@@ -1,6 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { openai } from '@ai-sdk/openai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
@@ -174,15 +174,21 @@ describe('StructuredOutputProcessor', () => {
     });
 
     it('should warn but not abort with warn strategy', async () => {
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      };
       const warnProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
         errorStrategy: 'warn',
+        logger: mockLogger as any,
       });
 
       const { controller } = createMockController();
       const abort = createMockAbort();
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const finishChunk: ChunkType = {
         runId: 'test-run',
@@ -216,7 +222,7 @@ describe('StructuredOutputProcessor', () => {
         abort,
       });
 
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalled();
       expect(abort).not.toHaveBeenCalled();
     });
 
@@ -554,7 +560,6 @@ describe('Structured Output with Tool Execution', () => {
 
     // Stream the response
     const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
-      format: 'aisdk',
       maxSteps: 5,
       structuredOutput: {
         schema: responseSchema,

@@ -2,7 +2,16 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { createStorageErrorId, MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  filterByDateRange,
+  MemoryStorage,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+} from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -11,12 +20,81 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { getTtlProps } from '../../ttl';
+import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  private ttlConfig?: DynamoDBTtlConfig;
+
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_THREADS);
+    await deleteTableData(this.service, TABLE_MESSAGES);
+    await deleteTableData(this.service, TABLE_RESOURCES);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Delete messages in batches of 25 (DynamoDB limit)
+      const batchSize = 25;
+      for (let i = 0; i < messageIds.length; i += batchSize) {
+        const batch = messageIds.slice(i, i + batchSize);
+
+        // Get messages to find their threadIds before deleting
+        const messagesToDelete = await Promise.all(
+          batch.map(async id => {
+            const result = await this.service.entities.message.get({ entity: 'message', id }).go();
+            return result.data;
+          }),
+        );
+
+        // Collect threadIds and delete messages
+        for (const message of messagesToDelete) {
+          if (message) {
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            await this.service.entities.message.delete({ entity: 'message', id: message.id }).go();
+          }
+        }
+      }
+
+      // Update thread timestamps
+      const now = new Date().toISOString();
+      for (const threadId of threadIds) {
+        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Helper function to parse message data (handle JSON fields)
@@ -88,7 +166,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const threadData = {
+    const threadData: ThreadEntityData = {
       entity: 'thread',
       id: thread.id,
       resourceId: thread.resourceId,
@@ -96,6 +174,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
+      ...getTtlProps('thread', this.ttlConfig),
     };
 
     try {
@@ -351,22 +430,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Apply date range filter
-      if (filter?.dateRange) {
-        const dateRange = filter.dateRange;
-        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
-          const createdAt = new Date(msg.createdAt).getTime();
-          if (dateRange.start) {
-            const startTime =
-              dateRange.start instanceof Date ? dateRange.start.getTime() : new Date(dateRange.start).getTime();
-            if (createdAt < startTime) return false;
-          }
-          if (dateRange.end) {
-            const endTime = dateRange.end instanceof Date ? dateRange.end.getTime() : new Date(dateRange.end).getTime();
-            if (createdAt > endTime) return false;
-          }
-          return true;
-        });
-      }
+      allThreadMessages = filterByDateRange(
+        allThreadMessages,
+        (msg: MastraDBMessage) => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
@@ -490,22 +558,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
 
     // Ensure 'entity' is added and complex fields are handled
-    const messagesToSave = messages.map(msg => {
+    const messagesToSave: MessageEntityData[] = messages.map(msg => {
       const now = new Date().toISOString();
       return {
-        entity: 'message', // Add entity type
+        entity: 'message' as const,
         id: msg.id,
         threadId: msg.threadId,
         role: msg.role,
         type: msg.type,
         resourceId: msg.resourceId,
-        // Ensure complex fields are stringified if not handled by attribute setters
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
         toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
         toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
         toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
         createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
-        updatedAt: now, // Add updatedAt
+        updatedAt: now,
+        ...getTtlProps('message', this.ttlConfig),
       };
     });
 
@@ -861,13 +929,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const resourceData = {
+    const resourceData: ResourceEntityData = {
       entity: 'resource',
       id: resource.id,
       workingMemory: resource.workingMemory,
       metadata: resource.metadata ? JSON.stringify(resource.metadata) : undefined,
       createdAt: resource.createdAt?.toISOString() || now.toISOString(),
       updatedAt: now.toISOString(),
+      ...getTtlProps('resource', this.ttlConfig),
     };
 
     try {

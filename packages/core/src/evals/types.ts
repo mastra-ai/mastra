@@ -3,93 +3,233 @@ import { z } from 'zod';
 import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
 import type { TracingContext } from '../observability';
+import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
+
+// ============================================================================
+// Sampling Config
+// ============================================================================
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
-export type ScoringSource = 'LIVE' | 'TEST';
+// ============================================================================
+// Scoring Source & Entity Type
+// ============================================================================
 
-export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | SpanType;
+export const scoringSourceSchema = z.enum(['LIVE', 'TEST']);
 
-export type ScoringPrompts = {
-  description: string;
-  prompt: string;
-};
+export type ScoringSource = z.infer<typeof scoringSourceSchema>;
 
-export type ScoringInput = {
-  runId?: string;
-  input?: any;
-  output: any;
-  additionalContext?: Record<string, any>;
-  requestContext?: Record<string, any>;
+export const scoringEntityTypeSchema = z.enum(['AGENT', 'WORKFLOW', ...Object.values(SpanType)] as [
+  string,
+  string,
+  ...string[],
+]);
+
+export type ScoringEntityType = z.infer<typeof scoringEntityTypeSchema>;
+
+// ============================================================================
+// Scoring Prompts
+// ============================================================================
+
+export const scoringPromptsSchema = z.object({
+  description: z.string(),
+  prompt: z.string(),
+});
+
+export type ScoringPrompts = z.infer<typeof scoringPromptsSchema>;
+
+// ============================================================================
+// Shared Record Schemas
+// ============================================================================
+
+/** Reusable schema for required record fields (e.g., scorer, entity) */
+const recordSchema = z.record(z.string(), z.unknown());
+
+/** Reusable schema for optional record fields (e.g., metadata, additionalContext) */
+const optionalRecordSchema = recordSchema.optional();
+
+// ============================================================================
+// Base Scoring Input (used for scorer functions)
+// ============================================================================
+
+export const scoringInputSchema = z.object({
+  runId: z.string().optional(),
+  input: z.unknown().optional(),
+  output: z.unknown(),
+  additionalContext: optionalRecordSchema,
+  requestContext: optionalRecordSchema,
+  // Note: tracingContext is not serializable, so we don't include it in the schema
+  // It's added at runtime when needed
+});
+
+export type ScoringInput = z.infer<typeof scoringInputSchema> & {
   tracingContext?: TracingContext;
 };
 
-export type ScoringHookInput = {
-  runId?: string;
-  scorer: Record<string, any>;
-  input: any;
-  output: any;
-  metadata?: Record<string, any>;
-  additionalContext?: Record<string, any>;
-  source: ScoringSource;
-  entity: Record<string, any>;
-  entityType: ScoringEntityType;
-  requestContext?: Record<string, any>;
+// ============================================================================
+// Scoring Hook Input
+// ============================================================================
+
+export const scoringHookInputSchema = z.object({
+  runId: z.string().optional(),
+  scorer: recordSchema,
+  input: z.unknown(),
+  output: z.unknown(),
+  metadata: optionalRecordSchema,
+  additionalContext: optionalRecordSchema,
+  source: scoringSourceSchema,
+  entity: recordSchema,
+  entityType: scoringEntityTypeSchema,
+  requestContext: optionalRecordSchema,
+  structuredOutput: z.boolean().optional(),
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+  // Note: tracingContext is not serializable, so we don't include it in the schema
+});
+
+export type ScoringHookInput = z.infer<typeof scoringHookInputSchema> & {
   tracingContext?: TracingContext;
-  structuredOutput?: boolean;
-  traceId?: string;
-  spanId?: string;
-  resourceId?: string;
-  threadId?: string;
 };
 
-export const scoringExtractStepResultSchema = z.record(z.string(), z.any()).optional();
+// ============================================================================
+// Extract Step Result
+// ============================================================================
+
+export const scoringExtractStepResultSchema = optionalRecordSchema;
 
 export type ScoringExtractStepResult = z.infer<typeof scoringExtractStepResultSchema>;
+
+// ============================================================================
+// Analyze Step Result (Score Result)
+// ============================================================================
 
 export const scoringValueSchema = z.number();
 
 export const scoreResultSchema = z.object({
-  result: z.record(z.string(), z.any()).optional(),
+  result: optionalRecordSchema,
   score: scoringValueSchema,
   prompt: z.string().optional(),
 });
 
 export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
 
-export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
-  runId: string;
+// ============================================================================
+// Composite Input Types (for scorer step functions)
+// ============================================================================
+
+export const scoringInputWithExtractStepResultSchema = scoringInputSchema.extend({
+  runId: z.string(), // Required in this context
+  extractStepResult: optionalRecordSchema,
+  extractPrompt: z.string().optional(),
+});
+
+export type ScoringInputWithExtractStepResult<TExtract = any> = Omit<
+  z.infer<typeof scoringInputWithExtractStepResultSchema>,
+  'extractStepResult'
+> & {
   extractStepResult?: TExtract;
-  extractPrompt?: string;
+  tracingContext?: TracingContext;
 };
 
-export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<
-  TExtract = any,
-  TScore = any,
-> = ScoringInputWithExtractStepResult<TExtract> & {
-  score: number;
+export const scoringInputWithExtractStepResultAndAnalyzeStepResultSchema =
+  scoringInputWithExtractStepResultSchema.extend({
+    score: z.number(),
+    analyzeStepResult: optionalRecordSchema,
+    analyzePrompt: z.string().optional(),
+  });
+
+export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<TExtract = any, TScore = any> = Omit<
+  z.infer<typeof scoringInputWithExtractStepResultAndAnalyzeStepResultSchema>,
+  'extractStepResult' | 'analyzeStepResult'
+> & {
+  extractStepResult?: TExtract;
   analyzeStepResult?: TScore;
-  analyzePrompt?: string;
+  tracingContext?: TracingContext;
 };
 
-export type ScoringInputWithExtractStepResultAndScoreAndReason =
-  ScoringInputWithExtractStepResultAndAnalyzeStepResult & {
-    reason?: string;
-    reasonPrompt?: string;
-  };
+export const scoringInputWithExtractStepResultAndScoreAndReasonSchema =
+  scoringInputWithExtractStepResultAndAnalyzeStepResultSchema.extend({
+    reason: z.string().optional(),
+    reasonPrompt: z.string().optional(),
+  });
 
-export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
-  ScoringHookInput & {
-    id: string;
-    entityId: string;
-    scorerId: string;
-    createdAt: Date;
-    updatedAt: Date;
-    preprocessStepResult?: Record<string, any>;
-    preprocessPrompt?: string;
-    generateScorePrompt?: string;
-    generateReasonPrompt?: string;
-  };
+export type ScoringInputWithExtractStepResultAndScoreAndReason = z.infer<
+  typeof scoringInputWithExtractStepResultAndScoreAndReasonSchema
+> & {
+  tracingContext?: TracingContext;
+};
+
+// ============================================================================
+// Score Row Data (stored in DB)
+// ============================================================================
+
+export const scoreRowDataSchema = z.object({
+  id: z.string(),
+  scorerId: z.string(),
+  entityId: z.string(),
+
+  // From ScoringInputWithExtractStepResultAndScoreAndReason
+  runId: z.string(),
+  input: z.unknown().optional(),
+  output: z.unknown(),
+  additionalContext: optionalRecordSchema,
+  requestContext: optionalRecordSchema,
+  extractStepResult: optionalRecordSchema,
+  extractPrompt: z.string().optional(),
+  score: z.number(),
+  analyzeStepResult: optionalRecordSchema,
+  analyzePrompt: z.string().optional(),
+  reason: z.string().optional(),
+  reasonPrompt: z.string().optional(),
+
+  // From ScoringHookInput
+  scorer: recordSchema,
+  metadata: optionalRecordSchema,
+  source: scoringSourceSchema,
+  entity: recordSchema,
+  entityType: scoringEntityTypeSchema.optional(),
+  structuredOutput: z.boolean().optional(),
+  traceId: z.string().optional(),
+  spanId: z.string().optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+
+  // Additional ScoreRowData fields
+  preprocessStepResult: optionalRecordSchema,
+  preprocessPrompt: z.string().optional(),
+  generateScorePrompt: z.string().optional(),
+  generateReasonPrompt: z.string().optional(),
+
+  // Timestamps
+  ...dbTimestamps,
+});
+
+export type ScoreRowData = z.infer<typeof scoreRowDataSchema>;
+
+// ============================================================================
+// Save Score Payload (for creating new scores)
+// ============================================================================
+
+export const saveScorePayloadSchema = scoreRowDataSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type SaveScorePayload = z.infer<typeof saveScorePayloadSchema>;
+
+// ============================================================================
+// List Scores Response
+// ============================================================================
+
+export const listScoresResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  scores: z.array(scoreRowDataSchema),
+});
+
+export type ListScoresResponse = z.infer<typeof listScoresResponseSchema>;
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
 
@@ -117,35 +257,3 @@ export type ScorerRunInputForAgent = {
 };
 
 export type ScorerRunOutputForAgent = MastraDBMessage[];
-
-export const saveScorePayloadSchema = z.object({
-  runId: z.string(),
-  scorerId: z.string(),
-  entityId: z.string(),
-  score: z.number(),
-  input: z.any().optional(),
-  output: z.any(),
-  source: z.enum(['LIVE', 'TEST']),
-  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(SpanType)]).optional(),
-  scorer: z.record(z.string(), z.any()),
-
-  traceId: z.string().optional(),
-  spanId: z.string().optional(),
-  preprocessStepResult: z.record(z.string(), z.any()).optional(),
-  extractStepResult: z.record(z.string(), z.any()).optional(),
-  analyzeStepResult: z.record(z.string(), z.any()).optional(),
-  reason: z.string().optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-  preprocessPrompt: z.string().optional(),
-  extractPrompt: z.string().optional(),
-  generateScorePrompt: z.string().optional(),
-  generateReasonPrompt: z.string().optional(),
-  analyzePrompt: z.string().optional(),
-  additionalContext: z.record(z.string(), z.any()).optional(),
-  requestContext: z.record(z.string(), z.any()).optional(),
-  entity: z.record(z.string(), z.any()).optional(),
-  resourceId: z.string().optional(),
-  threadId: z.string().optional(),
-});
-
-export type ValidatedSaveScorePayload = z.infer<typeof saveScorePayloadSchema>;

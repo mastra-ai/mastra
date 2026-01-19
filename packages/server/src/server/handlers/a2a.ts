@@ -69,10 +69,10 @@ export async function getAgentCardByIdHandler({
     throw new Error(`Agent with ID ${agentId} not found`);
   }
 
-  const [instructions, tools] = await Promise.all([
-    agent.getInstructions({ requestContext }),
-    agent.listTools({ requestContext }),
-  ]);
+  const [instructions, tools]: [
+    Awaited<ReturnType<typeof agent.getInstructions>>,
+    Awaited<ReturnType<typeof agent.listTools>>,
+  ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
@@ -158,7 +158,7 @@ export async function handleMessageSend({
     // Pass contextId as threadId for memory persistence across A2A conversations
     // Allow user to pass resourceId via metadata, fall back to agentId
     const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
-    const { text } = await agent.generate([convertToCoreMessage(message)], {
+    const result = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
       requestContext,
       ...(contextId ? { threadId: contextId, resourceId } : {}),
@@ -172,12 +172,23 @@ export async function handleMessageSend({
         parts: [
           {
             kind: 'text',
-            text: text,
+            text: result.text,
           },
         ],
         kind: 'message',
       },
     });
+
+    // Store execution details in task metadata
+    currentData.metadata = {
+      ...currentData.metadata,
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
 
     await taskStore.save({ agentId, data: currentData });
     context.task = currentData;
@@ -449,10 +460,10 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       throw new Error(`Agent with ID ${agentId} not found`);
     }
 
-    const [instructions, tools] = await Promise.all([
-      agent.getInstructions({ requestContext }),
-      agent.listTools({ requestContext }),
-    ]);
+    const [instructions, tools]: [
+      Awaited<ReturnType<typeof agent.getInstructions>>,
+      Awaited<ReturnType<typeof agent.listTools>>,
+    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
     const agentCard: AgentCard = {
       name: agent.id || (agentId as string),

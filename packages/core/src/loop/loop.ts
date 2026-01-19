@@ -1,14 +1,13 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
-import type { OutputSchema } from '../stream/base/schema';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   models,
   logger,
@@ -23,6 +22,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   requireToolApproval,
   agentId,
+  toolCallConcurrency,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -47,7 +47,14 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   let runIdToUse = runId;
 
   if (!runIdToUse) {
-    runIdToUse = idGenerator?.() || crypto.randomUUID();
+    runIdToUse =
+      idGenerator?.({
+        idType: 'run',
+        source: 'agent',
+        entityId: agentId,
+        threadId: _internal?.threadId,
+        resourceId: _internal?.resourceId,
+      }) || crypto.randomUUID();
   }
 
   const internalToUse: StreamInternal = {
@@ -93,6 +100,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     agentId,
     requireToolApproval,
+    toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,

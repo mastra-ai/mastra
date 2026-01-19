@@ -1,19 +1,18 @@
-import type { SystemModelMessage } from 'ai-v5';
-import { LRUCache } from 'lru-cache';
+import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import type { MastraEmbeddingModel, MastraVector } from '../../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
+import { globalEmbeddingCache } from './embedding-cache';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
-const DEFAULT_CACHE_MAX_SIZE = 1000; // Maximum number of cached embeddings
 
 export interface SemanticRecallOptions {
   /**
@@ -68,6 +67,24 @@ export interface SemanticRecallOptions {
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
+
+  /**
+   * Options to pass to the embedder when generating embeddings.
+   * Use this to pass provider-specific options like outputDimensionality for Google models.
+   *
+   * @example
+   * ```typescript
+   * embedderOptions: {
+   *   providerOptions: {
+   *     google: {
+   *       outputDimensionality: 768,
+   *       taskType: 'RETRIEVAL_DOCUMENT'
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  embedderOptions?: MastraEmbeddingOptions;
 }
 
 /**
@@ -109,12 +126,14 @@ export class SemanticRecall implements Processor {
   private threshold?: number;
   private indexName?: string;
   private logger?: IMastraLogger;
-
-  // LRU cache for embeddings: contentHash -> embedding vector
-  private embeddingCache: LRUCache<string, number[]>;
+  private embedderOptions?: MastraEmbeddingOptions;
 
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
+
+  // Cache for index dimension validation (per-process)
+  // Prevents redundant API calls when index already validated
+  private indexValidationCache = new Map<string, { dimension: number }>();
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -125,11 +144,7 @@ export class SemanticRecall implements Processor {
     this.threshold = options.threshold;
     this.indexName = options.indexName;
     this.logger = options.logger;
-
-    // Initialize LRU cache for embeddings
-    this.embeddingCache = new LRUCache<string, number[]>({
-      max: DEFAULT_CACHE_MAX_SIZE,
-    });
+    this.embedderOptions = options.embedderOptions;
 
     // Normalize messageRange to object format
     if (typeof options.messageRange === 'number') {
@@ -157,7 +172,7 @@ export class SemanticRecall implements Processor {
     const { messages, messageList, requestContext } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(requestContext);
+    const memoryContext = parseMemoryRequestContext(requestContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
       return messageList;
@@ -370,7 +385,7 @@ export class SemanticRecall implements Processor {
         withNextMessages: this.messageRange.after,
         withPreviousMessages: this.messageRange.before,
       })),
-      perPage: false, // Fetch all matching messages
+      perPage: 0,
     });
 
     return result.messages;
@@ -396,9 +411,9 @@ export class SemanticRecall implements Processor {
     embeddings: number[][];
     dimension: number;
   }> {
-    // Check cache first
+    // Check global cache first
     const contentHash = await this.hashContent(content, indexName);
-    const cachedEmbedding = this.embeddingCache.get(contentHash);
+    const cachedEmbedding = globalEmbeddingCache.get(contentHash);
 
     if (cachedEmbedding) {
       return {
@@ -408,13 +423,17 @@ export class SemanticRecall implements Processor {
     }
 
     // Generate embedding if not cached
+    // Note: embedderOptions may contain providerOptions for controlling embedding behavior
+    // (e.g., outputDimensionality for Google models). The user is responsible for providing
+    // options compatible with their embedder's SDK version.
     const result = await this.embedder.doEmbed({
       values: [content],
+      ...(this.embedderOptions as any),
     });
 
-    // Cache the first embedding
+    // Cache the first embedding in global cache
     if (result.embeddings[0]) {
-      this.embeddingCache.set(contentHash, result.embeddings[0]);
+      globalEmbeddingCache.set(contentHash, result.embeddings[0]);
     }
 
     return {
@@ -439,20 +458,25 @@ export class SemanticRecall implements Processor {
 
   /**
    * Ensure vector index exists with correct dimensions
+   * Uses in-memory cache to avoid redundant validation calls
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    // Check if index exists
-    const indexes = await this.vector.listIndexes();
-    const indexExists = indexes.includes(indexName);
-
-    if (!indexExists) {
-      // Create index if it doesn't exist
-      await this.vector.createIndex({
-        indexName,
-        dimension,
-        metric: 'cosine',
-      });
+    // Check cache first - if already validated in this process, skip
+    const cached = this.indexValidationCache.get(indexName);
+    if (cached?.dimension === dimension) {
+      return;
     }
+
+    // Always call createIndex - it's idempotent and validates dimensions
+    // Vector stores handle the "already exists" case and validate dimensions
+    await this.vector.createIndex({
+      indexName,
+      dimension,
+      metric: 'cosine',
+    });
+
+    // Cache the validated dimension to avoid redundant calls
+    this.indexValidationCache.set(indexName, { dimension });
   }
 
   /**
@@ -474,7 +498,7 @@ export class SemanticRecall implements Processor {
     }
 
     try {
-      const memoryContext = parseMemoryRuntimeContext(requestContext);
+      const memoryContext = parseMemoryRequestContext(requestContext);
 
       if (!memoryContext) {
         return messageList || messages;

@@ -5,6 +5,7 @@ import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 
+import { globalEmbeddingCache } from './embedding-cache';
 import { SemanticRecall } from './semantic-recall';
 
 // Helper function to create test messages in MastraDBMessage format
@@ -33,6 +34,9 @@ describe('SemanticRecall', () => {
   let requestContext: RequestContext;
 
   beforeEach(() => {
+    // Clear global embedding cache between tests
+    globalEmbeddingCache.clear();
+
     // Mock storage
     mockStorage = {
       listMessages: vi.fn(),
@@ -170,7 +174,7 @@ describe('SemanticRecall', () => {
             withPreviousMessages: 1,
           },
         ],
-        perPage: false,
+        perPage: 0,
       });
     });
 
@@ -1792,6 +1796,622 @@ describe('SemanticRecall', () => {
 
       // Should still be 1 call (cached)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Embedder Options', () => {
+    it('should pass embedderOptions to doEmbed when configured', async () => {
+      const embedderOptions = {
+        providerOptions: {
+          google: {
+            outputDimensionality: 384,
+            taskType: 'RETRIEVAL_DOCUMENT',
+          },
+        },
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        embedderOptions,
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-new',
+          role: 'user',
+          content: { format: 2, content: 'Test query', parts: [] },
+          createdAt: new Date(),
+        },
+      ];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+      });
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Verify embedder was called with providerOptions
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Test query'],
+        providerOptions: {
+          google: {
+            outputDimensionality: 384,
+            taskType: 'RETRIEVAL_DOCUMENT',
+          },
+        },
+      });
+    });
+
+    it('should pass embedderOptions during output processing (embedding generation)', async () => {
+      const embedderOptions = {
+        providerOptions: {
+          google: {
+            outputDimensionality: 768,
+          },
+        },
+      };
+
+      const localMockStorage = {
+        listMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const localMockEmbedder = {
+        modelId: 'gemini-embedding-001',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const localMockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra_memory_gemini_embedding_001']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: localMockStorage as any,
+        embedder: localMockEmbedder as any,
+        vector: localMockVector as any,
+        embedderOptions,
+      });
+
+      const userMessage: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const localRequestContext = new RequestContext();
+      localRequestContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const messageList = new MessageList();
+      messageList.add([userMessage], 'input');
+
+      await processor.processOutputResult({
+        messages: [userMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: localRequestContext,
+      });
+
+      // Verify embedder was called with providerOptions
+      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello'],
+        providerOptions: {
+          google: {
+            outputDimensionality: 768,
+          },
+        },
+      });
+    });
+
+    it('should work without embedderOptions (backwards compatibility)', async () => {
+      // Create processor without embedderOptions
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        // No embedderOptions
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-new',
+          role: 'user',
+          content: { format: 2, content: 'Test query', parts: [] },
+          createdAt: new Date(),
+        },
+      ];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+        warnings: [],
+      });
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Verify embedder was called with only values (no extra options)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Test query'],
+      });
+    });
+
+    it('should pass non-providerOptions embedderOptions (like maxRetries)', async () => {
+      const embedderOptions = {
+        maxRetries: 5,
+        maxParallelCalls: 2,
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        embedderOptions,
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-new',
+          role: 'user',
+          content: { format: 2, content: 'Test query', parts: [] },
+          createdAt: new Date(),
+        },
+      ];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+        warnings: [],
+      });
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Verify embedder was called with maxRetries and maxParallelCalls
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Test query'],
+        maxRetries: 5,
+        maxParallelCalls: 2,
+      });
+    });
+
+    it('should handle empty embedderOptions object', async () => {
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        embedderOptions: {}, // Empty object
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-new',
+          role: 'user',
+          content: { format: 2, content: 'Test query', parts: [] },
+          createdAt: new Date(),
+        },
+      ];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+        warnings: [],
+      });
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Verify embedder was called (empty object spread is fine)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Test query'],
+      });
+    });
+
+    it('should handle embedding errors gracefully when embedderOptions are configured', async () => {
+      const localMockStorage = {
+        listMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const localMockEmbedder = {
+        modelId: 'gemini-embedding-001',
+        doEmbed: vi.fn().mockRejectedValue(new Error('Invalid outputDimensionality value')),
+      };
+
+      const localMockVector = {
+        upsert: vi.fn(),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra_memory_gemini_embedding_001']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: localMockStorage as any,
+        embedder: localMockEmbedder as any,
+        vector: localMockVector as any,
+        embedderOptions: {
+          providerOptions: {
+            google: {
+              outputDimensionality: -1, // Invalid value that would cause an error
+            },
+          },
+        },
+      });
+
+      const userMessage: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const localRequestContext = new RequestContext();
+      localRequestContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const messageList = new MessageList();
+      messageList.add([userMessage], 'input');
+
+      // Should not throw, should handle error gracefully
+      const result = await processor.processOutputResult({
+        messages: [userMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: localRequestContext,
+      });
+
+      // Should return messageList (no transformation, just side effect embedding)
+      expect(result).toBe(messageList);
+      // Embedder should have been called with the providerOptions
+      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello'],
+        providerOptions: {
+          google: {
+            outputDimensionality: -1,
+          },
+        },
+      });
+      // Vector upsert should not be called since embedding failed
+      expect(localMockVector.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Dimension Validation', () => {
+    it('should fail when querying index with mismatched dimensions (reproduces user issue #11854)', async () => {
+      // Reproduces issue #11854: Create index with 384 dims, switch embedder to 1536 dims
+      const customIndexName = 'atlas_project_memories';
+
+      const createdIndexes = new Map<string, { dimension: number; metric: string; vectors: number[][] }>();
+
+      const mockVector = {
+        listIndexes: vi.fn().mockImplementation(async () => {
+          return Array.from(createdIndexes.keys());
+        }),
+        createIndex: vi.fn().mockImplementation(async ({ indexName, dimension, metric }) => {
+          if (createdIndexes.has(indexName)) {
+            const existing = createdIndexes.get(indexName)!;
+            if (existing.dimension !== dimension) {
+              throw new Error(
+                `Index "${indexName}" already exists with ${existing.dimension} dimensions, but ${dimension} dimensions were requested`,
+              );
+            }
+            return;
+          }
+          createdIndexes.set(indexName, { dimension, metric, vectors: [] });
+        }),
+        upsert: vi.fn().mockImplementation(async ({ indexName, vectors }) => {
+          const index = createdIndexes.get(indexName);
+          if (!index) {
+            throw new Error(`Index "${indexName}" does not exist`);
+          }
+          // Store vectors
+          index.vectors.push(...vectors);
+          return vectors.map((_, i) => `vec-${i}`);
+        }),
+        query: vi.fn().mockImplementation(async ({ indexName, queryVector }) => {
+          const index = createdIndexes.get(indexName);
+          if (!index) {
+            throw new Error(`Index "${indexName}" does not exist`);
+          }
+          // Validate query vector dimensions match index
+          if (queryVector.length !== index.dimension) {
+            throw new Error(
+              `vector field is indexed with ${index.dimension} dimensions but queried with ${queryVector.length}`,
+            );
+          }
+          return [];
+        }),
+        describeIndex: vi.fn().mockImplementation(async ({ indexName }) => {
+          const index = createdIndexes.get(indexName);
+          if (!index) {
+            throw new Error(`Index "${indexName}" does not exist`);
+          }
+          return {
+            dimension: index.dimension,
+            metric: index.metric,
+            count: index.vectors.length,
+          };
+        }),
+      } as any;
+
+      const mockStorage = {
+        listMessages: vi.fn().mockResolvedValue({
+          messages: [],
+          total: 0,
+          page: 1,
+          perPage: false,
+          hasMore: false,
+        }),
+      } as any;
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-1' },
+        resourceId: 'resource-1',
+      });
+
+      // Step 1: Create processor with fastembed (384 dims)
+      const fastembedEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [Array(384).fill(0.1)],
+        }),
+        modelId: 'fastembed-base',
+      } as any;
+
+      const fastembedProcessor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: fastembedEmbedder,
+        indexName: customIndexName,
+        topK: 3,
+      });
+
+      const message1: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello world',
+          parts: [{ type: 'text', text: 'Hello world' }],
+        },
+        createdAt: new Date(),
+      };
+
+      const messageList1 = new MessageList();
+      messageList1.add([message1], 'input');
+
+      await fastembedProcessor.processOutputResult({
+        messages: [message1],
+        messageList: messageList1,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      expect(createdIndexes.get(customIndexName)?.dimension).toBe(384);
+      expect(createdIndexes.get(customIndexName)?.vectors.length).toBe(1);
+
+      // Step 2: Switch to OpenAI embedder (1536 dims) with same index name
+      const openaiEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [Array(1536).fill(0.1)],
+        }),
+        modelId: 'text-embedding-3-small',
+      } as any;
+
+      const openaiProcessor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: openaiEmbedder,
+        indexName: customIndexName,
+        topK: 3,
+      });
+
+      const message2: MastraDBMessage = {
+        id: 'msg-2',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'What is the weather?',
+          parts: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        createdAt: new Date(),
+      };
+
+      const messageList2 = new MessageList();
+      messageList2.add([message2], 'input');
+
+      // After fix: ensureVectorIndex should call createIndex, which catches mismatch early
+      const result = await openaiProcessor.processInput({
+        messages: [message2],
+        messageList: messageList2,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      expect(mockVector.createIndex).toHaveBeenCalledWith({
+        indexName: customIndexName,
+        dimension: 1536,
+        metric: 'cosine',
+      });
+
+      // createIndex should have thrown, preventing query from happening
+      expect(mockVector.query).not.toHaveBeenCalled();
+      expect(result).toBe(messageList2);
+    });
+
+    it('should succeed when using same embedder dimensions on existing index', async () => {
+      // Verifies idempotent createIndex when dimensions match
+      const customIndexName = 'test_index';
+      const createdIndexes = new Map<string, { dimension: number; metric: string }>();
+
+      const mockVector = {
+        listIndexes: vi.fn().mockImplementation(async () => {
+          return Array.from(createdIndexes.keys());
+        }),
+        createIndex: vi.fn().mockImplementation(async ({ indexName, dimension, metric }) => {
+          if (createdIndexes.has(indexName)) {
+            const existing = createdIndexes.get(indexName)!;
+            if (existing.dimension !== dimension) {
+              throw new Error(
+                `Index "${indexName}" already exists with ${existing.dimension} dimensions, but ${dimension} dimensions were requested`,
+              );
+            }
+            return;
+          }
+          createdIndexes.set(indexName, { dimension, metric });
+        }),
+        describeIndex: vi.fn().mockImplementation(async ({ indexName }) => {
+          const index = createdIndexes.get(indexName);
+          if (!index) {
+            throw new Error(`Index "${indexName}" does not exist`);
+          }
+          return {
+            dimension: index.dimension,
+            metric: index.metric,
+            count: 0,
+          };
+        }),
+        query: vi.fn().mockResolvedValue([]),
+        upsert: vi.fn().mockResolvedValue([]),
+      } as any;
+
+      const mockStorage = {
+        listMessages: vi.fn().mockResolvedValue({
+          messages: [],
+          total: 0,
+          page: 1,
+          perPage: false,
+          hasMore: false,
+        }),
+      } as any;
+
+      const embedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [Array(384).fill(0.1)],
+        }),
+        modelId: 'test-embedder',
+      } as any;
+
+      const processor1 = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: embedder,
+        indexName: customIndexName,
+        topK: 3,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-1' },
+        resourceId: 'resource-1',
+      });
+
+      const inputMessage: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date(),
+      };
+
+      const messageList1 = new MessageList();
+      messageList1.add([inputMessage], 'input');
+
+      await processor1.processInput({
+        messages: [inputMessage],
+        messageList: messageList1,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      expect(createdIndexes.get(customIndexName)?.dimension).toBe(384);
+
+      const processor2 = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: embedder,
+        indexName: customIndexName,
+        topK: 3,
+      });
+
+      const messageList2 = new MessageList();
+      messageList2.add([inputMessage], 'input');
+
+      await expect(
+        processor2.processInput({
+          messages: [inputMessage],
+          messageList: messageList2,
+          abort: vi.fn() as any,
+          requestContext,
+        }),
+      ).resolves.not.toThrow();
+
+      expect(mockVector.createIndex).toHaveBeenCalledTimes(2);
     });
   });
 });

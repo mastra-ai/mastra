@@ -1,27 +1,16 @@
-import type { ClickHouseClient } from '@clickhouse/client';
+import type { ClickHouseClient, ClickHouseClientConfigOptions } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
-import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type {
-  TABLE_SCHEMAS,
-  PaginationInfo,
-  StorageColumn,
-  TABLE_NAMES,
-  WorkflowRun,
-  WorkflowRuns,
-  StoragePagination,
-  StorageDomains,
-  StorageResourceType,
-  StorageListWorkflowRunsInput,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { MemoryStorageClickhouse } from './domains/memory';
-import { StoreOperationsClickhouse } from './domains/operations';
+import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageClickhouse, ObservabilityStorageClickhouse, ScoresStorageClickhouse, WorkflowsStorageClickhouse };
+export type { ClickhouseDomainConfig } from './db';
 
 type IntervalUnit =
   | 'NANOSECOND'
@@ -36,23 +25,67 @@ type IntervalUnit =
   | 'QUARTER'
   | 'YEAR';
 
+type ClickhouseTtlConfig = {
+  [TableKey in TABLE_NAMES]?: {
+    row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
+    columns?: Partial<{
+      [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
+        interval: number;
+        unit: IntervalUnit;
+        ttlKey?: string;
+      };
+    }>;
+  };
+};
+
+/**
+ * ClickHouse credentials configuration.
+ * Requires url, username, and password, plus supports all other ClickHouseClientConfigOptions.
+ */
+type ClickhouseCredentialsConfig = Omit<ClickHouseClientConfigOptions, 'url' | 'username' | 'password'> & {
+  /** ClickHouse server URL (required) */
+  url: string;
+  /** ClickHouse username (required) */
+  username: string;
+  /** ClickHouse password (required) */
+  password: string;
+};
+
+/**
+ * ClickHouse configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured ClickHouse client: `{ id, client, ttl? }`
+ * - ClickHouse credentials with optional advanced options: `{ id, url, username, password, ... }`
+ *
+ * All ClickHouseClientConfigOptions are supported (database, request_timeout,
+ * compression, keep_alive, max_open_connections, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Simple credentials config
+ * const store = new ClickhouseStore({
+ *   id: 'my-store',
+ *   url: 'http://localhost:8123',
+ *   username: 'default',
+ *   password: '',
+ * });
+ *
+ * // With advanced options
+ * const store = new ClickhouseStore({
+ *   id: 'my-store',
+ *   url: 'http://localhost:8123',
+ *   username: 'default',
+ *   password: '',
+ *   request_timeout: 60000,
+ *   compression: { request: true, response: true },
+ *   keep_alive: { enabled: true },
+ * });
+ * ```
+ */
 export type ClickhouseConfig = {
   id: string;
-  url: string;
-  username: string;
-  password: string;
-  ttl?: {
-    [TableKey in TABLE_NAMES]?: {
-      row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
-      columns?: Partial<{
-        [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
-          interval: number;
-          unit: IntervalUnit;
-          ttlKey?: string;
-        };
-      }>;
-    };
-  };
+  ttl?: ClickhouseTtlConfig;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -73,8 +106,62 @@ export type ClickhouseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+} & (
+  | {
+      /**
+       * Pre-configured ClickHouse client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to set custom connection settings or interceptors.
+       *
+       * @example
+       * ```typescript
+       * import { createClient } from '@clickhouse/client';
+       *
+       * const client = createClient({
+       *   url: 'http://localhost:8123',
+       *   username: 'default',
+       *   password: '',
+       *   // Custom settings
+       *   request_timeout: 60000,
+       * });
+       *
+       * const store = new ClickhouseStore({ id: 'my-store', client });
+       * ```
+       */
+      client: ClickHouseClient;
+    }
+  | ClickhouseCredentialsConfig
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (config: ClickhouseConfig): config is ClickhouseConfig & { client: ClickHouseClient } => {
+  return 'client' in config;
 };
 
+/**
+ * ClickHouse storage adapter for Mastra.
+ *
+ * Access domain-specific storage via `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * const storage = new ClickhouseStore({ id: 'my-store', url: '...', username: '...', password: '...' });
+ *
+ * // Access memory domain
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Access workflows domain
+ * const workflows = await storage.getStore('workflows');
+ * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ *
+ * // Access observability domain
+ * const observability = await storage.getStore('observability');
+ * await observability?.createSpan(span);
+ * ```
+ */
 export class ClickhouseStore extends MastraStorage {
   protected db: ClickHouseClient;
   protected ttl: ClickhouseConfig['ttl'] = {};
@@ -84,53 +171,53 @@ export class ClickhouseStore extends MastraStorage {
   constructor(config: ClickhouseConfig) {
     super({ id: config.id, name: 'ClickhouseStore', disableInit: config.disableInit });
 
-    this.db = createClient({
-      url: config.url,
-      username: config.username,
-      password: config.password,
-      clickhouse_settings: {
-        date_time_input_format: 'best_effort',
-        date_time_output_format: 'iso', // This is crucial
-        use_client_time_zone: 1,
-        output_format_json_quote_64bit_integers: 0,
-      },
-    });
+    // Handle pre-configured client vs creating new connection
+    if (isClientConfig(config)) {
+      // User provided a pre-configured ClickHouse client
+      this.db = config.client;
+    } else {
+      // Validate URL before creating client
+      if (!config.url || typeof config.url !== 'string' || config.url.trim() === '') {
+        throw new Error('ClickhouseStore: url is required and cannot be empty.');
+      }
+      // Validate username and password are strings (can be empty for default user)
+      if (typeof config.username !== 'string') {
+        throw new Error('ClickhouseStore: username must be a string.');
+      }
+      if (typeof config.password !== 'string') {
+        throw new Error('ClickhouseStore: password must be a string.');
+      }
+
+      // Extract Mastra-specific config, pass rest to ClickHouse client
+      const { id, ttl, disableInit, clickhouse_settings, ...clientOptions } = config;
+
+      // Create client with all provided options
+      this.db = createClient({
+        ...clientOptions,
+        clickhouse_settings: {
+          ...clickhouse_settings,
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso', // This is crucial
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+    }
+
     this.ttl = config.ttl;
 
-    const operations = new StoreOperationsClickhouse({ client: this.db, ttl: this.ttl });
-    const workflows = new WorkflowsStorageClickhouse({ client: this.db, operations });
-    const scores = new ScoresStorageClickhouse({ client: this.db, operations });
-    const memory = new MemoryStorageClickhouse({ client: this.db, operations });
+    const domainConfig = { client: this.db, ttl: this.ttl };
+    const workflows = new WorkflowsStorageClickhouse(domainConfig);
+    const scores = new ScoresStorageClickhouse(domainConfig);
+    const memory = new MemoryStorageClickhouse(domainConfig);
+    const observability = new ObservabilityStorageClickhouse(domainConfig);
 
     this.stores = {
-      operations,
       workflows,
       scores,
       memory,
+      observability,
     };
-  }
-
-  get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    listScoresBySpan: boolean;
-  } {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: false,
-      listScoresBySpan: true,
-    };
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.stores.operations.batchInsert({ tableName, records });
-    // await this.optimizeTable({ tableName });
   }
 
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -169,233 +256,24 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateMessages(args: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      threadId?: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages(args);
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId, pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
-  }
-
+  /**
+   * Closes the ClickHouse client connection.
+   *
+   * This will close the ClickHouse client, including pre-configured clients.
+   * The store assumes ownership of all clients and manages their lifecycle.
+   */
   async close(): Promise<void> {
-    await this.db.close();
+    try {
+      await this.db.close();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'CLOSE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 }

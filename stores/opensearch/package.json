@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opensearch",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.4",
   "description": "OpenSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/opensearch",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"' && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
@@ -37,13 +38,12 @@
     "@internal/types-builder": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

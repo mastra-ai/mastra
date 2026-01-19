@@ -1,14 +1,10 @@
 import { cn } from '@/lib/utils';
-import {
-  SideDialog,
-  KeyValueList,
-  TextAndIcon,
-  getShortId,
-  Section,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-} from '@/components/ui/elements';
-import { ButtonsGroup, Sections } from '@/components/ui/containers';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Section } from '@/ds/components/Section';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Sections } from '@/ds/components/Sections';
 import {
   PanelLeftIcon,
   HashIcon,
@@ -20,18 +16,19 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
-import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
 import { SpanRecord } from '@mastra/core/storage';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
-import { UISpan } from '../types';
-import { TraceTimelineLegend } from './trace-timeline-legend';
+import { type UISpan, type UISpanState } from '../types';
+import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
+import { type GetScorerResponse } from '@mastra/client-js';
+import { Icon } from '@/ds/icons/Icon';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];
@@ -48,6 +45,8 @@ type TraceDialogProps = {
   initialSpanId?: string;
   initialSpanTab?: string;
   initialScoreId?: string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function TraceDialog({
@@ -59,12 +58,12 @@ export function TraceDialog({
   onNext,
   onPrevious,
   isLoadingSpans,
-  computeAgentsLink,
-  computeWorkflowsLink,
   computeTraceLink,
   initialSpanId,
   initialSpanTab,
   initialScoreId,
+  scorers,
+  isLoadingScorers,
 }: TraceDialogProps) {
   const { Link, navigate } = useLinkComponent();
 
@@ -75,6 +74,25 @@ export function TraceDialog({
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
   const traceInfo = useTraceInfo(traceDetails);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
+  const [searchPhrase, setSearchPhrase] = useState<string>('');
+  const [fadedSpanTypes, setFadedSpanTypes] = useState<string[]>([]);
+  const [featuredSpanIds, setFeaturedSpanIds] = useState<string[]>([]);
+  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (searchPhrase.trim() === '') {
+      setFeaturedSpanIds([]);
+      return;
+    }
+
+    const lowerCaseSearch = searchPhrase.toLowerCase();
+
+    const newFeaturedSpanIds = traceSpans
+      .filter(span => span.name.toLowerCase().includes(lowerCaseSearch))
+      .map(span => span.spanId);
+
+    setFeaturedSpanIds(newFeaturedSpanIds);
+  }, [searchPhrase]);
 
   useEffect(() => {
     if (initialSpanId) {
@@ -119,9 +137,13 @@ export function TraceDialog({
   });
 
   const handleSpanClick = (id: string) => {
-    setSelectedSpanId(id);
-    setSpanDialogDefaultTab('details');
-    setDialogIsOpen(true);
+    if (selectedSpanId === id) {
+      setSelectedSpanId(undefined);
+    } else {
+      setSelectedSpanId(id);
+      setSpanDialogDefaultTab('details');
+      setDialogIsOpen(true);
+    }
   };
 
   const handleToScoring = () => {
@@ -147,10 +169,60 @@ export function TraceDialog({
     }
   };
 
-  const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
+  const handleLegendClick = (type: string) => {
+    setFadedSpanTypes(prev => {
+      if (prev.includes(type)) {
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
+  };
 
-  const toNextSpan = getToNextEntryFn({ entries: flatSpans, id: selectedSpanId, update: setSelectedSpanId });
-  const toPreviousSpan = getToPreviousEntryFn({ entries: flatSpans, id: selectedSpanId, update: setSelectedSpanId });
+  const handleLegendReset = () => {
+    setFadedSpanTypes([]);
+  };
+
+  const selectedSpanInfo = getSpanInfo({ span: selectedSpan });
+
+  // Get visible spans (only those whose parent is expanded or parentSpanId is null)
+  const getVisibleSpans = () => {
+    const visibleSpans: UISpan[] = [];
+    const collectVisibleSpans = (spans: UISpan[], parentId?: string) => {
+      spans.forEach(span => {
+        const isVisible = !parentId || parentId === null || expandedSpanIds.includes(parentId);
+        if (isVisible) {
+          visibleSpans.push(span);
+          if (expandedSpanIds.includes(span.id) && span.spans) {
+            collectVisibleSpans(span.spans, span.id);
+          }
+        }
+      });
+    };
+    collectVisibleSpans(hierarchicalSpans);
+    return visibleSpans;
+  };
+
+  const toNextSpan = () => {
+    if (!selectedSpanId) return undefined;
+    const visibleSpans = getVisibleSpans();
+    const currentIndex = visibleSpans.findIndex(span => span.id === selectedSpanId);
+    if (currentIndex >= 0 && currentIndex < visibleSpans.length - 1) {
+      return () => setSelectedSpanId(visibleSpans[currentIndex + 1].id);
+    }
+
+    return undefined;
+  };
+
+  const toPreviousSpan = () => {
+    if (!selectedSpanId) return undefined;
+    const visibleSpans = getVisibleSpans();
+    const currentIndex = visibleSpans.findIndex(span => span.id === selectedSpanId);
+    if (currentIndex > 0) {
+      return () => setSelectedSpanId(visibleSpans[currentIndex - 1].id);
+    }
+    return undefined;
+  };
 
   return (
     <>
@@ -187,10 +259,10 @@ export function TraceDialog({
 
             {traceDetails && (
               <Sections>
-                <div className="grid xl:grid-cols-[3fr_2fr] gap-[1rem] items-start">
+                <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
                   <KeyValueList data={traceInfo} LinkComponent={Link} />
-                  <div className="bg-surface3 p-[1.5rem] rounded-lg grid gap-[1rem]">
-                    <h4 className="text-[1rem]">
+                  <div className="bg-surface3 p-6 rounded-lg grid gap-4">
+                    <h4 className="text-ui-lg">
                       <TextAndIcon>
                         <GaugeIcon /> Evaluate trace
                       </TextAndIcon>
@@ -198,7 +270,10 @@ export function TraceDialog({
 
                     <ButtonsGroup className="w-full">
                       <Button onClick={handleToScoring}>
-                        Scoring <CircleGaugeIcon />{' '}
+                        <Icon>
+                          <CircleGaugeIcon />
+                        </Icon>
+                        Scoring
                       </Button>
                       {spanScoresData?.scores?.[0] && (
                         <Button onClick={handleToLastScore}>
@@ -214,14 +289,27 @@ export function TraceDialog({
                     <Section.Heading>
                       <ListTreeIcon /> Timeline
                     </Section.Heading>
-                    <TraceTimelineLegend spans={traceSpans} />
                   </Section.Header>
+
+                  <TraceTimelineTools
+                    spans={traceSpans}
+                    fadedTypes={fadedSpanTypes}
+                    onLegendClick={handleLegendClick}
+                    onLegendReset={handleLegendReset}
+                    searchPhrase={searchPhrase}
+                    onSearchPhraseChange={setSearchPhrase}
+                    traceId={traceId}
+                  />
 
                   <TraceTimeline
                     hierarchicalSpans={hierarchicalSpans}
                     onSpanClick={handleSpanClick}
                     selectedSpanId={selectedSpanId}
                     isLoading={isLoadingSpans}
+                    fadedTypes={fadedSpanTypes}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    featuredSpanIds={featuredSpanIds}
                   />
                 </Section>
               </Sections>
@@ -229,33 +317,31 @@ export function TraceDialog({
           </SideDialog.Content>
 
           {selectedSpan && combinedView && (
-            <div className="grid grid-rows-[auto_1fr] relative overflow-y-auto">
-              <SideDialog.Top withTopSeparator={true}>
+            <div className="grid grid-rows-[auto_1fr] relative overflow-y-auto rounded-xl mx-8 mb-8 bg-surface4">
+              <SideDialog.Top>
                 <TextAndIcon>
                   <ChevronsLeftRightEllipsisIcon /> {getShortId(selectedSpanId)}
                 </TextAndIcon>
                 |
-                <SideDialog.Nav onNext={toNextSpan} onPrevious={toPreviousSpan} />
-                <button className="ml-auto mr-[2rem]" onClick={() => setCombinedView(false)}>
+                <SideDialog.Nav onNext={toNextSpan()} onPrevious={toPreviousSpan()} />
+                <button className="ml-auto mr-8" onClick={() => setCombinedView(false)}>
                   <PanelLeftIcon /> <VisuallyHidden>Switch to dialog view</VisuallyHidden>
                 </button>
               </SideDialog.Top>
 
-              <div className={cn('h-full overflow-y-auto grid gap-[2rem] grid-cols-[20rem_1fr]')}>
-                <div className="overflow-y-auto grid content-start p-[2rem] gap-[2rem]">
-                  <SideDialog.Heading as="h2">
-                    <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
-                  </SideDialog.Heading>
+              <div className={cn('h-full overflow-y-auto pb-8 pl-8')}>
+                <div className="overflow-y-auto pr-8 pt-8 h-full">
+                  <SideDialog.Header>
+                    <SideDialog.Heading>
+                      <EyeIcon />
+                      {selectedSpan?.name}
+                    </SideDialog.Heading>
 
-                  {selectedSpan?.attributes?.usage && (
-                    <TraceSpanUsage
-                      spanUsage={selectedSpan.attributes.usage}
-                      className="xl:grid-cols-1 xl:gap-[1rem]"
-                    />
-                  )}
-                  <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
-                </div>
-                <div className="overflow-y-auto pr-[2rem] pt-[2rem] h-full">
+                    <TextAndIcon>
+                      <HashIcon /> {selectedSpanId}
+                    </TextAndIcon>
+                  </SideDialog.Header>
+
                   <SpanTabs
                     trace={traceDetails}
                     span={selectedSpan}
@@ -285,15 +371,16 @@ export function TraceDialog({
           onClose={() => {
             navigate(computeTraceLink(traceId || ''));
             setDialogIsOpen(false);
-            setSelectedSpanId(undefined);
           }}
-          onNext={toNextSpan}
-          onPrevious={toPreviousSpan}
+          onNext={toNextSpan()}
+          onPrevious={toPreviousSpan()}
           onViewToggle={() => setCombinedView(!combinedView)}
           spanInfo={selectedSpanInfo}
           defaultActiveTab={spanDialogDefaultTab}
           initialScoreId={initialScoreId}
           computeTraceLink={computeTraceLink}
+          scorers={scorers}
+          isLoadingScorers={isLoadingScorers}
         />
       )}
     </>

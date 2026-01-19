@@ -14,8 +14,6 @@
 '@mastra/upstash': minor
 ---
 
-feat(storage): support querying messages from multiple threads
-
 - Fixed TypeScript errors where `threadId: string | string[]` was being passed to places expecting `Scalar` type
 - Added proper multi-thread support for `listMessages` across all adapters when `threadId` is an array
 - Updated `_getIncludedMessages` to look up message threadId by ID (since message IDs are globally unique)

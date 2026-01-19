@@ -12,12 +12,14 @@ import { TransformStream } from 'node:stream/web';
 import { SpanType } from '@mastra/core/observability';
 import type {
   Span,
-  EndSpanOptions,
+  EndGenerationOptions,
   ErrorSpanOptions,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
-import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+
+import { extractUsageMetrics } from './usage';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -44,8 +46,7 @@ export class ModelSpanTracker {
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
-  /** Tracks whether completionStartTime has been captured for this generation */
-  #completionStartTimeCaptured: boolean = false;
+  #completionStartTime?: Date;
   /** Tracks tool output accumulators by toolCallId for consolidating sub-agent streams */
   #toolOutputAccumulators: Map<string, ToolOutputAccumulator> = new Map();
   /** Tracks toolCallIds that had streaming output (to skip redundant tool-result spans) */
@@ -57,19 +58,12 @@ export class ModelSpanTracker {
 
   /**
    * Capture the completion start time (time to first token) when the first content chunk arrives.
-   * This is used by observability providers like Langfuse to calculate TTFT metrics.
    */
   #captureCompletionStartTime(): void {
-    if (this.#completionStartTimeCaptured || !this.#modelSpan) {
+    if (this.#completionStartTime) {
       return;
     }
-
-    this.#completionStartTimeCaptured = true;
-    this.#modelSpan.update({
-      attributes: {
-        completionStartTime: new Date(),
-      },
-    });
+    this.#completionStartTime = new Date();
   }
 
   /**
@@ -90,10 +84,18 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the generation span
+   * End the generation span with optional raw usage data.
+   * If usage is provided, it will be converted to UsageStats with cache token details.
    */
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void {
-    this.#modelSpan?.end(options);
+  endGeneration(options?: EndGenerationOptions): void {
+    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+
+    if (spanOptions.attributes) {
+      spanOptions.attributes.completionStartTime = this.#completionStartTime;
+      spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+    }
+
+    this.#modelSpan?.end(spanOptions);
   }
 
   /**
@@ -104,9 +106,16 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Start a new Model execution step
+   * Start a new Model execution step.
+   * This should be called at the beginning of LLM execution to capture accurate startTime.
+   * The step-start chunk payload can be passed later via updateStep() if needed.
    */
-  #startStepSpan(payload?: StepStartPayload) {
+  startStep(payload?: StepStartPayload): void {
+    // Don't create duplicate step spans
+    if (this.#currentStepSpan) {
+      return;
+    }
+
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
@@ -122,16 +131,38 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Update the current step span with additional payload data.
+   * Called when step-start chunk arrives with request/warnings info.
+   */
+  updateStep(payload?: StepStartPayload): void {
+    if (!this.#currentStepSpan || !payload) {
+      return;
+    }
+
+    // Update span with request/warnings from the step-start chunk
+    this.#currentStepSpan.update({
+      input: payload.request,
+      attributes: {
+        ...(payload.messageId ? { messageId: payload.messageId } : {}),
+        ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
+      },
+    });
+  }
+
+  /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
-  #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<any, OUTPUT>) {
+  #endStepSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>) {
     if (!this.#currentStepSpan) return;
 
     // Extract all data from step-finish chunk
     const output = payload.output;
-    const { usage, ...otherOutput } = output;
+    const { usage: rawUsage, ...otherOutput } = output;
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
+
+    // Convert raw usage to UsageStats with cache token details
+    const usage = extractUsageMetrics(rawUsage, metadata?.providerMetadata);
 
     // Remove request object from metadata (too verbose)
     const cleanMetadata = metadata ? { ...metadata } : undefined;
@@ -161,7 +192,7 @@ export class ModelSpanTracker {
   #startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
@@ -207,7 +238,7 @@ export class ModelSpanTracker {
   #createEventSpan(chunkType: string, output: any) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     const span = this.#currentStepSpan?.createEventSpan({
@@ -242,7 +273,7 @@ export class ModelSpanTracker {
   /**
    * Handle text chunk spans (text-start/delta/end)
    */
-  #handleTextChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleTextChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'text-start':
         this.#startChunkSpan('text');
@@ -262,7 +293,7 @@ export class ModelSpanTracker {
   /**
    * Handle reasoning chunk spans (reasoning-start/delta/end)
    */
-  #handleReasoningChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleReasoningChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'reasoning-start':
         this.#startChunkSpan('reasoning');
@@ -282,7 +313,7 @@ export class ModelSpanTracker {
   /**
    * Handle tool call chunk spans (tool-call-input-streaming-start/delta/end, tool-call)
    */
-  #handleToolCallChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleToolCallChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'tool-call-input-streaming-start':
         this.#startChunkSpan('tool-call', {
@@ -318,7 +349,7 @@ export class ModelSpanTracker {
   /**
    * Handle object chunk spans (object, object-result)
    */
-  #handleObjectChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleObjectChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     switch (chunk.type) {
       case 'object':
         // Start span on first partial object chunk (only if not already started)
@@ -339,7 +370,7 @@ export class ModelSpanTracker {
    * Handle tool-output chunks from sub-agents.
    * Consolidates streaming text/reasoning deltas into a single span per tool call.
    */
-  #handleToolOutputChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+  #handleToolOutputChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     if (chunk.type !== 'tool-output') return;
 
     const payload = chunk.payload as {
@@ -355,7 +386,7 @@ export class ModelSpanTracker {
     if (!acc) {
       // Auto-create step if we see a chunk before step-start
       if (!this.#currentStepSpan) {
-        this.#startStepSpan();
+        this.startStep();
       }
 
       acc = {
@@ -454,13 +485,16 @@ export class ModelSpanTracker {
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T {
-    let captureCompletionStartTime = false;
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          if (!captureCompletionStartTime) {
-            captureCompletionStartTime = true;
-            this.#captureCompletionStartTime();
+          // Capture completion start time on first actual content (for time-to-first-token)
+          switch (chunk.type) {
+            case 'text-delta':
+            case 'tool-call-delta':
+            case 'reasoning-delta':
+              this.#captureCompletionStartTime();
+              break;
           }
 
           controller.enqueue(chunk);
@@ -492,17 +526,38 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
-              this.#startStepSpan(chunk.payload);
+              // If step already started (via startStep()), just update with payload data
+              // Otherwise start a new step (for backwards compatibility)
+              if (this.#currentStepSpan) {
+                this.updateStep(chunk.payload);
+              } else {
+                this.startStep(chunk.payload);
+              }
               break;
 
             case 'step-finish':
               this.#endStepSpan(chunk.payload);
               break;
 
-            case 'raw': // Skip raw chunks as they're redundant
-            case 'start':
-            case 'finish':
-              // don't output these chunks that don't have helpful output
+            // Infrastructure chunks - skip creating spans for these
+            // They are either redundant, metadata-only, or error/control flow
+            case 'raw': // Redundant raw data
+            case 'start': // Stream start marker
+            case 'finish': // Stream finish marker (step-finish already captures this)
+            case 'response-metadata': // Response metadata (not semantic content)
+            case 'source': // Source references (metadata)
+            case 'file': // Binary file data (too large/not semantic)
+            case 'error': // Error handling
+            case 'abort': // Abort signal
+            case 'tripwire': // Processor rejection
+            case 'watch': // Internal watch event
+            case 'tool-error': // Tool error handling
+            case 'tool-call-approval': // Approval request (not content)
+            case 'tool-call-suspended': // Suspension (not content)
+            case 'reasoning-signature': // Signature metadata
+            case 'redacted-reasoning': // Redacted content metadata
+            case 'step-output': // Step output wrapper (content is nested)
+              // Don't create spans for these chunks
               break;
 
             case 'tool-output':
@@ -527,28 +582,12 @@ export class ModelSpanTracker {
               break;
             }
 
-            // Default: auto-create event span for all other chunk types
-            default: {
-              let outputPayload = chunk.payload;
-
-              // Special handling: if payload has 'data' field, replace with size
-              if (outputPayload && typeof outputPayload === 'object' && 'data' in outputPayload) {
-                const typedPayload = outputPayload as any;
-                outputPayload = { ...typedPayload };
-                if (typedPayload.data) {
-                  (outputPayload as any).size =
-                    typeof typedPayload.data === 'string'
-                      ? typedPayload.data.length
-                      : typedPayload.data instanceof Uint8Array
-                        ? typedPayload.data.length
-                        : undefined;
-                  delete (outputPayload as any).data;
-                }
-              }
-
-              this.#createEventSpan(chunk.type, outputPayload);
+            // Default: skip creating spans for unrecognized chunk types
+            // All semantic content chunks should be explicitly handled above
+            // Unknown chunks are likely infrastructure or custom chunks that don't need tracing
+            default:
+              // No span created - reduces trace noise
               break;
-            }
           }
         },
       }),

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Interfaces | Observability"
 description: Tracing type definitions and interfaces
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -31,6 +33,9 @@ interface ObservabilityInstance {
   startSpan<TType extends SpanType>(
     options: StartSpanOptions<TType>,
   ): Span<TType>;
+
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
 
   /** Shutdown observability and clean up resources */
   shutdown(): Promise<void>;
@@ -151,6 +156,9 @@ interface ObservabilityExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void>;
+
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
 
   /** Shutdown exporter */
   shutdown(): Promise<void>;
@@ -578,6 +586,18 @@ interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 ```
 

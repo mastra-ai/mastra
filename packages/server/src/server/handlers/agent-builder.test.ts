@@ -15,17 +15,14 @@ import {
   RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_AGENT_BUILDER_ACTION_ROUTE,
   LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE,
-  GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE,
   CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE,
   STREAM_AGENT_BUILDER_ACTION_ROUTE,
   STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
-  STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE,
-  OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE,
 } from './agent-builder';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 
 vi.mock('@mastra/agent-builder', () => ({
   agentBuilderWorkflows: {
@@ -149,7 +146,7 @@ describe('Agent Builder Handlers', () => {
   describe('LIST_AGENT_BUILDER_ACTIONS_ROUTE', () => {
     it('should get all agent builder actions successfully', async () => {
       const result = await LIST_AGENT_BUILDER_ACTIONS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
       });
 
       expect(result).toEqual({
@@ -172,7 +169,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined as any,
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -184,7 +181,7 @@ describe('Agent Builder Handlers', () => {
 
       await expect(
         GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'invalid-action',
         }),
       ).rejects.toThrow(
@@ -200,7 +197,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when action is not found', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
@@ -208,7 +205,7 @@ describe('Agent Builder Handlers', () => {
 
     it('should get action by ID successfully', async () => {
       const result = await GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
       });
 
@@ -234,7 +231,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         START_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           actionId: undefined,
         } as any),
@@ -244,7 +241,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when action is not found', async () => {
       await expect(
         START_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
           runId: 'test-run',
         } as any),
@@ -253,7 +250,7 @@ describe('Agent Builder Handlers', () => {
 
     it('should start action run successfully when runId is not passed', async () => {
       const result = await START_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         inputData: {},
       } as any);
@@ -277,7 +274,7 @@ describe('Agent Builder Handlers', () => {
 
     it('should start action run successfully when runId is passed', async () => {
       const result = await START_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         runId: 'test-run',
         inputData: {},
@@ -299,7 +296,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           actionId: undefined as any,
         }),
@@ -309,7 +306,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: undefined as any,
         }),
@@ -319,7 +316,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when action is not found', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
           runId: 'test-run',
         }),
@@ -334,7 +331,7 @@ describe('Agent Builder Handlers', () => {
       await run.start({ inputData: {} });
 
       const result = await GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         runId: 'test-run',
       });
@@ -351,72 +348,11 @@ describe('Agent Builder Handlers', () => {
     });
   });
 
-  describe('GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE', () => {
-    it('should throw error when actionId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          actionId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
-    });
-
-    it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run',
-      });
-      await run.start({ inputData: {} });
-
-      const result = await GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
-        actionId: 'merge-template',
-        runId: 'test-run',
-      });
-
-      expect(result).toEqual({
-        activeStepsPath: {},
-        error: undefined,
-        status: 'success',
-        result: { result: 'success' },
-        payload: {},
-        steps: {
-          'test-step': {
-            status: 'success',
-            output: { result: 'success' },
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {},
-          },
-        },
-        serializedStepGraph: mockWorkflow.serializedStepGraph,
-      });
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-    });
-  });
-
   describe('CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           actionId: undefined as any,
         }),
@@ -426,7 +362,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when action is not found', async () => {
       await expect(
         CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
           runId: 'test-run',
         }),
@@ -435,7 +371,7 @@ describe('Agent Builder Handlers', () => {
 
     it('should create action run successfully', async () => {
       const result = await CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         runId: 'test-run',
       });
@@ -462,7 +398,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         START_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           actionId: undefined,
         } as any),
@@ -472,7 +408,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         START_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: undefined,
         } as any),
@@ -487,7 +423,7 @@ describe('Agent Builder Handlers', () => {
       await run.start({ inputData: {} });
 
       const result = await START_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         runId: 'test-run',
         inputData: { test: 'data' },
@@ -509,7 +445,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           step: 'test-step',
           resumeData: {},
@@ -521,7 +457,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           step: 'test-step',
           resumeData: {},
@@ -533,7 +469,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on resume', async () => {
       await expect(
         RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: 'non-existent',
           step: 'test-step',
@@ -556,7 +492,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         RESUME_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           step: 'test-step',
           resumeData: {},
@@ -575,7 +511,7 @@ describe('Agent Builder Handlers', () => {
       });
 
       const result = await RESUME_AGENT_BUILDER_ACTION_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'workflow-builder',
         runId: 'test-run',
         step: 'test-step',
@@ -598,7 +534,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined,
         } as any),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
@@ -606,7 +542,7 @@ describe('Agent Builder Handlers', () => {
 
     it('should get action runs successfully (empty)', async () => {
       const result = await LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         page: 0,
       });
@@ -632,7 +568,7 @@ describe('Agent Builder Handlers', () => {
       await run.start({ inputData: {} });
 
       const result = await LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         actionId: 'merge-template',
         page: 0,
       });
@@ -653,7 +589,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on cancel', async () => {
       await expect(
         CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: 'non-existent',
         }),
@@ -680,7 +616,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on stream', async () => {
       await expect(
         STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           inputData: {},
           runId: undefined,
@@ -704,39 +640,11 @@ describe('Agent Builder Handlers', () => {
     });
   });
 
-  describe('STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE', () => {
-    it('should handle workflow registry correctly on streamVNext', async () => {
-      await expect(
-        STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          inputData: {},
-          runId: undefined,
-        } as any),
-      ).rejects.toThrow(); // Will throw because streaming is complex to mock
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Streaming agent builder action (v2)',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
   describe('STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE', () => {
     it('should handle workflow registry correctly on streamLegacy', async () => {
       await expect(
         STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           inputData: {},
           runId: undefined,
@@ -764,7 +672,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined as any,
           runId: 'test-run',
         }),
@@ -774,7 +682,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: undefined as any,
         }),
@@ -784,7 +692,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on observeStreamLegacy', async () => {
       await expect(
         OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: 'non-existent',
         }),
@@ -811,7 +719,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           actionId: undefined as any,
         }),
@@ -821,7 +729,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: undefined as any,
         }),
@@ -831,7 +739,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on observeStream', async () => {
       await expect(
         OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'merge-template',
           runId: 'non-existent',
         }),
@@ -854,68 +762,11 @@ describe('Agent Builder Handlers', () => {
     });
   });
 
-  describe('OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE', () => {
-    it('should throw error when actionId is not provided', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          actionId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to observe workflow stream' }));
-    });
-
-    it('should throw error when action is not found', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          actionId: 'non-existent',
-          runId: 'test-run',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should handle workflow registry correctly on observeStreamVNext', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(); // Will throw because run doesn't exist
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Observing agent builder action stream (v2)',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
   describe('RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
         RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
           step: 'test-step',
           resumeData: {},
@@ -927,7 +778,7 @@ describe('Agent Builder Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'workflow-builder',
           step: 'test-step',
           resumeData: {},
@@ -939,7 +790,7 @@ describe('Agent Builder Handlers', () => {
     it('should handle workflow registry correctly on resumeStream', async () => {
       await expect(
         RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'workflow-builder',
           runId: 'non-existent',
           step: 'test-step',
@@ -976,7 +827,7 @@ describe('Agent Builder Handlers', () => {
 
       await expect(
         GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: errorMastra }),
+          ...createTestServerContext({ mastra: errorMastra }),
           actionId: 'merge-template', // Use an action that exists in workflowMap
         }),
       ).rejects.toThrow('Workflow not found');
@@ -1000,7 +851,7 @@ describe('Agent Builder Handlers', () => {
     it('should still register and cleanup workflows even when actionId is not provided', async () => {
       await expect(
         GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined as any,
         }),
       ).rejects.toThrow();

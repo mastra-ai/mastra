@@ -957,6 +957,262 @@ describe('QdrantVector', () => {
   });
 });
 
+describe('Named Vectors Support', () => {
+  /**
+   * Tests for GitHub Issue #4660: Support for named vectors in Qdrant
+   * @see https://github.com/mastra-ai/mastra/issues/4660
+   *
+   * Qdrant supports named vectors, allowing multiple vector fields per collection.
+   * The `using` parameter specifies which named vector to query against.
+   */
+
+  let qdrant: QdrantVector;
+  const namedVectorCollectionName = 'test-named-vectors-' + Date.now();
+
+  beforeAll(async () => {
+    qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-named-test' });
+  });
+
+  afterAll(async () => {
+    try {
+      await qdrant.deleteIndex({ indexName: namedVectorCollectionName });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should allow extending QdrantVector with access to protected client', async () => {
+    // This test validates that the client property is protected (not private)
+    // allowing subclasses to access it for custom functionality
+
+    class ExtendedQdrantVector extends QdrantVector {
+      // This compiles because client is protected
+      async customQuery(_indexName: string, _queryVector: number[], _namedVector: string) {
+        // Access to this.client works because it's protected
+        const client = this.client;
+        expect(client).toBeDefined();
+        return [];
+      }
+    }
+
+    const extendedQdrant = new ExtendedQdrantVector({
+      url: 'http://localhost:6333/',
+      id: 'qdrant-extended-test',
+    });
+
+    // Validate that the extended class can be instantiated
+    expect(extendedQdrant).toBeInstanceOf(QdrantVector);
+  });
+
+  describe('Named Vector Collection Operations', () => {
+    beforeAll(async () => {
+      // Create collection with multiple named vector spaces
+      await qdrant.createIndex({
+        indexName: namedVectorCollectionName,
+        dimension: dimension, // fallback dimension
+        namedVectors: {
+          text: { size: dimension, distance: 'cosine' },
+          image: { size: dimension, distance: 'euclidean' },
+        },
+      });
+    });
+
+    it('should upsert vectors into a named vector space', async () => {
+      const textVectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+      ];
+      const textMetadata = [
+        { type: 'text', content: 'doc1' },
+        { type: 'text', content: 'doc2' },
+        { type: 'text', content: 'doc3' },
+      ];
+
+      const ids = await qdrant.upsert({
+        indexName: namedVectorCollectionName,
+        vectors: textVectors,
+        metadata: textMetadata,
+        vectorName: 'text',
+      });
+
+      expect(ids).toHaveLength(3);
+    });
+
+    it('should upsert vectors into a different named vector space', async () => {
+      const imageVectors = [
+        [0.5, 0.5, 0.0],
+        [0.0, 0.5, 0.5],
+        [0.5, 0.0, 0.5],
+      ];
+      const imageMetadata = [
+        { type: 'image', content: 'img1' },
+        { type: 'image', content: 'img2' },
+        { type: 'image', content: 'img3' },
+      ];
+
+      const ids = await qdrant.upsert({
+        indexName: namedVectorCollectionName,
+        vectors: imageVectors,
+        metadata: imageMetadata,
+        vectorName: 'image',
+      });
+
+      expect(ids).toHaveLength(3);
+    });
+
+    it('should query using a specific named vector', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 3,
+        using: 'text',
+      });
+
+      expect(results).toBeDefined();
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.score).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.type).toBe('text');
+    });
+
+    it('should query a different named vector space', async () => {
+      const queryVector = [0.5, 0.5, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 3,
+        using: 'image',
+      });
+
+      expect(results).toBeDefined();
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.type).toBe('image');
+    });
+
+    it('should return vectors from the correct named space when includeVector is true', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 1,
+        using: 'text',
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+    });
+
+    it('should apply filters when querying named vectors', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 10,
+        using: 'text',
+        filter: { content: 'doc1' },
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.content).toBe('doc1');
+    });
+
+    it('should isolate queries between different named vector spaces', async () => {
+      // Query text space
+      const textResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 3,
+        using: 'text',
+      });
+
+      // Query image space
+      const imageResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [0.5, 0.5, 0.0],
+        topK: 3,
+        using: 'image',
+      });
+
+      // Verify results are from correct spaces
+      expect(textResults.every(r => r.metadata?.type === 'text')).toBe(true);
+      expect(imageResults.every(r => r.metadata?.type === 'image')).toBe(true);
+    });
+
+    it('should throw error when upserting to non-existent vector name', async () => {
+      await expect(
+        qdrant.upsert({
+          indexName: namedVectorCollectionName,
+          vectors: [[1, 2, 3]],
+          vectorName: 'non_existent_vector',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('Backward Compatibility', () => {
+    const singleVectorCollectionName = 'test-single-vector-' + Date.now();
+
+    beforeAll(async () => {
+      // Create a traditional single-vector collection
+      await qdrant.createIndex({
+        indexName: singleVectorCollectionName,
+        dimension,
+        metric: 'cosine',
+      });
+    });
+
+    afterAll(async () => {
+      try {
+        await qdrant.deleteIndex({ indexName: singleVectorCollectionName });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should work without vectorName for single-vector collections', async () => {
+      const vectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+      ];
+      const metadata = [{ label: 'a' }, { label: 'b' }];
+
+      const ids = await qdrant.upsert({
+        indexName: singleVectorCollectionName,
+        vectors,
+        metadata,
+      });
+
+      expect(ids).toHaveLength(2);
+    });
+
+    it('should query without using parameter for single-vector collections', async () => {
+      const results = await qdrant.query({
+        indexName: singleVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 2,
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.score).toBeGreaterThan(0);
+    });
+
+    it('should return vector in results for single-vector collections', async () => {
+      const results = await qdrant.query({
+        indexName: singleVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 1,
+        includeVector: true,
+      });
+
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+    });
+  });
+});
+
 // Metadata filtering tests for Memory system
 describe('Qdrant Metadata Filtering', () => {
   const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-metadata-test' });

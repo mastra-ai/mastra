@@ -1,6 +1,8 @@
 ---
 title: "Streaming Overview | Streaming"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Streaming Overview
@@ -11,7 +13,7 @@ Mastra supports real-time, incremental responses from agents and workflows, allo
 
 Mastra's streaming API adapts based on your model version:
 
-- **`.stream()`**: For V2 models, supports **AI SDK v5** (`LanguageModelV2`).
+- **`.stream()`**: For V2 models, supports **AI SDK v5** and later (`LanguageModelV2`).
 - **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
 
 ## Streaming with agents
@@ -22,7 +24,7 @@ You can pass a single string for simple prompts, an array of strings when provid
 
 A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
-```typescript {3,7} showLineNumbers copy
+```typescript {3,7}
 const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream([
@@ -34,7 +36,11 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Output from `Agent.stream()`
 
@@ -56,13 +62,13 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-### AI SDK v5 Compatibility
+### AI SDK v5+ Compatibility
 
-AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
 
-For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
-```typescript {2,9-12} showLineNumbers copy
+```typescript {2,9-12}
 import { toAISdkV5Stream } from "@mastra/ai-sdk";
 
 const testAgent = mastra.getAgent("testAgent");
@@ -71,15 +77,15 @@ const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
 ]);
 
-// Convert to AI SDK v5 compatible stream
+// Convert to AI SDK v5+ compatible stream
 const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
 
-// Use with AI SDK v5 methods
+// Use with AI SDK v5+ methods
 ```
 
-For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
-```typescript {1,4} showLineNumbers copy
+```typescript {1,4}
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const messages = [{ role: "user", content: "Hello" }];
@@ -92,7 +98,7 @@ The `network()` method enables multi-agent collaboration by executing a network 
 
 > **Note**: This method is experimental and requires memory to be configured on the agent.
 
-```typescript {3,5-7} showLineNumbers copy
+```typescript {3,5-7}
 const testAgent = mastra.getAgent("testAgent");
 
 const networkStream = await testAgent.network("Help me organize my day");
@@ -102,7 +108,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 #### Network stream properties
 
@@ -112,7 +122,7 @@ The network stream provides access to execution information:
 - **`networkStream.result`**: Promise resolving to the complete execution results
 - **`networkStream.usage`**: Promise resolving to token usage information
 
-```typescript {9-11} showLineNumbers copy
+```typescript {9-11}
 const testAgent = mastra.getAgent("testAgent");
 
 const networkStream = await testAgent.network(
@@ -136,7 +146,7 @@ Streaming from a workflow returns a sequence of structured events describing the
 
 The `stream()` method returns a `ReadableStream` of events directly.
 
-```typescript {3,9} showLineNumbers copy
+```typescript {3,9}
 const run = await testWorkflow.createRun();
 
 const stream = await run.stream({
@@ -150,14 +160,17 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.stream()](/reference/v1/streaming/workflows/stream) method documentation for more information.
+:::info
+
+Visit [Run.stream()](/reference/v1/streaming/workflows/stream) for more information.
+
+:::
 
 ### Output from `Run.stream()`
 
 The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
-// ...
 {
   type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',

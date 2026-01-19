@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Input } from '@/components/ui/input';
-import Spinner from '@/components/ui/spinner';
+import { Input } from '@/ds/components/Input';
+import { Spinner } from '@/ds/components/Spinner';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
@@ -278,8 +278,8 @@ export const AgentMetadataModelSwitcher = ({
   };
 
   return (
-    <>
-      <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 w-full">
+    <div className="@container">
+      <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
         <Popover
           open={showProviderSuggestions}
           onOpenChange={open => {
@@ -291,7 +291,7 @@ export const AgentMetadataModelSwitcher = ({
           }}
         >
           <PopoverTrigger asChild>
-            <div className="relative w-full xl:w-2/5">
+            <div className="relative w-full @xs:w-2/5">
               {!isSearchingProvider && currentModelProvider && (
                 <>
                   <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
@@ -443,7 +443,7 @@ export const AgentMetadataModelSwitcher = ({
                   <div
                     key={provider.id}
                     data-provider-highlighted={isHighlighted}
-                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-4 rounded ${
+                    className={`flex items-center gap-2 cursor-pointer hover:bg-surface5 px-3 py-2 rounded-md ${
                       isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                     } ${isSelected ? 'bg-surface5' : ''}`}
                     onClick={() => handleProviderSelect(provider)}
@@ -489,7 +489,7 @@ export const AgentMetadataModelSwitcher = ({
               aria-label="Search models"
               spellCheck="false"
               ref={modelInputRef}
-              className="w-full xl:w-3/5"
+              className="w-full @xs:w-3/5"
               type="text"
               value={modelSearch || selectedModel}
               onChange={e => {
@@ -610,7 +610,7 @@ export const AgentMetadataModelSwitcher = ({
                   <Loader2 className="h-4 w-4 animate-spin mx-auto" />
                 </div>
               ) : filteredModels.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">No models found</div>
+                <div className="p-4 text-center text-sm text-neutral3">No models found</div>
               ) : (
                 filteredModels.map((model, index) => {
                   const isHighlighted = index === highlightedModelIndex;
@@ -619,7 +619,7 @@ export const AgentMetadataModelSwitcher = ({
                     <div
                       key={`${model.provider}-${model.model}`}
                       data-model-highlighted={isHighlighted}
-                      className={`flex items-center gap-2 px-4 py-3 cursor-pointer rounded hover:bg-surface5 ${
+                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer rounded-md hover:bg-surface5 ${
                         isHighlighted ? 'outline outline-2 outline-blue-500' : ''
                       } ${isSelected ? 'bg-surface5' : ''}`}
                       onMouseDown={e => {
@@ -693,13 +693,13 @@ export const AgentMetadataModelSwitcher = ({
       {infoMsg && (
         <div
           className={cn(
-            'text-[0.75rem] text-icon3 flex gap-[.5rem] mt-[0.5rem] ml-[.5rem]',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-[0.1rem]',
+            'text-ui-sm text-neutral3 flex gap-2 mt-2 ml-2',
+            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-7 [&>svg]:flex-shrink-0 [&>svg]:mt-0.5',
           )}
         >
           <Info /> {infoMsg}
         </div>
       )}
-    </>
+    </div>
   );
 };

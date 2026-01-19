@@ -1,6 +1,8 @@
 ---
 title: "Reference: Memory.createThread() | Memory"
 description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
+packages:
+  - "@mastra/memory"
 ---
 
 # Memory.createThread()
@@ -9,7 +11,7 @@ The `.createThread()` method creates a new conversation thread in the memory sys
 
 ## Usage Example
 
-```typescript copy
+```typescript
 await memory?.createThread({ resourceId: "user-123" });
 ```
 
@@ -85,7 +87,7 @@ await memory?.createThread({ resourceId: "user-123" });
 
 ## Extended usage example
 
-```typescript title="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts"
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");
@@ -116,4 +118,4 @@ console.log(response.text);
 - [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads concept)
 - [getThreadById](/reference/v1/memory/getThreadById)
 - [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
-- [query](/reference/v1/memory/query)
+- [recall](/reference/v1/memory/recall)

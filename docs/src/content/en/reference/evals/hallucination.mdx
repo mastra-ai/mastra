@@ -1,6 +1,9 @@
 ---
 title: "Reference: Hallucination Scorer | Evals"
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Hallucination Scorer
@@ -135,7 +138,7 @@ A hallucination score between 0 and 1:
 
 Evaluate agent responses for hallucinations against provided context:
 
-```typescript title="src/example-hallucination.ts" showLineNumbers copy
+```typescript title="src/example-hallucination.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.resume() | Workflows"
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.resume()
@@ -9,7 +11,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
@@ -45,9 +47,9 @@ if (result.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runCount",
+      name: "retryCount",
       type: "number",
-      description: "Optional run count for nested workflow execution",
+      description: "Optional retry count for nested workflow execution",
       isOptional: true,
     },
     {
@@ -177,7 +179,7 @@ if (result.status === "suspended") {
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 if (result.status === "suspended") {
   const resumedResults = await run.resume({
     step: result.suspended[0],

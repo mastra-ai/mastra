@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -10,17 +10,28 @@ import {
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsClickhouse } from '../operations';
+import type { StoragePagination } from '@mastra/core/storage';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
 
 export class ScoresStorageClickhouse extends ScoresStorage {
   protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+  #db: ClickhouseDB;
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new ClickhouseDB({ client, ttl });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   /**
@@ -69,8 +80,8 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -79,21 +90,36 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { scoreId: score.id },
+          details: {
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
 
+    const now = new Date();
+    const id = crypto.randomUUID();
+    const createdAt = now;
+    const updatedAt = now;
+
     try {
       // Build record from schema columns, converting undefined to null for ClickHouse
       const record: Record<string, unknown> = {};
       for (const key of Object.keys(SCORERS_SCHEMA)) {
-        const value = parsedScore[key as keyof typeof parsedScore];
-        if (key === 'createdAt' || key === 'updatedAt') {
-          record[key] = new Date().toISOString();
+        if (key === 'id') {
+          record[key] = id;
           continue;
         }
+        if (key === 'createdAt' || key === 'updatedAt') {
+          record[key] = now.toISOString();
+          continue;
+        }
+        const value = parsedScore[key as keyof typeof parsedScore];
         record[key] = value === undefined || value === null ? '_null_' : value;
       }
 
@@ -107,14 +133,14 @@ export class ScoresStorageClickhouse extends ScoresStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      return { score };
+      return { score: { ...parsedScore, id, createdAt, updatedAt } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { scoreId: score.id },
+          details: { scoreId: id },
         },
         error,
       );
@@ -127,7 +153,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       // Get total count
       const countResult = await this.client.query({
@@ -213,7 +239,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     let whereClause = `scorerId = {var_scorerId:String}`;
     if (entityId) {
       whereClause += ` AND entityId = {var_entityId:String}`;
@@ -314,7 +340,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       // Get total count
       const countResult = await this.client.query({
@@ -397,7 +423,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const countResult = await this.client.query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}`,

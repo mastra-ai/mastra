@@ -1,6 +1,8 @@
 import { ChunkFrom } from '@mastra/core/stream';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, MastraAgentNetworkStream } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
+
+import { toAISdkV5Stream } from '../convert-streams';
 import { WorkflowStreamToAISDKTransformer } from '../transformers';
 
 describe('WorkflowStreamToAISDKTransformer', () => {
@@ -358,6 +360,110 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(toolOutputAvailableChunk.output).toEqual({ results: ['result 1', 'result 2'] });
     });
 
+    it('should transform tool-call-suspended chunks from workflow-step-output', async () => {
+      const mockStream = new ReadableStream<ChunkType>({
+        async start(controller) {
+          // Workflow starts
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              workflowId: 'test-workflow',
+            },
+          });
+
+          // Step starts
+          controller.enqueue({
+            id: 'agent-step',
+            type: 'workflow-step-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              id: 'agent-step',
+              stepCallId: 'call-1',
+              status: 'running',
+            },
+          });
+
+          // Tool call suspended chunk (Mastra chunk format)
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              output: {
+                type: 'tool-call-suspended',
+                from: ChunkFrom.AGENT,
+                runId: 'agent-run-id',
+                payload: {
+                  toolCallId: 'tool-call-1',
+                  toolName: 'suspendable-tool',
+                  suspendPayload: {
+                    reason: 'Waiting for user approval',
+                    data: { value: 42 },
+                  },
+                },
+              },
+            },
+          });
+
+          // Step result
+          controller.enqueue({
+            type: 'workflow-step-result',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              id: 'agent-step',
+              stepCallId: 'call-1',
+              status: 'success',
+              output: {},
+            },
+          });
+
+          // Workflow finish
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              metadata: {},
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const transformedStream = mockStream.pipeThrough(
+        WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true }),
+      );
+
+      const chunks: any[] = [];
+      for await (const chunk of transformedStream) {
+        chunks.push(chunk);
+      }
+
+      // Find the tool-call-suspended chunk (converted to data-tool-call-suspended)
+      const toolCallSuspendedChunk = chunks.find(chunk => chunk.type === 'data-tool-call-suspended');
+
+      // Verify tool-call-suspended is transformed and passed through
+      expect(toolCallSuspendedChunk).toBeDefined();
+      expect(toolCallSuspendedChunk.type).toBe('data-tool-call-suspended');
+      expect(toolCallSuspendedChunk.id).toBe('tool-call-1');
+      expect(toolCallSuspendedChunk.data).toEqual({
+        runId: 'agent-run-id',
+        toolCallId: 'tool-call-1',
+        toolName: 'suspendable-tool',
+        suspendPayload: {
+          reason: 'Waiting for user approval',
+          data: { value: 42 },
+        },
+      });
+    });
+
     it('should not include text stream chunks when includeTextStreamParts is false', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
@@ -489,5 +595,330 @@ describe('WorkflowStreamToAISDKTransformer', () => {
         value: 42,
       });
     });
+  });
+});
+
+describe('AgentNetworkToAISDKTransformer', () => {
+  it('should return NetworkDataPart on each agent-execution-event and workflow-execution-event', async () => {
+    const mockStream = new ReadableStream({
+      async start(controller) {
+        // Network start
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'test-agent',
+            runId: 'agent-run-1',
+            inputData: {
+              iteration: 0,
+              task: null,
+              threadId: 'thread-1',
+              threadResourceId: 'resource-1',
+            },
+          },
+        });
+
+        // Agent execution start
+        controller.enqueue({
+          type: 'agent-execution-start',
+          runId: 'network-run-1',
+          payload: {
+            agentId: 'test-agent',
+            runId: 'agent-run-1',
+            args: {
+              prompt: 'test prompt',
+              iteration: 0,
+            },
+          },
+        });
+
+        // Agent execution event (should return NetworkDataPart)
+        controller.enqueue({
+          type: 'agent-execution-event-start',
+          runId: 'network-run-1',
+          payload: {
+            type: 'start',
+            runId: 'agent-run-1',
+            from: 'AGENT',
+            payload: {
+              id: 'test-agent',
+            },
+          },
+        });
+
+        // Workflow execution start
+        controller.enqueue({
+          type: 'workflow-execution-start',
+          runId: 'network-run-1',
+          payload: {
+            workflowId: 'test-workflow',
+            runId: 'workflow-run-1',
+            args: {
+              prompt: 'test prompt',
+              iteration: 0,
+            },
+          },
+        });
+
+        // Workflow execution event (should return NetworkDataPart)
+        controller.enqueue({
+          type: 'workflow-execution-event-workflow-start',
+          runId: 'network-run-1',
+          payload: {
+            type: 'workflow-start',
+            runId: 'workflow-run-1',
+            payload: {
+              workflowId: 'test-workflow',
+            },
+          },
+        });
+
+        // Network finish
+        controller.enqueue({
+          type: 'network-execution-event-finish',
+          runId: 'network-run-1',
+          payload: {
+            result: 'completed',
+            usage: {
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+          },
+        });
+
+        controller.close();
+      },
+    });
+
+    const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of aiSdkStream) {
+      chunks.push(chunk);
+    }
+
+    // Find all NetworkDataPart chunks
+    const networkChunks = chunks.filter(chunk => chunk.type === 'data-network' || chunk.type === 'data-tool-network');
+
+    // Should have NetworkDataPart chunks for:
+    // 1. routing-agent-start
+    // 2. agent-execution-start
+    // 3. agent-execution-event-start (our new behavior - returns NetworkDataPart)
+    // 4. workflow-execution-start
+    // 5. workflow-execution-event-workflow-start (our new behavior - returns NetworkDataPart)
+    // 6. network-execution-event-finish
+    expect(networkChunks.length).toBeGreaterThanOrEqual(6);
+
+    // Verify that agent-execution-event-start returns a NetworkDataPart
+    // The chunk should have the step with updated task from transformAgent
+    const agentEventChunk = networkChunks.find(chunk =>
+      chunk.data?.steps?.some((step: any) => step.name === 'test-agent' && step.task),
+    );
+    expect(agentEventChunk).toBeDefined();
+    expect(agentEventChunk?.type).toBe('data-network');
+    expect(agentEventChunk?.data.status).toBe('running');
+    expect(agentEventChunk?.data.steps).toBeDefined();
+    expect(agentEventChunk?.data.name).toBe('test-network');
+
+    // Verify that workflow-execution-event-workflow-start returns a NetworkDataPart
+    // The chunk should have the step with updated task from transformWorkflow
+    const workflowEventChunk = networkChunks.find(chunk =>
+      chunk.data?.steps?.some((step: any) => step.name === 'test-workflow' && step.task),
+    );
+    expect(workflowEventChunk).toBeDefined();
+    expect(workflowEventChunk?.type).toBe('data-network');
+    expect(workflowEventChunk?.data.status).toBe('running');
+    expect(workflowEventChunk?.data.steps).toBeDefined();
+    expect(workflowEventChunk?.data.name).toBe('test-network');
+
+    // Verify that the step's task was updated for agent event (from transformAgent)
+    const agentStep = agentEventChunk?.data.steps.find((step: any) => step.name === 'test-agent');
+    expect(agentStep).toBeDefined();
+    expect(agentStep?.task).toBeDefined();
+    expect(agentStep?.task.id).toBe('test-agent');
+    expect(agentStep?.task.text).toBe(''); // From transformAgent initial state
+
+    // Verify that the step's task was updated for workflow event (from transformWorkflow)
+    const workflowStep = workflowEventChunk?.data.steps.find((step: any) => step.name === 'test-workflow');
+    expect(workflowStep).toBeDefined();
+    expect(workflowStep?.task).toBeDefined();
+    expect(workflowStep?.task.name).toBe('test-workflow'); // From transformWorkflow
+  });
+});
+
+describe('Network stream - core fix (text events from core)', () => {
+  it('should transform routing-agent-text-* events to text-start and text-delta', async () => {
+    // This tests the flow when core emits text events (the fix)
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Who are you?',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        // Core now emits text events when routing agent handles request without delegation
+        controller.enqueue({
+          type: 'routing-agent-text-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: { runId: 'step-run-1' },
+        });
+        controller.enqueue({
+          type: 'routing-agent-text-delta',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: { runId: 'step-run-1', text: 'I am a helpful assistant.' },
+        });
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            prompt: '',
+            isComplete: true,
+            selectionReason: 'I am a helpful assistant.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartChunks = chunks.filter(c => c.type === 'text-start');
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+
+    expect(textStartChunks.length).toBeGreaterThan(0);
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaChunks.map(c => c.delta || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
+  });
+});
+
+describe('Network stream - fallback (no text events from core)', () => {
+  it('should emit text events via fallback when core does not send text events', async () => {
+    // This tests the fallback: no routing-agent-text-* events, text should come from step-finish result
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Who are you?',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        // NO routing-agent-text-start or routing-agent-text-delta events
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: '',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            prompt: '',
+            isComplete: true,
+            selectionReason: 'I am a helpful assistant.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartChunks = chunks.filter(c => c.type === 'text-start');
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+    const dataNetworkChunks = chunks.filter(c => c.type === 'data-network');
+
+    expect(dataNetworkChunks.length).toBeGreaterThan(0);
+
+    const lastNetworkChunk = dataNetworkChunks[dataNetworkChunks.length - 1];
+    expect(lastNetworkChunk.data.output).toBe('I am a helpful assistant.');
+
+    // Fallback should emit text events
+    expect(textStartChunks.length).toBeGreaterThan(0);
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaChunks.map(c => c.delta || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
   });
 });

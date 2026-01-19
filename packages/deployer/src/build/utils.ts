@@ -1,8 +1,32 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import { getPackageInfo } from 'local-pkg';
-import { pathToFileURL } from 'node:url';
+import { builtinModules } from 'node:module';
+
+/** The detected JavaScript runtime environment */
+export type RuntimePlatform = 'node' | 'bun';
+
+/**
+ * The esbuild/bundler platform setting.
+ * - 'node': Assumes Node.js environment, externalizes built-in modules
+ * - 'browser': Assumes browser environment, polyfills Node APIs
+ * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
+ */
+export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Detect the current JavaScript runtime environment.
+ *
+ * This is used by the bundler to determine the appropriate esbuild platform
+ * setting. When running under Bun, we need to use 'neutral' platform to
+ * preserve Bun-specific globals (like Bun.s3).
+ */
+export function detectRuntime(): RuntimePlatform {
+  if (process.versions?.bun) {
+    return 'bun';
+  }
+  return 'node';
+}
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -32,33 +56,6 @@ export function getPackageName(id: string) {
   }
 
   return parts[0];
-}
-
-/**
- * Get package root path
- */
-export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath: string | null;
-
-  try {
-    let options: { paths?: string[] } | undefined = undefined;
-    if (parentPath) {
-      if (!parentPath.startsWith('file://')) {
-        parentPath = pathToFileURL(parentPath).href;
-      }
-
-      options = {
-        paths: [parentPath],
-      };
-    }
-
-    const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
-  } catch (e) {
-    rootPath = null;
-  }
-
-  return rootPath;
 }
 
 /**
@@ -149,4 +146,55 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 
     return true;
   });
+}
+
+/**
+ * Ensures that server.studioBase is normalized.
+ *
+ * - If server.studioBase is '/' or empty, returns empty string
+ * - Normalizes multiple slashes to single slash (e.g., '//' → '/')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ *
+ * @param studioBase - The studioBase path to normalize
+ * @returns Normalized studioBase path string
+ */
+export function normalizeStudioBase(studioBase: string): string {
+  // Validate: no path traversal, no query params, no special chars
+  if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
+    throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);
+  }
+
+  // Normalize multiple slashes to single slash
+  studioBase = studioBase.replace(/\/+/g, '/');
+
+  // Handle default value cases
+  if (studioBase === '/' || studioBase === '') {
+    return '';
+  }
+
+  // Remove trailing slash
+  if (studioBase.endsWith('/')) {
+    studioBase = studioBase.slice(0, -1);
+  }
+
+  // Add leading slash if missing
+  if (!studioBase.startsWith('/')) {
+    studioBase = `/${studioBase}`;
+  }
+
+  return studioBase;
+}
+
+/**
+ * Check if a module is a Node.js builtin module
+ * @param specifier - Module specifier
+ * @returns True if it's a builtin module
+ */
+export function isBuiltinModule(specifier: string): boolean {
+  return (
+    builtinModules.includes(specifier) ||
+    specifier.startsWith('node:') ||
+    builtinModules.includes(specifier.replace(/^node:/, ''))
+  );
 }

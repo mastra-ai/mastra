@@ -1,5 +1,656 @@
 # @mastra/inngest
 
+## 1.0.0-beta.13
+
+### Major Changes
+
+- Refactor workflow and tool types to remove Zod-specific constraints ([#11814](https://github.com/mastra-ai/mastra/pull/11814))
+
+  Removed Zod-specific type constraints across all workflow implementations and tool types, replacing them with generic types. This ensures type consistency across default, evented, and inngest workflows while preparing for Zod v4 migration.
+
+  **Workflow Changes:**
+  - Removed `z.ZodObject<any>` and `z.ZodType<any>` constraints from all workflow generic types
+  - Updated method signatures to use `TInput` and `TState` directly instead of `z.infer<TInput>` and `z.infer<TState>`
+  - Aligned conditional types across all workflow implementations using `TInput extends unknown` pattern
+  - Fixed `TSteps` generic to properly use `TEngineType` instead of `any`
+
+  **Tool Changes:**
+  - Removed Zod schema constraints from `ToolExecutionContext` and related interfaces
+  - Simplified type parameters from `TSuspendSchema extends ZodLikeSchema` to `TSuspend` and `TResume`
+  - Updated tool execution context types to use generic types
+
+  **Type Utilities:**
+  - Refactored type helpers to work with generic schemas instead of Zod-specific types
+  - Updated type extraction utilities for better compatibility
+
+  This change maintains backward compatibility while improving type consistency and preparing for Zod v4 support across all affected packages.
+
+- **Breaking Change**: Convert OUTPUT generic from `OutputSchema` constraint to plain generic ([#11741](https://github.com/mastra-ai/mastra/pull/11741))
+
+  This change removes the direct dependency on Zod typings in the public API by converting all `OUTPUT extends OutputSchema` generic constraints to plain `OUTPUT` generics throughout the codebase. This is preparation for moving to a standard schema approach.
+  - All generic type parameters previously constrained to `OutputSchema` (e.g., `<OUTPUT extends OutputSchema = undefined>`) are now plain generics with defaults (e.g., `<OUTPUT = undefined>`)
+  - Affects all public APIs including `Agent`, `MastraModelOutput`, `AgentExecutionOptions`, and stream/generate methods
+  - `InferSchemaOutput<OUTPUT>` replaced with `OUTPUT` throughout
+  - `PartialSchemaOutput<OUTPUT>` replaced with `Partial<OUTPUT>`
+  - Schema fields now use `NonNullable<OutputSchema<OUTPUT>>` instead of `OUTPUT` directly
+  - Added `FullOutput<OUTPUT>` type representing complete output with all fields
+  - Added `AgentExecutionOptionsBase<OUTPUT>` type
+  - `getFullOutput()` method now returns `Promise<FullOutput<OUTPUT>>`
+  - `Agent` class now generic: `Agent<TAgentId, TTools, TOutput>`
+  - `agent.generate()` and `agent.stream()` methods have updated signatures
+  - `MastraModelOutput<OUTPUT>` no longer requires `OutputSchema` constraint
+  - Network route and streaming APIs updated to use plain OUTPUT generic
+
+  **Before:**
+
+  ```typescript
+  const output = await agent.generate<z.ZodType>({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+
+  **After:**
+  const output = await agent.generate<z.infer<typeof mySchema>>({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+  // Or rely on type inference:
+  const output = await agent.generate({
+    messages: [...],
+    structuredOutput: { schema: mySchema }
+  });
+
+  ```
+
+### Patch Changes
+
+- Improved TypeScript type inference for workflow steps. ([#11953](https://github.com/mastra-ai/mastra/pull/11953))
+
+  **What changed:**
+  - Step input/output type mismatches are now caught at compile time when chaining steps with `.then()`
+  - The `execute` function now properly infers types from `inputSchema`, `outputSchema`, `stateSchema`, and other schema parameters
+  - Clearer error messages when step types don't match workflow requirements
+
+  **Why:**
+  Previously, type errors in workflow step chains would only surface at runtime. Now TypeScript validates that each step's input requirements are satisfied by the previous step's output, helping you catch integration issues earlier in development.
+
+- Fix custom error properties being lost through Inngest serialization ([#11962](https://github.com/mastra-ai/mastra/pull/11962))
+
+  Inngest's error serialization only captures standard Error properties (message, name, stack, code, cause). Custom properties like `statusCode`, `responseHeaders`, or `isRetryable` from API/AI SDK errors were being stripped during serialization. Errors are now wrapped with a cause structure that preserves custom properties through the serialization boundary.
+
+- Real-time span export for Inngest workflow engine ([#11973](https://github.com/mastra-ai/mastra/pull/11973))
+  - Spans are now exported immediately when created and ended, instead of being batched at workflow completion
+  - Added durable span lifecycle hooks (`createStepSpan`, `endStepSpan`, `errorStepSpan`, `createChildSpan`, `endChildSpan`, `errorChildSpan`) that wrap span operations in Inngest's `step.run()` for memoization
+  - Added `rebuildSpan()` method to reconstruct span objects from exported data after Inngest replay
+  - Fixed nested workflow step spans missing output data
+  - Spans correctly maintain parent-child relationships across Inngest's durable execution boundaries using `tracingIds`
+
+- Fix observability tracing for Inngest workflows ([#11885](https://github.com/mastra-ai/mastra/pull/11885))
+  - Use SpanCollector to capture span hierarchy during execution and create real spans in the memoized finalize step
+  - Fix span timing by using step result `startedAt`/`endedAt` (memoized by Inngest) instead of replay-time timestamps
+  - Ensures proper parent-child span relationships and accurate durations in traces
+  - Multi-replica safe: no shared state needed across server instances
+
+- Updated dependencies [[`ebae12a`](https://github.com/mastra-ai/mastra/commit/ebae12a2dd0212e75478981053b148a2c246962d), [`c61a0a5`](https://github.com/mastra-ai/mastra/commit/c61a0a5de4904c88fd8b3718bc26d1be1c2ec6e7), [`69136e7`](https://github.com/mastra-ai/mastra/commit/69136e748e32f57297728a4e0f9a75988462f1a7), [`449aed2`](https://github.com/mastra-ai/mastra/commit/449aed2ba9d507b75bf93d427646ea94f734dfd1), [`eb648a2`](https://github.com/mastra-ai/mastra/commit/eb648a2cc1728f7678768dd70cd77619b448dab9), [`0131105`](https://github.com/mastra-ai/mastra/commit/0131105532e83bdcbb73352fc7d0879eebf140dc), [`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`b00ccd3`](https://github.com/mastra-ai/mastra/commit/b00ccd325ebd5d9e37e34dd0a105caae67eb568f), [`3bdfa75`](https://github.com/mastra-ai/mastra/commit/3bdfa7507a91db66f176ba8221aa28dd546e464a), [`e770de9`](https://github.com/mastra-ai/mastra/commit/e770de941a287a49b1964d44db5a5763d19890a6), [`52e2716`](https://github.com/mastra-ai/mastra/commit/52e2716b42df6eff443de72360ae83e86ec23993), [`27b4040`](https://github.com/mastra-ai/mastra/commit/27b4040bfa1a95d92546f420a02a626b1419a1d6), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151), [`8dc7f55`](https://github.com/mastra-ai/mastra/commit/8dc7f55900395771da851dc7d78d53ae84fe34ec), [`8379099`](https://github.com/mastra-ai/mastra/commit/8379099fc467af6bef54dd7f80c9bd75bf8bbddf), [`8c0ec25`](https://github.com/mastra-ai/mastra/commit/8c0ec25646c8a7df253ed1e5ff4863a0d3f1316c), [`ff4d9a6`](https://github.com/mastra-ai/mastra/commit/ff4d9a6704fc87b31a380a76ed22736fdedbba5a), [`69821ef`](https://github.com/mastra-ai/mastra/commit/69821ef806482e2c44e2197ac0b050c3fe3a5285), [`1ed5716`](https://github.com/mastra-ai/mastra/commit/1ed5716830867b3774c4a1b43cc0d82935f32b96), [`4186bdd`](https://github.com/mastra-ai/mastra/commit/4186bdd00731305726fa06adba0b076a1d50b49f), [`7aaf973`](https://github.com/mastra-ai/mastra/commit/7aaf973f83fbbe9521f1f9e7a4fd99b8de464617)]:
+  - @mastra/core@1.0.0-beta.22
+
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Added `createServe` factory function to support multiple web framework adapters for Inngest workflows. ([#11667](https://github.com/mastra-ai/mastra/pull/11667))
+
+  Previously, the `serve` function only supported Hono. Now you can use any framework adapter provided by the Inngest package (Express, Fastify, Koa, Next.js, and more).
+
+  **Before (Hono only)**
+
+  ```typescript
+  import { serve } from '@mastra/inngest';
+
+  // Only worked with Hono
+  app.all('/api/inngest', c => serve({ mastra, inngest })(c));
+  ```
+
+  **After (any framework)**
+
+  ```typescript
+  import { createServe } from '@mastra/inngest';
+  import { serve as expressAdapter } from 'inngest/express';
+  import { serve as fastifyAdapter } from 'inngest/fastify';
+
+  // Express
+  app.use('/api/inngest', createServe(expressAdapter)({ mastra, inngest }));
+
+  // Fastify
+  fastify.route({
+    method: ['GET', 'POST', 'PUT'],
+    url: '/api/inngest',
+    handler: createServe(fastifyAdapter)({ mastra, inngest }),
+  });
+  ```
+
+  The existing `serve` export remains available for backward compatibility with Hono.
+
+  Fixes #10053
+
+### Patch Changes
+
+- Add additional context to workflow `onFinish` and `onError` callbacks ([#11705](https://github.com/mastra-ai/mastra/pull/11705))
+
+  The `onFinish` and `onError` lifecycle callbacks now receive additional properties:
+  - `runId` - The unique identifier for the workflow run
+  - `workflowId` - The workflow's identifier
+  - `resourceId` - Optional resource identifier (if provided when creating the run)
+  - `getInitData()` - Function that returns the initial input data passed to the workflow
+  - `mastra` - The Mastra instance (if workflow is registered with Mastra)
+  - `requestContext` - Request-scoped context data
+  - `logger` - The workflow's logger instance
+  - `state` - The workflow's current state object
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'order-processing',
+    inputSchema: z.object({ orderId: z.string() }),
+    outputSchema: z.object({ status: z.string() }),
+    options: {
+      onFinish: async ({ runId, workflowId, getInitData, logger, state, mastra }) => {
+        const inputData = getInitData();
+        logger.info(`Workflow ${workflowId} run ${runId} completed`, {
+          orderId: inputData.orderId,
+          finalState: state,
+        });
+
+        // Access other Mastra components if needed
+        const agent = mastra?.getAgent('notification-agent');
+      },
+      onError: async ({ runId, workflowId, error, logger, requestContext }) => {
+        logger.error(`Workflow ${workflowId} run ${runId} failed: ${error?.message}`);
+        // Access request context for additional debugging
+        const userId = requestContext.get('userId');
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Add support for `retries` and `scorers` parameters across all `createStep` overloads.
+  ([#11495](https://github.com/mastra-ai/mastra/pull/11495))
+
+  The `createStep` function now includes support for the `retries` and `scorers` fields across all step creation patterns, enabling step-level retry configuration and AI evaluation support for regular steps, agent-based steps, and tool-based steps.
+
+  ```typescript
+  import { init } from '@mastra/inngest';
+  import { z } from 'zod';
+
+  const { createStep } = init(inngest);
+
+  // 1. Regular step with retries
+  const regularStep = createStep({
+    id: 'api-call',
+    inputSchema: z.object({ url: z.string() }),
+    outputSchema: z.object({ data: z.any() }),
+    retries: 3, // ← Will retry up to 3 times on failure
+    execute: async ({ inputData }) => {
+      const response = await fetch(inputData.url);
+      return { data: await response.json() };
+    },
+  });
+
+  // 2. Agent step with retries and scorers
+  const agentStep = createStep(myAgent, {
+    retries: 3,
+    scorers: [{ id: 'accuracy-scorer', scorer: myAccuracyScorer }],
+  });
+
+  // 3. Tool step with retries and scorers
+  const toolStep = createStep(myTool, {
+    retries: 2,
+    scorers: [{ id: 'quality-scorer', scorer: myQualityScorer }],
+  });
+  ```
+
+  This change ensures API consistency across all `createStep` overloads. All step types now support retry and evaluation configurations.
+
+  This is a non-breaking change - steps without these parameters continue to work exactly as before.
+
+  Fixes #9351
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single API that returns `WorkflowState` with both metadata and execution state. ([#11429](https://github.com/mastra-ai/mastra/pull/11429))
+
+  **What changed:**
+  - `getWorkflowRunById` now returns a unified `WorkflowState` object containing metadata (runId, workflowName, resourceId, createdAt, updatedAt) along with processed execution state (status, result, error, payload, steps)
+  - Added optional `fields` parameter to request only specific fields for better performance
+  - Added optional `withNestedWorkflows` parameter to control nested workflow step inclusion
+  - Removed `getWorkflowRunExecutionResult` - use `getWorkflowRunById` instead (breaking change)
+  - Removed `/execution-result` API endpoints from server (breaking change)
+  - Removed `runExecutionResult()` method from client SDK (breaking change)
+  - Removed `GetWorkflowRunExecutionResultResponse` type from client SDK (breaking change)
+
+  **Before:**
+
+  ```typescript
+  // Had to call two different methods for different data
+  const run = await workflow.getWorkflowRunById(runId); // Returns raw WorkflowRun with snapshot
+  const result = await workflow.getWorkflowRunExecutionResult(runId); // Returns processed execution state
+  ```
+
+  **After:**
+
+  ```typescript
+  // Single method returns everything
+  const run = await workflow.getWorkflowRunById(runId);
+  // Returns: { runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+
+  // Request only specific fields for better performance (avoids expensive step fetching)
+  const status = await workflow.getWorkflowRunById(runId, { fields: ['status'] });
+
+  // Skip nested workflow steps for faster response
+  const run = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+  ```
+
+  **Why:** The previous API required calling two separate methods to get complete workflow run information. This unification simplifies the API surface and gives users control over performance - fetching all steps (especially nested workflows) can be expensive, so the `fields` and `withNestedWorkflows` options let users request only what they need.
+
+- Add cron scheduling support to Inngest workflows. Workflows can now be automatically triggered on a schedule by adding a `cron` property along with optional `inputData` and `initialState`: ([#11518](https://github.com/mastra-ai/mastra/pull/11518))
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'scheduled-workflow',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    steps: [step1],
+    cron: '0 0 * * *', // Run daily at midnight
+    inputData: { value: 'scheduled-run' }, // Optional inputData for the scheduled workflow run
+    initialState: { count: 0 }, // Optional initialState for the scheduled workflow run
+  });
+  ```
+
+- Updated dependencies [[`d2d3e22`](https://github.com/mastra-ai/mastra/commit/d2d3e22a419ee243f8812a84e3453dd44365ecb0), [`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`0c0580a`](https://github.com/mastra-ai/mastra/commit/0c0580a42f697cd2a7d5973f25bfe7da9055038a), [`28f5f89`](https://github.com/mastra-ai/mastra/commit/28f5f89705f2409921e3c45178796c0e0d0bbb64), [`e601b27`](https://github.com/mastra-ai/mastra/commit/e601b272c70f3a5ecca610373aa6223012704892), [`3d3366f`](https://github.com/mastra-ai/mastra/commit/3d3366f31683e7137d126a3a57174a222c5801fb), [`5a4953f`](https://github.com/mastra-ai/mastra/commit/5a4953f7d25bb15ca31ed16038092a39cb3f98b3), [`eb9e522`](https://github.com/mastra-ai/mastra/commit/eb9e522ce3070a405e5b949b7bf5609ca51d7fe2), [`20e6f19`](https://github.com/mastra-ai/mastra/commit/20e6f1971d51d3ff6dd7accad8aaaae826d540ed), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`73b0bb3`](https://github.com/mastra-ai/mastra/commit/73b0bb394dba7c9482eb467a97ab283dbc0ef4db), [`5627a8c`](https://github.com/mastra-ai/mastra/commit/5627a8c6dc11fe3711b3fa7a6ffd6eb34100a306), [`3ff45d1`](https://github.com/mastra-ai/mastra/commit/3ff45d10e0c80c5335a957ab563da72feb623520), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`f894d14`](https://github.com/mastra-ai/mastra/commit/f894d148946629af7b1f452d65a9cf864cec3765), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`580b592`](https://github.com/mastra-ai/mastra/commit/580b5927afc82fe460dfdf9a38a902511b6b7e7f), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
+## 1.0.0-beta.10
+
+### Minor Changes
+
+- Unified observability schema with entity-based span identification ([#11132](https://github.com/mastra-ai/mastra/pull/11132))
+
+  ## What changed
+
+  Spans now use a unified identification model with `entityId`, `entityType`, and `entityName` instead of separate `agentId`, `toolId`, `workflowId` fields.
+
+  **Before:**
+
+  ```typescript
+  // Old span structure
+  span.agentId; // 'my-agent'
+  span.toolId; // undefined
+  span.workflowId; // undefined
+  ```
+
+  **After:**
+
+  ```typescript
+  // New span structure
+  span.entityType; // EntityType.AGENT
+  span.entityId; // 'my-agent'
+  span.entityName; // 'My Agent'
+  ```
+
+  ## New `listTraces()` API
+
+  Query traces with filtering, pagination, and sorting:
+
+  ```typescript
+  const { spans, pagination } = await storage.listTraces({
+    filters: {
+      entityType: EntityType.AGENT,
+      entityId: 'my-agent',
+      userId: 'user-123',
+      environment: 'production',
+      status: TraceStatus.SUCCESS,
+      startedAt: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+    },
+    pagination: { page: 0, perPage: 50 },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
+  });
+  ```
+
+  **Available filters:** date ranges (`startedAt`, `endedAt`), entity (`entityType`, `entityId`, `entityName`), identity (`userId`, `organizationId`), correlation IDs (`runId`, `sessionId`, `threadId`), deployment (`environment`, `source`, `serviceName`), `tags`, `metadata`, and `status`.
+
+  ## New retrieval methods
+  - `getSpan({ traceId, spanId })` - Get a single span
+  - `getRootSpan({ traceId })` - Get the root span of a trace
+  - `getTrace({ traceId })` - Get all spans for a trace
+
+  ## Backward compatibility
+
+  The legacy `getTraces()` method continues to work. When you pass `name: "agent run: my-agent"`, it automatically transforms to `entityId: "my-agent", entityType: AGENT`.
+
+  ## Migration
+
+  **Automatic:** SQL-based stores (PostgreSQL, LibSQL, MSSQL) automatically add new columns to existing `spans` tables on initialization. Existing data is preserved with new columns set to `NULL`.
+
+  **No action required:** Your existing code continues to work. Adopt the new fields and `listTraces()` API at your convenience.
+
+### Patch Changes
+
+- Refactor storage architecture to use domain-specific stores via `getStore()` pattern ([#11361](https://github.com/mastra-ai/mastra/pull/11361))
+
+  ### Summary
+
+  This release introduces a new storage architecture that replaces passthrough methods on `MastraStorage` with domain-specific storage interfaces accessed via `getStore()`. This change reduces code duplication across storage adapters and provides a cleaner, more modular API.
+
+  ### Migration Guide
+
+  All direct method calls on storage instances should be updated to use `getStore()`:
+
+  ```typescript
+  // Before
+  const thread = await storage.getThreadById({ threadId });
+  await storage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  await storage.createSpan(span);
+
+  // After
+  const memory = await storage.getStore('memory');
+  const thread = await memory?.getThreadById({ threadId });
+
+  const workflows = await storage.getStore('workflows');
+  await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+  const observability = await storage.getStore('observability');
+  await observability?.createSpan(span);
+  ```
+
+  ### Available Domains
+  - **`memory`**: Thread and message operations (`getThreadById`, `saveThread`, `saveMessages`, etc.)
+  - **`workflows`**: Workflow state persistence (`persistWorkflowSnapshot`, `loadWorkflowSnapshot`, `getWorkflowRunById`, etc.)
+  - **`scores`**: Evaluation scores (`saveScore`, `listScoresByScorerId`, etc.)
+  - **`observability`**: Tracing and spans (`createSpan`, `updateSpan`, `getTrace`, etc.)
+  - **`agents`**: Stored agent configurations (`createAgent`, `getAgentById`, `listAgents`, etc.)
+
+  ### Breaking Changes
+  - Passthrough methods have been removed from `MastraStorage` base class
+  - All storage adapters now require accessing domains via `getStore()`
+  - The `stores` property on storage instances is now the canonical way to access domain storage
+
+  ### Internal Changes
+  - Each storage adapter now initializes domain-specific stores in its constructor
+  - Domain stores share database connections and handle their own table initialization
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+- Add `perStep` option to workflow run methods, allowing a workflow to run just a step instead of all the workflow steps ([#11276](https://github.com/mastra-ai/mastra/pull/11276))
+
+- Updated dependencies [[`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde)]:
+  - @mastra/core@1.0.0-beta.15
+
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- feat: Add field filtering and nested workflow control to workflow execution result endpoint ([#11246](https://github.com/mastra-ai/mastra/pull/11246))
+
+  Adds two optional query parameters to `/api/workflows/:workflowId/runs/:runId/execution-result` endpoint:
+  - `fields`: Request only specific fields (e.g., `status`, `result`, `error`)
+  - `withNestedWorkflows`: Control whether to fetch nested workflow data
+
+  This significantly reduces response payload size and improves response times for large workflows.
+
+  ## Server Endpoint Usage
+
+  ```http
+  # Get only status (minimal payload - fastest)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status
+
+  # Get status and result
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,result
+
+  # Get all fields but without nested workflow data (faster)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?withNestedWorkflows=false
+
+  # Get only specific fields without nested workflow data
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,steps&withNestedWorkflows=false
+
+  # Get full data (default behavior)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result
+  ```
+
+  ## Client SDK Usage
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const workflow = client.getWorkflow('myWorkflow');
+
+  // Get only status (minimal payload - fastest)
+  const statusOnly = await workflow.runExecutionResult(runId, {
+    fields: ['status'],
+  });
+  console.log(statusOnly.status); // 'success' | 'failed' | 'running' | etc.
+
+  // Get status and result
+  const statusAndResult = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'result'],
+  });
+
+  // Get all fields but without nested workflow data (faster)
+  const resultWithoutNested = await workflow.runExecutionResult(runId, {
+    withNestedWorkflows: false,
+  });
+
+  // Get specific fields without nested workflow data
+  const optimized = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'steps'],
+    withNestedWorkflows: false,
+  });
+
+  // Get full execution result (default behavior)
+  const fullResult = await workflow.runExecutionResult(runId);
+  ```
+
+  ## Core API Changes
+
+  The `Workflow.getWorkflowRunExecutionResult` method now accepts an options object:
+
+  ```typescript
+  await workflow.getWorkflowRunExecutionResult(runId, {
+    withNestedWorkflows: false, // default: true, set to false to skip nested workflow data
+    fields: ['status', 'result'], // optional field filtering
+  });
+  ```
+
+  ## Inngest Compatibility
+
+  The `@mastra/inngest` package has been updated to use the new options object API. This is a non-breaking internal change - no action required from inngest workflow users.
+
+  ## Performance Impact
+
+  For workflows with large step outputs:
+  - Requesting only `status`: ~99% reduction in payload size
+  - Requesting `status,result,error`: ~95% reduction in payload size
+  - Using `withNestedWorkflows=false`: Avoids expensive nested workflow data fetching
+  - Combining both: Maximum performance optimization
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Add `onFinish` and `onError` lifecycle callbacks to workflow options ([#11200](https://github.com/mastra-ai/mastra/pull/11200))
+
+  Workflows now support lifecycle callbacks for server-side handling of workflow completion and errors:
+  - `onFinish`: Called when workflow completes with any status (success, failed, suspended, tripwire)
+  - `onError`: Called only when workflow fails (failed or tripwire status)
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema: z.object({ ... }),
+    outputSchema: z.object({ ... }),
+    options: {
+      onFinish: async (result) => {
+        // Handle any workflow completion
+        await updateJobStatus(result.status);
+      },
+      onError: async (errorInfo) => {
+        // Handle workflow failures
+        await logError(errorInfo.error);
+      },
+    },
+  });
+  ```
+
+  Both callbacks support sync and async functions. Callback errors are caught and logged, not propagated to the workflow result.
+
+- Updated dependencies [[`919a22b`](https://github.com/mastra-ai/mastra/commit/919a22b25876f9ed5891efe5facbe682c30ff497)]:
+  - @mastra/core@1.0.0-beta.13
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+  - Errors thrown in workflow steps now preserve full error details including `cause` chain and custom properties
+  - Added `SerializedError` type with proper cause chain support
+  - Added `SerializedStepResult` and `SerializedStepFailure` types for handling errors loaded from storage
+  - Enhanced `addErrorToJSON` to recursively serialize error cause chains with max depth protection
+  - Added `hydrateSerializedStepErrors` to convert serialized errors back to Error instances
+  - Fixed Inngest workflow error handling to extract original error from `NonRetriableError.cause`
+
+- Refactor internal event system from Emitter to PubSub abstraction for workflow event handling. This change replaces the EventEmitter-based event system with a pluggable PubSub interface, enabling support for distributed workflow execution backends like Inngest. Adds `close()` method to PubSub implementations for proper cleanup. ([#11052](https://github.com/mastra-ai/mastra/pull/11052))
+
+- Add `startAsync()` method and fix Inngest duplicate workflow execution bug ([#11093](https://github.com/mastra-ai/mastra/pull/11093))
+
+  **New Feature: `startAsync()` for fire-and-forget workflow execution**
+  - Add `Run.startAsync()` to base workflow class - starts workflow in background and returns `{ runId }` immediately
+  - Add `EventedRun.startAsync()` - publishes workflow start event without subscribing for completion
+  - Add `InngestRun.startAsync()` - sends Inngest event without polling for result
+
+  **Bug Fix: Prevent duplicate Inngest workflow executions**
+  - Fix `getRuns()` to properly handle rate limits (429), empty responses, and JSON parse errors with retry logic and exponential backoff
+  - Fix `getRunOutput()` to throw `NonRetriableError` when polling fails, preventing Inngest from retrying the parent function and re-triggering the workflow
+  - Add timeout to `getRunOutput()` polling (default 5 minutes) with `NonRetriableError` on timeout
+
+  This fixes a production issue where polling failures after successful workflow completion caused Inngest to retry the parent function, which fired a new workflow event and resulted in duplicate executions (e.g., duplicate Slack messages).
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+
+  Workflow errors now retain custom properties like `statusCode`, `responseHeaders`, and `cause` chains. This enables error-specific recovery logic in your applications.
+
+  **Before:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom error properties were lost
+    console.log(result.error); // "Step execution failed" (just a string)
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom properties are preserved
+    console.log(result.error.message); // "Step execution failed"
+    console.log(result.error.statusCode); // 429
+    console.log(result.error.cause?.name); // "RateLimitError"
+  }
+  ```
+
+  **Type change:** `WorkflowState.error` and `WorkflowRunState.error` types changed from `string | Error` to `SerializedError`.
+
+  Other changes:
+  - Added `UpdateWorkflowStateOptions` type for workflow state updates
+
+- Updated dependencies [[`d5ed981`](https://github.com/mastra-ai/mastra/commit/d5ed981c8701c1b8a27a5f35a9a2f7d9244e695f), [`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`932d63d`](https://github.com/mastra-ai/mastra/commit/932d63dd51be9c8bf1e00e3671fe65606c6fb9cd), [`b760b73`](https://github.com/mastra-ai/mastra/commit/b760b731aca7c8a3f041f61d57a7f125ae9cb215), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`2b459f4`](https://github.com/mastra-ai/mastra/commit/2b459f466fd91688eeb2a44801dc23f7f8a887ab), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`6f14f70`](https://github.com/mastra-ai/mastra/commit/6f14f706ccaaf81b69544b6c1b75ab66a41e5317), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`c7cd3c7`](https://github.com/mastra-ai/mastra/commit/c7cd3c7a187d7aaf79e2ca139de328bf609a14b4), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d), [`6f941c4`](https://github.com/mastra-ai/mastra/commit/6f941c438ca5f578619788acc7608fc2e23bd176)]:
+  - @mastra/core@1.0.0-beta.12
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Support new Workflow tripwire run status. Tripwires that are thrown from within a workflow will now bubble up and return a graceful state with information about tripwires. ([#10947](https://github.com/mastra-ai/mastra/pull/10947))
+
+  When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+  ```typescript showLineNumbers copy
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: { message: 'Hello' } });
+
+  if (result.status === 'tripwire') {
+    console.log('Workflow terminated by tripwire:', result.tripwire?.reason);
+    console.log('Processor ID:', result.tripwire?.processorId);
+    console.log('Retry requested:', result.tripwire?.retry);
+  }
+  ```
+
+  Adds new UI state for tripwire in agent chat and workflow UI.
+
+  This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
+
+- Updated dependencies [[`38380b6`](https://github.com/mastra-ai/mastra/commit/38380b60fca905824bdf6b43df307a58efb1aa15), [`798d0c7`](https://github.com/mastra-ai/mastra/commit/798d0c740232653b1d754870e6b43a55c364ffe2), [`ffe84d5`](https://github.com/mastra-ai/mastra/commit/ffe84d54f3b0f85167fe977efd027dba027eb998), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`4ca4306`](https://github.com/mastra-ai/mastra/commit/4ca430614daa5fa04730205a302a43bf4accfe9f), [`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/core@1.0.0-beta.11
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Internal code refactoring ([#10830](https://github.com/mastra-ai/mastra/pull/10830))
+
+- Add support for typed structured output in agent workflow steps ([#11014](https://github.com/mastra-ai/mastra/pull/11014))
+
+  When wrapping an agent with `createStep()` and providing a `structuredOutput.schema`, the step's `outputSchema` is now correctly inferred from the provided schema instead of defaulting to `{ text: string }`.
+
+  This enables type-safe chaining of agent steps with structured output to subsequent steps:
+
+  ```typescript
+  const articleSchema = z.object({
+    title: z.string(),
+    summary: z.string(),
+    tags: z.array(z.string()),
+  });
+
+  // Agent step with structured output - outputSchema is now articleSchema
+  const agentStep = createStep(agent, {
+    structuredOutput: { schema: articleSchema },
+  });
+
+  // Next step can receive the structured output directly
+  const processStep = createStep({
+    id: 'process',
+    inputSchema: articleSchema, // Matches agent's outputSchema
+    outputSchema: z.object({ tagCount: z.number() }),
+    execute: async ({ inputData }) => ({
+      tagCount: inputData.tags.length, // Fully typed!
+    }),
+  });
+
+  workflow.then(agentStep).then(processStep).commit();
+  ```
+
+  When `structuredOutput` is not provided, the agent step continues to use the default `{ text: string }` output schema.
+
+- Updated dependencies [[`edb07e4`](https://github.com/mastra-ai/mastra/commit/edb07e49283e0c28bd094a60e03439bf6ecf0221), [`b7e17d3`](https://github.com/mastra-ai/mastra/commit/b7e17d3f5390bb5a71efc112204413656fcdc18d), [`261473a`](https://github.com/mastra-ai/mastra/commit/261473ac637e633064a22076671e2e02b002214d), [`5d7000f`](https://github.com/mastra-ai/mastra/commit/5d7000f757cd65ea9dc5b05e662fd83dfd44e932), [`4f0331a`](https://github.com/mastra-ai/mastra/commit/4f0331a79bf6eb5ee598a5086e55de4b5a0ada03), [`8a000da`](https://github.com/mastra-ai/mastra/commit/8a000da0c09c679a2312f6b3aa05b2ca78ca7393)]:
+  - @mastra/core@1.0.0-beta.10
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

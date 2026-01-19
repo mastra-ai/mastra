@@ -236,6 +236,44 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
+    it('should return structured output from network', async () => {
+      const helperAgent = new Agent({
+        id: 'research-helper',
+        name: 'Research Helper',
+        instructions: 'You provide brief research summaries when asked.',
+        model: MODEL,
+      });
+
+      const agent = new Agent({
+        id: 'structured-network-agent',
+        name: 'Structured Network Agent',
+        instructions: 'You coordinate research tasks. Delegate to researchHelper for research.',
+        model: MODEL,
+        agents: { helperAgent },
+        memory,
+      });
+
+      const resultSchema = z.object({
+        summary: z.string().describe('Brief summary'),
+        confidence: z.number().min(0).max(1).describe('Confidence score'),
+      });
+
+      const stream = await agent.network('Research AI briefly', {
+        requestContext,
+        structuredOutput: { schema: resultSchema },
+      });
+
+      // Consume stream
+      for await (const _ of stream) {
+      }
+
+      // Verify structured output
+      const result = await stream.object;
+      expect(result).toBeDefined();
+      expect(typeof result!.summary).toBe('string');
+      expect(typeof result!.confidence).toBe('number');
+    }, 30000);
+
     it('should handle empty user message with system context in network', async () => {
       const helperAgent = new Agent({
         id: 'helper-agent',
@@ -641,8 +679,10 @@ describe('Gemini Model Compatibility Tests', () => {
         // This should trigger a tool call, then process the result
         const stream = await agent.stream('What is the weather in San Francisco?', {
           maxSteps: 5,
-          threadId: 'tool-calls',
-          resourceId: 'gemini-3',
+          memory: {
+            thread: 'tool-calls',
+            resource: 'gemini-3',
+          },
         });
 
         const result = await stream.getFullOutput();
@@ -653,8 +693,10 @@ describe('Gemini Model Compatibility Tests', () => {
         expect(result.error).toBeUndefined();
 
         const stream2 = await agent.stream('Whats the weather there now?', {
-          threadId: 'tool-calls',
-          resourceId: 'gemini-3',
+          memory: {
+            thread: 'tool-calls',
+            resource: 'gemini-3',
+          },
         });
         const result2 = await stream2.getFullOutput();
         expect(result2).toBeDefined();
@@ -665,49 +707,44 @@ describe('Gemini Model Compatibility Tests', () => {
       },
     );
 
-    it(
-      'should handle multi-step tool calls with gemini 3 pro',
-      { retry: 2, timeout: 120000 },
-      async () => {
-        const weatherTool = createTool({
-          id: 'get-weather-multi',
-          description: 'Gets the current weather for a location',
-          inputSchema: z.object({
-            location: z.string().describe('The city and state, e.g. San Francisco, CA'),
-          }),
-          outputSchema: z.object({
-            temperature: z.number(),
-            conditions: z.string(),
-          }),
-          execute: async () => {
-            return {
-              temperature: 72,
-              conditions: 'Sunny',
-            };
-          },
-        });
+    it('should handle multi-step tool calls with gemini 3 pro', { retry: 2, timeout: 120000 }, async () => {
+      const weatherTool = createTool({
+        id: 'get-weather-multi',
+        description: 'Gets the current weather for a location',
+        inputSchema: z.object({
+          location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          conditions: z.string(),
+        }),
+        execute: async () => {
+          return {
+            temperature: 72,
+            conditions: 'Sunny',
+          };
+        },
+      });
 
-        const agent = new Agent({
-          id: 'weather-multi-gemini3-agent',
-          name: 'Weather Multi Gemini3 Agent',
-          instructions:
-            'You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions.',
-          model: GEMINI_3_PRO,
-          tools: { weatherTool },
-          memory,
-        });
+      const agent = new Agent({
+        id: 'weather-multi-gemini3-agent',
+        name: 'Weather Multi Gemini3 Agent',
+        instructions:
+          'You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions.',
+        model: GEMINI_3_PRO,
+        tools: { weatherTool },
+        memory,
+      });
 
-        // This should trigger a tool call, then process the result
-        const result = await agent.generate('What is the weather in San Francisco and New York?', {
-          maxSteps: 5,
-        });
+      // This should trigger a tool call, then process the result
+      const result = await agent.generate('What is the weather in San Francisco and New York?', {
+        maxSteps: 5,
+      });
 
-        expect(result).toBeDefined();
-        expect(result.text).toBeDefined();
-        expect(result.text.length).toBeGreaterThan(0);
-        expect(result.error).toBeUndefined();
-      },
-      30000,
-    );
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.error).toBeUndefined();
+    });
   });
 });

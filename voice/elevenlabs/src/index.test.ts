@@ -95,6 +95,62 @@ describe('ElevenLabsVoice Integration Tests', () => {
         fileStream.on('error', reject);
       });
     }, 10000);
+
+    it('should support custom output formats for telephony use cases', async () => {
+      const speakers = await voice.getSpeakers();
+      const speaker = speakers[0].voiceId;
+
+      // Test with ulaw_8000 format (common for telephony/VoIP)
+      const audioStream = await voice.speak('Hello World', {
+        speaker,
+        outputFormat: 'ulaw_8000',
+      });
+
+      return new Promise((resolve, reject) => {
+        const outputPath = path.join(outputDir, 'elevenlabs-speech-test-ulaw.wav');
+        const fileStream = createWriteStream(outputPath);
+        const chunks: Buffer[] = [];
+
+        audioStream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        audioStream.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          expect(chunks.length).toBeGreaterThan(0);
+          resolve(undefined);
+        });
+
+        audioStream.on('error', reject);
+        fileStream.on('error', reject);
+      });
+    }, 10000);
+
+    it('should support PCM output formats', async () => {
+      const speakers = await voice.getSpeakers();
+      const speaker = speakers[0].voiceId;
+
+      // Test with pcm_16000 format
+      const audioStream = await voice.speak('Test PCM format', {
+        speaker,
+        outputFormat: 'pcm_16000',
+      });
+
+      return new Promise((resolve, reject) => {
+        const outputPath = path.join(outputDir, 'elevenlabs-speech-test-pcm.raw');
+        const fileStream = createWriteStream(outputPath);
+        const chunks: Buffer[] = [];
+
+        audioStream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        audioStream.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          expect(chunks.length).toBeGreaterThan(0);
+          resolve(undefined);
+        });
+
+        audioStream.on('error', reject);
+        fileStream.on('error', reject);
+      });
+    }, 10000);
   });
 
   describe('listen', () => {

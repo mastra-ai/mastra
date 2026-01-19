@@ -7,7 +7,6 @@ Let's update our agent with a custom working memory template:
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 
 // Create a memory instance with a custom working memory template
 const memory = new Memory({
@@ -16,9 +15,9 @@ const memory = new Memory({
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }), // Storage for message history
   vector: new LibSQLVector({
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }), // Vector database for semantic search
-  embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings
+  embedder: "openai/text-embedding-3-small", // Embedder for message embeddings
   options: {
     semanticRecall: {
       topK: 3,
@@ -74,7 +73,7 @@ export const memoryAgent = new Agent({
     When the user shares personal information such as their name, location, or preferences,
     acknowledge it and update your working memory accordingly.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: memory,
 });
 ```

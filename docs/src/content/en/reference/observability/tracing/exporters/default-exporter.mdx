@@ -1,6 +1,8 @@
 ---
 title: "Reference: DefaultExporter | Observability"
 description: API reference for the DefaultExporter
+packages:
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -111,6 +113,14 @@ Processes a tracing event according to the resolved strategy.
     },
   ]}
 />
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to storage without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 

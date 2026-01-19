@@ -18,12 +18,26 @@ import type {
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { initLogger, _exportsForTestingOnly } from 'braintrust';
 import type { Logger } from 'braintrust';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
 import type { BraintrustExporterConfig } from './tracing';
 
 // Mock Braintrust initLogger function (must be at the top level)
 vi.mock('braintrust');
+
+class TestBraintrustExporter extends BraintrustExporter {
+  _getTraceData(traceId: string) {
+    return this.getTraceData({ traceId, method: 'test' });
+  }
+
+  get _traceMapSize(): number {
+    return this.traceMapSize();
+  }
+
+  get _isDisabled(): boolean {
+    return this.isDisabled;
+  }
+}
 
 describe('BraintrustExporter', () => {
   // Mock objects
@@ -31,14 +45,16 @@ describe('BraintrustExporter', () => {
   let mockLogger: any;
   let mockInitLogger: any;
 
-  let exporter: BraintrustExporter;
+  let exporter: TestBraintrustExporter;
   let config: BraintrustExporterConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
     // Set up mocks
     mockSpan = {
+      id: 'mockSpan',
       startSpan: vi.fn(),
       log: vi.fn(),
       end: vi.fn(),
@@ -48,6 +64,7 @@ describe('BraintrustExporter', () => {
     mockSpan.startSpan.mockReturnValue(mockSpan);
 
     mockLogger = {
+      id: 'mockLogger',
       startSpan: vi.fn().mockReturnValue(mockSpan),
     };
 
@@ -61,9 +78,15 @@ describe('BraintrustExporter', () => {
       tuningParameters: {
         debug: true,
       },
+      // Short cleanup delay for faster tests
+      traceCleanupDelayMs: 10,
     };
 
-    exporter = new BraintrustExporter(config);
+    exporter = new TestBraintrustExporter(config);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -72,36 +95,47 @@ describe('BraintrustExporter', () => {
     });
 
     it('should disable exporter when apiKey is missing', async () => {
-      const invalidConfig = {
-        // Missing apiKey
-        endpoint: 'https://test.com',
-      };
+      // Save and clear env var to ensure exporter is truly disabled
+      const originalApiKey = process.env.BRAINTRUST_API_KEY;
+      delete process.env.BRAINTRUST_API_KEY;
 
-      const disabledExporter = new BraintrustExporter(invalidConfig);
+      try {
+        const invalidConfig = {
+          // Missing apiKey
+          endpoint: 'https://test.com',
+        };
 
-      // Should be disabled when apiKey is missing
-      expect(disabledExporter['isDisabled']).toBe(true);
+        const disabledExporter = new TestBraintrustExporter(invalidConfig);
 
-      // Should not create spans when disabled
-      const rootSpan = createMockSpan({
-        id: 'test-span',
-        name: 'test',
-        type: SpanType.GENERIC,
-        isRoot: true,
-        attributes: {},
-      });
+        // Should be disabled when apiKey is missing
+        expect(disabledExporter._isDisabled).toBe(true);
 
-      await disabledExporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
+        // Should not create spans when disabled
+        const rootSpan = createMockSpan({
+          id: 'test-span',
+          name: 'test',
+          type: SpanType.GENERIC,
+          isRoot: true,
+          attributes: {},
+        });
 
-      expect(mockInitLogger).not.toHaveBeenCalled();
+        await disabledExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: rootSpan,
+        });
+
+        expect(mockInitLogger).not.toHaveBeenCalled();
+      } finally {
+        // Restore env var safely (avoid setting to string "undefined")
+        if (originalApiKey !== undefined) process.env.BRAINTRUST_API_KEY = originalApiKey;
+      }
     });
   });
 
   describe('Logger Creation', () => {
     it('should create Braintrust logger for root spans', async () => {
+      const traceId = 'trace-id';
+
       const rootSpan = createMockSpan({
         id: 'root-span-id',
         name: 'root-agent',
@@ -112,15 +146,13 @@ describe('BraintrustExporter', () => {
           instructions: 'Test agent',
         },
         metadata: { userId: 'user-456', sessionId: 'session-789' },
+        traceId,
       });
 
       const event: TracingEvent = {
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       };
-
-      // Ensure traceId differs from span id
-      expect(rootSpan.traceId).not.toBe(rootSpan.id);
 
       await exporter.exportTracingEvent(event);
 
@@ -133,30 +165,66 @@ describe('BraintrustExporter', () => {
       });
 
       // Should create Braintrust span with correct type and payload
+      // Data properties (metadata, input, output, etc.) are passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         spanId: 'root-span-id',
         name: 'root-agent',
         type: 'task', // Default span type mapping for AGENT_RUN
         // No parentSpanIds for root spans!
-        input: undefined,
-        metadata: {
-          spanType: 'agent_run',
-          agentId: 'agent-123',
-          instructions: 'Test agent',
-          userId: 'user-456',
-          sessionId: 'session-789',
+        startTime: rootSpan.startTime.getTime() / 1000,
+        event: {
+          id: 'root-span-id', // Row ID for logFeedback() compatibility
+          metadata: {
+            spanType: 'agent_run',
+            agentId: 'agent-123',
+            instructions: 'Test agent',
+            userId: 'user-456',
+            sessionId: 'session-789',
+            'mastra-trace-id': 'trace-id',
+          },
         },
       });
     });
 
+    it('should handle logger initialization failure', async () => {
+      const error = new Error('Init failed');
+      mockInitLogger.mockRejectedValue(error);
+
+      // Spy on the internal logger to verify error logging
+      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+
+      const rootSpan = createMockSpan({
+        id: 'root-span-error',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      expect(mockInitLogger).toHaveBeenCalled();
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Braintrust exporter: Failed to initialize logger', {
+        error,
+      });
+
+      // Should be disabled after failure
+      expect(exporter._isDisabled).toBe(true);
+    });
+
     it('should not create logger for child spans', async () => {
       // First create root span
+      const traceId = 'trace-id';
       const rootSpan = createMockSpan({
         id: 'root-span-id',
         name: 'root-agent',
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -173,9 +241,9 @@ describe('BraintrustExporter', () => {
         type: SpanType.TOOL_CALL,
         isRoot: false,
         attributes: { toolId: 'calculator' },
+        traceId,
       });
-      childSpan.traceId = rootSpan.traceId;
-      childSpan.parentSpanId = 'root-span-id';
+      childSpan.parentSpanId = rootSpan.id;
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -187,16 +255,115 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent span
       // The startSpan() chain handles parent-child relationships automatically
+      // Data properties are passed via the event parameter
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
         spanId: 'child-span-id',
         name: 'child-tool',
         type: 'tool', // TOOL_CALL maps to 'tool'
-        input: undefined,
-        metadata: {
-          spanType: 'tool_call',
-          toolId: 'calculator',
+        startTime: childSpan.startTime.getTime() / 1000,
+        event: {
+          id: 'child-span-id', // Row ID for logFeedback() compatibility
+          metadata: {
+            spanType: 'tool_call',
+            toolId: 'calculator',
+            'mastra-trace-id': traceId,
+          },
         },
       });
+    });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Child span of first root
+      const firstChildSpan = createMockSpan({
+        id: 'child-span-1',
+        name: 'tool-call-1',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+      });
+      firstChildSpan.traceId = sharedTraceId;
+      firstChildSpan.parentSpanId = 'root-span-1';
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Child span of second root
+      const secondChildSpan = createMockSpan({
+        id: 'child-span-2',
+        name: 'tool-call-2',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'search' },
+      });
+      secondChildSpan.traceId = sharedTraceId;
+      secondChildSpan.parentSpanId = 'root-span-2';
+
+      // Process all spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstChildSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondChildSpan,
+      });
+
+      // Should create logger only once (for the shared traceId)
+      expect(mockInitLogger).toHaveBeenCalledTimes(1);
+
+      // Access internal traceMap to verify trace data is shared
+      const traceData = exporter._getTraceData(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // All four spans should be tracked in the same trace
+      expect(traceData.hasSpan({ spanId: 'root-span-1' })).toBe(true);
+      expect(traceData.hasSpan({ spanId: 'child-span-1' })).toBe(true);
+      expect(traceData.hasSpan({ spanId: 'root-span-2' })).toBe(true);
+      expect(traceData.hasSpan({ spanId: 'child-span-2' })).toBe(true);
+
+      // All four spans should be active
+      expect(traceData.isActiveSpan({ spanId: 'root-span-1' })).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: 'child-span-1' })).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: 'root-span-2' })).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: 'child-span-2' })).toBe(true);
     });
   });
 
@@ -222,7 +389,7 @@ describe('BraintrustExporter', () => {
       );
     });
 
-    it('should map MODEL_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "task" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
@@ -238,7 +405,7 @@ describe('BraintrustExporter', () => {
 
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'llm',
+          type: 'task',
         }),
       );
     });
@@ -372,6 +539,7 @@ describe('BraintrustExporter', () => {
 
   describe('LLM Generation Attributes', () => {
     it('should handle LLM generation with full attributes', async () => {
+      const traceId = 'trace-id';
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
@@ -384,9 +552,8 @@ describe('BraintrustExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -395,6 +562,7 @@ describe('BraintrustExporter', () => {
           streaming: false,
           resultType: 'response_generation',
         },
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -402,38 +570,43 @@ describe('BraintrustExporter', () => {
         exportedSpan: llmSpan,
       });
 
-      // Ensure traceId differs from span id
-      expect(llmSpan.traceId).not.toBe(llmSpan.id);
-
+      // Data properties are passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         spanId: 'llm-span',
         name: 'gpt-4-call',
         type: 'llm',
         // No parentSpanIds for root spans!
-        // Input is transformed: { messages: [...] } -> [...] for Braintrust Thread view
-        input: [{ role: 'user', content: 'Hello' }],
-        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
-        output: { role: 'assistant', content: 'Hi there!' },
-        metrics: {
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          tokens: 15,
-        },
-        metadata: {
-          spanType: 'model_generation',
-          model: 'gpt-4',
-          provider: 'openai',
-          streaming: false,
-          resultType: 'response_generation',
-          modelParameters: {
-            temperature: 0.7,
-            maxTokens: 100,
+        startTime: llmSpan.startTime.getTime() / 1000,
+        event: {
+          id: 'llm-span', // Row ID for logFeedback() compatibility
+          // Input is transformed: { messages: [...] } -> [...] for Braintrust Thread view
+          input: [{ role: 'user', content: 'Hello' }],
+          // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+          output: { role: 'assistant', content: 'Hi there!' },
+          metrics: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            tokens: 15,
+          },
+          metadata: {
+            spanType: 'model_generation',
+            model: 'gpt-4',
+            provider: 'openai',
+            streaming: false,
+            resultType: 'response_generation',
+            modelParameters: {
+              temperature: 0.7,
+              maxTokens: 100,
+            },
+            'mastra-trace-id': traceId,
           },
         },
       });
     });
 
     it('should handle minimal LLM generation attributes', async () => {
+      const traceId = 'trace-id';
+
       const llmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
@@ -442,6 +615,7 @@ describe('BraintrustExporter', () => {
         attributes: {
           model: 'gpt-3.5-turbo',
         },
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -449,17 +623,20 @@ describe('BraintrustExporter', () => {
         exportedSpan: llmSpan,
       });
 
-      // Ensure traceId differs from span id
-      expect(llmSpan.traceId).not.toBe(llmSpan.id);
-
+      // Data properties are passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         spanId: 'minimal-llm',
         name: 'simple-llm',
         type: 'llm',
+        startTime: llmSpan.startTime.getTime() / 1000,
         // No parentSpanIds for root spans!
-        metadata: {
-          spanType: 'model_generation',
-          model: 'gpt-3.5-turbo',
+        event: {
+          id: 'minimal-llm', // Row ID for logFeedback() compatibility
+          metadata: {
+            spanType: 'model_generation',
+            model: 'gpt-3.5-turbo',
+            'mastra-trace-id': traceId,
+          },
         },
       });
     });
@@ -506,11 +683,718 @@ describe('BraintrustExporter', () => {
       // Braintrust Thread view expects:
       // - input to be a direct array of messages in OpenAI format
       // - output to be { role: 'assistant', content: '...' } format
+      // Data properties are passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          // Thread view requires direct array format for messages to display
-          input: [{ role: 'user', content: 'What is the weather?' }],
-          output: { role: 'assistant', content: 'The weather is sunny.' },
+          event: expect.objectContaining({
+            // Thread view requires direct array format for messages to display
+            input: [{ role: 'user', content: 'What is the weather?' }],
+            output: { role: 'assistant', content: 'The weather is sunny.' },
+          }),
+        }),
+      );
+    });
+  });
+
+  /**
+   * Test for GitHub issue #11735: Thread view truncated for last turn in Braintrust
+   *
+   * When an LLM generation includes tool calls, the Braintrust exporter should
+   * reconstruct the output in OpenAI format by examining child TOOL_CALL spans.
+   *
+   * The span hierarchy for tool use looks like:
+   *   MODEL_GENERATION (parent)
+   *     └── TOOL_CALL (child) - contains tool input (args) and output (result)
+   *
+   * When the MODEL_GENERATION span ends, the exporter should look at completed
+   * child TOOL_CALL spans and reconstruct the Thread view output as:
+   *   1. Assistant message with tool_calls array
+   *   2. Tool message(s) with results
+   *   3. Final assistant message with text content
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/11735
+   */
+  it('should reconstruct LLM output from steps for Thread view (issue #11735)', async () => {
+    const traceId = 'step-output-reconstruction-trace';
+
+    // Create the MODEL_GENERATION span - no modelSteps in output, just final text
+    const llmSpan = createMockSpan({
+      id: 'model-gen-span',
+      traceId,
+      name: 'gpt-4-call',
+      type: SpanType.MODEL_GENERATION,
+      isRoot: true,
+      input: [{ role: 'user', content: 'What is 2+2?' }],
+      // Simple output - just the final text response
+      output: {
+        text: 'The answer is 4.',
+      },
+      attributes: { model: 'gpt-4', provider: 'openai' },
+    });
+
+    // Create MODEL_STEP span (step 0) - contains the tool call
+    // MODEL_STEP output has the toolCalls array from the LLM response
+    const modelStep0Span = createMockSpan({
+      id: 'model-step-0-span',
+      traceId,
+      name: 'Model Step 0',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      // MODEL_STEP output contains toolCalls from the LLM response
+      output: {
+        text: '',
+        toolCalls: [{ toolCallId: 'tc-1', toolName: 'calculator', args: { a: 2, b: 2 } }],
+      },
+      attributes: { stepIndex: 0 },
+    });
+    modelStep0Span.parentSpanId = llmSpan.id;
+
+    // Create TOOL_CALL span - child of MODEL_STEP, contains the tool execution result
+    const toolCallSpan = createMockSpan({
+      id: 'tool-call-span',
+      traceId,
+      name: 'calculator',
+      type: SpanType.TOOL_CALL,
+      isRoot: false,
+      // Input contains the tool call details (including toolCallId for matching)
+      input: {
+        toolCallId: 'tc-1',
+        toolName: 'calculator',
+        args: { a: 2, b: 2 },
+      },
+      // Output contains the tool result
+      output: {
+        result: 4,
+      },
+      attributes: { toolId: 'calculator', success: true },
+    });
+    toolCallSpan.parentSpanId = modelStep0Span.id;
+
+    // Create MODEL_STEP span (step 1) - contains the final text response
+    const modelStep1Span = createMockSpan({
+      id: 'model-step-1-span',
+      traceId,
+      name: 'Model Step 1',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      // Final step has the text response
+      output: {
+        text: 'The answer is 4.',
+        toolCalls: [],
+      },
+      attributes: { stepIndex: 1 },
+    });
+    modelStep1Span.parentSpanId = llmSpan.id;
+
+    // Start all spans in order
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: llmSpan,
+    });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: modelStep0Span,
+    });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: toolCallSpan,
+    });
+
+    // End TOOL_CALL span first (tool execution completes)
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...toolCallSpan, endTime: new Date() },
+    });
+
+    // End MODEL_STEP 0 (first LLM call with tool calls)
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep0Span, endTime: new Date() },
+    });
+
+    // Start and end MODEL_STEP 1 (second LLM call with final response)
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: modelStep1Span,
+    });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep1Span, endTime: new Date() },
+    });
+
+    // Reset mock to capture only the MODEL_GENERATION end call
+    mockSpan.log.mockClear();
+
+    // End MODEL_GENERATION span - this should reconstruct output from child spans
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...llmSpan, endTime: new Date() },
+    });
+
+    // The output should be reconstructed from MODEL_STEP and TOOL_CALL spans into OpenAI format:
+    // 1. Assistant message with tool_calls array (from MODEL_STEP 0 output.toolCalls)
+    // 2. Tool message with result (from TOOL_CALL span output)
+    // 3. Final assistant message with text (from MODEL_STEP 1 output.text)
+    expect(mockSpan.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: [
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tc-1',
+                type: 'function',
+                function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+              },
+            ],
+          },
+          { role: 'tool', content: '{"result":4}', tool_call_id: 'tc-1' },
+          { role: 'assistant', content: 'The answer is 4.' },
+        ],
+      }),
+    );
+  });
+
+  describe('AI SDK v5 Message Conversion', () => {
+    it('should convert AI SDK v5 user messages to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-user',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'system', content: 'You are helpful.' },
+          { role: 'user', content: [{ type: 'text', text: 'Hello!' }] },
+        ],
+        output: { text: 'Hi there!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'system', content: 'You are helpful.' },
+              { role: 'user', content: 'Hello!' },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should convert AI SDK v5 assistant messages with tool calls to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-tools',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Let me calculate.' },
+              { type: 'tool-call', toolCallId: 'call_123', toolName: 'calculator', args: { a: 2, b: 2 } },
+            ],
+          },
+        ],
+        output: { text: 'The answer is 4.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'user', content: 'What is 2+2?' },
+              {
+                role: 'assistant',
+                content: 'Let me calculate.',
+                tool_calls: [
+                  {
+                    id: 'call_123',
+                    type: 'function',
+                    function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+                  },
+                ],
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should convert AI SDK v5 tool result messages to OpenAI format', async () => {
+      const llmSpan = createMockSpan({
+        id: 'ai-sdk-v5-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: 'Calculate 2+2' },
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_123', output: { result: 4 } }],
+          },
+        ],
+        output: { text: '4' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'user', content: 'Calculate 2+2' },
+              { role: 'tool', content: '{"result":4}', tool_call_id: 'call_123' },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle mixed OpenAI and AI SDK v5 message formats', async () => {
+      const llmSpan = createMockSpan({
+        id: 'mixed-formats',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'system', content: 'Be helpful.' }, // Already OpenAI format
+          { role: 'user', content: [{ type: 'text', text: 'Hi' }] }, // AI SDK v5 format
+          { role: 'assistant', content: 'Hello!' }, // Already OpenAI format
+        ],
+        output: { text: 'Done' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'system', content: 'Be helpful.' },
+              { role: 'user', content: 'Hi' },
+              { role: 'assistant', content: 'Hello!' },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle tool calls with input field instead of args', async () => {
+      const llmSpan = createMockSpan({
+        id: 'tool-input-field',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId: 'call_456', toolName: 'search', input: { query: 'test' } }],
+          },
+        ],
+        output: { text: 'Found it.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'call_456',
+                    type: 'function',
+                    function: { name: 'search', arguments: '{"query":"test"}' },
+                  },
+                ],
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle tool results with v4 result field instead of output', async () => {
+      const llmSpan = createMockSpan({
+        id: 'tool-result-v4',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: 'Calculate 2+2' },
+          {
+            role: 'tool',
+            // AI SDK v4 uses 'result' instead of 'output'
+            content: [{ type: 'tool-result', toolCallId: 'call_123', result: { answer: 4, operation: 'add' } }],
+          },
+        ],
+        output: { text: '4' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'user', content: 'Calculate 2+2' },
+              { role: 'tool', content: '{"answer":4,"operation":"add"}', tool_call_id: 'call_123' },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle empty content arrays gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'empty-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          { role: 'user', content: [] },
+          { role: 'assistant', content: [] },
+        ],
+        output: { text: 'Response' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              { role: 'user', content: '' },
+              { role: 'assistant', content: '' },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle image content parts with placeholder', async () => {
+      const llmSpan = createMockSpan({
+        id: 'image-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'image', image: 'base64data...', mimeType: 'image/png' },
+            ],
+          },
+        ],
+        output: { text: 'I see a cat.' },
+        attributes: { model: 'gpt-4-vision' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'user', content: 'What is in this image?\n[image]' }],
+          }),
+        }),
+      );
+    });
+
+    it('should handle file content parts with filename', async () => {
+      const llmSpan = createMockSpan({
+        id: 'file-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze this document' },
+              { type: 'file', filename: 'report.pdf', data: 'base64data...' },
+            ],
+          },
+        ],
+        output: { text: 'Analysis complete.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'user', content: 'Analyze this document\n[file: report.pdf]' }],
+          }),
+        }),
+      );
+    });
+
+    it('should handle file content parts without filename', async () => {
+      const llmSpan = createMockSpan({
+        id: 'file-no-name',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Check this file' },
+              { type: 'file', data: 'base64data...' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'user', content: 'Check this file\n[file]' }],
+          }),
+        }),
+      );
+    });
+
+    it('should handle reasoning content parts with text preview', async () => {
+      const llmSpan = createMockSpan({
+        id: 'reasoning-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'reasoning', text: 'Let me think about this step by step...' },
+              { type: 'text', text: 'The answer is 42.' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'claude-3' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              {
+                role: 'assistant',
+                content: '[reasoning: Let me think about this step by step...]\nThe answer is 42.',
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should truncate long reasoning text in preview', async () => {
+      const longReasoning = 'A'.repeat(200);
+      const llmSpan = createMockSpan({
+        id: 'long-reasoning',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'reasoning', text: longReasoning },
+              { type: 'text', text: 'Done.' },
+            ],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'claude-3' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              {
+                role: 'assistant',
+                content: `[reasoning: ${'A'.repeat(100)}...]\nDone.`,
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should handle unknown content types gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'unknown-content',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Hello' },
+              { type: 'custom-type', data: 'some data' },
+            ],
+          },
+        ],
+        output: { text: 'Hi!' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'user', content: 'Hello\n[custom-type]' }],
+          }),
+        }),
+      );
+    });
+
+    it('should handle null/undefined tool results gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'null-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_123', output: null }],
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'tool', content: '', tool_call_id: 'call_123' }],
+          }),
+        }),
+      );
+    });
+
+    it('should handle undefined tool results (missing output/result fields)', async () => {
+      const llmSpan = createMockSpan({
+        id: 'undefined-tool-result',
+        name: 'llm-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: [
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: 'call_456' }], // no output or result field
+          },
+        ],
+        output: { text: 'Done.' },
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Data properties are passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [{ role: 'tool', content: '', tool_call_id: 'call_456' }],
+          }),
         }),
       );
     });
@@ -571,7 +1455,7 @@ describe('BraintrustExporter', () => {
       // Update with usage info
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       // Note: LLM output uses 'text' field, not 'content'
       llmSpan.output = { text: 'Updated response' };
@@ -584,7 +1468,7 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.log).toHaveBeenCalledWith({
         // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
         output: { role: 'assistant', content: 'Updated response' },
-        metrics: { tokens: 150 },
+        metrics: { prompt_tokens: 100, completion_tokens: 50, tokens: 150 },
         metadata: {
           spanType: 'model_generation',
           model: 'gpt-4',
@@ -682,8 +1566,10 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
+      const traceData = exporter._getTraceData(rootSpan.traceId);
+
       // Verify trace was created
-      expect((exporter as any).traceMap.has(rootSpan.traceId)).toBe(true);
+      expect(traceData.activeSpanCount()).toBeGreaterThan(0);
 
       rootSpan.endTime = new Date();
 
@@ -692,13 +1578,22 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      // Should clean up traceMap
-      expect((exporter as any).traceMap.has(rootSpan.traceId)).toBe(false);
+      // Wait for cleanup delay (config uses 10ms)
+      await vi.advanceTimersByTimeAsync(20);
+
+      const newTraceData = exporter._getTraceData(rootSpan.traceId);
+
+      // Trace should be cleaned up since this was the only active span
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      expect(traceData).not.toBe(newTraceData);
     });
   });
 
   describe('Event Span Handling', () => {
     it('should create zero-duration spans for root event spans', async () => {
+      const traceId = 'trace-id';
+
       const eventSpan = createMockSpan({
         id: 'event-span',
         name: 'user-feedback',
@@ -709,11 +1604,9 @@ describe('BraintrustExporter', () => {
           rating: 5,
         },
         output: { message: 'Great response!' },
+        traceId,
       });
       eventSpan.isEvent = true;
-
-      // Ensure traceId differs from span id
-      expect(eventSpan.traceId).not.toBe(eventSpan.id);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -730,17 +1623,22 @@ describe('BraintrustExporter', () => {
 
       // Should create span with zero duration (matching start/end times)
       // Root event spans should NOT have parentSpanIds
+      // Data properties are passed via the event parameter
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         spanId: 'event-span',
         name: 'user-feedback',
         type: 'task',
         // No parentSpanIds for root spans!
         startTime: eventSpan.startTime.getTime() / 1000,
-        output: { message: 'Great response!' },
-        metadata: {
-          spanType: 'generic',
-          eventType: 'user_feedback',
-          rating: 5,
+        event: {
+          id: 'event-span', // Row ID for logFeedback() compatibility
+          output: { message: 'Great response!' },
+          metadata: {
+            spanType: 'generic',
+            eventType: 'user_feedback',
+            rating: 5,
+            'mastra-trace-id': traceId,
+          },
         },
       });
 
@@ -750,12 +1648,15 @@ describe('BraintrustExporter', () => {
 
     it('should create zero-duration child spans for child event spans', async () => {
       // First create root span
+      const traceId = 'trace-id';
+
       const rootSpan = createMockSpan({
         id: 'root-span',
         name: 'root-agent',
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -774,9 +1675,9 @@ describe('BraintrustExporter', () => {
           success: true,
         },
         output: { result: 42 },
+        traceId,
       });
       childEventSpan.isEvent = true;
-      childEventSpan.traceId = rootSpan.traceId;
       childEventSpan.parentSpanId = 'root-span';
 
       await exporter.exportTracingEvent({
@@ -786,16 +1687,21 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent
       // The startSpan() chain handles parent-child relationships automatically
+      // Data properties are passed via the event parameter
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
         spanId: 'child-event',
         name: 'tool-result',
         type: 'task',
         startTime: childEventSpan.startTime.getTime() / 1000,
-        output: { result: 42 },
-        metadata: {
-          spanType: 'generic',
-          toolName: 'calculator',
-          success: true,
+        event: {
+          id: 'child-event', // Row ID for logFeedback() compatibility
+          output: { result: 42 },
+          metadata: {
+            spanType: 'generic',
+            toolName: 'calculator',
+            success: true,
+            'mastra-trace-id': traceId,
+          },
         },
       });
     });
@@ -875,7 +1781,7 @@ describe('BraintrustExporter', () => {
   });
 
   describe('Tags Support', () => {
-    it('should include tags in span.log() for root spans with tags', async () => {
+    it('should include tags in event for root spans with tags', async () => {
       const rootSpanWithTags = createMockSpan({
         id: 'root-with-tags',
         name: 'tagged-agent',
@@ -892,16 +1798,22 @@ describe('BraintrustExporter', () => {
 
       await exporter.exportTracingEvent(event);
 
-      // Should log tags via span.log()
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        metadata: {
-          'mastra-trace-id': rootSpanWithTags.traceId,
-        },
-        tags: ['production', 'experiment-v2', 'user-request'],
-      });
+      // Data properties (including tags) should be passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'tagged-agent',
+          spanId: 'root-with-tags',
+          event: expect.objectContaining({
+            tags: ['production', 'experiment-v2', 'user-request'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': rootSpanWithTags.traceId,
+            }),
+          }),
+        }),
+      );
     });
 
-    it('should not include tags in span.log() when tags array is empty', async () => {
+    it('should not include tags in event when tags array is empty', async () => {
       const rootSpanEmptyTags = createMockSpan({
         id: 'root-empty-tags',
         name: 'agent-no-tags',
@@ -917,19 +1829,14 @@ describe('BraintrustExporter', () => {
       };
 
       await exporter.exportTracingEvent(event);
+      expect(mockLogger.startSpan).toHaveBeenCalledOnce();
 
-      // Should log without tags property
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        metadata: {
-          'mastra-trace-id': rootSpanEmptyTags.traceId,
-        },
-      });
-      // Verify tags is not in the call
-      const logCall = mockSpan.log.mock.calls[0][0];
-      expect(logCall.tags).toBeUndefined();
+      // Event should not contain tags when tags array is empty
+      const call = mockLogger.startSpan.mock.calls[0][0];
+      expect(call.event.tags).toBeUndefined();
     });
 
-    it('should not include tags in span.log() when tags is undefined', async () => {
+    it('should not include tags in event when tags is undefined', async () => {
       const rootSpanNoTags = createMockSpan({
         id: 'root-no-tags',
         name: 'agent-undefined-tags',
@@ -945,10 +1852,11 @@ describe('BraintrustExporter', () => {
       };
 
       await exporter.exportTracingEvent(event);
+      expect(mockLogger.startSpan).toHaveBeenCalledOnce();
 
-      // Should log without tags property
-      const logCall = mockSpan.log.mock.calls[0][0];
-      expect(logCall.tags).toBeUndefined();
+      // Event should not contain tags when tags is undefined
+      const callArg = mockLogger.startSpan.mock.calls[0][0];
+      expect(callArg.event.tags).toBeUndefined();
     });
 
     it('should include tags with workflow spans', async () => {
@@ -968,13 +1876,19 @@ describe('BraintrustExporter', () => {
 
       await exporter.exportTracingEvent(event);
 
-      // Should log tags via span.log()
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        metadata: {
-          'mastra-trace-id': workflowSpanWithTags.traceId,
-        },
-        tags: ['batch-processing', 'priority-high'],
-      });
+      // Tags and metadata should be in the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'data-processing-workflow',
+          spanId: 'workflow-with-tags',
+          event: expect.objectContaining({
+            tags: ['batch-processing', 'priority-high'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': workflowSpanWithTags.traceId,
+            }),
+          }),
+        }),
+      );
     });
 
     it('should not include tags for child spans (only root spans get tags)', async () => {
@@ -993,8 +1907,8 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      // Clear mock to check child span log calls
-      mockSpan.log.mockClear();
+      // Clear mocks to check child span calls
+      mockSpan.startSpan.mockClear();
 
       // Create child span (should not have tags even if we set them)
       // Child spans should not have tags set by the system
@@ -1015,19 +1929,12 @@ describe('BraintrustExporter', () => {
         exportedSpan: childSpan,
       });
 
-      // Check that the log call for child span does not include tags
-      // Child spans log mastra-trace-id but NOT tags
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        metadata: {
-          'mastra-trace-id': rootSpan.traceId,
-        },
-      });
-      // Verify tags is not in the child span log call
-      const logCall = mockSpan.log.mock.calls[0][0];
-      expect(logCall.tags).toBeUndefined();
+      // Check that the event for child span does not include tags
+      const startSpanCall = mockSpan.startSpan.mock.calls[0][0];
+      expect(startSpanCall.event.tags).toBeUndefined();
     });
 
-    it('should include tags only on initial log, not on updates or end', async () => {
+    it('should include tags only on initial event, not on updates or end', async () => {
       const rootSpanWithTags = createMockSpan({
         id: 'root-lifecycle-tags',
         name: 'lifecycle-agent',
@@ -1037,19 +1944,25 @@ describe('BraintrustExporter', () => {
         tags: ['lifecycle-tag'],
       });
 
-      // Start span - should include tags
+      // Start span - tags should be in the event parameter
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpanWithTags,
       });
 
-      // Verify initial log has tags
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        metadata: {
-          'mastra-trace-id': rootSpanWithTags.traceId,
-        },
-        tags: ['lifecycle-tag'],
-      });
+      // Verify tags and metadata were passed via the event parameter
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'lifecycle-agent',
+          spanId: 'root-lifecycle-tags',
+          event: expect.objectContaining({
+            tags: ['lifecycle-tag'],
+            metadata: expect.objectContaining({
+              'mastra-trace-id': rootSpanWithTags.traceId,
+            }),
+          }),
+        }),
+      );
 
       // Clear mock for update
       mockSpan.log.mockClear();
@@ -1060,6 +1973,8 @@ describe('BraintrustExporter', () => {
         type: TracingEventType.SPAN_UPDATED,
         exportedSpan: rootSpanWithTags,
       });
+
+      expect(mockSpan.log).toHaveBeenCalledOnce();
 
       // Update log should NOT include tags (tags are only sent once on start)
       const updateLogCall = mockSpan.log.mock.calls[0][0];
@@ -1075,6 +1990,8 @@ describe('BraintrustExporter', () => {
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: rootSpanWithTags,
       });
+
+      expect(mockSpan.log).toHaveBeenCalledOnce();
 
       // End log should NOT include tags
       const endLogCall = mockSpan.log.mock.calls[0][0];
@@ -1099,16 +2016,21 @@ describe('BraintrustExporter', () => {
       });
 
       // Verify maps have data
-      expect((exporter as any).traceMap.size).toBeGreaterThan(0);
+      expect(exporter._traceMapSize).toBeGreaterThan(0);
 
-      // Shutdown
+      // Shutdown - TrackingExporter now aborts all open spans
       await exporter.shutdown();
 
-      // Verify all spans were ended
+      // Verify span was aborted with error logged and then ended
+      expect(mockSpan.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Observability is shutting down.',
+        }),
+      );
       expect(mockSpan.end).toHaveBeenCalled();
 
       // Verify maps were cleared
-      expect((exporter as any).traceMap.size).toBe(0);
+      expect(exporter._traceMapSize).toBe(0);
     });
 
     it('should handle shutdown when exporter is disabled', async () => {
@@ -1302,7 +2224,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     const config: BraintrustExporterConfig = {
       braintrustLogger: mockLogger as Logger<true>,
     };
-    const exporter = new BraintrustExporter(config);
+    const exporter = new TestBraintrustExporter(config);
 
     // Verify initLogger was NOT called (because braintrustLogger is provided)
     const mockInitLogger = vi.mocked(initLogger);
@@ -1323,29 +2245,27 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     });
 
     // Verify the provided logger was used to create the span
+    // Data properties are passed via the event parameter
     expect(mockLogger.startSpan).toHaveBeenCalledWith({
       spanId: 'root-span-id',
       name: 'root-agent',
       type: 'task',
+      startTime: rootSpan.startTime.getTime() / 1000,
       // No parentSpanIds for root spans!
-      metadata: {
-        spanType: 'agent_run',
-        agentId: 'test-agent',
+      event: {
+        id: 'root-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'agent_run',
+          agentId: 'test-agent',
+          'mastra-trace-id': rootSpan.traceId,
+        },
       },
     });
 
-    // Verify mastra-trace-id metadata was logged
-    expect(mockSpan.log).toHaveBeenCalledWith({
-      metadata: {
-        'mastra-trace-id': rootSpan.traceId,
-      },
-    });
-
-    // Verify the trace is NOT marked as external
-    const spanData = (exporter as any).traceMap.get(rootSpan.traceId);
-    expect(spanData).toBeDefined();
-    expect(spanData.isExternal).toBe(false);
-    expect(spanData.logger).toBe(mockLogger);
+    // Verify the trace built off the passed logger
+    const traceData = exporter._getTraceData(rootSpan.traceId);
+    expect(traceData).toBeDefined();
+    expect(traceData.getRoot()).toBe(mockLogger);
   });
 
   it('should attach to external span when detected via currentSpan()', async () => {
@@ -1361,7 +2281,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     const config: BraintrustExporterConfig = {
       braintrustLogger: mockLogger as Logger<true>,
     };
-    const exporter = new BraintrustExporter(config);
+    const exporter = new TestBraintrustExporter(config);
+    const traceId = 'trace-id';
 
     // Create a Mastra root span
     const rootSpan = createMockSpan({
@@ -1370,6 +2291,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.AGENT_RUN,
       isRoot: true,
       attributes: { agentId: 'test-agent' },
+      traceId,
     });
 
     // Export the span - should detect external span and attach to it
@@ -1382,30 +2304,28 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     expect(mockedCurrentSpan).toHaveBeenCalled();
 
     // Verify the external span was used (not the provided logger)
+    // Data properties are passed via the event parameter
     expect(mockExternalSpan.startSpan).toHaveBeenCalledWith({
       spanId: 'mastra-span-id',
       name: 'mastra-agent',
       type: 'task',
+      startTime: rootSpan.startTime.getTime() / 1000,
       // When attaching to external span, parentSpanIds should be omitted
       // (checked by NOT having parentSpanIds in the call)
-      metadata: {
-        spanType: 'agent_run',
-        agentId: 'test-agent',
+      event: {
+        id: 'mastra-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'agent_run',
+          agentId: 'test-agent',
+          'mastra-trace-id': traceId,
+        },
       },
     });
 
-    // Verify the trace IS marked as external
-    const spanData = (exporter as any).traceMap.get(rootSpan.traceId);
-    expect(spanData).toBeDefined();
-    expect(spanData.isExternal).toBe(true);
-    expect(spanData.logger).toBe(mockExternalSpan);
-
-    // Verify mastra-trace-id metadata was logged
-    expect(mockExternalSpan.log).toHaveBeenCalledWith({
-      metadata: {
-        'mastra-trace-id': rootSpan.traceId,
-      },
-    });
+    // Verify externalSpan is the root of the trace
+    const traceData = exporter._getTraceData(rootSpan.traceId);
+    expect(traceData).toBeDefined();
+    expect(traceData.getRoot()).toBe(mockExternalSpan);
   });
 
   it('should nest child spans correctly with external parent', async () => {
@@ -1427,7 +2347,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     const config: BraintrustExporterConfig = {
       braintrustLogger: mockLogger as Logger<true>,
     };
-    const exporter = new BraintrustExporter(config);
+    const exporter = new TestBraintrustExporter(config);
+    const traceId = 'trace-id';
 
     // Create parent and child Mastra spans
     const parentSpan = createMockSpan({
@@ -1436,6 +2357,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.AGENT_RUN,
       isRoot: true,
       attributes: { agentId: 'parent-agent' },
+      traceId,
     });
 
     const childSpan = createMockSpan({
@@ -1444,8 +2366,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.TOOL_CALL,
       isRoot: false,
       attributes: { toolId: 'calculator' },
+      traceId,
     });
-    childSpan.traceId = parentSpan.traceId;
     childSpan.parentSpanId = parentSpan.id;
 
     // Export parent span (should attach to external span)
@@ -1461,40 +2383,40 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     });
 
     // Verify parent was attached to external span without parentSpanIds
+    // Data properties are passed via the event parameter
     expect(mockExternalSpan.startSpan).toHaveBeenCalledWith({
       spanId: 'parent-span-id',
       name: 'parent-agent',
       type: 'task',
-      metadata: {
-        spanType: 'agent_run',
-        agentId: 'parent-agent',
+      startTime: parentSpan.startTime.getTime() / 1000,
+      event: {
+        id: 'parent-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'agent_run',
+          agentId: 'parent-agent',
+          'mastra-trace-id': traceId,
+        },
       },
     });
 
     // Verify child span was created WITHOUT parentSpanIds
     // In external contexts, the startSpan() chain handles parent-child relationships
+    // Data properties are passed via the event parameter
     expect(mockChildSpan.startSpan).toHaveBeenCalledWith({
       spanId: 'child-span-id',
       name: 'child-tool',
       type: 'tool',
+      startTime: childSpan.startTime.getTime() / 1000,
       // No parentSpanIds in external context - startSpan() chain handles relationships
-      metadata: {
-        spanType: 'tool_call',
-        toolId: 'calculator',
+      event: {
+        id: 'child-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'calculator',
+          'mastra-trace-id': traceId,
+        },
       },
     });
-
-    // Verify both spans have mastra-trace-id metadata
-    expect(mockChildSpan.log).toHaveBeenCalledWith({
-      metadata: {
-        'mastra-trace-id': parentSpan.traceId,
-      },
-    });
-
-    // Verify trace is marked as external
-    const spanData = (exporter as any).traceMap.get(parentSpan.traceId);
-    expect(spanData).toBeDefined();
-    expect(spanData.isExternal).toBe(true);
   });
 
   it('should properly nest multiple levels of spans in external context via startSpan() chain', async () => {
@@ -1537,8 +2459,10 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
 
     const config: BraintrustExporterConfig = {
       braintrustLogger: mockLogger as Logger<true>,
+      logLevel: 'debug',
     };
-    const exporter = new BraintrustExporter(config);
+    const exporter = new TestBraintrustExporter(config);
+    const traceId = 'trace-id';
 
     // Create Mastra span hierarchy: agent -> llm -> tool
     const agentSpan = createMockSpan({
@@ -1547,6 +2471,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.AGENT_RUN,
       isRoot: true,
       attributes: { agentId: 'test-agent' },
+      traceId,
     });
 
     const llmSpan = createMockSpan({
@@ -1555,8 +2480,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.MODEL_GENERATION,
       isRoot: false,
       attributes: { model: 'gpt-4' },
+      traceId,
     });
-    llmSpan.traceId = agentSpan.traceId;
     llmSpan.parentSpanId = agentSpan.id;
 
     const toolSpan = createMockSpan({
@@ -1565,8 +2490,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       type: SpanType.TOOL_CALL,
       isRoot: false,
       attributes: { toolId: 'calc' },
+      traceId,
     });
-    toolSpan.traceId = agentSpan.traceId;
     toolSpan.parentSpanId = llmSpan.id;
 
     // Export spans in order
@@ -1586,16 +2511,23 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     });
 
     // Verify the startSpan() chain:
+    // Data properties are passed via the event parameter
+
     // 1. Agent span should be created on the EXTERNAL span
     expect(mockExternalSpan.startSpan).toHaveBeenCalledTimes(1);
     expect(mockExternalSpan.startSpan).toHaveBeenCalledWith({
       spanId: 'agent-span-id',
       name: 'test-agent',
       type: 'task',
+      startTime: agentSpan.startTime.getTime() / 1000,
       // No parentSpanIds in external context
-      metadata: {
-        spanType: 'agent_run',
-        agentId: 'test-agent',
+      event: {
+        id: 'agent-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'agent_run',
+          agentId: 'test-agent',
+          'mastra-trace-id': traceId,
+        },
       },
     });
 
@@ -1605,10 +2537,14 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       spanId: 'llm-span-id',
       name: 'gpt-4-call',
       type: 'llm',
-      // No parentSpanIds in external context
-      metadata: {
-        spanType: 'model_generation',
-        model: 'gpt-4',
+      startTime: llmSpan.startTime.getTime() / 1000,
+      event: {
+        id: 'llm-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'model_generation',
+          model: 'gpt-4',
+          'mastra-trace-id': traceId,
+        },
       },
     });
 
@@ -1618,23 +2554,27 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       spanId: 'tool-span-id',
       name: 'calculator',
       type: 'tool',
-      // No parentSpanIds in external context
-      metadata: {
-        spanType: 'tool_call',
-        toolId: 'calc',
+      startTime: toolSpan.startTime.getTime() / 1000,
+      event: {
+        id: 'tool-span-id', // Row ID for logFeedback() compatibility
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'calc',
+          'mastra-trace-id': traceId,
+        },
       },
     });
 
     // Verify trace is external
-    const spanData = (exporter as any).traceMap.get(agentSpan.traceId);
-    expect(spanData.isExternal).toBe(true);
+    const traceData = exporter._getTraceData(agentSpan.traceId);
 
     // Verify spans are stored correctly in spanData.spans
     // This proves getBraintrustParent() can find the right parent for each child
-    expect(spanData.spans.size).toBe(3);
-    expect(spanData.spans.get('agent-span-id')).toBe(mockAgentSpan);
-    expect(spanData.spans.get('llm-span-id')).toBe(mockLlmSpan);
-    expect(spanData.spans.get('tool-span-id')).toBe(mockToolSpan);
+    expect(traceData.activeSpanCount()).toBe(3);
+    // getSpan() returns BraintrustSpanData, access .span for the underlying Braintrust Span
+    expect(traceData.getSpan({ spanId: 'agent-span-id' })?.span).toBe(mockAgentSpan);
+    expect(traceData.getSpan({ spanId: 'llm-span-id' })?.span).toBe(mockLlmSpan);
+    expect(traceData.getSpan({ spanId: 'tool-span-id' })?.span).toBe(mockToolSpan);
 
     // The key proof of correct nesting:
     // - mockAgentSpan was returned by mockExternalSpan.startSpan()
@@ -1658,6 +2598,7 @@ function createMockSpan({
   output,
   errorInfo,
   tags,
+  traceId,
 }: {
   id: string;
   name: string;
@@ -1669,6 +2610,7 @@ function createMockSpan({
   output?: any;
   errorInfo?: any;
   tags?: string[];
+  traceId?: string;
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -1682,7 +2624,7 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? `${id}-trace` : 'parent-trace-id',
+    traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
     get isRootSpan() {
       return isRoot;
     },

@@ -1,42 +1,46 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<
-  OUTPUT,
-  'mastra'
-> & {
+export type NetworkStreamHandlerParams<OUTPUT = undefined> = AgentExecutionOptions<OUTPUT> & {
   messages: MessageListInput;
 };
 
-export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined> = {
+export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
 /**
- * Framework-agnostic handler for streaming agent network execution in AI SDK format.
- * Use this function directly when you need to handle network streaming outside of Hono/registerApiRoute.
+ * Framework-agnostic handler for streaming agent network execution in AI SDK-compatible format.
+ * Use this function directly when you need to handle network streaming outside of Hono or Mastra's own apiRoutes feature.
  *
  * @example
+ * ```ts
  * // Next.js App Router
+ * import { handleNetworkStream } from '@mastra/ai-sdk';
+ * import { createUIMessageStreamResponse } from 'ai';
+ * import { mastra } from '@/src/mastra';
+ *
  * export async function POST(req: Request) {
  *   const params = await req.json();
- *   return handleNetworkStream({
+ *   const stream = await handleNetworkStream({
  *     mastra,
- *     agentId: 'my-agent',
+ *     agentId: 'routingAgent',
  *     params,
  *   });
+ *   return createUIMessageStreamResponse({ stream });
  * }
+ * ```
  */
-export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
   mastra,
   agentId,
   params,
@@ -50,7 +54,7 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
     throw new Error(`Agent ${agentId} not found`);
   }
 
-  const result = await agentObj.network(messages, {
+  const result = await agentObj.network<any>(messages, {
     ...defaultOptions,
     ...rest,
   });
@@ -64,11 +68,37 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
   });
 }
 
-export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> };
+export type NetworkRouteOptions<OUTPUT = undefined> =
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
 
-export function networkRoute<OUTPUT extends OutputSchema = undefined>({
+/**
+ * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
+ *
+ * This function registers an HTTP POST endpoint that accepts messages, executes an agent network, and streams the response back to the client in AI SDK-compatible format. Agent networks allow a routing agent to delegate tasks to other agents.
+ *
+ * @param {NetworkRouteOptions} options - Configuration options for the network route
+ * @param {string} [options.path='/network/:agentId'] - The route path. Include `:agentId` for dynamic routing
+ * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
+ * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
+ *
+ * @example
+ * // Dynamic agent routing
+ * networkRoute({
+ *   path: '/network/:agentId',
+ * });
+ *
+ * @example
+ * // Fixed agent with custom path
+ * networkRoute({
+ *   path: '/api/orchestrator',
+ *   agent: 'router-agent',
+ *   defaultOptions: {
+ *     maxSteps: 10,
+ *   },
+ * });
+ */
+export function networkRoute<OUTPUT = undefined>({
   path = '/network/:agentId',
   agent,
   defaultOptions,
@@ -131,6 +161,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const params = (await c.req.json()) as NetworkStreamHandlerParams<OUTPUT>;
       const mastra = c.get('mastra');
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -146,6 +177,19 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
+        mastra
+          .getLogger()
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
+      }
+
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
@@ -153,7 +197,10 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
       const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
         mastra,
         agentId: agentToUse,
-        params,
+        params: {
+          ...params,
+          requestContext: effectiveRequestContext,
+        } as any,
         defaultOptions,
       });
 

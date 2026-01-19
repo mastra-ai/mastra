@@ -2,14 +2,16 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
+import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from 'date-fns';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Badge } from '@/ds/components/Badge';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { useInView } from '@/hooks';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { useState } from 'react';
 
 export interface WorkflowRunListProps {
   workflowId: string;
@@ -17,8 +19,21 @@ export interface WorkflowRunListProps {
 }
 
 export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => {
-  const { Link, paths } = useLinkComponent();
+  const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
+
+  const { Link, paths, navigate } = useLinkComponent();
   const { isLoading, data: runs, setEndOfListElement, isFetchingNextPage } = useWorkflowRuns(workflowId);
+  const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
+
+  const handleDelete = async (runId: string) => {
+    try {
+      await deleteRun({ runId });
+      setDeleteRunId(null);
+      navigate(paths.workflowLink(workflowId));
+    } catch (_error) {
+      setDeleteRunId(null);
+    }
+  };
 
   const actualRuns = runs || [];
 
@@ -46,7 +61,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
           </ThreadItem>
 
           {actualRuns.length === 0 && (
-            <Txt variant="ui-md" className="text-icon3 py-3 px-5">
+            <Txt variant="ui-md" className="text-neutral3 py-3 px-5">
               Your run history will appear here once you run the workflow
             </Txt>
           )}
@@ -59,7 +74,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                     <WorkflowRunStatusBadge status={run.snapshot.status} />
                   </div>
                 )}
-                <span className="truncate max-w-[14rem] text-muted-foreground">{run.runId}</span>
+                <span className="truncate max-w-32 text-neutral3">{run.runId}</span>
                 <span>
                   {typeof run?.snapshot === 'string'
                     ? ''
@@ -68,10 +83,22 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                       : ''}
                 </span>
               </ThreadLink>
+
+              <ThreadDeleteButton onClick={() => setDeleteRunId(run.runId)} />
             </ThreadItem>
           ))}
         </ThreadList>
       </Threads>
+
+      <DeleteRunDialog
+        open={!!deleteRunId}
+        onOpenChange={() => setDeleteRunId(null)}
+        onDelete={() => {
+          if (deleteRunId) {
+            handleDelete(deleteRunId);
+          }
+        }}
+      />
 
       {isFetchingNextPage && (
         <div className="flex justify-center items-center">
@@ -108,7 +135,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'canceled') {
     return (
-      <Badge variant="default" icon={<CircleSlash className="text-icon3" />}>
+      <Badge variant="default" icon={<CircleSlash className="text-neutral3" />}>
         {status}
       </Badge>
     );
@@ -116,7 +143,7 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
 
   if (status === 'pending' || status === 'waiting') {
     return (
-      <Badge variant="default" icon={<Clock className="text-icon3" />}>
+      <Badge variant="default" icon={<Clock className="text-neutral3" />}>
         {status}
       </Badge>
     );
@@ -139,4 +166,28 @@ const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
   }
 
   return <Badge variant="default">{status}</Badge>;
+};
+
+interface DeleteRunDialogProps {
+  open: boolean;
+  onOpenChange: (n: boolean) => void;
+  onDelete: () => void;
+}
+const DeleteRunDialog = ({ open, onOpenChange, onDelete }: DeleteRunDialogProps) => {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialog.Content>
+        <AlertDialog.Header>
+          <AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
+          <AlertDialog.Description>
+            This action cannot be undone. This will permanently delete the workflow run and remove it from our servers.
+          </AlertDialog.Description>
+        </AlertDialog.Header>
+        <AlertDialog.Footer>
+          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+          <AlertDialog.Action onClick={onDelete}>Continue</AlertDialog.Action>
+        </AlertDialog.Footer>
+      </AlertDialog.Content>
+    </AlertDialog>
+  );
 };

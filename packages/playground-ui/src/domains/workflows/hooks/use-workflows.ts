@@ -7,7 +7,11 @@ export const useWorkflows = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['workflows', JSON.stringify(requestContext)],
-    queryFn: () => client.listWorkflows(requestContext),
+    queryKey: ['workflows', requestContext],
+    queryFn: async () => {
+      const workflows = await client.listWorkflows(requestContext);
+      // Filter out processor workflows - they're shown on the Processors tab instead
+      return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
+    },
   });
 };

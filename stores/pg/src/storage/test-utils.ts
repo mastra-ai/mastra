@@ -1,9 +1,11 @@
 import { createSampleThread } from '@internal/storage-test-utils';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import pgPromise from 'pg-promise';
+import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
-import { PostgresStore } from '.';
+import { PgDB } from './db';
+import { MemoryPG } from './domains/memory';
+import { exportSchemas, PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   id: 'test-postgres-store',
@@ -18,11 +20,14 @@ export const connectionString = `postgresql://${(TEST_CONFIG as any).user}:${(TE
 
 export function pgTests() {
   let store: PostgresStore;
+  let dbOps: PgDB;
 
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
       await store.init();
+      // Create PgDB instance for low-level operations
+      dbOps = new PgDB({ client: store.db });
     });
     afterAll(async () => {
       try {
@@ -31,36 +36,27 @@ export function pgTests() {
     });
 
     describe('Public Fields Access', () => {
-      it('should expose db field as public', () => {
+      it('should expose client field as public', () => {
         expect(store.db).toBeDefined();
         expect(typeof store.db).toBe('object');
         expect(store.db.query).toBeDefined();
         expect(typeof store.db.query).toBe('function');
       });
 
-      it('should expose pgp field as public', () => {
-        expect(store.pgp).toBeDefined();
-        expect(typeof store.pgp).toBe('function');
-        expect(store.pgp.end).toBeDefined();
-        expect(typeof store.pgp.end).toBe('function');
+      it('should expose pool field as public', () => {
+        expect(store.pool).toBeDefined();
+        expect(store.pool).toBeInstanceOf(Pool);
       });
 
-      it('should allow direct database queries via public db field', async () => {
-        const result = await store.db.one('SELECT 1 as test');
+      it('should allow direct database queries via public client field', async () => {
+        const result = await store.db.one<{ test: number }>('SELECT 1 as test');
         expect(result.test).toBe(1);
       });
 
-      it('should allow access to pgp utilities via public pgp field', () => {
-        const helpers = store.pgp.helpers;
-        expect(helpers).toBeDefined();
-        expect(helpers.insert).toBeDefined();
-        expect(helpers.update).toBeDefined();
-      });
-
-      it('should maintain connection state through public db field', async () => {
+      it('should maintain connection state through public client field', async () => {
         // Test multiple queries to ensure connection state
-        const result1 = await store.db.one('SELECT NOW() as timestamp1');
-        const result2 = await store.db.one('SELECT NOW() as timestamp2');
+        const result1 = await store.db.one<{ timestamp1: Date }>('SELECT NOW() as timestamp1');
+        const result2 = await store.db.one<{ timestamp2: Date }>('SELECT NOW() as timestamp2');
 
         expect(result1.timestamp1).toBeDefined();
         expect(result2.timestamp2).toBeDefined();
@@ -72,6 +68,8 @@ export function pgTests() {
         await expect(store.db.connect()).rejects.toThrow();
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
+        // Recreate dbOps with new store connection
+        dbOps = new PgDB({ client: store.db });
       });
     });
 
@@ -89,8 +87,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -101,8 +99,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -111,18 +109,18 @@ export function pgTests() {
 
       it('should create and upsert to a camelCase table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: camelCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: camelCaseTable as TABLE_NAMES,
           record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: camelCaseTable as TABLE_NAMES,
           keys: { id: '1' },
         });
@@ -131,18 +129,18 @@ export function pgTests() {
 
       it('should create and upsert to a snake_case table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: snakeCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
           record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: snakeCaseTable as TABLE_NAMES,
           keys: { id: '2' },
         });
@@ -154,24 +152,21 @@ export function pgTests() {
       const schemaRestrictedUser = 'mastra_schema_restricted_storage';
       const restrictedPassword = 'test123';
       const testSchema = 'testSchema';
-      let adminDb: pgPromise.IDatabase<{}>;
-      let pgpAdmin: pgPromise.IMain;
+      let adminPool: Pool;
 
       beforeAll(async () => {
         // Re-initialize the main store for subsequent tests
-
         await store.init();
 
-        // Create a separate pg-promise instance for admin operations
-        pgpAdmin = pgPromise();
-        adminDb = pgpAdmin(connectionString);
+        // Create a separate pool for admin operations
+        adminPool = new Pool({ connectionString });
+        const client = await adminPool.connect();
         try {
-          await adminDb.tx(async t => {
-            // Drop the test schema if it exists from previous runs
-            await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          // Drop the test schema if it exists from previous runs
+          await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
-            // Create schema restricted user with minimal permissions
-            await t.none(`          
+          // Create schema restricted user with minimal permissions
+          await client.query(`
                 DO $$
                 BEGIN
                   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
@@ -180,86 +175,68 @@ export function pgTests() {
                 END
                 $$;`);
 
-            // Grant only connect and usage to schema restricted user
-            await t.none(`
+          // Grant only connect and usage to schema restricted user
+          await client.query(`
                   REVOKE ALL ON DATABASE ${(TEST_CONFIG as any).database} FROM ${schemaRestrictedUser};
                   GRANT CONNECT ON DATABASE ${(TEST_CONFIG as any).database} TO ${schemaRestrictedUser};
                   REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
                   GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
                 `);
-          });
-        } catch (error) {
-          // Clean up the database connection on error
-          pgpAdmin.end();
-          throw error;
+        } finally {
+          client.release();
         }
       });
 
       afterAll(async () => {
+        const client = await adminPool.connect();
         try {
-          // Then clean up test user in admin connection
-          await adminDb.tx(async t => {
-            await t.none(`
+          await client.query(`
                   REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
                   DROP OWNED BY ${schemaRestrictedUser};
                   DROP USER IF EXISTS ${schemaRestrictedUser};
                 `);
-          });
-
-          // Finally clean up admin connection
-          if (pgpAdmin) {
-            pgpAdmin.end();
-          }
-        } catch (error) {
-          console.error('Error cleaning up test user:', error);
-          if (pgpAdmin) pgpAdmin.end();
+        } finally {
+          client.release();
+          await adminPool.end();
         }
       });
 
       describe('Schema Creation', () => {
         beforeEach(async () => {
-          // Create a fresh connection for each test
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
+          const client = await adminPool.connect();
           try {
             // Ensure schema doesn't exist before each test
-            await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+            await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
             // Ensure no active connections from restricted user
-            await tempDb.none(`
-                  SELECT pg_terminate_backend(pid) 
-                  FROM pg_stat_activity 
+            await client.query(`
+                  SELECT pg_terminate_backend(pid)
+                  FROM pg_stat_activity
                   WHERE usename = '${schemaRestrictedUser}'
                 `);
           } finally {
-            tempPgp.end(); // Always clean up the connection
+            client.release();
           }
         });
 
         afterEach(async () => {
-          // Create a fresh connection for cleanup
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
+          const client = await adminPool.connect();
           try {
             // Clean up any connections from the restricted user and drop schema
-            await tempDb.none(`
+            await client.query(`
                   DO $$
                   BEGIN
                     -- Terminate connections
-                    PERFORM pg_terminate_backend(pid) 
-                    FROM pg_stat_activity 
+                    PERFORM pg_terminate_backend(pid)
+                    FROM pg_stat_activity
                     WHERE usename = '${schemaRestrictedUser}';
-      
+
                     -- Drop schema
                     DROP SCHEMA IF EXISTS ${testSchema} CASCADE;
                   END $$;
                 `);
-          } catch (error) {
-            console.error('Error in afterEach cleanup:', error);
           } finally {
-            tempPgp.end(); // Always clean up the connection
+            client.release();
           }
         });
 
@@ -272,10 +249,6 @@ export function pgTests() {
             schemaName: testSchema,
           });
 
-          // Create a fresh connection for verification
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
           try {
             // Test schema creation by initializing the store
             await expect(async () => {
@@ -285,14 +258,13 @@ export function pgTests() {
             );
 
             // Verify schema was not created
-            const exists = await tempDb.oneOrNone(
+            const result = await adminPool.query(
               `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
               [testSchema],
             );
-            expect(exists?.exists).toBe(false);
+            expect(result.rows[0]?.exists).toBe(false);
           } finally {
             await restrictedDB.close();
-            tempPgp.end(); // Clean up the verification connection
           }
         });
 
@@ -305,28 +277,24 @@ export function pgTests() {
             schemaName: testSchema,
           });
 
-          // Create a fresh connection for verification
-          const tempPgp = pgPromise();
-          const tempDb = tempPgp(connectionString);
-
           try {
             await expect(async () => {
               await restrictedDB.init();
+              const memory = await restrictedDB.getStore('memory');
               const thread = createSampleThread();
-              await restrictedDB.saveThread({ thread });
+              await memory!.saveThread({ thread });
             }).rejects.toThrow(
               `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
             );
 
             // Verify schema was not created
-            const exists = await tempDb.oneOrNone(
+            const result = await adminPool.query(
               `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
               [testSchema],
             );
-            expect(exists?.exists).toBe(false);
+            expect(result.rows[0]?.exists).toBe(false);
           } finally {
             await restrictedDB.close();
-            tempPgp.end(); // Clean up the verification connection
           }
         });
       });
@@ -335,19 +303,20 @@ export function pgTests() {
     describe('Function Namespace in Schema', () => {
       const testSchema = 'schema_fn_test';
       let testStore: PostgresStore;
+      let adminPool: Pool;
 
       beforeAll(async () => {
-        // Use a temp connection to set up schema
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        // Use a temp pool to set up schema
+        adminPool = new Pool({ connectionString });
+        const client = await adminPool.connect();
 
         try {
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
-          await tempDb.none(`CREATE SCHEMA ${testSchema}`);
+          await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await client.query(`CREATE SCHEMA ${testSchema}`);
           // Drop the function from public schema if it exists from other tests
-          await tempDb.none(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
+          await client.query(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
         } finally {
-          tempPgp.end();
+          client.release();
         }
 
         testStore = new PostgresStore({
@@ -361,14 +330,12 @@ export function pgTests() {
       afterAll(async () => {
         await testStore?.close();
 
-        // Use a temp connection to clean up
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
-
+        const client = await adminPool.connect();
         try {
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
         } finally {
-          tempPgp.end();
+          client.release();
+          await adminPool.end();
         }
       });
 
@@ -380,13 +347,15 @@ export function pgTests() {
           updatedAt: { type: 'timestamp', nullable: false },
         } as Record<string, StorageColumn>;
 
-        await testStore.createTable({
+        // Create PgDB instance for low-level operations
+        const testDbOps = new PgDB({ client: testStore.db, schemaName: testSchema });
+        await testDbOps.createTable({
           tableName: 'mastra_ai_spans' as TABLE_NAMES,
           schema: SpansSchema,
         });
 
         // Verify trigger function exists in the correct schema
-        const functionInfo = await testStore.db.oneOrNone(
+        const functionInfo = await testStore.db.oneOrNone<{ proname: string; nspname: string }>(
           `SELECT p.proname, n.nspname
            FROM pg_proc p
            JOIN pg_namespace n ON p.pronamespace = n.oid
@@ -414,10 +383,12 @@ export function pgTests() {
       let testThreadId: string;
       let testResourceId: string;
       let testMessageId: string;
+      let memory: MemoryStorage;
 
       beforeAll(async () => {
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
+        memory = (await store.getStore('memory'))!;
       });
       afterAll(async () => {
         try {
@@ -434,7 +405,7 @@ export function pgTests() {
       it('should use createdAtZ over createdAt for messages when both exist', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with both createdAt and createdAtZ where they differ
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -447,14 +418,14 @@ export function pgTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -466,7 +437,7 @@ export function pgTests() {
       it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with only createdAt (simulating old records)
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -478,13 +449,13 @@ export function pgTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -497,11 +468,11 @@ export function pgTests() {
         const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
         thread.createdAt = threadCreatedAt;
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Save a message through the normal API with a different timestamp
         const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
-        await store.saveMessages({
+        await memory.saveMessages({
           messages: [
             {
               id: testMessageId,
@@ -515,13 +486,13 @@ export function pgTests() {
         });
 
         // Get thread
-        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        const retrievedThread = await memory.getThreadById({ threadId: testThreadId });
         expect(retrievedThread).toBeTruthy();
         expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messagesResult = await store.listMessages({ threadId: testThreadId });
+        const messagesResult = await memory.listMessages({ threadId: testThreadId });
         expect(messagesResult.messages.length).toBe(1);
         expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
@@ -530,7 +501,7 @@ export function pgTests() {
       it('should handle included messages with correct timestamp fallback', async () => {
         // Create a thread
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Create multiple messages
         const msg1Id = `${testMessageId}-1`;
@@ -565,7 +536,7 @@ export function pgTests() {
         );
 
         // Test listMessages with include
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
           include: [
             {
@@ -579,17 +550,17 @@ export function pgTests() {
         expect(messagesResult.messages.length).toBe(3);
 
         // Find each message and verify correct timestamps
-        const message1 = messagesResult.messages.find(m => m.id === msg1Id);
+        const message1 = messagesResult.messages.find((m: any) => m.id === msg1Id);
         expect(message1).toBeDefined();
         expect(message1?.createdAt).toBeInstanceOf(Date);
         expect(message1?.createdAt.getTime()).toBe(date1.getTime());
 
-        const message2 = messagesResult.messages.find(m => m.id === msg2Id);
+        const message2 = messagesResult.messages.find((m: any) => m.id === msg2Id);
         expect(message2).toBeDefined();
         expect(message2?.createdAt).toBeInstanceOf(Date);
         expect(message2?.createdAt.getTime()).toBe(date2.getTime());
 
-        const message3 = messagesResult.messages.find(m => m.id === msg3Id);
+        const message3 = messagesResult.messages.find((m: any) => m.id === msg3Id);
         expect(message3).toBeDefined();
         expect(message3?.createdAt).toBeInstanceOf(Date);
         // Should use createdAtZ (date2Z), not createdAt (date3)
@@ -598,183 +569,252 @@ export function pgTests() {
       });
     });
 
-    describe('Validation', () => {
-      const validConfig = TEST_CONFIG as any;
-
-      describe('Connection String Config', () => {
-        it('throws if connectionString is empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString: '' })).toThrow();
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, connectionString: '' })).toThrow();
-        });
-        it('does not throw on non-empty connection string', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString })).not.toThrow();
-        });
+    // PG-specific: Cloud SQL Connector configuration tests (not covered by factory)
+    describe('Cloud SQL Connector Config', () => {
+      it('accepts config with stream property (Cloud SQL connector)', () => {
+        const connectorConfig = {
+          id: 'cloud-sql-connector-store',
+          user: 'test-user',
+          database: 'test-db',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream function
+        };
+        expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
       });
 
-      describe('TCP Host Config', () => {
-        it('throws if host is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, host: '' })).toThrow();
-          const { host, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if database is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, database: '' })).toThrow();
-          const { database, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if user is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, user: '' })).toThrow();
-          const { user, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if password is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, password: '' })).toThrow();
-          const { password, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('does not throw on valid config (host-based)', () => {
-          expect(() => new PostgresStore(validConfig)).not.toThrow();
-        });
+      it('accepts config with password function (IAM auth)', () => {
+        const iamConfig = {
+          id: 'iam-auth-store',
+          user: 'test-user',
+          database: 'test-db',
+          host: 'localhost', // This could be present but ignored when password is a function
+          port: 5432,
+          password: () => Promise.resolve('dynamic-token'), // Mock password function
+          ssl: { rejectUnauthorized: false },
+        };
+        expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
       });
 
-      describe('Cloud SQL Connector Config', () => {
-        it('accepts config with stream property (Cloud SQL connector)', () => {
-          const connectorConfig = {
-            id: 'cloud-sql-connector-store',
-            user: 'test-user',
-            database: 'test-db',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream function
-          };
-          expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
-        });
-
-        it('accepts config with password function (IAM auth)', () => {
-          const iamConfig = {
-            id: 'iam-auth-store',
-            user: 'test-user',
-            database: 'test-db',
-            host: 'localhost', // This could be present but ignored when password is a function
-            port: 5432,
-            password: () => Promise.resolve('dynamic-token'), // Mock password function
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
-        });
-
-        it('accepts generic pg ClientConfig', () => {
-          const clientConfig = {
-            id: 'generic-client-config-store',
-            user: 'test-user',
-            database: 'test-db',
-            application_name: 'test-app',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream
-          };
-          expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
-        });
+      it('accepts generic pg ClientConfig', () => {
+        const clientConfig = {
+          id: 'generic-client-config-store',
+          user: 'test-user',
+          database: 'test-db',
+          application_name: 'test-app',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream
+        };
+        expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
       });
+    });
 
-      describe('SSL Configuration', () => {
-        it('accepts connectionString with ssl: true', () => {
-          expect(() => new PostgresStore({ id: 'ssl-true-store', connectionString, ssl: true })).not.toThrow();
+    // PG-specific: pool field exposure with pre-configured pool
+    describe('Pre-configured Pool Field Exposure', () => {
+      it('should expose client and pool fields with pre-configured pool', async () => {
+        const pool = new Pool({ connectionString });
+
+        const poolStore = new PostgresStore({
+          id: 'pre-configured-pool-fields-store',
+          pool,
         });
 
-        it('accepts connectionString with ssl object', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'ssl-object-store',
-                connectionString,
-                ssl: { rejectUnauthorized: false },
-              }),
-          ).not.toThrow();
-        });
+        // pool should be the same pool we passed in
+        expect(poolStore.pool).toBe(pool);
+        // db should be defined
+        expect(poolStore.db).toBeDefined();
 
-        it('accepts host config with ssl: true', () => {
-          const config = {
-            id: 'host-ssl-true-store',
-            ...validConfig,
-            ssl: true,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-
-        it('accepts host config with ssl object', () => {
-          const config = {
-            id: 'host-ssl-object-store',
-            ...validConfig,
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
+        // Clean up
+        await pool.end();
       });
+    });
 
-      describe('Pool Options', () => {
-        it('accepts max and idleTimeoutMillis with connectionString', () => {
-          const config = {
-            id: 'pool-options-connection-store',
-            connectionString,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
+    // PG-specific: Domain schemaName verification with pre-configured pool
+    describe('Domain schemaName with Pre-configured Pool', () => {
+      it('should allow domains to use custom schemaName with pre-configured pool', async () => {
+        const pool = new Pool({ connectionString });
 
-        it('accepts max and idleTimeoutMillis with host config', () => {
-          const config = {
-            id: 'pool-options-host-store',
-            ...validConfig,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
+        // Create schema for test
+        await pool.query('CREATE SCHEMA IF NOT EXISTS domain_test_schema');
 
-      describe('Schema Configuration', () => {
-        it('accepts schemaName with connectionString', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'custom-schema-connection-store',
-                connectionString,
-                schemaName: 'custom_schema',
-              }),
-          ).not.toThrow();
-        });
+        try {
+          const memoryDomain = new MemoryPG({
+            pool,
+            schemaName: 'domain_test_schema',
+          });
 
-        it('accepts schemaName with host config', () => {
-          const config = {
-            id: 'custom-schema-host-store',
-            ...validConfig,
-            schemaName: 'custom_schema',
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
+          expect(memoryDomain).toBeDefined();
+          await memoryDomain.init();
 
-      describe('Invalid Config', () => {
-        it('throws on invalid config (missing required fields)', () => {
-          expect(() => new PostgresStore({ id: 'test-store', user: 'test' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
+          // Verify tables were created in the custom schema
+          const result = await pool.query(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'domain_test_schema'
+              AND table_name = 'mastra_threads'
+            )`,
           );
-        });
+          expect(result.rows[0]?.exists).toBe(true);
+        } finally {
+          // Clean up
+          await pool.query('DROP SCHEMA IF EXISTS domain_test_schema CASCADE');
+          await pool.end();
+        }
+      });
+    });
 
-        it('throws on completely empty config', () => {
-          expect(() => new PostgresStore({ id: 'test-store' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
-          );
-        });
+    describe('Schema Export', () => {
+      it('should export schema for public schema', () => {
+        const schema = exportSchemas();
+
+        expect(schema).toContain('CREATE TABLE IF NOT EXISTS');
+        expect(schema).toContain('mastra_threads');
+        expect(schema).toContain('mastra_messages');
+        expect(schema).toContain('mastra_workflow_snapshot');
+        expect(schema).toContain('mastra_scorers');
+        expect(schema).toContain('mastra_ai_spans');
+        expect(schema).toContain('mastra_traces');
+        expect(schema).toContain('mastra_resources');
+        expect(schema).toContain('mastra_agents');
       });
 
-      describe('Store Initialization', () => {
-        it('throws if store is not initialized', () => {
-          expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
-            /PostgresStore: Store is not initialized/,
-          );
-          expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
+      it('should export schema with custom schema name', () => {
+        const schema = exportSchemas('my_custom_schema');
+
+        expect(schema).toContain('CREATE SCHEMA IF NOT EXISTS "my_custom_schema"');
+        expect(schema).toContain('"my_custom_schema"."mastra_threads"');
+        expect(schema).toContain('"my_custom_schema"."mastra_messages"');
+
+        // Verify constraint names include the schema prefix
+        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('my_custom_schema_mastra_ai_spans_traceid_spanid_pk');
+      });
+
+      it('should generate SQL with correct constraints', () => {
+        const schema = exportSchemas();
+
+        expect(schema).toContain('createdAtZ" TIMESTAMPTZ DEFAULT NOW()');
+        expect(schema).toContain('updatedAtZ" TIMESTAMPTZ DEFAULT NOW()');
+        expect(schema).toContain('mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('UNIQUE (workflow_name, run_id)');
+        expect(schema).toContain('mastra_ai_spans_traceid_spanid_pk');
+        expect(schema).toContain('PRIMARY KEY ("traceId", "spanId")');
+      });
+
+      it('should reject invalid schema names', () => {
+        // Schema names with special characters should throw an error
+        expect(() => exportSchemas('my-schema')).toThrow('Invalid schema name');
+        expect(() => exportSchemas('123schema')).toThrow('Invalid schema name');
+        expect(() => exportSchemas('schema with spaces')).toThrow('Invalid schema name');
+      });
+
+      it('should accept valid schema names with underscores', () => {
+        const schema = exportSchemas('my_schema');
+
+        // Valid schema name should work
+        expect(schema).toContain('"my_schema"."mastra_threads"');
+        expect(schema).toContain('my_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('my_schema_mastra_ai_spans_traceid_spanid_pk');
+      });
+    });
+
+    // PG-specific: Unicode escape sequence handling in workflow snapshots
+    // See: https://github.com/mastra-ai/mastra/issues/11563
+    describe('Unicode Escape Sequence Handling', () => {
+      let unicodeStore: PostgresStore;
+      let workflowsStorage: any;
+
+      beforeAll(async () => {
+        // Create a dedicated store for these tests to avoid pool lifecycle issues
+        // with other tests that close/reopen the main store
+        unicodeStore = new PostgresStore({ ...TEST_CONFIG, id: 'unicode-test-store' });
+        await unicodeStore.init();
+        workflowsStorage = await unicodeStore.getStore('workflows');
+      });
+
+      afterAll(async () => {
+        try {
+          await unicodeStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        await workflowsStorage.dangerouslyClearAll();
+      });
+
+      it('should handle null characters in snapshot when filtering by status', async () => {
+        // Test for GitHub issue #11563: "Unsupported unicode escape sequence" when listing messages
+        // PostgreSQL's jsonb cast fails on null characters (\u0000) with error 22P05
+        const workflowName = 'unicode_null_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithNull = {
+          runId,
+          status: 'success',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          userMessage: 'Ótimo, já entendi! Vamos lá então.',
+          problematicContent: 'Text with null char: \u0000 and accented: áéíóú',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithNull,
         });
+
+        // This should NOT throw "unsupported Unicode escape sequence" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'success' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
+        expect(foundRun.snapshot.userMessage).toBe('Ótimo, já entendi! Vamos lá então.');
+        // Verify the null character is sanitized (removed) to allow jsonb storage
+        // PostgreSQL jsonb type does not support null characters, so they are stripped during insertion
+        expect(foundRun.snapshot.problematicContent).toBe('Text with null char:  and accented: áéíóú');
+        expect(foundRun.snapshot.problematicContent.includes('\u0000')).toBe(false);
+      });
+
+      it('should handle unpaired Unicode surrogates in snapshot when filtering by status', async () => {
+        // PostgreSQL's jsonb cast fails on unpaired surrogates (\uD800-\uDFFF)
+        const workflowName = 'unicode_surrogate_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithSurrogate = {
+          runId,
+          status: 'failed',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          problematicHigh: 'Text with high surrogate: \ud800 here',
+          problematicLow: 'Text with low surrogate: \udc00 here',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithSurrogate,
+        });
+
+        // This should NOT throw "Unicode low surrogate must follow a high surrogate" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'failed' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
       });
     });
   });

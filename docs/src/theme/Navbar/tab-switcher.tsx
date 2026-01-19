@@ -1,4 +1,4 @@
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import Link from "@docusaurus/Link";
 import { useLocation } from "@docusaurus/router";
 
@@ -14,12 +14,6 @@ const docsTabs = [
     label: "Models",
     href: "/models/v1",
     basePath: "/models/v1",
-  },
-  {
-    id: "Examples",
-    label: "Examples",
-    href: "/examples/v1",
-    basePath: "/examples/v1",
   },
   {
     id: "Guides",

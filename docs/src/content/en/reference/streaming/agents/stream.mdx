@@ -1,24 +1,20 @@
 ---
 title: "Reference: Agent.stream() | Streaming"
 description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.stream()
 
-The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5 compatibility.
+The `.stream()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5+ compatibility.
 
 ## Usage example
 
-```ts title="index.ts" copy
-// Default Mastra format
-const mastraStream = await agent.stream("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkStream = await agent.stream("message for agent", {
-  format: "aisdk",
-});
+```ts title="index.ts"
+const stream = await agent.stream("message for agent");
 ```
 
 :::info
@@ -50,14 +46,6 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 <PropertiesTable
   content={[
-    {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
     {
       name: "maxSteps",
       type: "number",
@@ -336,7 +324,7 @@ const aiSdkStream = await agent.stream("message for agent", {
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Configuration for memory behavior, like message history and semantic recall.",
+                "Configuration for memory behavior including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },
@@ -355,13 +343,6 @@ const aiSdkStream = await agent.stream("message for agent", {
       isOptional: true,
       description:
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
     },
     {
       name: "telemetry",
@@ -417,13 +398,6 @@ const aiSdkStream = await agent.stream("message for agent", {
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -490,6 +464,27 @@ const aiSdkStream = await agent.stream("message for agent", {
       isOptional: true,
       description:
         "Save messages incrementally after each stream step completes (default: false).",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, all tool calls require explicit approval before execution. The stream will emit `tool-call-approval` chunks and pause until `approveToolCall()` or `declineToolCall()` is called.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "providerOptions",
@@ -650,9 +645,9 @@ const aiSdkStream = await agent.stream("message for agent", {
   content={[
     {
       name: "stream",
-      type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
+      type: "MastraModelOutput<Output>",
       description:
-        "Returns a streaming interface based on the format parameter. When format is 'mastra' (default), returns MastraModelOutput. When format is 'aisdk', returns AISDKV5OutputStream for AI SDK v5 compatibility.",
+        "Returns a MastraModelOutput instance that provides access to the streaming output.",
     },
     {
       name: "traceId",
@@ -668,7 +663,7 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 ### Mastra Format (Default)
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 import { stepCountIs } from "ai-v5";
 
 const stream = await agent.stream("Tell me a story", {
@@ -683,39 +678,41 @@ for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 
+// or access full stream
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
 // Get full text after streaming
 const fullText = await stream.text;
 ```
 
-### AI SDK v5 Format
+### AI SDK v5+ Format
 
-```ts title="index.ts" showLineNumbers copy
-import { stepCountIs } from "ai-v5";
+To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
+
+```ts title="index.ts"
+import { stepCountIs, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
 
 const stream = await agent.stream("Tell me a story", {
-  format: "aisdk",
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
   },
 });
 
-// Use with AI SDK v5 compatible interfaces
-for await (const part of stream.fullStream) {
-  if (part.type === "text-delta") {
-    console.log(part.text);
-  }
-}
-
 // In an API route for frontend integration
-return stream.toUIMessageStreamResponse();
+return createUIMessageStreamResponse({
+  stream: toAISdkStream(stream, { from: "agent" }),
+})
 ```
 
 ### Using Callbacks
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 const stream = await agent.stream("Tell me a story", {
   onFinish: (result) => {
     console.log("Streaming finished:", result);
@@ -742,12 +739,11 @@ for await (const chunk of stream.textStream) {
 
 ### Advanced Example with Options
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 import { z } from "zod";
-import { stepCountIs } from "ai-v5";
+import { stepCountIs } from "ai";
 
 await agent.stream("message for agent", {
-  format: "aisdk", // Enable AI SDK v5 compatibility
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -778,3 +774,4 @@ await agent.stream("message for agent", {
 
 - [Generating responses](/docs/v1/agents/overview#generating-responses)
 - [Streaming responses](/docs/v1/agents/overview#generating-responses)
+- [Agent Approval](/docs/v1/agents/agent-approval)

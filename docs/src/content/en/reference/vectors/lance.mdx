@@ -1,6 +1,8 @@
 ---
 title: "Reference: Lance Vector Store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
+packages:
+  - "@mastra/lance"
 ---
 
 # Lance Vector Store
@@ -263,7 +265,7 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
 
 Returns an array of table names as strings.
 
-```typescript copy
+```typescript
 const tables = await vectorStore.listTables();
 // ['my_vectors', 'embeddings', 'documents']
 ```
@@ -316,7 +318,7 @@ Returns an array of index names as strings.
 
 Returns information about the index:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -425,7 +427,7 @@ Closes the database connection.
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -439,7 +441,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     tableName: "my_vectors",

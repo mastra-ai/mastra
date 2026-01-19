@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraAuthWorkos Class | Auth"
 description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/core"
 ---
 
 # MastraAuthWorkos Class
@@ -9,12 +12,11 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
@@ -129,4 +131,4 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 
 ## Related
 
-[MastraAuthWorkos Class](/docs/v1/auth/workos)
+[MastraAuthWorkos Class](/docs/v1/server/auth/workos)

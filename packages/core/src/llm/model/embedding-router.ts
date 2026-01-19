@@ -1,7 +1,7 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';

@@ -1,6 +1,8 @@
 ---
 title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # SystemPromptScrubber
@@ -9,7 +11,7 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
@@ -112,7 +114,7 @@ const processor = new SystemPromptScrubber({
     },
     {
       name: "processOutputResult",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
       description: "Processes final output results to detect and handle system prompts in non-streaming scenarios",
       isOptional: false,
     },
@@ -123,7 +125,7 @@ const processor = new SystemPromptScrubber({
 
 When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
 
-```typescript title="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/scrubbed-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processors";
 

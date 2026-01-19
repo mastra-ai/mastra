@@ -1,13 +1,20 @@
 ---
 title: "Working Memory | Memory"
 description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+  - "@mastra/upstash"
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
 
 # Working Memory
 
-While [conversation history](/docs/v1/memory/conversation-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [message history](/docs/v1/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -24,7 +31,7 @@ Working memory can persist at two different scopes:
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {11-14}
+```typescript {11-15}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -85,13 +92,15 @@ const memory = new Memory({
 
 ### Usage with Agents
 
-When using resource-scoped memory, make sure to pass the `resourceId` parameter:
+When using resource-scoped memory, make sure to pass the `resource` parameter in the memory options:
 
 ```typescript
-// Resource-scoped memory requires resourceId
+// Resource-scoped memory requires resource
 const response = await agent.generate("Hello!", {
-  threadId: "conversation-123",
-  resourceId: "user-alice-456", // Same user across different threads
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // Same user across different threads
+  },
 });
 ```
 
@@ -126,9 +135,9 @@ const memory = new Memory({
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### ✅ Supported Storage Adapters
+### Supported Storage Adapters
 
-- **LibSQL** (`@mastra/libsql`)
+- **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
 - **MongoDB** (`@mastra/mongodb`)
@@ -325,7 +334,7 @@ While agents typically update working memory through the `updateWorkingMemory` t
 
 When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 // Create a thread with initial working memory
 const thread = await memory.createThread({
   threadId: "thread-123",
@@ -344,8 +353,10 @@ const thread = await memory.createThread({
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
-  threadId: thread.id,
-  resourceId: "user-456",
+  memory: {
+    thread: thread.id,
+    resource: "user-456",
+  },
 });
 // Response: "Your blood type is O+."
 ```
@@ -354,7 +365,7 @@ await agent.generate("What's my blood type?", {
 
 You can also update an existing thread's working memory:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
   id: "thread-123",
@@ -376,7 +387,7 @@ await memory.updateThread({
 
 Alternatively, use the `updateWorkingMemory` method directly:
 
-```typescript title="src/app/medical-consultation.ts" showLineNumbers copy
+```typescript title="src/app/medical-consultation.ts"
 await memory.updateWorkingMemory({
   threadId: "thread-123",
   resourceId: "user-456", // Required for resource-scoped memory

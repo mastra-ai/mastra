@@ -1,6 +1,8 @@
 ---
 title: "Reference: Server Routes | Server"
 description: "API reference for HTTP routes registered by Mastra server adapters."
+packages:
+  - "@mastra/server"
 ---
 
 # Server Routes
@@ -58,16 +60,43 @@ Server adapters register these routes when you call `server.init()`. All routes 
 |--------|------|-------------|
 | `GET` | `/api/workflows` | List all workflows |
 | `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
+| `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
+| `POST` | `/api/workflows/:workflowId/start-async` | Start workflow and await result |
 | `POST` | `/api/workflows/:workflowId/stream` | Stream workflow execution |
 | `POST` | `/api/workflows/:workflowId/resume` | Resume suspended workflow |
 | `POST` | `/api/workflows/:workflowId/resume-async` | Resume asynchronously |
 | `GET` | `/api/workflows/:workflowId/runs` | List workflow runs |
 | `GET` | `/api/workflows/:workflowId/runs/:runId` | Get specific run |
 
+### Create run request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  disableScorers?: boolean; // Disable scorers for this run
+}
+```
+
+### Start-async request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  tracingOptions?: {
+    spanName?: string;
+    attributes?: Record<string, unknown>;
+  };
+}
+```
+
 ### Stream workflow request body
 
 ```typescript
 {
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
@@ -110,6 +139,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/memory/threads/:threadId` | Get thread |
 | `POST` | `/api/memory/threads` | Create thread |
 | `DELETE` | `/api/memory/threads/:threadId` | Delete thread |
+| `POST` | `/api/memory/threads/:threadId/clone` | Clone thread |
 | `GET` | `/api/memory/threads/:threadId/messages` | Get thread messages |
 | `POST` | `/api/memory/threads/:threadId/messages` | Add message |
 
@@ -120,6 +150,48 @@ Server adapters register these routes when you call `server.init()`. All routes 
   resourceId: string;
   title?: string;
   metadata?: Record<string, unknown>;
+}
+```
+
+### Clone thread request body
+
+```typescript
+{
+  newThreadId?: string;           // Custom ID for cloned thread
+  resourceId?: string;            // Override resource ID
+  title?: string;                 // Custom title for clone
+  metadata?: Record<string, unknown>;  // Additional metadata
+  options?: {
+    messageLimit?: number;        // Max messages to clone
+    messageFilter?: {
+      startDate?: Date;           // Clone messages after this date
+      endDate?: Date;             // Clone messages before this date
+      messageIds?: string[];      // Clone specific messages
+    };
+  };
+}
+```
+
+### Clone thread response
+
+```typescript
+{
+  thread: {
+    id: string;
+    resourceId: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata: {
+      clone: {
+        sourceThreadId: string;
+        clonedAt: Date;
+        lastMessageId?: string;
+      };
+      // ... other metadata
+    };
+  };
+  clonedMessages: MastraDBMessage[];
 }
 ```
 
@@ -201,15 +273,6 @@ Most list endpoints support:
 }
 ```
 
-Or offset-based:
-
-```typescript
-{
-  offset?: number; // Skip N items
-  limit?: number;  // Max items (default: 50)
-}
-```
-
 ### Filtering
 
 Workflow runs support:
@@ -247,4 +310,4 @@ Common status codes:
 ## Related
 
 - [createRoute()](/reference/v1/server/create-route) - Creating custom routes
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters

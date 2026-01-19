@@ -1,22 +1,22 @@
+import { APICallError } from '@internal/ai-sdk-v5';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
-import type { Span, SpanType, TracingContext } from '../../../observability';
+import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
+import type { Step } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
+import { isSupportedLanguageModel } from '../../utils';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-interface MapResultsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
@@ -27,10 +27,7 @@ interface MapResultsStepOptions<
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
@@ -41,19 +38,16 @@ export function createMapResultsStep<
   agentSpan,
   agentId,
   methodType,
-}: MapResultsStepOptions<OUTPUT, FORMAT>) {
-  return async ({
-    inputData,
-    bail,
-    tracingContext,
-  }: {
-    inputData: {
-      'prepare-tools-step': PrepareToolsStepOutput;
-      'prepare-memory-step': PrepareMemoryStepOutput;
-    };
-    bail: <T>(value: T) => T;
-    tracingContext: TracingContext;
-  }) => {
+}: MapResultsStepOptions<OUTPUT>): Step<
+  string,
+  unknown,
+  {
+    'prepare-tools-step': PrepareToolsStepOutput;
+    'prepare-memory-step': PrepareMemoryStepOutput;
+  },
+  ModelLoopStreamArgs<any, OUTPUT>
+>['execute'] {
+  return async ({ inputData, bail, tracingContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -70,7 +64,7 @@ export function createMapResultsStep<
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep) {
+        if (options.savePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -94,7 +88,6 @@ export function createMapResultsStep<
       },
       ...(memoryData.tripwire && {
         tripwire: memoryData.tripwire,
-        tripwireReason: memoryData.tripwireReason,
       }),
     };
 
@@ -102,15 +95,25 @@ export function createMapResultsStep<
     if (result.tripwire) {
       const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
-      const modelOutput = await getModelOutputForTripwire({
-        tripwireReason: result.tripwireReason!,
+      if (!isSupportedLanguageModel(agentModel)) {
+        throw new MastraError({
+          id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Tripwire handling requires a v2/v3 model',
+        });
+      }
+
+      const modelOutput = await getModelOutputForTripwire<OUTPUT>({
+        tripwire: memoryData.tripwire!,
         runId,
         tracingContext,
-        options,
+        options: options,
         model: agentModel,
         messageList: memoryData.messageList,
       });
 
+      // @ts-ignore - TODO: types are wrong here, maybe wrong in general?
       return bail(modelOutput);
     }
 
@@ -127,7 +130,10 @@ export function createMapResultsStep<
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+      const structuredProcessor = new StructuredOutputProcessor({
+        ...options.structuredOutput,
+        logger: capabilities.logger,
+      });
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -148,7 +154,7 @@ export function createMapResultsStep<
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
-    const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+    const loopOptions = {
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
@@ -166,10 +172,27 @@ export function createMapResultsStep<
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
           if (payload.finishReason === 'error') {
-            capabilities.logger.error('Error in agent stream', {
-              error: payload.error,
-              runId,
-            });
+            const provider = payload.model?.provider;
+            const modelId = payload.model?.modelId;
+            const isUpstreamError = APICallError.isInstance(payload.error);
+
+            if (isUpstreamError) {
+              const providerInfo = provider ? ` from ${provider}` : '';
+              const modelInfo = modelId ? ` (model: ${modelId})` : '';
+              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            } else {
+              capabilities.logger.error('Error in agent stream', {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            }
             return;
           }
 
@@ -184,7 +207,7 @@ export function createMapResultsStep<
               outputText,
               thread: result.thread,
               threadId: result.threadId,
-              readOnlyMemory: options.memory?.readOnly,
+              readOnlyMemory: memoryConfig?.readOnly,
               resourceId,
               memoryConfig,
               requestContext,
@@ -214,9 +237,9 @@ export function createMapResultsStep<
         onChunk: options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
-        activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
+      activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
@@ -225,6 +248,7 @@ export function createMapResultsStep<
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      maxProcessorRetries: options.maxProcessorRetries,
     };
 
     return loopOptions;

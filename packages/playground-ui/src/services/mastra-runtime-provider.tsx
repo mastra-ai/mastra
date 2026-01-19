@@ -1,5 +1,3 @@
-'use client';
-
 import {
   useExternalStoreRuntime,
   ThreadMessageLike,
@@ -14,7 +12,7 @@ import { fileToBase64 } from '@/lib/file/toBase64';
 import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
-import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
+import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
@@ -90,15 +88,15 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
       }));
 
       const formattedParts = (message.parts || [])
-        .map(part => {
+        .map((part: any) => {
           if (part.type === 'reasoning') {
             return {
               type: 'reasoning',
               text:
                 part.reasoning ||
                 part?.details
-                  ?.filter(detail => detail.type === 'text')
-                  ?.map(detail => detail.text)
+                  ?.filter((detail: any) => detail.type === 'text')
+                  ?.map((detail: any) => detail.text)
                   .join(' '),
             };
           }
@@ -114,18 +112,19 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             } else if (part.toolInvocation.state === 'call') {
               // Only return pending tool calls that are legitimately awaiting approval
               const toolCallId = part.toolInvocation.toolCallId;
+              const toolName = part.toolInvocation.toolName;
               const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
               const suspensionData = pendingToolApprovals?.[toolCallId];
               if (suspensionData) {
                 return {
                   type: 'tool-call',
                   toolCallId,
-                  toolName: part.toolInvocation.toolName,
+                  toolName,
                   args: part.toolInvocation.args,
                   metadata: {
                     mode: 'stream',
                     requireApprovalMetadata: {
-                      [toolCallId]: suspensionData,
+                      [toolName]: suspensionData,
                     },
                   },
                 };
@@ -190,7 +189,12 @@ export function MastraRuntimeProvider({
     setMessages,
     approveToolCall,
     declineToolCall,
+    approveToolCallGenerate,
+    declineToolCallGenerate,
     toolCallApprovals,
+    approveNetworkToolCall,
+    declineNetworkToolCall,
+    networkToolCallApprovals,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -208,6 +212,7 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
+    seed,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
@@ -221,14 +226,15 @@ export function MastraRuntimeProvider({
     requestContextInstance.set(key, value);
   });
 
-  const modelSettingsArgs: ModelSettings = {
+  const modelSettingsArgs = {
     frequencyPenalty,
     presencePenalty,
     maxRetries,
     temperature,
     topK,
     topP,
-    maxTokens,
+    seed,
+    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
     instructions,
     providerOptions,
     maxSteps,
@@ -237,7 +243,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isVNext = modelVersion === 'v2';
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -245,7 +251,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    if (!isVNext) {
+    if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
@@ -262,7 +268,7 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      if (isVNext) {
+      if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
             message: input,
@@ -355,6 +361,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -362,7 +369,7 @@ export function MastraRuntimeProvider({
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
             const latestMessage = generateResponse.response.messages.reduce(
-              (acc: ThreadMessageLike, message) => {
+              (acc: ThreadMessageLike, message: any) => {
                 const _content = Array.isArray(acc.content) ? acc.content : [];
                 if (typeof message.content === 'string') {
                   return {
@@ -379,10 +386,10 @@ export function MastraRuntimeProvider({
                 }
                 if (message.role === 'assistant') {
                   const toolCallContent = Array.isArray(message.content)
-                    ? message.content.find(content => content.type === 'tool-call')
+                    ? message.content.find((content: any) => content.type === 'tool-call')
                     : undefined;
                   const reasoningContent = Array.isArray(message.content)
-                    ? message.content.find(content => content.type === 'reasoning')
+                    ? message.content.find((content: any) => content.type === 'reasoning')
                     : undefined;
 
                   if (toolCallContent) {
@@ -403,7 +410,7 @@ export function MastraRuntimeProvider({
                   }
 
                   const textContent = Array.isArray(message.content)
-                    ? message.content.find(content => content.type === 'text' && content.text)
+                    ? message.content.find((content: any) => content.type === 'text' && content.text)
                     : undefined;
 
                   if (textContent) {
@@ -416,7 +423,7 @@ export function MastraRuntimeProvider({
 
                 if (message.role === 'tool') {
                   const toolResult = Array.isArray(message.content)
-                    ? message.content.find(content => content.type === 'tool-result')
+                    ? message.content.find((content: any) => content.type === 'tool-result')
                     : undefined;
 
                   if (toolResult) {
@@ -472,6 +479,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -512,7 +520,7 @@ export function MastraRuntimeProvider({
           }
 
           await response.processDataStream({
-            onTextPart(value) {
+            onTextPart(value: any) {
               if (assistantToolCallAddedForContent) {
                 // start new content value to add as next message item in messages array
                 assistantToolCallAddedForContent = false;
@@ -522,7 +530,7 @@ export function MastraRuntimeProvider({
               }
               updater();
             },
-            async onToolCallPart(value) {
+            async onToolCallPart(value: any) {
               // Update the messages state
               setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
@@ -582,7 +590,7 @@ export function MastraRuntimeProvider({
               });
               toolCallIdToName.current[value.toolCallId] = value.toolName;
             },
-            async onToolResultPart(value) {
+            async onToolResultPart(value: any) {
               // Update the messages state
               setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
@@ -621,13 +629,13 @@ export function MastraRuntimeProvider({
                 delete toolCallIdToName.current[value.toolCallId];
               }
             },
-            onErrorPart(error) {
+            onErrorPart(error: any) {
               throw new Error(error);
             },
-            onFinishMessagePart({ finishReason }) {
+            onFinishMessagePart({ finishReason }: { finishReason: any }) {
               handleFinishReason(finishReason);
             },
-            onReasoningPart(value) {
+            onReasoningPart(value: any) {
               setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
@@ -686,7 +694,7 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      if (isVNext) {
+      if (isSupportedModel) {
         setMessages(currentConversation => [
           ...currentConversation,
           { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
@@ -718,7 +726,7 @@ export function MastraRuntimeProvider({
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
-    messages: isVNext ? vnextmessages : legacyMessages,
+    messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
     onCancel,
@@ -726,6 +734,8 @@ export function MastraRuntimeProvider({
     extras: {
       approveToolCall,
       declineToolCall,
+      approveNetworkToolCall,
+      declineNetworkToolCall,
     },
   });
 
@@ -736,8 +746,13 @@ export function MastraRuntimeProvider({
       <ToolCallProvider
         approveToolcall={approveToolCall}
         declineToolcall={declineToolCall}
+        approveToolcallGenerate={approveToolCallGenerate}
+        declineToolcallGenerate={declineToolCallGenerate}
         isRunning={isRunningStream}
         toolCallApprovals={toolCallApprovals}
+        approveNetworkToolcall={approveNetworkToolCall}
+        declineNetworkToolcall={declineNetworkToolCall}
+        networkToolCallApprovals={networkToolCallApprovals}
       >
         {children}
       </ToolCallProvider>

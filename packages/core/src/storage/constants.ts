@@ -1,3 +1,5 @@
+import { spanRecordSchema } from './domains/observability/types';
+import { buildStorageSchema } from './types';
 import type { StorageColumn } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
@@ -7,6 +9,7 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
+export const TABLE_AGENTS = 'mastra_agents';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +18,8 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_SPANS;
+  | typeof TABLE_SPANS
+  | typeof TABLE_AGENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -55,7 +59,13 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp' },
 };
 
-export const SPAN_SCHEMA: Record<string, StorageColumn> = {
+export const SPAN_SCHEMA = buildStorageSchema(spanRecordSchema);
+
+/**
+ * @deprecated Use SPAN_SCHEMA instead. This legacy schema is retained only for migration purposes.
+ * @internal
+ */
+export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
   // Composite primary key of traceId and spanId
   traceId: { type: 'text', nullable: false },
   spanId: { type: 'text', nullable: false },
@@ -76,6 +86,25 @@ export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   isEvent: { type: 'boolean', nullable: false },
 };
 
+export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: false }, // System instructions for the agent
+  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, etc.)
+  tools: { type: 'jsonb', nullable: true }, // Serialized tool references/configurations
+  defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
+  workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
+  agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
+  outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
+  memory: { type: 'jsonb', nullable: true }, // Memory configuration
+  scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
+  metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -86,7 +115,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
     resourceId: { type: 'text', nullable: true },
     snapshot: {
-      type: 'text',
+      type: 'jsonb',
     },
     createdAt: {
       type: 'timestamp',
@@ -100,7 +129,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     id: { type: 'text', nullable: false, primaryKey: true },
     resourceId: { type: 'text', nullable: false },
     title: { type: 'text', nullable: false },
-    metadata: { type: 'text', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
@@ -137,4 +166,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_AGENTS]: AGENTS_SCHEMA,
 };

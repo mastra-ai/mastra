@@ -1,3 +1,5 @@
+import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
@@ -14,12 +16,10 @@ import type {
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -58,7 +58,7 @@ class TestExporter implements ObservabilityExporter {
   private logs: string[] = [];
 
   async exportTracingEvent(event: TracingEvent) {
-    const logMessage = `[TestExporter] ${event.type}: ${event.exportedSpan.type} "${event.exportedSpan.name}" (trace: ${event.exportedSpan.traceId.slice(-8)}, span: ${event.exportedSpan.id.slice(-8)})`;
+    const logMessage = `[TestExporter] ${event.type}: ${event.exportedSpan.type} "${event.exportedSpan.name}" (entity: ${event.exportedSpan.entityName ?? event.exportedSpan.entityId}, trace: ${event.exportedSpan.traceId.slice(-8)}, span: ${event.exportedSpan.id.slice(-8)})`;
 
     // Store log for potential test failure reporting
     this.logs.push(logMessage);
@@ -1129,8 +1129,11 @@ describe('Tracing Integration Tests', () => {
         });
 
         const resourceId = 'test-resource-id';
+        const threadId = 'test-thread-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
+        const result = await method(agent, 'Calculate 5 + 3', {
+          memory: { thread: threadId, resource: resourceId },
+        });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
@@ -1202,7 +1205,7 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         expect(llmGenerationSpan?.endTime).toBeDefined();
         expect(agentRunSpan?.endTime).toBeDefined();
@@ -1304,89 +1307,7 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
-
-        testExporter.finalExpectations();
-      });
-    },
-  );
-
-  describe.each(agentMethods)(
-    'should trace agent with multiple tools using aisdk output format using $name',
-    ({ name, method, model }) => {
-      it(`should trace spans correctly`, async () => {
-        const testAgent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'You are a test agent',
-          model,
-          tools: {
-            calculator: calculatorTool,
-            apiCall: apiTool,
-            workflowExecutor: workflowExecutorTool,
-          },
-        });
-
-        const mastra = new Mastra({
-          ...getBaseMastraConfig(testExporter),
-          agents: { testAgent },
-        });
-
-        const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { format: 'aisdk' });
-        expect(result.text).toBeDefined();
-        expect(result.traceId).toBeDefined();
-
-        const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
-        const llmStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
-        const toolCallSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
-        const workflowSpans = testExporter.getSpansByType(SpanType.WORKFLOW_RUN);
-        const workflowSteps = testExporter.getSpansByType(SpanType.WORKFLOW_STEP);
-
-        expect(agentRunSpans.length).toBe(1); // one agent run
-        expect(llmGenerationSpans.length).toBe(1); // tool call
-        expect(toolCallSpans.length).toBe(1); // one tool call (calculator)
-        expect(workflowSpans.length).toBe(0); // no workflows
-        expect(workflowSteps.length).toBe(0); // no workflows
-
-        const agentRunSpan = agentRunSpans[0];
-        const llmGenerationSpan = llmGenerationSpans[0];
-        const toolCallSpan = toolCallSpans[0];
-
-        expect(agentRunSpan?.traceId).toBe(result.traceId);
-
-        // verify span nesting
-        expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        if (name.includes('Legacy')) {
-          expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        } else {
-          const llmStepSpan = llmStepSpans[0];
-          expect(llmStepSpan).toBeDefined();
-          expect(toolCallSpan?.parentSpanId).toEqual(llmStepSpan?.id);
-        }
-
-        expect(llmGenerationSpan?.name).toBe("llm: 'mock-model-id'");
-        expect(llmGenerationSpan?.input.messages).toHaveLength(2);
-        switch (name) {
-          case 'generateLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock response');
-            expect(agentRunSpan?.output.text).toBe('Mock response');
-            break;
-          case 'streamLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock streaming response');
-            break;
-          default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            break;
-        }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
-
-        expect(llmGenerationSpan?.endTime).toBeDefined();
-        expect(agentRunSpan?.endTime).toBeDefined();
-        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         testExporter.finalExpectations();
       });
@@ -1408,7 +1329,7 @@ describe('Tracing Integration Tests', () => {
           items: z.string(),
         });
 
-        const structuredOutput: StructuredOutputOptions<OutputSchema> = {
+        const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
           schema: outputSchema,
           model,
         };
@@ -1489,8 +1410,8 @@ describe('Tracing Integration Tests', () => {
         expect(result.object).toHaveProperty('items');
         expect((result.object as any).items).toBe('test structured output');
 
-        expect(testAgentLlmSpan!.attributes?.usage?.totalTokens).toBeGreaterThan(1);
-        expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(testAgentLlmSpan!.attributes?.usage?.inputTokens).toBeGreaterThan(0);
+        expect(processorAgentLlmSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         expect(testAgentLlmSpan!.endTime).toBeDefined();
         expect(testAgentSpan?.endTime).toBeDefined();
@@ -1998,12 +1919,10 @@ describe('Tracing Integration Tests', () => {
           { type: 'text-delta', id: '1', delta: 'Test response from agent' },
           {
             type: 'finish',
-            id: '1',
             finishReason: 'stop',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           },
         ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
       }),
     });
 
@@ -2073,4 +1992,253 @@ describe('Tracing Integration Tests', () => {
 
     testExporter.finalExpectations();
   });
+
+  it('should have MODEL_STEP span startTime close to MODEL_GENERATION startTime, not endTime (issue #11271)', async () => {
+    // This test verifies that MODEL_STEP spans have correct startTime.
+    // The span should start when the model API call begins, not when the response starts streaming.
+
+    const SIMULATED_MODEL_DELAY_MS = 100; // Simulate model processing time before first token
+
+    const delayedMockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        // Simulate model processing delay before first token
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_MODEL_DELAY_MS));
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-1' },
+            { type: 'text-delta', id: '1', delta: 'Hello ' },
+            { type: 'text-delta', id: '2', delta: 'world' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const delayedAgent = new Agent({
+      id: 'delayed-agent',
+      name: 'Delayed Agent',
+      instructions: 'You are a test agent',
+      model: delayedMockModel,
+    });
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      agents: { delayedAgent },
+    });
+
+    const agent = mastra.getAgent('delayedAgent');
+    const result = await agent.stream('Hello');
+
+    // Consume the stream to trigger span lifecycle
+    let fullText = '';
+    for await (const chunk of result.textStream) {
+      fullText += chunk;
+    }
+    expect(fullText).toBe('Hello world');
+
+    const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    const llmStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+
+    expect(llmGenerationSpans.length).toBe(1);
+    expect(llmStepSpans.length).toBe(1);
+
+    const generationSpan = llmGenerationSpans[0]!;
+    const stepSpan = llmStepSpans[0]!;
+
+    // Both spans should have defined times
+    expect(generationSpan.startTime).toBeDefined();
+    expect(generationSpan.endTime).toBeDefined();
+    expect(stepSpan.startTime).toBeDefined();
+    expect(stepSpan.endTime).toBeDefined();
+
+    const generationStart = generationSpan.startTime.getTime();
+    const generationEnd = generationSpan.endTime!.getTime();
+    const stepStart = stepSpan.startTime.getTime();
+
+    const generationDuration = generationEnd - generationStart;
+    const stepStartOffset = stepStart - generationStart;
+
+    // Log values for debugging (only visible in verbose mode or on failure)
+    console.log('MODEL_GENERATION span:', {
+      start: generationSpan.startTime.toISOString(),
+      end: generationSpan.endTime!.toISOString(),
+      duration: `${generationDuration}ms`,
+    });
+    console.log('MODEL_STEP span:', {
+      start: stepSpan.startTime.toISOString(),
+      end: stepSpan.endTime!.toISOString(),
+      startOffset: `${stepStartOffset}ms from generation start`,
+    });
+
+    // The step should start close to when the generation started (within 50ms tolerance)
+    expect(stepStartOffset).toBeLessThan(50);
+
+    // The step should NOT start close to when the generation ended
+    const stepStartToGenerationEnd = generationEnd - stepStart;
+    expect(stepStartToGenerationEnd).toBeGreaterThan(50);
+
+    testExporter.finalExpectations();
+  });
+
+  describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
+    'should accumulate text from all steps in agent run span, not just last step (issue #11659) using $name',
+    ({ name }) => {
+      it('should include text from all steps in output', async () => {
+        // This test verifies that when an agent executes multiple steps (e.g., announces tool call,
+        // executes tool, then returns result), ALL text chunks are accumulated in the output,
+        // not just the text from the final step.
+        //
+        // The bug was that onFinishPayload used baseFinishStep.text (last step only) instead of
+        // self.#bufferedText.join('') (all accumulated text).
+
+        let callCount = 0;
+
+        const multiStepMockModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+
+            if (callCount === 1) {
+              // First call: Agent announces it will use a tool, then calls the tool
+              return {
+                content: [
+                  { type: 'text', text: 'Let me calculate that for you. ' },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-calc-1',
+                    toolName: 'calculator',
+                    args: { operation: 'add', a: 5, b: 3 },
+                    input: '{"operation":"add","a":5,"b":3}',
+                  },
+                ],
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+                warnings: [],
+              };
+            } else {
+              // Second call: After tool execution, agent returns the final answer
+              return {
+                content: [{ type: 'text', text: 'The result of 5 + 3 is 8.' }],
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                warnings: [],
+              };
+            }
+          },
+          doStream: async () => {
+            callCount++;
+
+            if (callCount === 1) {
+              // First call: Agent announces it will use a tool, then calls the tool
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'response-metadata', id: 'resp-1' },
+                  { type: 'text-delta', id: '1', delta: 'Let me calculate that for you. ' },
+                  {
+                    type: 'tool-input-start',
+                    id: 'call-calc-1',
+                    toolName: 'calculator',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call-calc-1',
+                    delta: '{"operation":"add","a":5,"b":3}',
+                  },
+                  {
+                    type: 'tool-input-end',
+                    id: 'call-calc-1',
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-calc-1',
+                    toolName: 'calculator',
+                    args: '{"operation":"add","a":5,"b":3}',
+                    input: '{"operation":"add","a":5,"b":3}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+                  },
+                ]),
+              };
+            } else {
+              // Second call: After tool execution, agent returns the final answer
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'response-metadata', id: 'resp-2' },
+                  { type: 'text-delta', id: '2', delta: 'The result of 5 + 3 is 8.' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+
+        const multiStepAgent = new Agent({
+          id: 'multi-step-agent',
+          name: 'Multi Step Agent',
+          instructions: 'You are a helpful calculator assistant that announces what you will do before doing it.',
+          model: multiStepMockModel,
+          tools: { calculator: calculatorTool },
+        });
+
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { multiStepAgent },
+        });
+
+        const agent = mastra.getAgent('multiStepAgent');
+
+        // Call either stream() or generate() based on the test parameter
+        let fullText: string;
+        if (name === 'stream') {
+          const result = await agent.stream('What is 5 + 3?');
+          fullText = '';
+          for await (const chunk of result.textStream) {
+            fullText += chunk;
+          }
+        } else {
+          const result = await agent.generate('What is 5 + 3?');
+          fullText = result.text;
+        }
+
+        // The full text should contain text from BOTH steps
+        expect(fullText).toContain('Let me calculate that for you.');
+        expect(fullText).toContain('The result of 5 + 3 is 8.');
+
+        const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+        const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+
+        expect(agentRunSpans.length).toBe(1);
+        expect(llmGenerationSpans.length).toBe(1);
+
+        const agentRunSpan = agentRunSpans[0]!;
+        const llmGenerationSpan = llmGenerationSpans[0]!;
+
+        // CRITICAL: The agent run span output should contain ALL accumulated text from all steps,
+        // not just the text from the final step. This was the bug fixed in issue #11659.
+        expect(agentRunSpan.output?.text).toContain('Let me calculate that for you.');
+        expect(agentRunSpan.output?.text).toContain('The result of 5 + 3 is 8.');
+
+        // The LLM generation span should also contain all accumulated text
+        expect(llmGenerationSpan.output?.text).toContain('Let me calculate that for you.');
+        expect(llmGenerationSpan.output?.text).toContain('The result of 5 + 3 is 8.');
+
+        // Verify the full accumulated text matches what we received from the stream/generate
+        expect(agentRunSpan.output?.text).toBe(fullText);
+        expect(llmGenerationSpan.output?.text).toBe(fullText);
+
+        testExporter.finalExpectations();
+      });
+    },
+  );
 });

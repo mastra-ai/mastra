@@ -2,17 +2,23 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { Fragment, useState } from 'react';
 
-import { Text } from '@/components/ui/text';
-
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronDown } from 'lucide-react';
 import { getConditionIconAndColor } from './workflow-node-badges';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCurrentRun } from '../context/use-current-run';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
@@ -41,6 +47,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const previousStep = steps[previousStepId];
   const nextStep = steps[nextStepId];
 
+  // Check if previous step is a tripwire (failed step with tripwire property)
+  const isPreviousTripwire = previousStep?.status === 'failed' && previousStep?.tripwire !== undefined;
+  const previousDisplayStatus = isPreviousTripwire ? 'tripwire' : previousStep?.status;
+
   const { icon: IconComponent, color } = getConditionIconAndColor(type);
 
   return (
@@ -49,12 +59,13 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
 
       <div
         data-workflow-node
-        data-workflow-step-status={previousStep?.status}
+        data-workflow-step-status={previousDisplayStatus}
         data-testid="workflow-condition-node"
         className={cn(
-          'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',
-          previousStep?.status === 'failed' && nextStep && 'bg-accent2Darker',
+          'bg-surface3 rounded-lg w-[300px] border border-border1',
+          previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
+          previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
+          previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',
           !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
         )}
       >
@@ -79,7 +90,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             {isCollapsible && (
               <Icon>
                 <ChevronDown
-                  className={cn('transition-transform text-icon3', {
+                  className={cn('transition-transform text-neutral3', {
                     'transform rotate-180': open,
                   })}
                 />
@@ -115,17 +126,18 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll',
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 whitespace-pre-wrap break-words',
                             className,
-                            previousStep?.status === 'success' && nextStep && '!bg-accent1Dark',
-                            previousStep?.status === 'failed' && nextStep && '!bg-accent2Dark',
+                            previousDisplayStatus === 'success' && nextStep && '!bg-accent1Dark',
+                            previousDisplayStatus === 'failed' && nextStep && '!bg-accent2Dark',
+                            previousDisplayStatus === 'tripwire' && nextStep && '!bg-amber-900/40',
                           )}
                           onClick={() => setOpenDialog(true)}
                           style={style}
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -136,35 +148,40 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     </Highlight>
 
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                      <DialogContent className="max-w-[30rem] bg-surface2 p-4">
-                        <DialogTitle className="sr-only">Condition Function</DialogTitle>
-                        <ScrollArea className="w-full p-2 pt-4" maxHeight="400px">
-                          <Highlight
-                            theme={themes.oneDark}
-                            code={String(condition.fnString).trim()}
-                            language="javascript"
-                          >
-                            {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                              <pre
-                                className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                                style={{
-                                  ...style,
-                                  backgroundColor: '#121212',
-                                  padding: '0 0.75rem 0 0',
-                                }}
-                              >
-                                {tokens.map((line, i) => (
-                                  <div key={i} {...getLineProps({ line })}>
-                                    <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
-                                    {line.map((token, key) => (
-                                      <span key={key} {...getTokenProps({ token })} />
-                                    ))}
-                                  </div>
-                                ))}
-                              </pre>
-                            )}
-                          </Highlight>
-                        </ScrollArea>
+                      <DialogContent className="max-w-[30rem]">
+                        <DialogHeader>
+                          <DialogTitle className="sr-only">Condition Function</DialogTitle>
+                          <DialogDescription>View the condition function code</DialogDescription>
+                        </DialogHeader>
+                        <DialogBody>
+                          <ScrollArea className="w-full" maxHeight="400px">
+                            <Highlight
+                              theme={themes.oneDark}
+                              code={String(condition.fnString).trim()}
+                              language="javascript"
+                            >
+                              {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                                <pre
+                                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                                  style={{
+                                    ...style,
+                                    backgroundColor: '#121212',
+                                    padding: '0 0.75rem 0 0',
+                                  }}
+                                >
+                                  {tokens.map((line, i) => (
+                                    <div key={i} {...getLineProps({ line })}>
+                                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                                      {line.map((token, key) => (
+                                        <span key={key} {...getTokenProps({ token })} />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </pre>
+                              )}
+                            </Highlight>
+                          </ScrollArea>
+                        </DialogBody>
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -174,10 +191,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Text size={'xs'} className=" text-mastra-el-3 flex-1">
+                        <Txt variant="ui-xs" className=" text-neutral3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
-                        </Text>
+                        </Txt>
                       </div>
                     ) : null}
                   </Fragment>
@@ -191,7 +208,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           stepName={nextStepId}
           input={previousStep?.output}
           mapConfig={data.mapConfig}
-          status={nextStep ? previousStep?.status : undefined}
+          tripwire={isPreviousTripwire ? previousStep?.tripwire : undefined}
+          status={nextStep ? previousDisplayStatus : undefined}
         />
       </div>
 

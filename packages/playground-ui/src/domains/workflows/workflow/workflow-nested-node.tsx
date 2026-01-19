@@ -1,11 +1,10 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
-import { useContext } from 'react';
-import { WorkflowNestedGraphContext } from '../context/workflow-nested-graph-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
@@ -32,11 +31,16 @@ export type NestedNode = Node<
 
 export interface WorkflowNestedNodeProps {
   parentWorkflowName?: string;
+  stepsFlow: Record<string, string[]>;
 }
 
-export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
+export function WorkflowNestedNode({
+  data,
+  parentWorkflowName,
+  stepsFlow,
+}: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
-  const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
+  const { showNestedGraph } = useWorkflowStepDetail();
 
   const {
     label,
@@ -56,6 +60,10 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
   const step = steps[stepKey];
 
+  // Check if this is a tripwire (failed step with tripwire property)
+  const isTripwire = step?.status === 'failed' && step?.tripwire !== undefined;
+  const displayStatus = isTripwire ? 'tripwire' : step?.status;
+
   const { isForEachNode, isMapNode, isNestedWorkflow, hasSpecialBadge } = getNodeBadgeInfo({
     isForEach,
     mapConfig,
@@ -70,15 +78,16 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
       <div
         data-testid="workflow-nested-node"
         data-workflow-node
-        data-workflow-step-status={step?.status}
+        data-workflow-step-status={displayStatus}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          'bg-surface3 rounded-lg w-[274px] border border-border1',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
-          step?.status === 'success' && 'bg-accent1Darker',
-          step?.status === 'failed' && 'bg-accent2Darker',
-          step?.status === 'suspended' && 'bg-accent3Darker',
-          step?.status === 'waiting' && 'bg-accent5Darker',
-          step?.status === 'running' && 'bg-accent6Darker',
+          displayStatus === 'success' && 'bg-accent1Darker',
+          displayStatus === 'failed' && 'bg-accent2Darker',
+          displayStatus === 'tripwire' && 'bg-amber-950/40 border-amber-500/30',
+          displayStatus === 'suspended' && 'bg-accent3Darker',
+          displayStatus === 'waiting' && 'bg-accent5Darker',
+          displayStatus === 'running' && 'bg-accent6Darker',
         )}
       >
         {hasSpecialBadge && (
@@ -110,21 +119,25 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
         )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
-            {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
-            {step?.status === 'success' && <CheckIcon className="text-accent1" />}
-            {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
-            {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && <CircleDashed className="text-icon2" />}
+            {displayStatus === 'failed' && <CrossIcon className="text-accent2" />}
+            {displayStatus === 'success' && <CheckIcon className="text-accent1" />}
+            {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" />}
+            {displayStatus === 'suspended' && <PauseIcon className="text-accent3" />}
+            {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" />}
+            {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {!step && <CircleDashed className="text-neutral2" />}
           </Icon>
 
-          <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
+          <Txt
+            variant="ui-lg"
+            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
+          >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 
         {description && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             {description}
           </Txt>
         )}
@@ -137,10 +150,12 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           output={step?.output}
           suspendOutput={step?.suspendOutput}
           error={step?.error}
+          tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
-          status={step?.status}
+          status={displayStatus}
           stepKey={stepKey}
+          stepsFlow={stepsFlow}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

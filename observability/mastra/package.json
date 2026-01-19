@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.13",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -33,19 +33,16 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^4.3.16",
-    "ai-v5": "npm:ai@5.0.97",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "catalog:"
-  },
-  "dependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "zod": "^3.25.76"
   },
   "peerDependencies": {

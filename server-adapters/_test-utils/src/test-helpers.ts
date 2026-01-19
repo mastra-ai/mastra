@@ -17,6 +17,7 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -41,8 +42,6 @@ export interface AdapterTestContext {
   tools?: Record<string, Tool>;
   taskStore?: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
 }
 
 /**
@@ -159,8 +158,21 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
-  // Mock legacy generate - returns a stream
-  vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
+  // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
+  vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
+    text: 'test response',
+    toolCalls: [],
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 5 },
+    experimental_output: undefined,
+    response: {
+      id: 'test-response-id',
+      timestamp: new Date(),
+      modelId: 'gpt-4',
+    },
+    request: {},
+    warnings: [],
+  } as any);
 
   // Helper to create a mock Response object for datastream-response routes
   const createMockResponse = () => {
@@ -187,6 +199,12 @@ export function mockAgentMethods(agent: Agent) {
 
   // Mock declineToolCall method - returns object with fullStream property
   vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
+
+  // Mock approveToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'approveToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Mock declineToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
@@ -251,6 +269,10 @@ const createMockWorkflowStream = () => {
  * This provides everything needed for adapter integration tests.
  */
 export async function createDefaultTestContext(): Promise<AdapterTestContext> {
+  // Mock OPENAI_API_KEY so that isProviderConnected('openai') returns true
+  // This is needed for routes like ENHANCE_INSTRUCTIONS_ROUTE that check provider connectivity
+  vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
+
   // Create memory and pre-populate with test thread
   const memory = createMockMemory();
   await memory.createThread({
@@ -269,6 +291,17 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const agent = createTestAgent({ name: 'test-agent', memory });
   mockAgentMethods(agent);
 
+  // Mock Agent.prototype.generate for routes that create new Agent instances
+  // (e.g., ENHANCE_INSTRUCTIONS_ROUTE creates a systemPromptAgent)
+  // This needs to return both text and object for different use cases
+  vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+    text: 'test response',
+    object: {
+      explanation: 'Enhanced the instructions for clarity and specificity.',
+      new_prompt: 'You are a helpful assistant with enhanced instructions.',
+    },
+  } as any);
+
   // Create test workflow with mocks
   const workflow = createTestWorkflow({ id: 'test-workflow' });
   const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
@@ -280,6 +313,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     name: 'Test Scorer',
     description: 'Test scorer for observability tests',
   });
+
+  // Create test processor
+  const testProcessor = createTestProcessor({ id: 'test-processor' });
 
   mockLogger.transports = new Map([
     ['console', {}],
@@ -391,6 +427,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
     },
+    processors: {
+      'test-processor': testProcessor,
+    },
   });
 
   await mockWorkflowRun(workflow);
@@ -405,23 +444,63 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Add test trace by creating a span with that traceId
   const storage = mastra.getStorage();
   if (storage) {
-    await storage.createSpan({
-      spanId: 'test-span-1',
-      traceId: 'test-trace',
-      parentSpanId: null,
-      name: 'test-span',
-      scope: null,
-      spanType: SpanType.GENERIC,
-      attributes: {},
-      metadata: null,
-      links: null,
-      startedAt: new Date(),
-      endedAt: new Date(),
-      input: null,
-      output: null,
-      error: null,
-      isEvent: false,
-    });
+    const observability = await storage.getStore('observability');
+    if (observability) {
+      await observability.createSpan({
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
+      });
+    }
+
+    // Add test stored agent for stored agents routes
+    const agents = await storage.getStore('agents');
+    if (agents) {
+      await agents.createAgent({
+        agent: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent',
+          description: 'A test stored agent for integration tests',
+          instructions: 'Test instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+        },
+      });
+    }
+
+    // Add test thread and messages to Mastra's storage for memory routes without agentId
+    // This is needed because when agentId is not provided, the handler falls back to storage directly
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await memoryStore.saveThread({
+        thread: {
+          id: 'test-thread',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'test-message-1',
+            threadId: 'test-thread',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test message' }],
+            },
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
   }
 
   return {
@@ -431,27 +510,27 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 }
 
 async function mockWorkflowRun(workflow: Workflow) {
-  // Mock getWorkflowRunById to return a mock run object
-  // This is needed for routes that require an existing workflow run (restart, resume, etc.)
+  // Mock getWorkflowRunById to return a mock WorkflowState object
+  // This is the unified format that includes both metadata and processed execution state
   vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
     runId: 'test-run',
     workflowName: 'test-workflow',
-    status: 'completed',
     resourceId: 'test-resource',
-    snapshot: {
-      context: {},
-      value: {},
-      status: 'done',
-      runId: 'test-run',
-    },
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as any);
-
-  // Mock getWorkflowRunExecutionResult for execution-result routes
-  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
-    results: { step1: { output: 'test-output' } },
     status: 'success',
+    result: { output: 'test-output' },
+    payload: {},
+    steps: {
+      step1: {
+        status: 'success',
+        output: { result: 'test-output' },
+        startedAt: Date.now() - 1000,
+        endedAt: Date.now(),
+      },
+    },
+    activeStepsPath: {},
+    serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
   } as any);
 
   // Mock createRun to return a mocked run object with all required methods
@@ -532,6 +611,27 @@ export function createMockMemory() {
   const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
+}
+
+/**
+ * Creates a test processor for integration tests
+ */
+export function createTestProcessor(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+  } = {},
+): Processor {
+  return {
+    id: overrides.id || 'test-processor',
+    name: overrides.name || 'Test Processor',
+    description: overrides.description || 'A test processor for integration tests',
+    async processInput({ messages }: ProcessInputArgs): Promise<ProcessInputResult> {
+      // Simple pass-through processor
+      return messages;
+    },
+  };
 }
 
 /**
@@ -773,7 +873,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
   const appendValue = (prefix: string, value: unknown) => {
     if (value === undefined || value === null) return;
     if (Array.isArray(value)) {
-      query[prefix] = value.map(item => convertQueryValue(item));
+      // JSON-encode arrays for complex query params (e.g., tags=["tag1","tag2"])
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     if (value instanceof Date) {
@@ -781,9 +883,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
       return;
     }
     if (typeof value === 'object') {
-      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-        appendValue(`${prefix}[${key}]`, nested);
-      }
+      // JSON-encode objects for complex query params (e.g., dateRange={"gte":"2024-01-01"})
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     query[prefix] = convertQueryValue(value);

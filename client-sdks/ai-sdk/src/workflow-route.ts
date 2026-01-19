@@ -24,19 +24,26 @@ export type WorkflowStreamHandlerOptions = {
 };
 
 /**
- * Framework-agnostic handler for streaming workflow execution in AI SDK format.
- * Use this function directly when you need to handle workflow streaming outside of Hono/registerApiRoute.
+ * Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+ * Use this function directly when you need to handle workflow streaming outside of Hono or Mastra's own apiRoutes feature.
  *
  * @example
+ * ```ts
  * // Next.js App Router
+ * import { handleWorkflowStream } from '@mastra/ai-sdk';
+ * import { createUIMessageStreamResponse } from 'ai';
+ * import { mastra } from '@/src/mastra';
+ *
  * export async function POST(req: Request) {
  *   const params = await req.json();
- *   return handleWorkflowStream({
+ *   const stream = await handleWorkflowStream({
  *     mastra,
- *     workflowId: 'my-workflow',
+ *     workflowId: 'weatherWorkflow',
  *     params,
  *   });
+ *   return createUIMessageStreamResponse({ stream });
  * }
+ * ```
  */
 export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
   mastra,
@@ -70,6 +77,29 @@ export type WorkflowRouteOptions =
   | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
   | { path: string; workflow: string; includeTextStreamParts?: boolean };
 
+/**
+ * Creates a workflow route handler for streaming workflow execution using the AI SDK format.
+ *
+ * This function registers an HTTP POST endpoint that accepts input data, executes a workflow, and streams the response back to the client in AI SDK-compatible format.
+ *
+ * @param {WorkflowRouteOptions} options - Configuration options for the workflow route
+ * @param {string} [options.path='/api/workflows/:workflowId/stream'] - The route path. Include `:workflowId` for dynamic routing
+ * @param {string} [options.workflow] - Fixed workflow ID when not using dynamic routing
+ * @param {boolean} [options.includeTextStreamParts=true] - Whether to include text stream parts in the output
+ *
+ * @example
+ * // Dynamic workflow routing
+ * workflowRoute({
+ *   path: '/api/workflows/:workflowId/stream',
+ * });
+ *
+ * @example
+ * // Fixed workflow with custom path
+ * workflowRoute({
+ *   path: '/api/data-pipeline/stream',
+ *   workflow: 'data-processing-workflow',
+ * });
+ */
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,

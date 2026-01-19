@@ -1,5 +1,4 @@
 import type { MastraMessageContentV2 } from '../../../agent';
-import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageResourceType,
@@ -10,14 +9,17 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
   StorageOrderBy,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
   ObservationalMemoryRecord,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
   CreateReflectionGenerationInput,
 } from '../../types';
+import { StorageDomain } from '../base';
 
-export abstract class MemoryStorage extends MastraBase {
+export abstract class MemoryStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',
@@ -64,6 +66,20 @@ export abstract class MemoryStorage extends MastraBase {
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;
+
+  /**
+   * Clone a thread and its messages to create a new independent thread.
+   * The cloned thread will have clone metadata stored in its metadata field.
+   *
+   * @param args - Clone configuration options
+   * @returns The newly created thread and the cloned messages
+   */
+  async cloneThread(_args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    throw new Error(
+      `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `The cloneThread method needs to be implemented in the storage adapter.`,
+    );
+  }
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(

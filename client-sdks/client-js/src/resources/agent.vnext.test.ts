@@ -1,6 +1,6 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
-import { APICallError } from 'ai-v5';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import z from 'zod';
 import { MastraClient } from '../client';
@@ -49,7 +49,7 @@ describe('Agent vNext', () => {
 
     (global.fetch as any).mockResolvedValueOnce(sseResponse(sseChunks));
 
-    const resp = await agent.stream({ messages: 'hi' });
+    const resp = await agent.stream('hi');
 
     // Verify stream can be consumed without errors
     let receivedChunks = 0;
@@ -109,7 +109,7 @@ describe('Agent vNext', () => {
       execute: executeSpy,
     });
 
-    const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
 
     let lastChunk: any = null;
     await resp.processDataStream({
@@ -164,7 +164,7 @@ describe('Agent vNext', () => {
       execute: executeSpy,
     });
 
-    const resp = await agent.stream({ messages: 'What is the weather?', clientTools: { weatherTool } });
+    const resp = await agent.stream('What is the weather?', { clientTools: { weatherTool } });
 
     const receivedChunks: any[] = [];
     await resp.processDataStream({
@@ -249,8 +249,7 @@ describe('Agent vNext', () => {
       execute: newsExecuteSpy,
     });
 
-    const resp = await agent.stream({
-      messages: 'Give me weather and news',
+    const resp = await agent.stream('Give me weather and news', {
       clientTools: { weatherTool, newsTool },
     });
 
@@ -310,7 +309,7 @@ describe('Agent vNext', () => {
       outputSchema: z.object({ ok: z.boolean() }),
     });
 
-    const resp = await agent.stream({ messages: 'weather?', clientTools: { weatherTool } });
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
 
     let lastChunk: any = null;
     await resp.processDataStream({
@@ -368,8 +367,7 @@ describe('Agent vNext', () => {
       age: z.number(),
     });
 
-    const resp = await agent.stream({
-      messages: 'Create a person object',
+    const resp = await agent.stream('Create a person object', {
       structuredOutput: {
         schema: personSchema,
         // Note: No model provided - should fallback to agent's model
@@ -428,8 +426,7 @@ describe('Agent vNext', () => {
       age: z.number(),
     });
 
-    const result = await agent.generate({
-      messages: 'Create a person object',
+    const result = await agent.generate('Create a person object', {
       structuredOutput: {
         schema: personSchema,
         instructions: 'Generate a person with realistic data',
@@ -750,7 +747,7 @@ describe('Agent vNext', () => {
 
     (global.fetch as any).mockResolvedValueOnce(sseResponse(errorChunks));
 
-    const resp = await agent.stream({ messages: 'hi' });
+    const resp = await agent.stream('hi');
 
     // Capture error chunks
     let errorChunk: any = null;

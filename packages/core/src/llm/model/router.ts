@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
+import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { parseModelRouterId } from './gateway-resolver.js';
-import type { MastraModelGateway } from './gateways/base.js';
+import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
@@ -11,6 +13,13 @@ import { NetlifyGateway } from './gateways/netlify.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { PROVIDER_REGISTRY } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
+
+/**
+ * Type guard to check if a model is a LanguageModelV3 (AI SDK v6)
+ */
+function isLanguageModelV3(model: GatewayLanguageModel): model is LanguageModelV3 {
+  return model.specificationVersion === 'v3';
+}
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
@@ -127,6 +136,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
+    // Handle both V2 and V3 models
+    if (isLanguageModelV3(model)) {
+      const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
+      return aiSDKV6Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+    }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
     return aiSDKV5Model.doGenerate(options);
   }
@@ -164,6 +179,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
+    // Handle both V2 and V3 models
+    if (isLanguageModelV3(model)) {
+      const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
+      return aiSDKV6Model.doStream(options as any) as unknown as Promise<StreamResult>;
+    }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
     return aiSDKV5Model.doStream(options);
   }
@@ -178,7 +199,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> {
+  }): Promise<GatewayLanguageModel> {
     const key = createHash('sha256')
       .update(
         this.gateway.id +
@@ -208,5 +229,5 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
     return modelInstance;
   }
-  private static modelInstances = new Map<string, LanguageModelV2>();
+  private static modelInstances = new Map<string, GatewayLanguageModel>();
 }

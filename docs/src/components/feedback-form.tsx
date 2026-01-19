@@ -1,7 +1,7 @@
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -199,7 +199,7 @@ export const FeedbackForm = ({
                 className="flex items-start gap-0 flex-col"
               >
                 <span className="text-lg font-semibold">Share feedback</span>
-                <span className="text-xs text(--mastra-text-secondary)">
+                <span className="text-xs text-(--mastra-text-secondary)">
                   Tell us how this can be better.
                 </span>
               </Label>
@@ -243,7 +243,7 @@ export const FeedbackForm = ({
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-[80px] w-full text-black dark:text-white resize-none text-sm"
+                        className="min-h-20 w-full text-black dark:text-white resize-none text-sm"
                         {...field}
                       />
                     </FormControl>

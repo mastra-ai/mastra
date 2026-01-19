@@ -9,7 +9,7 @@ export const useAgents = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agents', JSON.stringify(requestContext)],
+    queryKey: ['agents', requestContext],
     queryFn: () => client.listAgents(requestContext),
   });
 };

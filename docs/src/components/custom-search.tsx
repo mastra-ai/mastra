@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 import { BookOpen, Code2, FileText, Lightbulb, Search } from "lucide-react";
 import type { FC, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -75,7 +75,7 @@ const getSectionIcon = (section?: string) => {
 
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = "Search docs...",
+  placeholder = "Search documentation",
   searchOptions,
   closeModal,
 }) => {
@@ -103,7 +103,7 @@ export const CustomSearch: FC<SearchProps> = ({
   }, []);
 
   // Check if screen is mobile size
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("(max-width: 996px)");
 
   // Virtual list for search results
   const virtualizer = useVirtualizer({
@@ -295,7 +295,7 @@ export const CustomSearch: FC<SearchProps> = ({
       <div
         className={cn(
           className,
-          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]",
+          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-3.5",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -384,8 +384,8 @@ export const CustomSearch: FC<SearchProps> = ({
                         className={cn(
                           "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
                           isSelected
-                            ? "dark:bg-surface-5 bg-(--mastra-surface-2)"
-                            : "bg-(--ifm-background-color) dark:bg-surface-4",
+                            ? "dark:bg-(--mastra-surface-5) bg-(--mastra-surface-2)"
+                            : "bg-(--ifm-background-color) dark:bg-transparent",
                         )}
                         onClick={() => handleSelect(subResult)}
                         onMouseEnter={() => setSelectedIndex(virtualItem.index)}
@@ -396,7 +396,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="flex gap-2 items-center">
                           <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! dark:[&_mark]:text-(--mastra-green-accent-2)! [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}

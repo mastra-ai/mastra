@@ -28,30 +28,41 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun create mastra@beta
 ```
+
+:::warning
+
+Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
+
+- `bun add @mastra/server@beta`
+- Delete your `node_modules` folder
+- Delete your `bun.lock` file
+- Run `bun install` to reinstall your packages
+
+:::
 
 </TabItem>
 </Tabs>
@@ -64,7 +75,7 @@ This creates a new directory for your project with a `src/mastra` folder contain
 
 :::tip
 
-You can use [flags](/reference/v1/cli/create-mastra#cli-flags)  with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates)
+You can use [flags](/reference/v1/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
 
 :::
 

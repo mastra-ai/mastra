@@ -38,7 +38,7 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-[240px]">
+          <div className="w-48">
             <WorkflowCombobox value={workflowId} />
           </div>
 
@@ -48,12 +48,6 @@ export function WorkflowHeader({
               <Badge variant="default">Run: {runId}</Badge>
             </>
           )}
-
-          <DividerIcon />
-
-          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
-            Graph
-          </Button>
 
           <DividerIcon />
 

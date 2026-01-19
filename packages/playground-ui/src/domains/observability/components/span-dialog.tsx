@@ -1,28 +1,10 @@
-import {
-  SideDialog,
-  KeyValueList,
-  type KeyValueListItemData,
-  TextAndIcon,
-  getShortId,
-  Section,
-} from '@/components/ui/elements';
-import {
-  PanelTopIcon,
-  ChevronsLeftRightEllipsisIcon,
-  HashIcon,
-  EyeIcon,
-  CircleGaugeIcon,
-  GaugeIcon,
-} from 'lucide-react';
-import { SpanDetails } from './span-details';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { type KeyValueListItemData } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanRecord } from '@mastra/core/storage';
-import { useLinkComponent } from '@/lib/framework';
-import { Tabs } from '@/components/ui/elements/tabs/tabs';
-import { Sections } from '@/components/ui/containers';
-import { SpanScoreList } from './span-score-list';
-import { SpanScoring } from './span-scoring';
-import { TraceSpanUsage } from './trace-span-usage';
-import { ListScoresResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 
@@ -41,6 +23,8 @@ type SpanDialogProps = {
   defaultActiveTab?: string;
   initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function SpanDialog({
@@ -58,6 +42,8 @@ export function SpanDialog({
   defaultActiveTab = 'details',
   initialScoreId,
   computeTraceLink,
+  scorers,
+  isLoadingScorers,
 }: SpanDialogProps) {
   return (
     <SideDialog
@@ -78,7 +64,7 @@ export function SpanDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-        <button className="ml-auto mr-[2rem]" onClick={onViewToggle}>
+        <button className="ml-auto mr-8" onClick={onViewToggle}>
           <PanelTopIcon />
           <VisuallyHidden>Switch to dialog view</VisuallyHidden>
         </button>
@@ -103,6 +89,8 @@ export function SpanDialog({
           defaultActiveTab={defaultActiveTab}
           initialScoreId={initialScoreId}
           computeTraceLink={computeTraceLink}
+          scorers={scorers}
+          isLoadingScorers={isLoadingScorers}
         />
       </SideDialog.Content>
     </SideDialog>

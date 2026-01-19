@@ -5,8 +5,7 @@ import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
+import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -17,12 +16,9 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
@@ -35,18 +31,17 @@ interface CreatePrepareStreamWorkflowOptions<
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
 }
 
-export function createPrepareStreamWorkflow<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -61,10 +56,12 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   saveQueueManager,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
-}: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
+}: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -96,14 +93,17 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     requireToolApproval,
+    toolCallConcurrency,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
     methodType,
     saveQueueManager,
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -122,10 +122,7 @@ export function createPrepareStreamWorkflow<
   return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {

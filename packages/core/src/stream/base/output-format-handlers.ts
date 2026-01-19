@@ -1,6 +1,8 @@
 import { TransformStream } from 'node:stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
-import type { JSONSchema7, Schema } from 'ai-v5';
+import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
+import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isZodType } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -11,7 +13,69 @@ import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
+import type { OutputSchema, ZodLikePartialSchema } from './schema';
+
+/**
+ * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
+ *
+ * LLMs often output actual newline characters inside JSON strings instead of properly
+ * escaped \n sequences, which breaks JSON parsing. This function fixes that by:
+ * 1. Tracking whether we're inside a JSON string (after an unescaped quote)
+ * 2. Replacing literal newlines/tabs with their escape sequences only inside strings
+ * 3. Preserving already-escaped sequences like \\n
+ *
+ * @param text - Raw JSON text that may contain unescaped control characters in strings
+ * @returns JSON text with control characters properly escaped inside string values
+ */
+export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
+  let result = '';
+  let inString = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const char = text[i];
+
+    // Check for escape sequences
+    if (char === '\\' && i + 1 < text.length) {
+      // This is an escape sequence - pass through both characters
+      result += char + text[i + 1];
+      i += 2;
+      continue;
+    }
+
+    // Track string boundaries (unescaped quotes)
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      i++;
+      continue;
+    }
+
+    // If inside a string, escape control characters
+    if (inString) {
+      if (char === '\n') {
+        result += '\\n';
+        i++;
+        continue;
+      }
+      if (char === '\r') {
+        result += '\\r';
+        i++;
+        continue;
+      }
+      if (char === '\t') {
+        result += '\\t';
+        i++;
+        continue;
+      }
+    }
+
+    result += char;
+    i++;
+  }
+
+  return result;
+}
 
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
@@ -31,14 +95,14 @@ interface ProcessPartialChunkResult {
   newPreviousResult?: unknown;
 }
 
-type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
+type ValidateAndTransformFinalResult<OUTPUT = undefined> =
   | {
       /** Whether validation succeeded */
       success: true;
       /**
        * The validated and transformed value if successful
        */
-      value: InferSchemaOutput<OUTPUT>;
+      value: OUTPUT;
     }
   | {
       /** Whether validation succeeded */
@@ -54,19 +118,19 @@ type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
  * Each handler implements format-specific logic for processing partial chunks
  * and validating final results.
  */
-abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
+abstract class BaseFormatHandler<OUTPUT = undefined> {
   abstract readonly type: 'object' | 'array' | 'enum';
   /**
    * The original user-provided schema (Zod, JSON Schema, or AI SDK Schema).
    */
-  readonly schema: OUTPUT | undefined;
+  readonly schema: OutputSchema<OUTPUT> | undefined;
   /**
    * Validate partial chunks as they are streamed. @planned
    */
   readonly validatePartialChunks: boolean = false;
-  readonly partialSchema?: ZodLikePartialSchema<InferSchemaOutput<OUTPUT>> | undefined;
+  readonly partialSchema?: ZodLikePartialSchema<OUTPUT> | undefined;
 
-  constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
+  constructor(schema?: OutputSchema<OUTPUT>, options: { validatePartialChunks?: boolean } = {}) {
     this.schema = schema;
 
     if (
@@ -75,7 +139,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
       'partial' in schema &&
       typeof schema.partial === 'function'
     ) {
-      this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
+      this.partialSchema = schema.partial() as ZodLikePartialSchema<OUTPUT>;
       this.validatePartialChunks = true;
     }
   }
@@ -84,23 +148,17 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * Checks if the original schema is a Zod schema with safeParse method.
    */
   protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
-    return (
-      schema !== undefined &&
-      schema !== null &&
-      typeof schema === 'object' &&
-      'safeParse' in schema &&
-      typeof schema.safeParse === 'function'
-    );
+    return isZodType(schema);
   }
 
   /**
    * Validates a value against the schema, preferring Zod's safeParse.
    */
-  protected async validateValue(value: unknown): Promise<ValidationResult<InferSchemaOutput<OUTPUT>>> {
+  protected async validateValue(value: unknown): Promise<ValidationResult<OUTPUT>> {
     if (!this.schema) {
       return {
         success: true,
-        value: value as InferSchemaOutput<OUTPUT>,
+        value: value as OUTPUT,
       };
     }
 
@@ -110,7 +168,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
         if (result.success) {
           return {
             success: true,
-            value: result.data as InferSchemaOutput<OUTPUT>,
+            value: result.data,
           };
         } else {
           return {
@@ -141,19 +199,19 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
       if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
         // Plain JSONSchema7 object - wrap it using jsonSchema()
         const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
-        return result as ValidationResult<InferSchemaOutput<OUTPUT>>;
+        return result as ValidationResult<OUTPUT>;
       } else if ((this.schema as Schema<any>).jsonSchema) {
         // Already an AI SDK Schema - use it directly
         const result = await safeValidateTypes({
           value,
-          schema: this.schema as Schema<InferSchemaOutput<OUTPUT>>,
+          schema: this.schema as Schema<OUTPUT>,
         });
         return result;
       } else {
         // Should not reach here, but handle as fallback
         return {
           success: true,
-          value: value as InferSchemaOutput<OUTPUT>,
+          value: value as OUTPUT,
         };
       }
     } catch (error) {
@@ -182,7 +240,8 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 
   /**
-   * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks.
+   * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks
+   * and fix common JSON formatting issues like unescaped newlines in strings.
    * Extracts content from the first complete valid ```json...``` code block or removes opening ```json prefix if no complete code block is found (streaming chunks).
    * @param accumulatedText - Raw accumulated text from streaming
    * @returns Processed text ready for JSON parsing
@@ -212,6 +271,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
       }
     }
 
+    // LLMs often output actual newlines/tabs inside JSON strings instead of
+    // properly escaped \n sequences. Fix this before parsing.
+    processedText = escapeUnescapedControlCharsInJsonStrings(processedText);
+
     return processedText;
   }
 }
@@ -220,7 +283,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
  * Handles object format streaming. Emits parsed objects when they change during streaming.
  * This is the simplest format - objects are parsed and emitted directly without wrapping.
  */
-class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
+class ObjectFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'object' as const;
 
   async processPartialChunk({
@@ -282,7 +345,7 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
  * for better generation reliability. This handler unwraps them and filters incomplete elements.
  * Emits progressive array states as elements are completed.
  */
-class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
+class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'array' as const;
   /** Previously filtered array to track changes */
   private textPreviousFilteredArray: any[] = [];
@@ -300,7 +363,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     if (currentObjectJson !== undefined && !isDeepEqualData(previousObject, currentObjectJson)) {
       // For arrays, extract and filter elements
       const rawElements = (currentObjectJson as any)?.elements || [];
-      const filteredElements: Partial<InferSchemaOutput<OUTPUT>>[] = [];
+      const filteredElements: Partial<OUTPUT>[] = [];
 
       // Filter out incomplete elements (like empty objects {})
       for (let i = 0; i < rawElements.length; i++) {
@@ -327,8 +390,8 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
           this.textPreviousFilteredArray = [];
           return {
             shouldEmit: true,
-            emitValue: [] as unknown as Partial<InferSchemaOutput<OUTPUT>>,
-            newPreviousResult: currentObjectJson as Partial<InferSchemaOutput<OUTPUT>>,
+            emitValue: [] as unknown as Partial<OUTPUT>,
+            newPreviousResult: currentObjectJson as Partial<OUTPUT>,
           };
         }
       }
@@ -338,8 +401,8 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
         this.textPreviousFilteredArray = [...filteredElements];
         return {
           shouldEmit: true,
-          emitValue: filteredElements as unknown as Partial<InferSchemaOutput<OUTPUT>>,
-          newPreviousResult: currentObjectJson as Partial<InferSchemaOutput<OUTPUT>>,
+          emitValue: filteredElements as unknown as Partial<OUTPUT>,
+          newPreviousResult: currentObjectJson as Partial<OUTPUT>,
         };
       }
     }
@@ -367,7 +430,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
  * Emits progressive enum states as they are completed.
  * Validates the final result against the user-provided schema.
  */
-class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
+class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'enum' as const;
   /** Previously emitted enum result to avoid duplicate emissions */
   private textPreviousEnumResult?: string;
@@ -387,8 +450,9 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     let enumValues: unknown[] | undefined;
 
     if (this.isZodSchema(this.schema)) {
-      const wrappedSchema = asSchema(this.schema);
-      enumValues = wrappedSchema.jsonSchema?.enum;
+      // Use transform-safe zodToJsonSchema to avoid "Transforms cannot be represented in JSON Schema" error
+      const convertedSchema = zodToJsonSchema(this.schema as z3.ZodType<any> | z4.ZodType<any, any>);
+      enumValues = (convertedSchema as JSONSchema7)?.enum;
     } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
       // Plain JSONSchema7
       const wrappedSchema = jsonSchema(this.schema as JSONSchema7);
@@ -456,7 +520,7 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
         error: new Error('Invalid enum format: expected object with result property'),
       };
     }
-    const finalValue = value as { result: InferSchemaOutput<OUTPUT> };
+    const finalValue = value as { result: OUTPUT };
 
     // For enums, check the wrapped format and unwrap
     if (!finalValue || typeof finalValue !== 'object' || typeof finalValue.result !== 'string') {
@@ -478,7 +542,7 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }: { schema?: OUTPUT }) {
+function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: OutputSchema<OUTPUT> }) {
   const transformedSchema = getTransformedSchema(schema);
   switch (transformedSchema?.outputFormat) {
     case 'array':
@@ -502,7 +566,7 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }
  * - For enums: unwraps from {result: ""} wrapper and provides partial matching
  * - Always passes through original chunks for downstream processing
  */
-export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
+export function createObjectStreamTransformer<OUTPUT = undefined>({
   structuredOutput,
   logger,
 }: {
@@ -537,7 +601,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
             from: chunk.from,
             runId: chunk.runId,
             type: 'object',
-            object: result.emitValue as PartialSchemaOutput<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
+            object: result.emitValue as Partial<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
           };
 
           controller.enqueue(chunkData as ChunkType<OUTPUT>);
@@ -621,7 +685,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
  * - For arrays: emits opening bracket, new elements, and closing bracket
  * - For objects/no-schema: emits the object as JSON
  */
-export function createJsonTextStreamTransformer<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
+export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: OutputSchema<OUTPUT>) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
   let chunkCount = 0;
@@ -633,7 +697,7 @@ export function createJsonTextStreamTransformer<OUTPUT extends OutputSchema = un
         return;
       }
 
-      if (outputSchema?.outputFormat === 'array') {
+      if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
         chunkCount++;
 
         // If this is the first chunk, decide between complete vs incremental streaming

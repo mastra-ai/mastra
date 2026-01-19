@@ -1,5 +1,63 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fixed OpenAI schema validation error when using passthrough schemas with tools like `vectorQueryTool`. ([#11846](https://github.com/mastra-ai/mastra/pull/11846))
+
+  **What was happening:** Tools using `.passthrough()` or `z.looseObject()` schemas (like the RAG `vectorQueryTool`) would fail with OpenAI models, returning the error: "Invalid schema for function: In context=('additionalProperties',), schema must have a 'type' key."
+
+  **What changed:** The OpenAI schema compatibility layer now converts passthrough schemas to strict object schemas, producing valid `additionalProperties: false` instead of the invalid empty object `{}` that Zod v4 generates.
+
+  Fixes #11823
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix oneOf schema conversion generating invalid JavaScript ([#11626](https://github.com/mastra-ai/mastra/pull/11626))
+
+  The upstream json-schema-to-zod library generates TypeScript syntax (`reduce<z.ZodError[]>`) when converting oneOf schemas. This TypeScript generic annotation fails when evaluated at runtime with Function(), causing schema resolution to fail.
+
+  The fix removes TypeScript generic syntax from the generated output, producing valid JavaScript that can be evaluated at runtime. This resolves issues where MCP tools with oneOf in their output schemas would fail validation.
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fixed "Transforms cannot be represented in JSON Schema" error when using Zod v4 with structuredOutput ([#11466](https://github.com/mastra-ai/mastra/pull/11466))
+
+  When using schemas with `.optional()`, `.nullable()`, `.default()`, or `.nullish().default("")` patterns with `structuredOutput` and Zod v4, users would encounter an error because OpenAI schema compatibility layer adds transforms that Zod v4's native `toJSONSchema()` cannot handle.
+
+  The fix uses Mastra's transform-safe `zodToJsonSchema` function which gracefully handles transforms by using the `unrepresentable: 'any'` option.
+
+  Also exported `isZodType` utility from `@mastra/schema-compat` and updated it to detect both Zod v3 (`_def`) and Zod v4 (`_zod`) schemas.
+
+- fix(schema-compat): handle undefined values in optional fields for OpenAI compat layers ([#11469](https://github.com/mastra-ai/mastra/pull/11469))
+
+  When a Zod schema has nested objects with `.partial()`, the optional fields would fail validation with "expected string, received undefined" errors. This occurred because the OpenAI schema compat layer converted `.optional()` to `.nullable()`, which only accepts `null` values, not `undefined`.
+
+  Changed `.nullable()` to `.nullish()` so that optional fields now accept both `null` (when explicitly provided by the LLM) and `undefined` (when fields are omitted entirely).
+
+  Fixes #11457
+
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Fix OpenAI structured output compatibility for fields with `.default()` values ([#11434](https://github.com/mastra-ai/mastra/pull/11434))
+
+  When using Zod schemas with `.default()` fields (e.g., `z.number().default(1)`), OpenAI's structured output API was failing with errors like `Missing '<field>' in required`. This happened because `zod-to-json-schema` doesn't include fields with defaults in the `required` array, but OpenAI requires all properties to be required.
+
+  This fix converts `.default()` fields to `.nullable()` with a transform that returns the default value when `null` is received, ensuring compatibility with OpenAI's strict mode while preserving the original default value semantics.
+
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

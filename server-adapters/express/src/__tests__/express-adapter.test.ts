@@ -5,6 +5,7 @@ import {
   createDefaultTestContext,
   createStreamWithSensitiveData,
   consumeSSEStream,
+  createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
@@ -28,8 +29,6 @@ describe('Express Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       await adapter.init();
@@ -502,5 +501,56 @@ describe('Express Server Adapter', () => {
       expect(receivedAbortSignal).toBeDefined();
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
+  });
+
+  // Multipart FormData tests
+  createMultipartTestSuite({
+    suiteName: 'Express Multipart FormData',
+
+    setupAdapter: async (context, options) => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        bodyLimitOptions: options?.bodyLimitOptions,
+      });
+
+      await adapter.init();
+
+      return { app, adapter };
+    },
+
+    startServer: async (app: Application) => {
+      const server: Server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      return {
+        baseUrl: `http://localhost:${address.port}`,
+        cleanup: async () => {
+          await new Promise<void>(resolve => {
+            server.close(() => resolve());
+          });
+        },
+      };
+    },
+
+    registerRoute: async (adapter, app, route, options) => {
+      await adapter.registerRoute(app, route, options || { prefix: '' });
+    },
+
+    getContextMiddleware: adapter => adapter.createContextMiddleware(),
+
+    applyMiddleware: (app, middleware) => {
+      app.use(middleware);
+    },
   });
 });

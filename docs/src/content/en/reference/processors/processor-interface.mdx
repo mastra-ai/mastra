@@ -1,6 +1,8 @@
 ---
 title: "Reference: Processor Interface | Processors"
 description: "API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines."
+packages:
+  - "@mastra/core"
 ---
 
 # Processor Interface
@@ -9,7 +11,7 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-The four processor methods run at different points in the agent execution lifecycle:
+The five processor methods run at different points in the agent execution lifecycle:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -39,6 +41,11 @@ The four processor methods run at different points in the agent execution lifecy
 │  │  └──────────┬───────────┘                               │    │
 │  │             │                                           │    │
 │  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │  processOutputStep   │  ← Runs after EACH LLM step   │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
 │  │     Tool Execution (if needed)                          │    │
 │  │             │                                           │    │
 │  │             └──────── Loop back if tools called ────────│    │
@@ -60,19 +67,21 @@ The four processor methods run at different points in the agent execution lifecy
 | `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
 | `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
+| `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
 
 ## Interface definition
 
-```typescript copy
+```typescript
 interface Processor<TId extends string = string> {
   readonly id: TId;
   readonly name?: string;
 
   processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
-  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
-  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 }
 ```
 
@@ -101,7 +110,7 @@ interface Processor<TId extends string = string> {
 
 Processes input messages before they are sent to the LLM. Runs once at the start of agent execution.
 
-```typescript copy
+```typescript
 processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
 ```
 
@@ -129,9 +138,15 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
     },
     {
       name: "abort",
-      type: "(reason?: string) => never",
-      description: "Function to abort processing. Throws a TripWire error that stops execution.",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "Function to abort processing. Throws a TripWire error that stops execution. Pass `retry: true` to request the LLM retry the step with feedback.",
       isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "Number of times processors have triggered retry for this generation. Use this to limit retry attempts.",
+      isOptional: true,
     },
     {
       name: "tracingContext",
@@ -178,15 +193,15 @@ The method can return one of three types:
 
 Processes input messages at each step of the agentic loop, before they are sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
-```typescript copy
+```typescript
 processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 ```
 
 #### Execution order in the agentic loop
 
 1. `processInput` (once at start)
-2. `processInputStep` (at each step, before LLM call)
-3. `prepareStep` callback (if provided)
+2. `processInputStep` from inputProcessors (at each step, before LLM call)
+3. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
 4. LLM execution
 5. Tool execution (if needed)
 6. Repeat from step 2 if tools were called
@@ -198,13 +213,13 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
     {
       name: "messages",
       type: "MastraDBMessage[]",
-      description: "All messages including tool calls and results from previous steps.",
+      description: "All messages including tool calls and results from previous steps (read-only snapshot).",
       isOptional: false,
     },
     {
       name: "messageList",
       type: "MessageList",
-      description: "MessageList instance for managing messages.",
+      description: "MessageList instance for managing messages. Can mutate directly or return in result.",
       isOptional: false,
     },
     {
@@ -214,10 +229,58 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
       isOptional: false,
     },
     {
+      name: "steps",
+      type: "StepResult[]",
+      description: "Results from previous steps, including text, toolCalls, and toolResults.",
+      isOptional: false,
+    },
+    {
       name: "systemMessages",
       type: "CoreMessage[]",
-      description: "All system messages for read/modify access.",
+      description: "All system messages (read-only snapshot). Return in result to replace.",
       isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModelV2",
+      description: "Current model being used. Return a different model in result to switch.",
+      isOptional: false,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Current tool choice setting ('auto', 'none', 'required', or specific tool).",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Currently active tool names. Return filtered array to limit tools.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Current tools available for this step. Return in result to add/replace tools.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Provider-specific options (e.g., Anthropic cacheControl, OpenAI reasoningEffort).",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Model settings like temperature, maxTokens, topP.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Structured output configuration (schema, output mode). Return in result to modify.",
+      isOptional: true,
     },
     {
       name: "abort",
@@ -240,12 +303,99 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
   ]}
 />
 
+#### ProcessInputStepResult
+
+The method can return any combination of these properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2 | string",
+      description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-4o'.",
+      isOptional: true,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "Change tool selection behavior for this step.",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "Filter which tools are available for this step.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "Replace or modify tools for this step. Use spread to merge: { tools: { ...tools, newTool } }.",
+      isOptional: true,
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Replace all messages. Cannot be used with messageList.",
+      isOptional: true,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "Return the same messageList instance (indicates you mutated it). Cannot be used with messages.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "Replace all system messages for this step only.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "Change provider-specific options for this step.",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "Change model settings for this step.",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "Change structured output configuration for this step.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Processor chaining
+
+When multiple processors implement `processInputStep`, they run in order and changes chain through:
+
+```
+Processor 1: receives { model: 'gpt-4o' } → returns { model: 'gpt-4o-mini' }
+Processor 2: receives { model: 'gpt-4o-mini' } → returns { toolChoice: 'none' }
+Final: model = 'gpt-4o-mini', toolChoice = 'none'
+```
+
+#### System message isolation
+
+System messages are **reset to their original values** at the start of each step. Modifications made in `processInputStep` only affect the current step, not subsequent steps.
+
 #### Use cases
 
+- Dynamic model switching based on step number or context
+- Disabling tools after a certain number of steps
+- Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context
-- Implementing per-step message filtering or enrichment
-- Adding step-specific context or instructions
+- Adding step-specific system instructions
+- Adjusting provider options per step (e.g., cache control)
+- Modifying structured output schema based on step context
 
 ---
 
@@ -253,7 +403,7 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 
 Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
 
-```typescript copy
+```typescript
 processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
 ```
 
@@ -317,7 +467,7 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 Processes the complete output result after streaming or generation is finished.
 
-```typescript copy
+```typescript
 processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 ```
 
@@ -358,20 +508,140 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   ]}
 />
 
+---
+
+### processOutputStep
+
+Processes output after each LLM response in the agentic loop, before tool execution. Unlike `processOutputResult` which runs once at the end, this runs at every step. This is the ideal method for implementing guardrails that can trigger retries.
+
+```typescript
+processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "All messages including the latest LLM response.",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "MessageList instance for managing messages.",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "Current step number (0-indexed).",
+      isOptional: false,
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description: "The finish reason from the LLM (stop, tool-use, length, etc.).",
+      isOptional: true,
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCallInfo[]",
+      description: "Tool calls made in this step (if any).",
+      isOptional: true,
+    },
+    {
+      name: "text",
+      type: "string",
+      description: "Generated text from this step.",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "All system messages for read/modify access.",
+      isOptional: true,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "Function to abort processing. Pass `retry: true` to request the LLM retry the step.",
+      isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "Number of times processors have triggered retry. Use this to limit retry attempts.",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### Use cases
+
+- Implementing quality guardrails that can request retries
+- Validating LLM output before tool execution
+- Adding per-step logging or metrics
+- Implementing output moderation with retry capability
+
+#### Example: Quality guardrail with retry
+
+```typescript title="src/mastra/processors/quality-guardrail.ts"
+import type { Processor } from "@mastra/core";
+
+export class QualityGuardrail implements Processor {
+  id = "quality-guardrail";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const score = await evaluateResponseQuality(text);
+
+    if (score < 0.7) {
+      if (retryCount < 3) {
+        // Request retry with feedback for the LLM
+        abort("Response quality too low. Please provide more detail.", {
+          retry: true,
+          metadata: { qualityScore: score },
+        });
+      } else {
+        // Max retries reached, block the response
+        abort("Response quality too low after multiple attempts.");
+      }
+    }
+
+    return [];
+  }
+}
+```
+
 ## Processor types
 
 Mastra provides type aliases to ensure processors implement the required methods:
 
-```typescript copy
+```typescript
 // Must implement processInput OR processInputStep (or both)
 type InputProcessor = Processor & (
   | { processInput: required }
   | { processInputStep: required }
 );
 
-// Must implement processOutputStream OR processOutputResult (or both)
+// Must implement processOutputStream, processOutputStep, OR processOutputResult (or any combination)
 type OutputProcessor = Processor & (
   | { processOutputStream: required }
+  | { processOutputStep: required }
   | { processOutputResult: required }
 );
 ```
@@ -380,7 +650,7 @@ type OutputProcessor = Processor & (
 
 ### Basic input processor
 
-```typescript title="src/mastra/processors/lowercase.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/lowercase.ts"
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class LowercaseProcessor implements Processor {
@@ -404,13 +674,46 @@ export class LowercaseProcessor implements Processor {
 
 ### Per-step processor with processInputStep
 
-```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/dynamic-model.ts"
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    steps,
+    toolChoice,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // Use a fast model for initial response
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // Switch to powerful model after tool calls
+    if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
+      return { model: "openai/gpt-4o" };
+    }
+
+    // Disable tools after 5 steps to force completion
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    return {};
+  }
+}
+```
+
+### Message transformer with processInputStep
+
+```typescript title="src/mastra/processors/reasoning-transformer.ts"
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class ReasoningTransformer implements Processor {
   id = "reasoning-transformer";
 
-  async processInputStep({ messages, messageList, stepNumber }) {
+  async processInputStep({ messages, messageList }) {
     // Transform reasoning parts to thinking parts at each step
     // This is useful when switching between model providers
     for (const msg of messages) {
@@ -429,7 +732,7 @@ export class ReasoningTransformer implements Processor {
 
 ### Hybrid processor (input and output)
 
-```typescript title="src/mastra/processors/content-filter.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/content-filter.ts"
 import type { Processor, MastraDBMessage, ChunkType } from "@mastra/core";
 
 export class ContentFilter implements Processor {
@@ -467,7 +770,7 @@ export class ContentFilter implements Processor {
 
 ### Stream accumulator with state
 
-```typescript title="src/mastra/processors/word-counter.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/word-counter.ts"
 import type { Processor, ChunkType } from "@mastra/core";
 
 export class WordCounter implements Processor {

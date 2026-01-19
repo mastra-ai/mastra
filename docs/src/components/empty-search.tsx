@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { cn } from "../css/utils";
+import { cn } from "@site/src/lib/utils";
 
 export const searches = [
   {
     label: "Quickstart",
-    description: "Get up and running with Mastra AI",
-    link: "/docs/v1/getting-started/quickstart",
+    description: "Get up and running with Mastra",
+    link: "/docs/v1/getting-started/start",
   },
   {
     label: "Agents",
@@ -18,9 +18,9 @@ export const searches = [
     link: "/docs/v1/workflows/overview",
   },
   {
-    label: "Playground",
+    label: "Studio",
     description: "Test your agents, workflows, and tools during development",
-    link: "/docs/v1/server-db/local-dev-playground",
+    link: "/docs/v1/getting-started/studio",
   },
   {
     label: "Streaming",
@@ -29,8 +29,8 @@ export const searches = [
   },
   {
     label: "MCP",
-    description: "Connect AI agents to external tools and resources",
-    link: "/docs/v1/tools-mcp/mcp-overview",
+    description: "Connect agents to external tools and resources",
+    link: "/docs/v1/mcp/overview",
   },
   {
     label: "Memory",
@@ -38,9 +38,9 @@ export const searches = [
     link: "/docs/v1/memory/overview",
   },
   {
-    label: "Scorers",
+    label: "Evals",
     description: "Evaluate agent performance",
-    link: "/docs/v1/scorers/overview",
+    link: "/docs/v1/evals/overview",
   },
   {
     label: "RAG",

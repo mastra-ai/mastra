@@ -6,6 +6,7 @@ import { Link2 } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from 'sonner';
+import { InputField } from '@/ds/components/FormFields';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
@@ -23,6 +24,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
     e.preventDefault();
 
     const formData = new FormData(e.target as HTMLFormElement);
+    const url = formData.get('url') as string;
 
     const formHeaders: Record<string, string> = {};
     for (let i = 0; i < headers.length; i++) {
@@ -31,7 +33,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
       formHeaders[headerName] = headerValue;
     }
 
-    setConfig({ headers: formHeaders });
+    setConfig({ headers: formHeaders, baseUrl: url });
     toast.success('Configuration saved');
   };
 
@@ -45,6 +47,14 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <InputField
+        name="url"
+        label="Mastra instance URL"
+        placeholder="e.g: http://localhost:4111"
+        required
+        defaultValue={initialConfig?.baseUrl}
+      />
+
       <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
       <Button type="submit" variant="light" className="w-full" size="lg">
         <Icon>

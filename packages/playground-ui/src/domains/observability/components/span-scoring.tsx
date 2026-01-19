@@ -1,19 +1,29 @@
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
-import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { Notification } from '@/ds/components/Notification';
+import { SelectField } from '@/ds/components/FormFields';
+import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
+import { type GetScorerResponse } from '@mastra/client-js';
 
 export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
   entityType?: string;
   isTopLevelSpan?: boolean;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 }
 
-export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading, error } = useScorers();
+export const SpanScoring = ({
+  traceId,
+  spanId,
+  entityType,
+  isTopLevelSpan,
+  scorers,
+  isLoadingScorers,
+}: SpanScoringProps) => {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -24,7 +34,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
     }
   }, [isSuccess]);
 
-  let scorerList = Object.entries(scorers)
+  let scorerList = Object.entries(scorers || {})
     .map(([key, scorer]) => ({
       id: key,
       name: scorer.scorer.config.name,
@@ -39,7 +49,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
-  const isWaiting = isPending || isLoading;
+  const isWaiting = isPending || isLoadingScorers;
 
   const handleStartScoring = () => {
     if (selectedScorer) {
@@ -59,10 +69,10 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
 
-  if (error) {
+  if (scorers === undefined && !isLoadingScorers) {
     return (
       <Notification isVisible={true} autoDismiss={false} type="error">
-        <InfoIcon /> {error?.message ? error.message : 'Failed to load scorers.'}
+        <InfoIcon /> Failed to load scorers.
       </Notification>
     );
   }
@@ -77,8 +87,8 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
 
   return (
     <div>
-      <div className="grid grid-cols-[3fr_1fr] gap-[1rem] items-start">
-        <div className="grid gap-[0.5rem]">
+      <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+        <div className="grid gap-2">
           <SelectField
             name={'select-scorer'}
             placeholder="Select a scorer..."
@@ -92,7 +102,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
             disabled={isWaiting}
           />
           {selectedScorerDescription && (
-            <TextAndIcon className="text-icon3">
+            <TextAndIcon className="text-neutral3">
               <InfoIcon /> {selectedScorerDescription}
             </TextAndIcon>
           )}
@@ -103,7 +113,7 @@ export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: Spa
         </Button>
       </div>
 
-      <Notification isVisible={notificationIsVisible} className="mt-[1rem]">
+      <Notification isVisible={notificationIsVisible} className="mt-4">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
       </Notification>

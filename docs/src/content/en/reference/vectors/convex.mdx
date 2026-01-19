@@ -1,6 +1,8 @@
 ---
 title: "Reference: Convex Vector Store | Vectors"
 description: Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
+packages:
+  - "@mastra/convex"
 ---
 
 # Convex Vector Store
@@ -9,7 +11,7 @@ The ConvexVector class provides vector storage and similarity search using [Conv
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/convex@beta
 ```
 
@@ -94,7 +96,7 @@ const vectorStore = new ConvexVector({
   ]}
 />
 
-```typescript copy
+```typescript
 await vectorStore.createIndex({
   indexName: "my_vectors",
   dimension: 1536,
@@ -130,7 +132,7 @@ await vectorStore.createIndex({
   ]}
 />
 
-```typescript copy
+```typescript
 await vectorStore.upsert({
   indexName: "my_vectors",
   vectors: [[0.1, 0.2, 0.3, ...]],
@@ -176,7 +178,7 @@ await vectorStore.upsert({
   ]}
 />
 
-```typescript copy
+```typescript
 const results = await vectorStore.query({
   indexName: "my_vectors",
   queryVector: [0.1, 0.2, 0.3, ...],
@@ -189,7 +191,7 @@ const results = await vectorStore.query({
 
 Returns an array of index names as strings.
 
-```typescript copy
+```typescript
 const indexes = await vectorStore.listIndexes();
 // ["my_vectors", "embeddings", ...]
 ```
@@ -208,7 +210,7 @@ const indexes = await vectorStore.listIndexes();
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -230,7 +232,7 @@ interface IndexStats {
 
 Deletes the index and all its vectors.
 
-```typescript copy
+```typescript
 await vectorStore.deleteIndex({ indexName: "my_vectors" });
 ```
 
@@ -265,7 +267,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
   ]}
 />
 
-```typescript copy
+```typescript
 // Update by ID
 await vectorStore.updateVector({
   indexName: "my_vectors",
@@ -303,7 +305,7 @@ await vectorStore.updateVector({
   ]}
 />
 
-```typescript copy
+```typescript
 await vectorStore.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
@@ -333,7 +335,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
   ]}
 />
 
-```typescript copy
+```typescript
 // Delete by IDs
 await vectorStore.deleteVectors({
   indexName: "my_vectors",
@@ -351,7 +353,7 @@ await vectorStore.deleteVectors({
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -364,7 +366,7 @@ interface QueryResult {
 
 ConvexVector supports metadata filtering with various operators:
 
-```typescript copy
+```typescript
 // Simple equality
 const results = await vectorStore.query({
   indexName: "my_vectors",
