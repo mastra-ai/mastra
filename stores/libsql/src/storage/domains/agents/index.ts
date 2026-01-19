@@ -84,7 +84,6 @@ export class AgentsLibSQL extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
-      integrations: this.parseJson(row.integrations, 'integrations'),
       integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
       ownerId: row.ownerId as string | undefined,
       activeVersionId: row.activeVersionId as string | undefined,
@@ -135,7 +134,6 @@ export class AgentsLibSQL extends AgentsStorage {
           outputProcessors: agent.outputProcessors ?? null,
           memory: agent.memory ?? null,
           scorers: agent.scorers ?? null,
-          integrations: agent.integrations ?? null,
           integrationTools: agent.integrationTools ?? null,
           ownerId: agent.ownerId ?? null,
           activeVersionId: agent.activeVersionId ?? null,
@@ -194,7 +192,6 @@ export class AgentsLibSQL extends AgentsStorage {
       if (updates.outputProcessors !== undefined) data.outputProcessors = updates.outputProcessors;
       if (updates.memory !== undefined) data.memory = updates.memory;
       if (updates.scorers !== undefined) data.scorers = updates.scorers;
-      if (updates.integrations !== undefined) data.integrations = updates.integrations;
       if (updates.integrationTools !== undefined) data.integrationTools = updates.integrationTools;
       if (updates.ownerId !== undefined) data.ownerId = updates.ownerId;
       if (updates.activeVersionId !== undefined) data.activeVersionId = updates.activeVersionId;

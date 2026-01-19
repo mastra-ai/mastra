@@ -45,16 +45,12 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         }
       }
 
-      // Keep the same integration IDs as before (we don't modify integrations in the edit form)
-      const integrationIds = agent?.integrations || [];
-
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
         instructions: values.instructions,
         model: values.model as Record<string, unknown>,
         tools: codeDefinedTools,
-        integrations: integrationIds.length > 0 ? integrationIds : [],
         integrationTools: integrationToolIds,
         workflows: values.workflows,
         agents: values.agents,
@@ -115,7 +111,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-surface1 border-border1 max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Agent</DialogTitle>
         </DialogHeader>

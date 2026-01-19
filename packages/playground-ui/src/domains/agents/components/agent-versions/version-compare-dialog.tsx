@@ -242,7 +242,7 @@ export function VersionCompareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-screen-85 overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Compare Versions</DialogTitle>
           <DialogDescription>Select two versions to compare their differences.</DialogDescription>

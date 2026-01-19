@@ -24,23 +24,19 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
       // Separate code-defined tools from integration tools
       const codeDefinedTools: string[] = [];
       const integrationToolIds: string[] = [];
-      const integrationIdsSet = new Set<string>();
 
       if (values.tools && toolsData) {
         for (const toolId of values.tools) {
           const toolData = toolsData[toolId] as { integrationId?: string } | undefined;
           if (toolData?.integrationId) {
-            // This is an integration tool - store the specific tool ID and its integration ID
+            // This is an integration tool - store the specific tool ID
             integrationToolIds.push(toolId);
-            integrationIdsSet.add(toolData.integrationId);
           } else {
             // This is a code-defined tool
             codeDefinedTools.push(toolId);
           }
         }
       }
-
-      const integrationIds = Array.from(integrationIdsSet);
 
       const createParams = {
         id: agentId,
@@ -49,7 +45,6 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         instructions: values.instructions,
         model: values.model as Record<string, unknown>,
         tools: codeDefinedTools.length > 0 ? codeDefinedTools : undefined,
-        integrations: integrationIds.length > 0 ? integrationIds : undefined,
         integrationTools: integrationToolIds.length > 0 ? integrationToolIds : undefined,
         workflows: values.workflows,
         agents: values.agents,
@@ -72,7 +67,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-surface1 border-border1 max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Agent</DialogTitle>
         </DialogHeader>

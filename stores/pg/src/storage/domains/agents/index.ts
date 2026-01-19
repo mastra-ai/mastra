@@ -132,7 +132,6 @@ export class AgentsPG extends AgentsStorage {
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
       workflows: this.parseJson(row.workflows, 'workflows'),
       agents: this.parseJson(row.agents, 'agents'),
-      integrations: this.parseJson(row.integrations, 'integrations'),
       integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
@@ -179,11 +178,11 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, name, description, instructions, model, tools,
-          "defaultOptions", workflows, agents, integrations, "integrationTools",
+          "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers, metadata,
           "ownerId", "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
         [
           agent.id,
           agent.name,
@@ -194,7 +193,6 @@ export class AgentsPG extends AgentsStorage {
           agent.defaultOptions ? JSON.stringify(agent.defaultOptions) : null,
           agent.workflows ? JSON.stringify(agent.workflows) : null,
           agent.agents ? JSON.stringify(agent.agents) : null,
-          agent.integrations ? JSON.stringify(agent.integrations) : null,
           agent.integrationTools ? JSON.stringify(agent.integrationTools) : null,
           agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
           agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
@@ -306,11 +304,6 @@ export class AgentsPG extends AgentsStorage {
       if (updates.scorers !== undefined) {
         setClauses.push(`scorers = $${paramIndex++}`);
         values.push(JSON.stringify(updates.scorers));
-      }
-
-      if (updates.integrations !== undefined) {
-        setClauses.push(`integrations = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.integrations));
       }
 
       if (updates.integrationTools !== undefined) {

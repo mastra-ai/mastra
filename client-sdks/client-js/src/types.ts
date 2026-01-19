@@ -597,7 +597,6 @@ export interface StoredAgentResponse {
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
-  integrations?: string[];
   integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
@@ -647,7 +646,6 @@ export interface CreateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
-  integrations?: string[];
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
@@ -669,7 +667,6 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
-  integrations?: string[];
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];

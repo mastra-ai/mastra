@@ -40,7 +40,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     this.logger.debug(`InMemoryAgentsStorage: getAgentById called for ${id}`);
     const agent = this.db.agents.get(id);
-    return agent ? this.cloneAgent(agent) : null;
+    return agent ? this.deepCopyAgent(agent) : null;
   }
 
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
@@ -90,7 +90,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       }),
       ...(updates.ownerId !== undefined && { ownerId: updates.ownerId }),
       ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
-      ...(updates.integrations !== undefined && { integrations: updates.integrations }),
       ...(updates.integrationTools !== undefined && { integrationTools: updates.integrationTools }),
       updatedAt: new Date(),
     };
@@ -146,7 +145,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     const sortedAgents = this.sortAgents(agents, field, direction);
 
     // Deep clone agents to avoid mutation
-    const clonedAgents = sortedAgents.map(agent => this.cloneAgent(agent));
+    const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
@@ -184,14 +183,14 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     };
 
     // Deep clone before storing to prevent external mutation
-    this.db.agentVersions.set(input.id, this.cloneVersion(version));
-    return this.cloneVersion(version);
+    this.db.agentVersions.set(input.id, this.deepCopyVersion(version));
+    return this.deepCopyVersion(version);
   }
 
   async getVersion(id: string): Promise<AgentVersion | null> {
     this.logger.debug(`InMemoryAgentsStorage: getVersion called for ${id}`);
     const version = this.db.agentVersions.get(id);
-    return version ? this.cloneVersion(version) : null;
+    return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
@@ -199,7 +198,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId && version.versionNumber === versionNumber) {
-        return this.cloneVersion(version);
+        return this.deepCopyVersion(version);
       }
     }
     return null;
@@ -216,7 +215,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
         }
       }
     }
-    return latest ? this.cloneVersion(latest) : null;
+    return latest ? this.deepCopyVersion(latest) : null;
   }
 
   async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
@@ -245,7 +244,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     versions = this.sortVersions(versions, field, direction);
 
     // Deep clone versions to avoid mutation
-    const clonedVersions = versions.map(v => this.cloneVersion(v));
+    const clonedVersions = versions.map(v => this.deepCopyVersion(v));
 
     const total = clonedVersions.length;
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -298,9 +297,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   /**
-   * Deep clone an agent to prevent external mutation of stored data
+   * Deep copy an agent to prevent external mutation of stored data
    */
-  private cloneAgent(agent: StorageAgentType): StorageAgentType {
+  private deepCopyAgent(agent: StorageAgentType): StorageAgentType {
     return {
       ...agent,
       metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
@@ -313,12 +312,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   /**
-   * Deep clone a version to prevent external mutation of stored data
+   * Deep copy a version to prevent external mutation of stored data
    */
-  private cloneVersion(version: AgentVersion): AgentVersion {
+  private deepCopyVersion(version: AgentVersion): AgentVersion {
     return {
       ...version,
-      snapshot: this.cloneAgent(version.snapshot),
+      snapshot: this.deepCopyAgent(version.snapshot),
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };
   }

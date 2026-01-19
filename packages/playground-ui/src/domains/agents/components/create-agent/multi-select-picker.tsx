@@ -161,7 +161,7 @@ export function MultiSelectPicker<T>({
               key={id}
               className="inline-flex items-center gap-1 bg-surface4 text-icon5 text-ui-sm rounded-md px-1.5 h-badge-default shrink-0"
             >
-              <span className="truncate max-w-truncate-sm">{getOptionLabel(option)}</span>
+              <span className="truncate max-w-[120px]">{getOptionLabel(option)}</span>
               <button
                 type="button"
                 onClick={e => handleRemove(id, e)}

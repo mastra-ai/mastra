@@ -62,7 +62,6 @@ const storedAgentBaseSchema = z.object({
   defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  integrations: z.array(z.string()).optional().describe('Array of integration IDs (backward compatibility)'),
   integrationTools: z
     .array(z.string())
     .optional()
