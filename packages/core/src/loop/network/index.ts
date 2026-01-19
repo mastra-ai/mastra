@@ -927,10 +927,12 @@ export async function createNetworkLoop({
         ? run.resumeStream({
             resumeData,
             requestContext: requestContext,
+            tracingContext,
           })
         : run.stream({
             inputData: input,
             requestContext: requestContext,
+            tracingContext,
           });
 
       // let result: any;
@@ -1424,8 +1426,7 @@ export async function createNetworkLoop({
           runId,
           memory,
           context: inputDataToUse,
-          // TODO: Pass proper tracing context when network supports tracing
-          tracingContext: { currentSpan: undefined },
+          tracingContext: tracingContext ?? { currentSpan: undefined },
           writer,
         },
         { toolCallId, messages: [] },
@@ -2218,6 +2219,7 @@ export async function networkLoop<OUTPUT = undefined>({
       if (resumeDataToUse) {
         return run.resumeStream({
           resumeData: resumeDataToUse,
+          tracingContext: networkTracingContext,
         }).fullStream;
       }
       return run.stream({
@@ -2232,6 +2234,7 @@ export async function networkLoop<OUTPUT = undefined>({
           isOneOff: false,
           verboseIntrospection: true,
         },
+        tracingContext: networkTracingContext,
       }).fullStream;
     },
     onComplete: () => {
