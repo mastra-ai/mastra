@@ -114,10 +114,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   /**
-   * Override to fix JSON schema issues that OpenAI doesn't support:
-   * - additionalProperties: {} -> true
-   *
-   * Note: anyOf nullable pattern fixing is now handled in zodToJsonSchema() for all Zod v4 schemas.
+   * Override to fix additionalProperties: {} which OpenAI doesn't support.
+   * Converts empty object {} to true to preserve passthrough intent.
    */
   processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
     const jsonSchema = super.processToJSONSchema(zodSchema);
