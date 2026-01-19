@@ -16,7 +16,7 @@ import type {
 
 import type { ConvexAdminClientConfig } from '../storage/client';
 import { ConvexAdminClient } from '../storage/client';
-import type { StorageRequest } from '../storage/types';
+import type { StorageRequest, VectorSearchResult } from '../storage/types';
 
 type VectorRecord = {
   id: string;
@@ -29,6 +29,11 @@ type VectorFilter = {
 };
 
 const INDEX_METADATA_TABLE = 'mastra_vector_indexes';
+
+// Safe batch sizes for Convex bandwidth limits
+// With 1536-dim embeddings: each vector ≈ 12KB, so 500 vectors ≈ 6MB (under 16MB limit)
+const VECTOR_BATCH_SIZE = 500;
+const VECTOR_UPSERT_BATCH_SIZE = 100; // Smaller for writes due to mutation limits
 
 export type ConvexVectorConfig = ConvexAdminClientConfig & {
   id: string;
@@ -63,7 +68,6 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       ids: [indexName],
     });
     // Delete in batches since each mutation can only delete a small number of docs
-    // to stay within Convex's 1-second mutation timeout.
     await this.callStorageUntilComplete({
       op: 'clearTable',
       tableName: this.vectorTable(indexName),
@@ -71,8 +75,6 @@ export class ConvexVector extends MastraVector<VectorFilter> {
   }
 
   async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    // Delete in batches since each mutation can only delete a small number of docs
-    // to stay within Convex's 1-second mutation timeout.
     await this.callStorageUntilComplete({
       op: 'clearTable',
       tableName: this.vectorTable(indexName),
@@ -88,41 +90,75 @@ export class ConvexVector extends MastraVector<VectorFilter> {
   }
 
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    const index = await this.callStorage<{ dimension: number } | null>({
-      op: 'load',
-      tableName: INDEX_METADATA_TABLE,
-      keys: { id: indexName },
-    });
-    if (!index) {
-      throw new Error(`Index ${indexName} not found`);
+    // Use the semantic operation for efficient stats retrieval
+    try {
+      const stats = await this.callStorage<{ dimension: number; count: number | string; metric: string }>({
+        op: 'getVectorIndexStats',
+        indexName,
+      });
+
+      return {
+        dimension: stats.dimension,
+        count: typeof stats.count === 'string' ? parseInt(stats.count, 10) : stats.count,
+        metric: stats.metric as 'cosine' | 'euclidean' | 'dotproduct',
+      };
+    } catch {
+      // Fallback to legacy approach if semantic op not available
+      const index = await this.callStorage<{ dimension: number } | null>({
+        op: 'load',
+        tableName: INDEX_METADATA_TABLE,
+        keys: { id: indexName },
+      });
+
+      if (!index) {
+        throw new Error(`Index ${indexName} not found`);
+      }
+
+      // Get count with limited query to avoid bandwidth issues
+      const vectors = await this.callStorage<VectorRecord[]>({
+        op: 'queryTable',
+        tableName: this.vectorTable(indexName),
+        limit: VECTOR_BATCH_SIZE,
+      });
+
+      return {
+        dimension: index.dimension,
+        count: vectors.length,
+        metric: 'cosine',
+      };
     }
-
-    const vectors = await this.callStorage<VectorRecord[]>({
-      op: 'queryTable',
-      tableName: this.vectorTable(indexName),
-    });
-
-    return {
-      dimension: index.dimension,
-      count: vectors.length,
-      metric: 'cosine',
-    };
   }
 
   async upsert({ indexName, vectors, ids, metadata }: UpsertVectorParams<VectorFilter>): Promise<string[]> {
     const vectorIds = ids ?? vectors.map(() => crypto.randomUUID());
 
-    const records: VectorRecord[] = vectors.map((vector, i) => ({
+    const records = vectors.map((vector, i) => ({
       id: vectorIds[i]!,
       embedding: vector,
       metadata: metadata?.[i],
     }));
 
-    await this.callStorage({
-      op: 'batchInsert',
-      tableName: this.vectorTable(indexName),
-      records,
-    });
+    // Use semantic upsert operation if available, with batching
+    try {
+      for (let i = 0; i < records.length; i += VECTOR_UPSERT_BATCH_SIZE) {
+        const batch = records.slice(i, i + VECTOR_UPSERT_BATCH_SIZE);
+        await this.callStorage({
+          op: 'upsertVectors',
+          indexName,
+          vectors: batch,
+        });
+      }
+    } catch {
+      // Fallback to batchInsert
+      for (let i = 0; i < records.length; i += VECTOR_UPSERT_BATCH_SIZE) {
+        const batch = records.slice(i, i + VECTOR_UPSERT_BATCH_SIZE);
+        await this.callStorage({
+          op: 'batchInsert',
+          tableName: this.vectorTable(indexName),
+          records: batch,
+        });
+      }
+    }
 
     return vectorIds;
   }
@@ -134,9 +170,48 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     includeVector = false,
     filter,
   }: QueryVectorParams<VectorFilter>): Promise<QueryResult[]> {
+    // Use the semantic vectorSearch operation for optimized search
+    try {
+      const results = await this.callStorage<VectorSearchResult[]>({
+        op: 'vectorSearch',
+        indexName,
+        queryVector,
+        topK,
+        filter: filter && !this.isEmptyFilter(filter) ? filter : undefined,
+        includeVector,
+      });
+
+      return results.map(r => ({
+        id: r.id,
+        score: r.score,
+        metadata: r.metadata,
+        ...(includeVector && r.vector ? { vector: r.vector } : {}),
+      }));
+    } catch {
+      // Fallback to legacy client-side search
+      return this.legacyQuery({ indexName, queryVector, topK, includeVector, filter });
+    }
+  }
+
+  /**
+   * Legacy query implementation - fetches vectors and computes similarity client-side.
+   * Used as fallback if semantic vectorSearch is not available.
+   */
+  private async legacyQuery({
+    indexName,
+    queryVector,
+    topK = 10,
+    includeVector = false,
+    filter,
+  }: QueryVectorParams<VectorFilter>): Promise<QueryResult[]> {
+    // Fetch limited vectors to avoid bandwidth issues
+    // Fetch more than topK to allow for filtering, but cap at safe limit
+    const fetchLimit = Math.min(topK * 10, VECTOR_BATCH_SIZE);
+
     const vectors = await this.callStorage<VectorRecord[]>({
       op: 'queryTable',
       tableName: this.vectorTable(indexName),
+      limit: fetchLimit,
     });
 
     const filtered =
@@ -162,23 +237,21 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     const hasId = 'id' in params && params.id;
     const hasFilter = 'filter' in params && params.filter !== undefined;
 
-    // Check for mutually exclusive parameters
     if (hasId && hasFilter) {
       throw new Error('ConvexVector.updateVector: id and filter are mutually exclusive');
     }
 
-    // Check for filter-based update
     if (hasFilter) {
       const filter = params.filter as VectorFilter;
-      // Check for empty filter
       if (this.isEmptyFilter(filter)) {
         throw new Error('ConvexVector.updateVector: cannot update with empty filter');
       }
 
-      // Update by filter - find all matching records and update them
+      // Update by filter - find matching records (with safe limit)
       const vectors = await this.callStorage<VectorRecord[]>({
         op: 'queryTable',
         tableName: this.vectorTable(params.indexName),
+        limit: VECTOR_BATCH_SIZE,
       });
 
       const matching = vectors.filter(record => this.matchesFilter(record.metadata, filter));
@@ -199,7 +272,6 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       return;
     }
 
-    // Update by id
     if (!hasId) {
       throw new Error('ConvexVector.updateVector: Either id or filter must be provided');
     }
@@ -237,17 +309,14 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     const hasIds = 'ids' in params && params.ids !== undefined;
     const hasFilter = 'filter' in params && params.filter !== undefined;
 
-    // Check for mutually exclusive parameters
     if (hasIds && hasFilter) {
       throw new Error('ConvexVector.deleteVectors: ids and filter are mutually exclusive');
     }
 
-    // Check that at least one is provided
     if (!hasIds && !hasFilter) {
       throw new Error('ConvexVector.deleteVectors: Either filter or ids must be provided');
     }
 
-    // Handle ID-based deletion
     if (hasIds) {
       const ids = params.ids as string[];
       if (ids.length === 0) {
@@ -261,16 +330,16 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       return;
     }
 
-    // Handle filter-based deletion
     const filter = params.filter as VectorFilter;
     if (this.isEmptyFilter(filter)) {
       throw new Error('ConvexVector.deleteVectors: cannot delete with empty filter');
     }
 
-    // Find all matching vectors and delete them
+    // Find matching vectors (with safe limit)
     const vectors = await this.callStorage<VectorRecord[]>({
       op: 'queryTable',
       tableName: this.vectorTable(indexName),
+      limit: VECTOR_BATCH_SIZE,
     });
 
     const matchingIds = vectors.filter(record => this.matchesFilter(record.metadata, filter)).map(record => record.id);
