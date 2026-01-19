@@ -72,6 +72,12 @@ function validateRedirectUrl(url: string): string {
     return '/';
   }
 
+  // Reject URLs containing backslashes - some browsers normalize backslashes to forward slashes
+  // This prevents open redirect bypass via /\evil.com being interpreted as //evil.com
+  if (url.includes('\\')) {
+    return '/';
+  }
+
   // Reject URLs with protocols (http://, https://, javascript:, data:, etc.)
   if (url.includes(':')) {
     return '/';
