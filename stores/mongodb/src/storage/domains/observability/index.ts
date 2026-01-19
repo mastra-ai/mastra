@@ -18,6 +18,8 @@ import type {
   BatchCreateSpansArgs,
   BatchUpdateSpansArgs,
   CreateSpanArgs,
+  DeleteTracesOlderThanArgs,
+  DeleteTracesOlderThanResponse,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -927,6 +929,62 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
           id: createStorageErrorId('MONGODB', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Build query for root spans matching the criteria
+      const query: Record<string, any> = {
+        parentSpanId: null,
+        startedAt: { $lt: args.beforeDate },
+      };
+
+      // Optional filters
+      if (args.filters?.entityType !== undefined) {
+        query.entityType = args.filters.entityType;
+      }
+      if (args.filters?.entityId !== undefined) {
+        query.entityId = args.filters.entityId;
+      }
+      if (args.filters?.organizationId !== undefined) {
+        query.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.environment !== undefined) {
+        query.environment = args.filters.environment;
+      }
+
+      // Find trace IDs of root spans matching the criteria
+      const rootSpans = await collection.find(query, { projection: { traceId: 1 } }).toArray();
+      const traceIds = rootSpans.map(doc => doc.traceId);
+
+      if (traceIds.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Delete all spans belonging to those traces
+      await collection.deleteMany({
+        traceId: { $in: traceIds },
+      });
+
+      return {
+        deletedCount: traceIds.length,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_TRACES_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

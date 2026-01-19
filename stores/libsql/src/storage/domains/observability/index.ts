@@ -18,6 +18,8 @@ import type {
   BatchUpdateSpansArgs,
   BatchCreateSpansArgs,
   CreateSpanArgs,
+  DeleteTracesOlderThanArgs,
+  DeleteTracesOlderThanResponse,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -567,6 +569,78 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           id: createStorageErrorId('LIBSQL', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
+    try {
+      // Build WHERE clause conditions
+      const conditions: string[] = [];
+      const sqlArgs: any[] = [];
+
+      // Date filter - delete traces where root span started before this date
+      conditions.push('startedAt < ?');
+      sqlArgs.push(args.beforeDate.toISOString());
+
+      // Only match root spans
+      conditions.push('parentSpanId IS NULL');
+
+      // Optional filters
+      if (args.filters?.entityType !== undefined) {
+        conditions.push('entityType = ?');
+        sqlArgs.push(args.filters.entityType);
+      }
+      if (args.filters?.entityId !== undefined) {
+        conditions.push('entityId = ?');
+        sqlArgs.push(args.filters.entityId);
+      }
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push('organizationId = ?');
+        sqlArgs.push(args.filters.organizationId);
+      }
+      if (args.filters?.environment !== undefined) {
+        conditions.push('environment = ?');
+        sqlArgs.push(args.filters.environment);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // First, find trace IDs of root spans matching the criteria
+      const traceIdsResult = await this.#db.selectMany<{ traceId: string }>({
+        tableName: TABLE_SPANS,
+        columns: ['DISTINCT traceId'],
+        whereClause: { sql: ` WHERE ${whereClause}`, args: sqlArgs },
+      });
+
+      if (traceIdsResult.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      const traceIds = traceIdsResult.map(row => row.traceId);
+
+      // Delete all spans belonging to those traces
+      const placeholders = traceIds.map(() => '?').join(', ');
+      await this.#db.execute({
+        sql: `DELETE FROM ${parseSqlIdentifier(TABLE_SPANS)} WHERE traceId IN (${placeholders})`,
+        args: traceIds,
+      });
+
+      return {
+        deletedCount: traceIds.length,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'DELETE_TRACES_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );

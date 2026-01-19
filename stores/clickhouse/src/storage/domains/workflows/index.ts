@@ -8,6 +8,8 @@ import {
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -418,6 +420,76 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    try {
+      // Build WHERE clause conditions
+      const conditions: string[] = [];
+      const params: Record<string, any> = {};
+
+      // Date filter - delete workflow runs created before this date
+      // ClickHouse uses DateTime for timestamps
+      conditions.push('createdAt < {beforeDate:DateTime}');
+      params.beforeDate = args.beforeDate.toISOString().slice(0, 19).replace('T', ' ');
+
+      // Optional filters
+      if (args.filters?.workflowName !== undefined) {
+        conditions.push('workflow_name = {workflowName:String}');
+        params.workflowName = args.filters.workflowName;
+      }
+
+      if (args.filters?.status !== undefined) {
+        conditions.push("JSONExtractString(snapshot, 'status') = {status:String}");
+        params.status = args.filters.status;
+      }
+
+      if (args.filters?.resourceId !== undefined) {
+        conditions.push('resourceId = {resourceId:String}');
+        params.resourceId = args.filters.resourceId;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // First count the records to be deleted
+      const countResult = await this.client.query({
+        query: `SELECT count() as count FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+        query_params: params,
+        format: 'JSONEachRow',
+      });
+
+      const countRows = await countResult.json<{ count: string }[]>();
+      const deletedCount = parseInt(countRows[0]?.count || '0', 10);
+
+      if (deletedCount === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Delete the records
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+        query_params: params,
+      });
+
+      return {
+        deletedCount,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
+          },
         },
         error,
       );
