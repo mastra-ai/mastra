@@ -18,8 +18,8 @@ declare global {
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
-import Processors from '@/pages/processors';
-import Processor from '@/pages/processors/processor';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';

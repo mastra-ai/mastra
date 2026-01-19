@@ -15,7 +15,7 @@ import {
   Skeleton,
 } from '@mastra/playground-ui';
 
-const Processor = () => {
+export function Processor() {
   const { processorId } = useParams();
   const { data: processor, isLoading } = useProcessor(processorId!);
 
@@ -65,7 +65,7 @@ const Processor = () => {
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/processors" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/processors" target="_blank" rel="noopener noreferrer">
             <Icon>
               <DocsIcon />
             </Icon>
@@ -77,6 +77,4 @@ const Processor = () => {
       <ProcessorPanel processorId={processorId!} />
     </div>
   );
-};
-
-export default Processor;
+}
