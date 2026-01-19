@@ -4,6 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   ObservabilityExporter,
@@ -2241,4 +2242,258 @@ describe('Tracing Integration Tests', () => {
       });
     },
   );
+
+  describe('Agent Network Tracing', () => {
+    /**
+     * Creates a mock model that handles agent network flows:
+     * - First call: Routing decision (selects primitive or completes)
+     * - Second call: Completion check (isComplete response)
+     *
+     * The model returns structured JSON responses that the network loop expects.
+     */
+    function createNetworkMockModel(options: {
+      primitiveId?: string;
+      primitiveType?: 'agent' | 'tool' | 'workflow' | 'none';
+      isComplete?: boolean;
+    }) {
+      const { primitiveId = 'none', primitiveType = 'none', isComplete = true } = options;
+
+      // Routing response - selects which primitive to execute
+      const routingResponse = JSON.stringify({
+        primitiveId,
+        primitiveType,
+        prompt: 'Execute the task',
+        selectionReason: 'Selected for the task',
+      });
+
+      // Completion check response
+      const completionResponse = JSON.stringify({
+        isComplete,
+        completionReason: 'Task completed successfully',
+        finalResult: 'The task has been completed.',
+      });
+
+      let callCount = 0;
+
+      return new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          // First call is routing, second is completion check
+          const text = callCount === 1 ? routingResponse : completionResponse;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          const text = callCount === 1 ? routingResponse : completionResponse;
+
+          const chunks = [
+            { type: 'stream-start' as const, warnings: [] },
+            {
+              type: 'response-metadata' as const,
+              id: `id-${callCount}`,
+              modelId: 'mock-network-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start' as const, id: `text-${callCount}` },
+            { type: 'text-delta' as const, id: `text-${callCount}`, delta: text },
+            { type: 'text-end' as const, id: `text-${callCount}` },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ];
+
+          return {
+            stream: convertArrayToReadableStream(chunks),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+    }
+
+    it('should create AGENT_RUN span for agent.network() execution', async () => {
+      const memory = new MockMemory();
+      const mockModel = createNetworkMockModel({ primitiveType: 'none', isComplete: true });
+
+      const networkAgent = new Agent({
+        id: 'network-agent',
+        name: 'Network Agent',
+        instructions: 'You are a network routing agent',
+        model: mockModel,
+        memory,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { networkAgent },
+      });
+
+      const agent = mastra.getAgent('networkAgent');
+      const stream = await agent.network('Test network task', {
+        tracingOptions: {
+          metadata: { testId: 'network-trace-test' },
+        },
+      });
+
+      // Consume the stream to trigger span lifecycle
+      for await (const _chunk of stream) {
+        // Process chunks
+      }
+
+      // Verify AGENT_RUN span was created for the network
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBeGreaterThanOrEqual(1);
+
+      // Find the network agent span
+      const networkSpan = agentRunSpans.find(span => span.entityId === 'network-agent');
+      expect(networkSpan).toBeDefined();
+      expect(networkSpan?.name).toContain('network-agent');
+      expect(networkSpan?.startTime).toBeDefined();
+      expect(networkSpan?.endTime).toBeDefined();
+
+      // Verify no incomplete spans for the network agent span
+      const incompleteSpans = testExporter.getIncompleteSpans();
+      const incompleteNetworkSpans = incompleteSpans.filter(s => s.span?.entityId === 'network-agent');
+      expect(incompleteNetworkSpans).toHaveLength(0);
+    });
+
+    it('should create spans with tracingOptions metadata passed through', async () => {
+      const memory = new MockMemory();
+      const mockModel = createNetworkMockModel({ primitiveType: 'none', isComplete: true });
+
+      const networkAgent = new Agent({
+        id: 'context-network-agent',
+        name: 'Context Network Agent',
+        instructions: 'You are a network routing agent',
+        model: mockModel,
+        memory,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { contextNetworkAgent: networkAgent },
+      });
+
+      const agent = mastra.getAgent('contextNetworkAgent');
+      const stream = await agent.network('Test context propagation', {
+        tracingOptions: {
+          metadata: { testId: 'context-test', environment: 'test' },
+        },
+      });
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Process chunks
+      }
+
+      // Verify spans were created
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+
+      // Find the network agent span
+      const networkSpan = agentRunSpans.find(span => span.entityId === 'context-network-agent');
+
+      expect(networkSpan).toBeDefined();
+      expect(networkSpan?.metadata?.testId).toBe('context-test');
+      expect(networkSpan?.metadata?.environment).toBe('test');
+
+      // Verify span completed properly
+      expect(networkSpan?.endTime).toBeDefined();
+    });
+
+    it('should include network-specific metadata in span', async () => {
+      const memory = new MockMemory();
+      const mockModel = createNetworkMockModel({ primitiveType: 'none', isComplete: true });
+
+      const networkAgent = new Agent({
+        id: 'metadata-network-agent',
+        name: 'Metadata Network Agent',
+        instructions: 'You are a network routing agent',
+        model: mockModel,
+        memory,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { metadataNetworkAgent: networkAgent },
+      });
+
+      const agent = mastra.getAgent('metadataNetworkAgent');
+      const customMetadata = {
+        customField: 'custom-value',
+        numericField: 42,
+      };
+
+      const stream = await agent.network('Test with metadata', {
+        tracingOptions: {
+          metadata: customMetadata,
+        },
+      });
+
+      // Consume the stream
+      for await (const _chunk of stream) {
+        // Process chunks
+      }
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const networkSpan = agentRunSpans.find(span => span.entityId === 'metadata-network-agent');
+
+      expect(networkSpan).toBeDefined();
+      expect(networkSpan?.metadata?.customField).toBe('custom-value');
+      expect(networkSpan?.metadata?.numericField).toBe(42);
+
+      // Verify span completed properly
+      expect(networkSpan?.endTime).toBeDefined();
+    });
+
+    it('should properly end span when network stream completes', async () => {
+      const memory = new MockMemory();
+      const mockModel = createNetworkMockModel({ primitiveType: 'none', isComplete: true });
+
+      const networkAgent = new Agent({
+        id: 'completion-network-agent',
+        name: 'Completion Network Agent',
+        instructions: 'You are a network routing agent',
+        model: mockModel,
+        memory,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { completionNetworkAgent: networkAgent },
+      });
+
+      const agent = mastra.getAgent('completionNetworkAgent');
+      const stream = await agent.network('Test span completion');
+
+      // Consume the stream fully
+      for await (const _chunk of stream) {
+        // Process chunks
+      }
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const networkSpan = agentRunSpans.find(span => span.entityId === 'completion-network-agent');
+
+      expect(networkSpan).toBeDefined();
+      expect(networkSpan?.startTime).toBeDefined();
+      expect(networkSpan?.endTime).toBeDefined();
+
+      // Verify span has proper duration (endTime > startTime)
+      if (networkSpan?.startTime && networkSpan?.endTime) {
+        expect(networkSpan.endTime.getTime()).toBeGreaterThanOrEqual(networkSpan.startTime.getTime());
+      }
+
+      // Verify the network agent span specifically is complete
+      const incompleteSpans = testExporter.getIncompleteSpans();
+      const incompleteNetworkSpans = incompleteSpans.filter(s => s.span?.entityId === 'completion-network-agent');
+      expect(incompleteNetworkSpans).toHaveLength(0);
+    });
+  });
 });
