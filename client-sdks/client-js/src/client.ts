@@ -7,6 +7,7 @@ import {
   Agent,
   MemoryThread,
   Tool,
+  Processor,
   Workflow,
   Vector,
   BaseResource,
@@ -30,6 +31,7 @@ import type {
   GetLogsParams,
   GetLogsResponse,
   GetToolResponse,
+  GetProcessorResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
@@ -260,6 +262,35 @@ export class MastraClient extends BaseResource {
    */
   public getTool(toolId: string) {
     return new Tool(this.options, toolId);
+  }
+
+  /**
+   * Retrieves all available processors
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of processor IDs to processor details
+   */
+  public listProcessors(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Record<string, GetProcessorResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/processors${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a processor instance by ID
+   * @param processorId - ID of the processor to retrieve
+   * @returns Processor instance
+   */
+  public getProcessor(processorId: string) {
+    return new Processor(this.options, processorId);
   }
 
   /**

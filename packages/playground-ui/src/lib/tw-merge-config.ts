@@ -7,6 +7,7 @@ const fontSizeKeys = Object.keys(Tokens.FontSizes);
 const lineHeightKeys = Object.keys(Tokens.LineHeights);
 const borderRadiusKeys = Object.keys(Tokens.BorderRadius);
 const sizeKeys = Object.keys(Tokens.Sizes);
+const shadowKeys = Object.keys(Tokens.Shadows).concat(Object.keys(Tokens.Glows));
 
 export const twMerge = extendTailwindMerge({
   extend: {
@@ -15,6 +16,7 @@ export const twMerge = extendTailwindMerge({
       spacing: spacingKeys,
       radius: borderRadiusKeys,
       leading: lineHeightKeys,
+      shadow: shadowKeys,
     },
     classGroups: {
       'font-size': [{ text: fontSizeKeys }],

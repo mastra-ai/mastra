@@ -370,8 +370,7 @@ The `prepareStep` callback now receives messages in `MastraDBMessage` format ins
 If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
-  agent.generate({
-    prompt: 'Hello',
+  agent.generate('Hello', {
     prepareStep: async ({ messages, messageList }) => {
 -     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);

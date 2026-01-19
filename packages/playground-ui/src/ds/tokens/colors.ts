@@ -7,7 +7,6 @@ export const Colors = {
   accent1: '#1AFB6F',
   accent2: '#FF4931',
   accent3: '#267AD2',
-  accent4: '#9E57B3',
   accent5: '#4A9DF2',
   accent6: '#ECB047',
   accent1Dark: '#16281f',
@@ -26,6 +25,12 @@ export const Colors = {
   neutral4: '#A9A9A9',
   neutral5: '#E6E6E6',
   neutral6: '#FFFFFF',
+
+  // Semantic state colors
+  error: '#FF4931',
+
+  // Overlay colors
+  overlay: 'rgba(0, 0, 0, 0.8)',
 };
 
 export const BorderColors = {

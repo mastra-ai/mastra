@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';

@@ -30,7 +30,11 @@ FIRESTORE_DATABASE_ID=(default)
 # FIREBASE_DATABASE_ID=(default)
 ```
 
-> **Note:** Store your service account JSON file securely and never commit it to version control.
+:::note
+
+Store your service account JSON file securely and never commit it to version control.
+
+:::
 
 ## Installation
 
@@ -83,7 +87,11 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 - `FIREBASE_SERVICE_ACCOUNT`: Path to Firebase service account JSON file
 - `FIRESTORE_DATABASE_ID` or `FIREBASE_DATABASE_ID`: Firestore database ID
 
-> **Note:** When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+:::note
+
+When constructor options are not provided, the class automatically reads these environment variables. This means you can simply call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+
+:::
 
 ### User Authorization
 
@@ -175,7 +183,11 @@ export const signOutUser = async () => {
 };
 ```
 
-> Refer to the [Firebase documentation](https://firebase.google.com/docs/auth) for other authentication methods like email/password, phone authentication, and more.
+:::note
+
+Refer to the [Firebase documentation](https://firebase.google.com/docs/auth) for other authentication methods like email/password, phone authentication, and more.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -194,9 +206,9 @@ export const createMastraClient = (idToken: string) => {
 };
 ```
 
-> **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The ID token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
 
@@ -208,6 +220,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/test-agent.tsx" copy
     "use client";
 
@@ -226,9 +239,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         const client = createMastraClient(token);
 
         const weatherAgent = client.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in New York",
-        });
+        const response = await weatherAgent.generate("What's the weather like in New York");
 
         console.log({ response });
       }
@@ -243,6 +254,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
   </TabItem>
   <TabItem value="nodejs" label="Node.js">
+
     ```typescript title="server.js" copy
     const express = require('express');
     const admin = require('firebase-admin');
@@ -273,9 +285,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         });
 
         const weatherAgent = mastra.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in Nairobi"
-        });
+        const response = await weatherAgent.generate("What's the weather like in Nairobi");
 
         res.json({ response: response.text });
       } catch (error) {
@@ -286,6 +296,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -294,5 +305,6 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
