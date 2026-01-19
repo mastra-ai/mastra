@@ -368,6 +368,48 @@ export function renameImportAndUsages(
 }
 
 /**
+ * Tracks variables assigned from method calls on tracked instances.
+ * Useful for tracking objects returned from factory methods like `client.getAgent()`.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param instances - Set of instance variable names to track
+ * @param methodName - Name of the method to track (or undefined to match any method)
+ * @returns Set of variable names that are assigned from the method calls
+ */
+export function trackMethodCallResults(
+  j: JSCodeshift,
+  root: Collection<any>,
+  instances: Set<string>,
+  methodName?: string,
+): Set<string> {
+  const results = new Set<string>();
+
+  if (instances.size === 0) return results;
+
+  root.find(j.CallExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'MemberExpression') return;
+    if (callee.object.type !== 'Identifier') return;
+    if (callee.property.type !== 'Identifier') return;
+
+    // Only process if called on a tracked instance
+    if (!instances.has(callee.object.name)) return;
+
+    // Only process if it's the method we want (or any method if undefined)
+    if (methodName && callee.property.name !== methodName) return;
+
+    // Track the variable this is assigned to
+    const parent = path.parent.value;
+    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+      results.add(parent.id.name);
+    }
+  });
+
+  return results;
+}
+
+/**
  * Transforms properties in constructor call arguments.
  *
  * @param j - JSCodeshift API

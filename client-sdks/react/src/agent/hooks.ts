@@ -99,6 +99,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       instructions,
       providerOptions,
       maxSteps,
+      requireToolApproval,
     } = modelSettings || {};
     setIsRunning(true);
 
@@ -111,8 +112,11 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const agent = clientWithAbort.getAgent(agentId);
 
+    const runId = uuid();
+    _currentRunId.current = runId;
+
     const response = await agent.generate(coreUserMessages, {
-      runId: uuid(),
+      runId,
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -128,7 +132,37 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
+      requireToolApproval,
     });
+
+    // Check if suspended for tool approval
+    if (response.finishReason === 'suspended' && response.suspendPayload) {
+      const { toolCallId, toolName, args } = response.suspendPayload;
+
+      // Add uiMessages with requireApprovalMetadata so UI shows approval buttons
+      if (response.response?.uiMessages) {
+        const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
+          ...message,
+          metadata: {
+            mode: 'generate',
+            requireApprovalMetadata: {
+              [toolName]: {
+                toolCallId,
+                toolName,
+                args,
+              },
+            },
+          },
+        }));
+
+        setMessages(prev => [...prev, ...mastraUIMessages]);
+      }
+
+      // Set isRunning to false so approval buttons are enabled
+      // The approval/decline functions will set isRunning to true when clicked
+      setIsRunning(false);
+      return;
+    }
 
     setIsRunning(false);
 
@@ -331,6 +365,62 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(false);
   };
 
+  const approveToolCallGenerate = async (toolCallId: string) => {
+    const currentRunId = _currentRunId.current;
+
+    if (!currentRunId)
+      return console.info(
+        '[approveToolCallGenerate] approveToolCallGenerate can only be called after a generate has started',
+      );
+
+    setIsRunning(true);
+    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.approveToolCallGenerate({ runId: currentRunId, toolCallId });
+
+    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
+        ...message,
+        metadata: {
+          mode: 'generate',
+        },
+      }));
+
+      setMessages(prev => [...prev, ...mastraUIMessages]);
+    }
+
+    setIsRunning(false);
+  };
+
+  const declineToolCallGenerate = async (toolCallId: string) => {
+    const currentRunId = _currentRunId.current;
+
+    if (!currentRunId)
+      return console.info(
+        '[declineToolCallGenerate] declineToolCallGenerate can only be called after a generate has started',
+      );
+
+    setIsRunning(true);
+    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.declineToolCallGenerate({ runId: currentRunId, toolCallId });
+
+    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
+        ...message,
+        metadata: {
+          mode: 'generate',
+        },
+      }));
+
+      setMessages(prev => [...prev, ...mastraUIMessages]);
+    }
+
+    setIsRunning(false);
+  };
+
   const approveNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
@@ -418,6 +508,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     messages,
     approveToolCall,
     declineToolCall,
+    approveToolCallGenerate,
+    declineToolCallGenerate,
     cancelRun: handleCancelRun,
     toolCallApprovals,
     approveNetworkToolCall,

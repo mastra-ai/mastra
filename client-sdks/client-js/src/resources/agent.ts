@@ -1627,6 +1627,28 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Approves a pending tool call and returns the complete response (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
+   */
+  async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+    return this.request(`/api/agents/${this.agentId}/approve-tool-call-generate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Declines a pending tool call and returns the complete response (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
+   */
+  async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+    return this.request(`/api/agents/${this.agentId}/decline-tool-call-generate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
    * Processes the stream response and handles tool calls
    */
   private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {

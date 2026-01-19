@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.0.0-beta.24
+
+### Minor Changes
+
+- Added `flush()` method to `ObservabilityExporter`, `ObservabilityBridge`, and `ObservabilityInstance` interfaces ([#12003](https://github.com/mastra-ai/mastra/pull/12003))
+
+### Patch Changes
+
+- When using agent networks, the routing agent could fail with a cryptic `TypeError: Cannot read properties of undefined` if the generation response was missing or malformed. This made it difficult to diagnose why routing failed. The release now throws a descriptive error with debugging details (response text, finish reason, usage) to help identify the root cause. ([#12028](https://github.com/mastra-ai/mastra/pull/12028))
+
+  Fixes #11749
+
+- Improve error messaging for LLM API errors. When an error originates from an LLM provider (e.g., rate limits, overloaded, auth failures), the console now indicates it's an upstream API error and includes the provider and model information. ([#12022](https://github.com/mastra-ai/mastra/pull/12022))
+
+  Before:
+
+  ```
+  ERROR (Mastra): Error in agent stream
+      error: { "message": "Overloaded", "type": "overloaded_error" }
+  ```
+
+  After:
+
+  ```
+  ERROR (Mastra): Upstream LLM API error from anthropic (model: claude-3-opus)
+      error: { "message": "Overloaded", "type": "overloaded_error" }
+  ```
+
+- Fixed the type of targetResult in the onItemComplete callback for runEvals. The parameter was incorrectly typed as a Promise, but the actual value passed is already resolved. Users no longer need to await targetResult inside their callback. ([#12030](https://github.com/mastra-ai/mastra/pull/12030))
+
+- Updated dependencies [[`f93e2f5`](https://github.com/mastra-ai/mastra/commit/f93e2f575e775e627e5c1927cefdd72db07858ed)]:
+  - @mastra/schema-compat@1.0.0-beta.7
+
 ## 1.0.0-beta.23
 
 ### Patch Changes

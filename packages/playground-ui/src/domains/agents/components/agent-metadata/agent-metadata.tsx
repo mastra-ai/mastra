@@ -7,6 +7,7 @@ import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
 import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
@@ -80,6 +81,9 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const agentWorkflows = agent.workflows ?? {};
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
+
+  const inputProcessors = agent.inputProcessors ?? [];
+  const outputProcessors = agent.outputProcessors ?? [];
 
   return (
     <AgentMetadataWrapper>
@@ -181,6 +185,18 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataWorkflowList workflows={workflows} />
       </AgentMetadataSection>
 
+      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
+        <AgentMetadataSection
+          title="Processors"
+          hint={{
+            link: 'https://mastra.ai/docs/agents/processors',
+            title: 'Processors documentation',
+          }}
+        >
+          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
+        </AgentMetadataSection>
+      )}
+
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
@@ -277,6 +293,45 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
           </Link>
         </AgentMetadataListItem>
       ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataCombinedProcessorListProps {
+  inputProcessors: Array<{ id: string; name: string }>;
+  outputProcessors: Array<{ id: string; name: string }>;
+}
+
+export const AgentMetadataCombinedProcessorList = ({
+  inputProcessors,
+  outputProcessors,
+}: AgentMetadataCombinedProcessorListProps) => {
+  const { Link, paths } = useLinkComponent();
+
+  if (inputProcessors.length === 0 && outputProcessors.length === 0) {
+    return <AgentMetadataListEmpty>No processors</AgentMetadataListEmpty>;
+  }
+
+  // Use the first processor's ID for the link (they're grouped into a single workflow per type)
+  const inputProcessorId = inputProcessors[0]?.id;
+  const outputProcessorId = outputProcessors[0]?.id;
+
+  return (
+    <AgentMetadataList>
+      {inputProcessors.length > 0 && inputProcessorId && (
+        <AgentMetadataListItem>
+          <Link href={`${paths.workflowLink(inputProcessorId)}/graph`} data-testid="processor-badge">
+            <Badge icon={<ProcessorIcon className="text-accent4" />}>input</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      )}
+      {outputProcessors.length > 0 && outputProcessorId && (
+        <AgentMetadataListItem>
+          <Link href={`${paths.workflowLink(outputProcessorId)}/graph`} data-testid="processor-badge">
+            <Badge icon={<ProcessorIcon className="text-accent5" />}>output</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      )}
     </AgentMetadataList>
   );
 };

@@ -1,5 +1,18 @@
 # @mastra/react-hooks
 
+## 1.0.0-beta.24
+
+### Major Changes
+
+- **Fixed:** Align `Agent.network` with core and update `@mastra/react` network usage. ([#12015](https://github.com/mastra-ai/mastra/pull/12015))
+
+### Patch Changes
+
+- Fixed compatibility with updated `@mastra/client-js` generate and stream API signatures ([#12011](https://github.com/mastra-ai/mastra/pull/12011))
+
+- Updated dependencies [[`461e448`](https://github.com/mastra-ai/mastra/commit/461e448852fe999506a6046d50b1efc27d8aa378)]:
+  - @mastra/client-js@1.0.0-beta.24
+
 ## 0.1.0-beta.23
 
 ### Patch Changes
