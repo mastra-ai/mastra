@@ -162,6 +162,55 @@ export interface WorkspaceConfig {
 
 export type WorkspaceStatus = 'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed';
 
+// =============================================================================
+// Path Context Types
+// =============================================================================
+
+/**
+ * Describes the relationship between filesystem and sandbox.
+ */
+export type PathContextType =
+  | 'same-context' // Filesystem and sandbox share the same environment (e.g., LocalFilesystem + LocalSandbox)
+  | 'cross-context' // Filesystem and sandbox are in different environments (requires sync)
+  | 'sandbox-only' // Only sandbox is configured
+  | 'filesystem-only'; // Only filesystem is configured
+
+/**
+ * Information about how filesystem and sandbox paths relate.
+ * Used by agents to understand how to access workspace files from sandbox code.
+ */
+export interface PathContext {
+  /** The type of context relationship */
+  type: PathContextType;
+
+  /** Filesystem details (if available) */
+  filesystem?: {
+    provider: string;
+    /** Absolute base path on disk (for local filesystems) */
+    basePath?: string;
+  };
+
+  /** Sandbox details (if available) */
+  sandbox?: {
+    provider: string;
+    /** Working directory for command execution */
+    workingDirectory?: string;
+    /** Directory where script files are written */
+    scriptDirectory?: string;
+  };
+
+  /**
+   * Whether files need to be synced between filesystem and sandbox.
+   * True for cross-context combinations (e.g., AgentFS + LocalSandbox).
+   */
+  requiresSync: boolean;
+
+  /**
+   * Human-readable instructions for how to access filesystem files from sandbox code.
+   */
+  instructions: string;
+}
+
 export interface WorkspaceInfo {
   id: string;
   name: string;
@@ -936,6 +985,98 @@ export class Workspace {
     }
 
     return info;
+  }
+
+  /**
+   * Get information about how filesystem and sandbox paths relate.
+   * Useful for understanding how to access workspace files from sandbox code.
+   *
+   * @returns PathContext with type, paths, and instructions
+   */
+  getPathContext(): PathContext {
+    const hasFs = !!this._fs;
+    const hasSandbox = !!this._sandbox;
+
+    // Filesystem only
+    if (hasFs && !hasSandbox) {
+      return {
+        type: 'filesystem-only',
+        filesystem: {
+          provider: this._fs!.provider,
+          basePath: (this._fs as any).basePath,
+        },
+        requiresSync: false,
+        instructions: 'No sandbox configured. Files can only be accessed via workspace filesystem tools.',
+      };
+    }
+
+    // Sandbox only
+    if (!hasFs && hasSandbox) {
+      return {
+        type: 'sandbox-only',
+        sandbox: {
+          provider: this._sandbox!.provider,
+          workingDirectory: (this._sandbox as any).workingDirectory,
+          scriptDirectory: (this._sandbox as any).scriptDirectory,
+        },
+        requiresSync: false,
+        instructions: 'No filesystem configured. Code execution is available but files are ephemeral.',
+      };
+    }
+
+    // Both configured - determine context type
+    const fsProvider = this._fs!.provider;
+    const sandboxProvider = this._sandbox!.provider;
+
+    // Same-context combinations
+    const isSameContext =
+      (fsProvider === 'local' && sandboxProvider === 'local') || (fsProvider === 'e2b' && sandboxProvider === 'e2b');
+
+    if (isSameContext) {
+      const basePath = (this._fs as any).basePath as string | undefined;
+      const workingDirectory = (this._sandbox as any).workingDirectory as string | undefined;
+      const scriptDirectory = (this._sandbox as any).scriptDirectory as string | undefined;
+
+      let instructions: string;
+      if (basePath) {
+        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in sandbox code. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
+      } else {
+        instructions =
+          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents, then pass them to your code.';
+      }
+
+      return {
+        type: 'same-context',
+        filesystem: {
+          provider: fsProvider,
+          basePath,
+        },
+        sandbox: {
+          provider: sandboxProvider,
+          workingDirectory,
+          scriptDirectory,
+        },
+        requiresSync: false,
+        instructions,
+      };
+    }
+
+    // Cross-context - requires sync
+    return {
+      type: 'cross-context',
+      filesystem: {
+        provider: fsProvider,
+        basePath: (this._fs as any).basePath,
+      },
+      sandbox: {
+        provider: sandboxProvider,
+        workingDirectory: (this._sandbox as any).workingDirectory,
+        scriptDirectory: (this._sandbox as any).scriptDirectory,
+      },
+      requiresSync: true,
+      instructions:
+        'Filesystem and sandbox are in different environments. To use workspace files in code: 1) Read file contents using workspace_read_file, 2) Pass contents as variables to your code, or 3) Use workspace_sync_to_sandbox to sync files before execution.',
+    };
   }
 }
 

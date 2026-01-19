@@ -75,17 +75,32 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly provider = 'local';
 
   private _status: SandboxStatus = 'stopped';
-  private readonly workingDirectory: string;
-  private readonly scriptDirectory?: string;
+  private readonly _workingDirectory: string;
+  private readonly _scriptDirectory?: string;
   private readonly env: Record<string, string>;
   private readonly timeout: number;
   private detectedRuntimes: SandboxRuntime[] = [];
   private configuredRuntimes?: SandboxRuntime[];
 
+  /**
+   * The working directory where commands are executed.
+   */
+  get workingDirectory(): string {
+    return this._workingDirectory;
+  }
+
+  /**
+   * The directory where temporary script files are written.
+   * Returns os.tmpdir() if not explicitly configured.
+   */
+  get scriptDirectory(): string {
+    return this._scriptDirectory ?? os.tmpdir();
+  }
+
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
-    this.workingDirectory = options.workingDirectory ?? process.cwd();
-    this.scriptDirectory = options.scriptDirectory;
+    this._workingDirectory = options.workingDirectory ?? process.cwd();
+    this._scriptDirectory = options.scriptDirectory;
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 30000;
     this.configuredRuntimes = options.runtimes;
@@ -113,9 +128,9 @@ export class LocalSandbox implements WorkspaceSandbox {
     try {
       await fs.mkdir(this.workingDirectory, { recursive: true });
 
-      // Create script directory if configured (enables __dirname to work within workspace)
-      if (this.scriptDirectory) {
-        await fs.mkdir(this.scriptDirectory, { recursive: true });
+      // Create script directory if explicitly configured (enables __dirname to work within workspace)
+      if (this._scriptDirectory) {
+        await fs.mkdir(this._scriptDirectory, { recursive: true });
       }
 
       await this.detectRuntimes();
@@ -218,21 +233,13 @@ export class LocalSandbox implements WorkspaceSandbox {
     }
   }
 
-  /**
-   * Get the directory for temporary script files.
-   * Uses scriptDirectory if configured, otherwise falls back to os.tmpdir().
-   */
-  private getScriptDirectory(): string {
-    return this.scriptDirectory ?? os.tmpdir();
-  }
-
   private async executeCodeForRuntime(
     code: string,
     runtime: SandboxRuntime,
     options: ExecuteCodeOptions,
     timeout: number,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const scriptDir = this.getScriptDirectory();
+    const scriptDir = this.scriptDirectory;
     const tempFile = path.join(scriptDir, `mastra-code-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
     try {

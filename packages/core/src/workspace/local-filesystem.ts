@@ -63,12 +63,20 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
 
-  private readonly basePath: string;
+  private readonly _basePath: string;
   private readonly sandbox: boolean;
+
+  /**
+   * The absolute base path on disk where files are stored.
+   * Useful for understanding how workspace paths map to disk paths.
+   */
+  get basePath(): string {
+    return this._basePath;
+  }
 
   constructor(options: LocalFilesystemOptions) {
     this.id = options.id ?? this.generateId();
-    this.basePath = nodePath.resolve(options.basePath);
+    this._basePath = nodePath.resolve(options.basePath);
     this.sandbox = options.sandbox ?? true;
   }
 
@@ -105,10 +113,10 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   private resolvePath(inputPath: string): string {
     const cleanedPath = inputPath.replace(/^\/+/, '');
     const normalizedInput = nodePath.normalize(cleanedPath);
-    const absolutePath = nodePath.resolve(this.basePath, normalizedInput);
+    const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
 
     if (this.sandbox) {
-      const relative = nodePath.relative(this.basePath, absolutePath);
+      const relative = nodePath.relative(this._basePath, absolutePath);
       if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
         throw new PermissionError(inputPath, 'access');
       }
@@ -118,7 +126,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   private toRelativePath(absolutePath: string): string {
-    return '/' + nodePath.relative(this.basePath, absolutePath).replace(/\\/g, '/');
+    return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
@@ -443,7 +451,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.basePath, { recursive: true });
+    await fs.mkdir(this._basePath, { recursive: true });
   }
 
   async destroy(): Promise<void> {

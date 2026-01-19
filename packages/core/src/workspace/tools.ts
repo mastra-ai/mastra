@@ -242,10 +242,31 @@ export function createWorkspaceTools(workspace: Workspace) {
 
   // Only add sandbox tools if sandbox is available
   if (workspace.sandbox) {
+    // Get path context for dynamic descriptions
+    const pathContext = workspace.getPathContext();
+
+    // Build path context description for sandbox tools
+    let pathInfo = '';
+    if (pathContext.type === 'same-context' && pathContext.filesystem?.basePath) {
+      pathInfo = ` Workspace filesystem basePath: "${pathContext.filesystem.basePath}" (files at workspace path "/foo" are at "${pathContext.filesystem.basePath}/foo" on disk).`;
+      if (pathContext.sandbox?.workingDirectory) {
+        pathInfo += ` Working directory (process.cwd()): "${pathContext.sandbox.workingDirectory}".`;
+      }
+      if (pathContext.sandbox?.scriptDirectory) {
+        pathInfo += ` Script directory (__dirname): "${pathContext.sandbox.scriptDirectory}".`;
+      }
+    } else if (pathContext.type === 'cross-context') {
+      pathInfo =
+        ' Filesystem and sandbox are in different environments. Read file contents using workspace_read_file and pass them as variables to your code.';
+    } else if (pathContext.type === 'sandbox-only') {
+      if (pathContext.sandbox?.workingDirectory) {
+        pathInfo = ` Working directory: "${pathContext.sandbox.workingDirectory}".`;
+      }
+    }
+
     tools.workspace_execute_code = createTool({
       id: 'workspace_execute_code',
-      description:
-        'Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.',
+      description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
       inputSchema: z.object({
         code: z.string().describe('The code to execute'),
         runtime: z
@@ -279,7 +300,7 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
-      description: 'Execute a shell command in the workspace sandbox',
+      description: `Execute a shell command in the workspace sandbox.${pathInfo}`,
       inputSchema: z.object({
         command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
         args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),

@@ -727,6 +727,86 @@ describe('Workspace', () => {
   });
 
   // ===========================================================================
+  // Path Context
+  // ===========================================================================
+  describe('getPathContext', () => {
+    it('should return same-context for local filesystem + local sandbox', () => {
+      // Create mocks that identify as 'local' provider
+      const localFs = {
+        ...mockFs,
+        provider: 'local',
+        basePath: '/path/to/workspace',
+      };
+      const localSandbox = {
+        ...mockSandbox,
+        provider: 'local',
+        workingDirectory: '/path/to/workspace',
+        scriptDirectory: '/path/to/workspace/.mastra/sandbox',
+      };
+
+      const workspace = new Workspace({
+        filesystem: localFs as unknown as WorkspaceFilesystem,
+        sandbox: localSandbox as unknown as WorkspaceSandbox,
+      });
+
+      const context = workspace.getPathContext();
+
+      expect(context.type).toBe('same-context');
+      expect(context.requiresSync).toBe(false);
+      expect(context.filesystem?.provider).toBe('local');
+      expect(context.filesystem?.basePath).toBe('/path/to/workspace');
+      expect(context.sandbox?.provider).toBe('local');
+      expect(context.instructions).toContain('/path/to/workspace');
+    });
+
+    it('should return cross-context for different providers', () => {
+      // AgentFS (provider: 'agentfs') + LocalSandbox (provider: 'local')
+      const agentFs = {
+        ...mockFs,
+        provider: 'agentfs',
+      };
+      const localSandbox = {
+        ...mockSandbox,
+        provider: 'local',
+        workingDirectory: '/tmp/sandbox',
+      };
+
+      const workspace = new Workspace({
+        filesystem: agentFs as unknown as WorkspaceFilesystem,
+        sandbox: localSandbox as unknown as WorkspaceSandbox,
+      });
+
+      const context = workspace.getPathContext();
+
+      expect(context.type).toBe('cross-context');
+      expect(context.requiresSync).toBe(true);
+      expect(context.instructions).toContain('sync');
+    });
+
+    it('should return filesystem-only when no sandbox configured', () => {
+      const workspace = new Workspace({ filesystem: mockFs });
+
+      const context = workspace.getPathContext();
+
+      expect(context.type).toBe('filesystem-only');
+      expect(context.requiresSync).toBe(false);
+      expect(context.filesystem?.provider).toBe('mock');
+      expect(context.sandbox).toBeUndefined();
+    });
+
+    it('should return sandbox-only when no filesystem configured', () => {
+      const workspace = new Workspace({ sandbox: mockSandbox });
+
+      const context = workspace.getPathContext();
+
+      expect(context.type).toBe('sandbox-only');
+      expect(context.requiresSync).toBe(false);
+      expect(context.filesystem).toBeUndefined();
+      expect(context.sandbox?.provider).toBe('mock-sandbox');
+    });
+  });
+
+  // ===========================================================================
   // Error Classes
   // ===========================================================================
   describe('error classes', () => {

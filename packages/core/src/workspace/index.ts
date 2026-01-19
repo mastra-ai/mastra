@@ -53,6 +53,8 @@ export {
   type SnapshotOptions,
   type WorkspaceSnapshot,
   type RestoreOptions,
+  type PathContext,
+  type PathContextType,
 } from './workspace';
 
 // =============================================================================
