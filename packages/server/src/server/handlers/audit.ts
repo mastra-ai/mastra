@@ -87,6 +87,12 @@ function sanitizeCSVField(value: string): string {
 }
 
 /**
+ * Maximum number of records that can be exported in a single request.
+ * Prevents OOM errors when enterprise audit logs accumulate millions of records.
+ */
+const MAX_EXPORT_LIMIT = 100000;
+
+/**
  * Convert audit events to CSV format
  */
 function convertToCSV(events: any[]): string {
@@ -255,7 +261,7 @@ export const GET_AUDIT_EXPORT_ROUTE = createRoute({
         throw new HTTPException(503, { message: 'Audit storage not configured' });
       }
 
-      // Build filter from query parameters (no pagination for export)
+      // Build filter from query parameters with maximum export limit
       const filter = {
         actorId: params.actorId,
         actorType: params.actorType,
@@ -265,10 +271,26 @@ export const GET_AUDIT_EXPORT_ROUTE = createRoute({
         outcome: params.outcome,
         startDate: params.startDate,
         endDate: params.endDate,
+        limit: MAX_EXPORT_LIMIT,
+        offset: 0,
       };
 
-      // Query all matching events (no pagination)
+      // Query events with maximum limit to prevent OOM
       const events = await auditStorage.query(filter);
+
+      // Get total count to determine if results were truncated
+      const total = await auditStorage.count({
+        actorId: filter.actorId,
+        actorType: filter.actorType,
+        action: filter.action,
+        resourceType: filter.resourceType,
+        resourceId: filter.resourceId,
+        outcome: filter.outcome,
+        startDate: filter.startDate,
+        endDate: filter.endDate,
+      });
+
+      const wasTruncated = total > MAX_EXPORT_LIMIT;
 
       const format = params.format || 'json';
 
@@ -281,9 +303,14 @@ export const GET_AUDIT_EXPORT_ROUTE = createRoute({
           data: csv,
           contentType: 'text/csv',
           filename: `audit-export-${new Date().toISOString()}.csv`,
+          truncated: wasTruncated,
+          total: total,
+          exported: events.length,
         };
       } else {
         // JSON format - return events array
+        // Note: For JSON format, truncation warning would need to be communicated via headers
+        // or the schema would need to be updated to return an object instead of array
         return events;
       }
     } catch (error) {

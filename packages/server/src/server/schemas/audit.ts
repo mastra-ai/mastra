@@ -91,5 +91,8 @@ export const auditExportResponseSchema = z.union([
     data: z.string(),
     contentType: z.string(),
     filename: z.string(),
+    truncated: z.boolean().optional(),
+    total: z.number().optional(),
+    exported: z.number().optional(),
   }),
 ]);
