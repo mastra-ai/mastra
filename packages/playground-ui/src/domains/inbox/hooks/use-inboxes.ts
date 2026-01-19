@@ -4,7 +4,7 @@ import { usePlaygroundStore } from '../../../store/playground-store';
 
 // Extended client type to include inbox methods (not yet in MastraClient)
 type MastraClientWithInbox = ReturnType<typeof useMastraClient> & {
-  listInboxes?: (ctx?: unknown) => Promise<Array<{ id: string; name?: string }>>;
+  listInboxes?: (ctx?: unknown) => Promise<{ inboxes: Array<{ id: string; name?: string }> }>;
   getInbox?: (inboxId: string) => {
     listTasks?: (filter?: unknown, ctx?: unknown) => Promise<unknown[]>;
     getTask?: (taskId: string, ctx?: unknown) => Promise<unknown>;
@@ -25,10 +25,8 @@ export function useInboxes() {
   return useQuery({
     queryKey: ['inboxes', requestContext],
     queryFn: async () => {
-      // Note: This will need to be implemented in the client
-      // For now, return the data from listInboxes if available
       const response = await client.listInboxes?.(requestContext);
-      return response ?? [];
+      return response?.inboxes ?? [];
     },
     enabled: !!client.listInboxes,
   });
