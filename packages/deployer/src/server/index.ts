@@ -166,7 +166,7 @@ export async function createHonoServer(
   app.get(
     '/api',
     describeRoute({
-      description: 'Get API status',
+      description: 'API Welcome Page',
       tags: ['system'],
       responses: {
         200: {
