@@ -1631,16 +1631,10 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
   async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/approve-tool-call-generate`, {
+    return this.request(`/api/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: params,
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to approve tool call: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
   /**
@@ -1648,16 +1642,10 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
   async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/decline-tool-call-generate`, {
+    return this.request(`/api/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: params,
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to decline tool call: ${response.statusText}`);
-    }
-
-    return response.json();
   }
 
   /**

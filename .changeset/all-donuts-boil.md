@@ -8,6 +8,8 @@
 
 Added human-in-the-loop (HITL) tool approval support for `generate()` method.
 
+**Why:** This provides parity between `stream()` and `generate()` for tool approval flows, allowing non-streaming use cases to leverage `requireToolApproval` without needing to switch to streaming.
+
 Previously, tool approval with `requireToolApproval` only worked with `stream()`. Now you can use the same approval flow with `generate()` for non-streaming use cases.
 
 **Using tool approval with generate()**
