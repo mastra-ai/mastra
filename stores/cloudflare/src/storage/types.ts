@@ -1,6 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { ScoreRowData } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
+import type { Task } from '@mastra/core/inbox';
 import type {
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -12,6 +13,7 @@ import type {
   TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_AGENTS,
+  TABLE_INBOX_TASKS,
   SpanRecord,
   StorageAgentType,
 } from '@mastra/core/storage';
@@ -109,6 +111,7 @@ export type RecordTypes = {
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
+  [TABLE_INBOX_TASKS]: Task;
 };
 
 export type ListOptions = {
