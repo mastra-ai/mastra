@@ -6,8 +6,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -88,26 +88,28 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
 
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
+    const perPage = normalizePerPage(perPageInput, 100);
 
-      // When perPage is false (get all), ignore page offset
+    try {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -121,8 +123,18 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const data = await this.#db.getKV(TABLE_THREADS, key);
         if (!data) continue;
 
-        // Filter by resourceId
-        if (data.resourceId !== resourceId) continue;
+        // Apply resourceId filter if provided
+        if (filter?.resourceId && data.resourceId !== filter.resourceId) {
+          continue;
+        }
+
+        // Apply metadata filters if provided (AND logic)
+        if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+          const metadata = this.ensureMetadata(data.metadata);
+          if (!metadata) continue; // Skip if thread has no metadata
+          const matches = Object.entries(filter.metadata).every(([key, value]) => metadata[key] === value);
+          if (!matches) continue;
+        }
 
         threads.push(data);
       }
@@ -148,10 +160,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to get threads by resource ID with pagination',
+          text: 'Failed to list threads with filters',
         },
         error,
       );
