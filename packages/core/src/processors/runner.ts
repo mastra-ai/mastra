@@ -1170,12 +1170,12 @@ export class ProcessorRunner {
           text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
         });
       }
-      if (result.messages && result.messageList) {
+      if (result.messages && result.messageList && result.messageList.hasRecordedEvents()) {
         throw new MastraError({
           category: 'USER',
           domain: 'AGENT',
           id: 'PROCESSOR_RETURNED_MESSAGES_AND_MESSAGE_LIST',
-          text: `Processor ${processor.id} returned both messages and messageList. Only one of these is allowed.`,
+          text: `Processor ${processor.id} returned both messages and a messageList with mutations. Only one of these is allowed. Message list was mutated ${result.messageList.getRecordedEvents().length} times.`,
         });
       }
       const { model: _model, ...rest } = result;

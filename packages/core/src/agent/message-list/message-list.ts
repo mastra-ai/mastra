@@ -112,6 +112,23 @@ export class MessageList {
     this.recordedEvents = [];
   }
 
+  public hasRecordedEvents(): boolean {
+    return this.recordedEvents.length > 0;
+  }
+
+  public getRecordedEvents(): Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> {
+    const events = [...this.recordedEvents];
+    return events;
+  }
+
   /**
    * Stop recording and return the list of recorded events
    */
@@ -125,7 +142,7 @@ export class MessageList {
     message?: CoreMessageV4;
   }> {
     this.isRecording = false;
-    const events = [...this.recordedEvents];
+    const events = this.getRecordedEvents();
     this.recordedEvents = [];
     return events;
   }
