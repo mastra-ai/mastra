@@ -33,8 +33,8 @@ Changes to settings require a new deployment to take effect
 
 Mastra Cloud offers two storage options:
 
-1. **Mastra Cloud Store** - Managed storage provided by Mastra Cloud
-2. **Bring your own database** - Connect to your own external database
+1. **Mastra Cloud Store**: Managed storage provided by Mastra Cloud
+1. **Bring your own database**: Connect to your own external database
 
 ### Using Mastra Cloud Store
 
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 });
 ```
 
-Agents can use Memory without specifying storage—they inherit from the Mastra instance:
+Agents can use Memory without specifying storage as they inherit from the Mastra instance:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
