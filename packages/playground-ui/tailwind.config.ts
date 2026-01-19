@@ -5,7 +5,6 @@ import {
   LineHeights,
   BorderColors,
   Colors,
-  Gradients,
   BorderRadius,
   Spacings,
   Sizes,
@@ -66,39 +65,24 @@ export default {
       },
       // Animation tokens
       transitionDuration: {
-        fast: Animations.durationFast,
         normal: Animations.durationNormal,
         slow: Animations.durationSlow,
       },
       transitionTimingFunction: {
         'ease-out-custom': Animations.easeOut,
-        'ease-in-out-custom': Animations.easeInOut,
-        spring: Animations.easeSpring,
       },
       // Shadow tokens
       boxShadow: {
         sm: Shadows.sm,
         md: Shadows.md,
         lg: Shadows.lg,
-        xl: Shadows.xl,
         inner: Shadows.inner,
         card: Shadows.card,
         elevated: Shadows.elevated,
         dialog: Shadows.dialog,
         'glow-accent1': Glows.accent1,
         'glow-accent2': Glows.accent2,
-        'glow-accent3': Glows.accent3,
-        'glow-accent5': Glows.accent5,
-        'glow-accent6': Glows.accent6,
         'focus-ring': Glows.focusRing,
-      },
-      // Gradient backgrounds
-      backgroundImage: {
-        'gradient-surface': Gradients.surface,
-        'gradient-accent1': Gradients.accent1,
-        'gradient-accent2': Gradients.accent2,
-        'gradient-accent3': Gradients.accent3,
-        'gradient-accent5': Gradients.accent5,
       },
       // Custom keyframes
       keyframes: {
