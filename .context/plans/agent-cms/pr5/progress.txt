@@ -2314,3 +2314,44 @@ This was the final task for PR5! All 76 tasks are now complete. The Auth feature
 - No breaking changes - function signature remains compatible
 - Remaining incomplete tasks: Task 082 (P2), Task 083 (P2), Task 084 (P2)
 - Task 082 (URI-encode cookies) is the next logical P2 task to work on
+
+---
+
+## Task 082: URI-encode cookie values in better-auth credentials provider
+
+**Date:** 2026-01-18
+**Status:** ✅ COMPLETED (Already Implemented)
+
+### What was found:
+- Task 082 was already completed in previous work
+- URI encoding is properly implemented in both encoding and decoding paths
+- No code changes were necessary
+
+### Implementation details:
+- Cookie encoding in auth/better-auth/src/credentials.ts:297:
+  * `const encodedValue = encodeURIComponent(value);`
+  * Applied before serializing cookie in createSessionCookie() method
+  * Handles special characters: ';', ',', '=', spaces, etc.
+  
+- Cookie decoding in auth/better-auth/src/user.ts:139:
+  * `return value ? decodeURIComponent(value) : null;`
+  * Applied when parsing session token from cookie header
+  * Correctly reverses the encoding applied during cookie creation
+
+### Verification:
+- Verified full monorepo typecheck passes with pnpm typecheck (exit code 0)
+- Verified full monorepo build passes with pnpm build (124 tasks successful in 2.02s)
+- Updated tasks.json to mark task 082 as completed with passing: true
+
+### Acceptance criteria met:
+✓ Cookie values are URI-encoded (encodeURIComponent applied at line 297 of credentials.ts)
+✓ Session tokens with special characters work correctly (encoding/decoding is symmetric)
+✓ Cookie parsing correctly decodes values (decodeURIComponent applied at line 139 of user.ts)
+
+### Notes for next engineer:
+- The encoding/decoding implementation follows RFC 6265 cookie standards
+- Special characters that could break cookie headers are properly escaped
+- Both the write path (createSessionCookie) and read path (getSessionTokenFromRequest) use matching encoding
+- No edge cases found - implementation handles null/undefined values gracefully
+- Remaining incomplete tasks: Task 083 (P2 - Invalid Date handling), Task 084 (P2 - Import ordering)
+- Task 083 is the next logical P2 task to work on
