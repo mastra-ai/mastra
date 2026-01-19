@@ -244,3 +244,90 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Passthrough Schemas', () => {
     expect(jsonSchema.additionalProperties).toHaveProperty('type', 'array');
   });
 });
+
+describe('OpenAISchemaCompatLayer with Zod v4 - Optional/Nullable Fields (GitHub #12047)', () => {
+  // This test suite verifies that optional/nullable fields produce valid OpenAI JSON schemas.
+  // OpenAI requires properties to have a 'type' key, not just 'anyOf'.
+  // With Zod v4, z.toJSONSchema() produces anyOf: [{type: X}, {type: "null"}] for nullable,
+  // which OpenAI rejects with: "must have a 'type' key"
+
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  /**
+   * OpenAI requires each property to have a 'type' key.
+   * anyOf without a type key is not valid for OpenAI structured outputs.
+   */
+  function expectValidOpenAIPropertySchema(prop: any) {
+    // Property must have a 'type' key OR be a valid anyOf/oneOf that OpenAI accepts
+    // For now, we require 'type' to be present
+    expect(prop).toHaveProperty('type');
+  }
+
+  it('should produce JSON schema with type key for optional string fields', () => {
+    // This is the exact pattern used in validation.ts finalResultSchema
+    const schema = z.object({
+      finalResult: z
+        .string()
+        .optional()
+        .describe('The final result text to return to the user'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // finalResult should have a type key, not just anyOf
+    const finalResultProp = jsonSchema.properties?.finalResult as any;
+    expectValidOpenAIPropertySchema(finalResultProp);
+  });
+
+  it('should produce JSON schema with type key for nullable string fields', () => {
+    const schema = z.object({
+      result: z.string().nullable().describe('A nullable result'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    const resultProp = jsonSchema.properties?.result as any;
+    expectValidOpenAIPropertySchema(resultProp);
+  });
+
+  it('should produce JSON schema with type key for optional boolean fields', () => {
+    // This is the exact pattern used in validation.ts defaultCompletionSchema
+    const schema = z.object({
+      isComplete: z.boolean().describe('Whether the task is complete'),
+      completionReason: z.string().describe('Explanation'),
+      finalResult: z
+        .string()
+        .optional()
+        .describe('The final result text'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // All properties should have type keys
+    expect(jsonSchema.properties?.isComplete).toHaveProperty('type');
+    expect(jsonSchema.properties?.completionReason).toHaveProperty('type');
+    expectValidOpenAIPropertySchema(jsonSchema.properties?.finalResult);
+  });
+
+  it('should produce JSON schema with type key for nested optional fields', () => {
+    const schema = z.object({
+      outer: z.object({
+        inner: z.string().optional(),
+      }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    const outerProp = jsonSchema.properties?.outer as any;
+    const innerProp = outerProp?.properties?.inner as any;
+    expectValidOpenAIPropertySchema(innerProp);
+  });
+});
