@@ -32,19 +32,16 @@ This change removes the direct dependency on Zod typings in the public API by co
 **Before:**
 
 ```typescript
-const output = await agent.generate<z.ZodType>({
-  messages: [...],
+const output = await agent.generate<z.ZodType>([...], {
   structuredOutput: { schema: mySchema }
 });
 
 **After:**
-const output = await agent.generate<z.infer<typeof mySchema>>({
-  messages: [...],
+const output = await agent.generate<z.infer<typeof mySchema>>([...], {
   structuredOutput: { schema: mySchema }
 });
 // Or rely on type inference:
-const output = await agent.generate({
-  messages: [...],
+const output = await agent.generate([...], {
   structuredOutput: { schema: mySchema }
 });
 
