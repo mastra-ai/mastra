@@ -1,0 +1,2540 @@
+{
+  "prNumber": 5,
+  "prTitle": "Auth (WorkOS, Better Auth, Cloud)",
+  "prDescription": "Enterprise authentication with SSO, RBAC, session management, credentials login, and audit logging. Provides pluggable auth providers with composable EE interfaces.",
+  "sourceBranch": "total-cms",
+  "targetBranch": "main",
+  "tasks": [
+    {
+      "id": "001",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create EE module structure and license validation",
+      "description": "Set up the Enterprise Edition module structure with license key validation. This is the foundation for all EE features.",
+      "files": [
+        "packages/core/src/ee/index.ts",
+        "packages/core/src/ee/license.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/ directory structure",
+        "Implement license.ts with validateLicense() function",
+        "Support MASTRA_EE_LICENSE environment variable",
+        "Define LicenseInfo type with valid, expiresAt, features, tier fields",
+        "Create index.ts that exports all EE interfaces and utilities",
+        "Add license validation that accepts keys >= 32 chars (production would verify signatures)"
+      ],
+      "acceptanceCriteria": [
+        "validateLicense() returns LicenseInfo with valid boolean",
+        "License can be provided via env var or function parameter",
+        "Invalid/missing license returns valid: false",
+        "EE module exports are accessible from @mastra/core"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "002",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define EEUser and IUserProvider interface",
+      "description": "Create the base user interface and user provider contract for retrieving current user information.",
+      "files": [
+        "packages/core/src/ee/interfaces/user.ts",
+        "packages/core/src/ee/interfaces/index.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/interfaces/ directory",
+        "Define EEUser interface with id, email, name, avatarUrl, metadata fields",
+        "Define IUserProvider<TUser extends EEUser> interface",
+        "Add getCurrentUser(request: Request) method returning Promise<TUser | null>",
+        "Add getUser(userId: string) method for user lookup",
+        "Add optional getUserProfileUrl(user: TUser) method",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "EEUser interface covers common user properties",
+        "IUserProvider is generic to support extended user types",
+        "Request parameter allows cookie/header-based user resolution",
+        "Types are exported and can be imported from @mastra/core"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "003",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define Session and ISessionProvider interface",
+      "description": "Create the session management interface for creating, validating, and destroying user sessions.",
+      "files": [
+        "packages/core/src/ee/interfaces/session.ts"
+      ],
+      "steps": [
+        "Define Session interface with id, userId, expiresAt, createdAt, metadata",
+        "Define ISessionProvider<TSession extends Session> interface",
+        "Add createSession(userId, metadata?) returning Promise<TSession>",
+        "Add validateSession(sessionId) returning Promise<TSession | null>",
+        "Add destroySession(sessionId) returning Promise<void>",
+        "Add refreshSession(sessionId) returning Promise<TSession | null>",
+        "Add getSessionIdFromRequest(request: Request) returning string | null",
+        "Add getSessionHeaders(session) returning Record<string, string> for Set-Cookie",
+        "Add getClearSessionHeaders() for logout cookie clearing",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Session interface captures all session state",
+        "Provider supports full session lifecycle",
+        "Cookie handling is abstracted via header methods",
+        "Types support custom session extensions"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "004",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define ISSOProvider interface for OAuth/OIDC",
+      "description": "Create the Single Sign-On provider interface for handling OAuth/OIDC redirect flows.",
+      "files": [
+        "packages/core/src/ee/interfaces/sso.ts"
+      ],
+      "steps": [
+        "Define SSOLoginConfig interface with provider, text, icon, url fields",
+        "Define SSOCallbackResult<TUser> with user, tokens (accessToken, refreshToken, idToken, expiresAt), cookies",
+        "Define ISSOProvider<TUser> interface",
+        "Add getLoginUrl(redirectUri, state) returning string",
+        "Add handleCallback(code, state) returning Promise<SSOCallbackResult<TUser>>",
+        "Add optional getLogoutUrl(redirectUri) returning string",
+        "Add getLoginButtonConfig() returning SSOLoginConfig",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Interface supports standard OAuth 2.0 / OIDC flows",
+        "Callback result includes all token types",
+        "Login button config enables dynamic UI rendering",
+        "Logout URL support is optional for providers that support it"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "005",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define ICredentialsProvider interface",
+      "description": "Create the credentials provider interface for email/password authentication.",
+      "files": [
+        "packages/core/src/ee/interfaces/credentials.ts"
+      ],
+      "steps": [
+        "Define CredentialsResult<TUser> with user, session, cookies fields",
+        "Define ICredentialsProvider<TUser extends EEUser> interface",
+        "Add signIn(email, password, request) returning Promise<CredentialsResult<TUser>>",
+        "Add signUp(email, password, name?, request) returning Promise<CredentialsResult<TUser>>",
+        "Add optional requestPasswordReset(email) method",
+        "Add optional resetPassword(token, newPassword) method",
+        "Add optional isSignUpEnabled() returning boolean",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Interface supports sign in and sign up flows",
+        "Password reset is optional feature",
+        "Sign up can be disabled via isSignUpEnabled",
+        "Request parameter allows rate limiting and IP logging"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "002",
+        "003"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "006",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define IRBACProvider interface for role-based access control",
+      "description": "Create the RBAC provider interface for role and permission checking, decoupled from authentication.",
+      "files": [
+        "packages/core/src/ee/interfaces/rbac.ts"
+      ],
+      "steps": [
+        "Define RoleMapping type as { [role: string]: string[] }",
+        "Define Role interface with id, name, permissions fields",
+        "Define IRBACProvider<TUser> interface",
+        "Add optional roleMapping property for static configuration",
+        "Add getRoles(user) returning Promise<string[]>",
+        "Add hasRole(user, role) returning Promise<boolean>",
+        "Add getPermissions(user) returning Promise<string[]>",
+        "Add hasPermission(user, permission) returning Promise<boolean>",
+        "Add hasAllPermissions(user, permissions[]) returning Promise<boolean>",
+        "Add hasAnyPermission(user, permissions[]) returning Promise<boolean>",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "RBAC is fully decoupled from authentication provider",
+        "Role mapping supports wildcard permissions ('*')",
+        "Interface supports both role and permission-based checks",
+        "Permissions use dot-notation (e.g., 'agents:read', 'workflows:execute')"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "007",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Define IACLProvider interface for resource-level access control",
+      "description": "Create the Access Control List provider interface for resource-level permissions.",
+      "files": [
+        "packages/core/src/ee/interfaces/acl.ts"
+      ],
+      "steps": [
+        "Define ResourceIdentifier interface with type and id fields",
+        "Define ACLGrant interface with subject, resource, actions, grantedAt, grantedBy",
+        "Define IACLProvider<TUser> interface (read-only)",
+        "Add canAccess(user, resource, action) returning Promise<boolean>",
+        "Add listAccessible(user, resourceType, action) returning Promise<string[]>",
+        "Add filterAccessible(user, resources[], resourceType, action) returning Promise<T[]>",
+        "Define optional IACLManager interface for write operations",
+        "Add grant(subject, resource, actions) method to manager",
+        "Add revoke(subject, resource, actions?) method to manager",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "ACL is separate from RBAC for granular resource access",
+        "Read interface is separate from write interface",
+        "Resource filtering supports batch operations",
+        "ACL grants track who granted access and when"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "008",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Define IAuditLogger interface for security event logging",
+      "description": "Create the audit logging interface for compliance and security event tracking.",
+      "files": [
+        "packages/core/src/ee/interfaces/audit.ts"
+      ],
+      "steps": [
+        "Define AuditActor interface with type ('user' | 'system' | 'apikey'), id, email, ip, userAgent",
+        "Define AuditEvent interface with id, timestamp, actor, action, resource, outcome, metadata, duration",
+        "Define AuditFilter interface for querying events",
+        "Define IAuditLogger interface",
+        "Add log(event: Omit<AuditEvent, 'id' | 'timestamp'>) returning Promise<void>",
+        "Add optional query(filter: AuditFilter) returning Promise<AuditEvent[]>",
+        "Add optional export(filter, format: 'json' | 'csv') returning Promise<ReadableStream>",
+        "Export from interfaces/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Audit events capture actor, action, outcome, and timing",
+        "Actor type supports users, system, and API keys",
+        "Outcome enum: 'success' | 'failure' | 'denied'",
+        "Query and export are optional capabilities"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "001"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "009",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create MastraAuthProvider base class",
+      "description": "Create the base authentication provider class that all auth providers extend.",
+      "files": [
+        "packages/core/src/ee/auth-provider.ts"
+      ],
+      "steps": [
+        "Define MastraAuthProviderConfig with optional name, logger fields",
+        "Create abstract MastraAuthProvider<TUser extends EEUser> class",
+        "Add abstract getCurrentUser(request: Request) method",
+        "Add optional isMastraCloudAuth property for license bypass",
+        "Add optional user, session, sso, credentials, rbac, acl, audit provider references",
+        "Add getCapabilities() method for feature detection",
+        "Add buildCapabilities(request) method stub for subclasses",
+        "Export from ee/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Base class provides common auth provider structure",
+        "Providers can implement any subset of EE interfaces",
+        "isMastraCloudAuth flag exempts from license checks",
+        "Capability detection works at runtime"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007",
+        "008"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "010",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create capabilities detection and response building",
+      "description": "Implement the capability detection system for public and authenticated contexts.",
+      "files": [
+        "packages/core/src/ee/capabilities.ts"
+      ],
+      "steps": [
+        "Define PublicAuthCapabilities interface with enabled, login config",
+        "Define LoginConfig with type ('sso' | 'credentials' | 'both'), signUpEnabled, sso config",
+        "Define CapabilityFlags interface for feature detection (user, session, sso, rbac, acl, audit)",
+        "Define UserAccess interface with roles and permissions arrays",
+        "Define AuthenticatedCapabilities extending PublicAuthCapabilities with user, capabilities, access",
+        "Implement buildPublicCapabilities(provider) function",
+        "Implement buildAuthenticatedCapabilities(provider, user) function",
+        "Add license check integration (bypass for isMastraCloudAuth)",
+        "Export from ee/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Public capabilities enable login page rendering without auth",
+        "Authenticated capabilities include full user context",
+        "Capability flags detect which interfaces are implemented",
+        "License check is integrated and respects MastraCloudAuth bypass"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "001",
+        "009"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "011",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create withEE composition helper",
+      "description": "Implement the composition helper that wraps auth providers to add EE capabilities.",
+      "files": [
+        "packages/core/src/ee/with-ee.ts"
+      ],
+      "steps": [
+        "Define WithEEOptions interface with optional licenseKey, user, session, sso, rbac, acl, audit",
+        "Define EEAuthProvider<TUser> type combining auth provider with EE interfaces",
+        "Implement withEE<TUser>(baseAuth, options) function",
+        "Compose base auth with additional EE providers",
+        "Override getCapabilities() to include composed capabilities",
+        "Handle license validation for composed providers",
+        "Export from ee/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "withEE wraps any auth provider to add EE features",
+        "RBAC can be added to providers that don't natively support it",
+        "Audit logging can be added to any provider",
+        "License is validated for composed EE features"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "009",
+        "010"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "012",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Create default role definitions",
+      "description": "Define the default role hierarchy and permission mappings for Mastra Studio.",
+      "files": [
+        "packages/core/src/ee/defaults/roles.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/defaults/ directory",
+        "Define DEFAULT_ROLES array with owner, admin, member, viewer roles",
+        "Owner: ['*'] - full access",
+        "Admin: ['studio:*', 'agents:*', 'workflows:*', 'tools:*', 'logs:*', 'settings:*']",
+        "Member: ['studio:read', 'agents:read', 'agents:execute', 'workflows:read', 'workflows:execute', 'tools:read', 'logs:read']",
+        "Viewer: ['studio:read', 'agents:read', 'workflows:read', 'logs:read']",
+        "Export DEFAULT_ROLES and DEFAULT_ROLE_MAPPING",
+        "Export from ee/defaults/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Default roles cover common access patterns",
+        "Permission strings use consistent dot-notation",
+        "Role hierarchy is clear (owner > admin > member > viewer)",
+        "Roles can be extended by custom configurations"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "006"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "013",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Implement MemorySessionProvider",
+      "description": "Create an in-memory session provider for development and testing.",
+      "files": [
+        "packages/core/src/ee/defaults/session/memory.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/defaults/session/ directory",
+        "Implement MemorySessionProvider class implementing ISessionProvider",
+        "Use Map<string, Session> for session storage",
+        "Implement createSession with UUID generation and expiry",
+        "Implement validateSession with expiry check",
+        "Implement destroySession removing from map",
+        "Implement refreshSession extending expiry",
+        "Implement getSessionIdFromRequest parsing cookie header",
+        "Implement getSessionHeaders returning Set-Cookie header",
+        "Add configurable session TTL (default 24 hours)",
+        "Export from ee/defaults/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Sessions are stored in memory",
+        "Session expiry is enforced",
+        "Cookie parsing and generation works correctly",
+        "Provider is suitable for development only (warning in docs)"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "003"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "014",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Implement CookieSessionProvider",
+      "description": "Create a secure cookie-based session provider for production use.",
+      "files": [
+        "packages/core/src/ee/defaults/session/cookie.ts"
+      ],
+      "steps": [
+        "Implement CookieSessionProvider class implementing ISessionProvider",
+        "Accept encryption secret in constructor",
+        "Implement createSession encoding session data in encrypted cookie",
+        "Use AES-GCM encryption for session payload",
+        "Implement validateSession decrypting and validating cookie",
+        "Implement destroySession with max-age=0 cookie",
+        "Implement refreshSession updating expiry in cookie",
+        "Add secure, httpOnly, sameSite cookie flags",
+        "Support configurable cookie name and domain",
+        "Export from ee/defaults/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Sessions are stored entirely in encrypted cookies",
+        "No server-side session storage required",
+        "Cookies are httpOnly, secure, sameSite=lax",
+        "Encryption uses strong AES-GCM algorithm"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "003"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "015",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Implement StaticRBACProvider",
+      "description": "Create a static RBAC provider using role mapping configuration.",
+      "files": [
+        "packages/core/src/ee/defaults/rbac/static.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/defaults/rbac/ directory",
+        "Implement StaticRBACProvider<TUser> class implementing IRBACProvider",
+        "Accept roleMapping and getRolesFromUser callback in constructor",
+        "Implement getRoles using callback to extract user roles",
+        "Implement hasRole checking against extracted roles",
+        "Implement getPermissions expanding roles to permissions via mapping",
+        "Handle wildcard permissions ('*') correctly",
+        "Implement hasPermission, hasAllPermissions, hasAnyPermission",
+        "Support permission hierarchy (e.g., 'agents:*' matches 'agents:read')",
+        "Export from ee/defaults/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Roles are extracted from user object via callback",
+        "Permissions expand from role mapping",
+        "Wildcard permissions work correctly",
+        "Permission hierarchy is supported"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "006",
+        "012"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "016",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Implement ConsoleAuditLogger",
+      "description": "Create a console-based audit logger for development and debugging.",
+      "files": [
+        "packages/core/src/ee/defaults/audit/console.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/ee/defaults/audit/ directory",
+        "Implement ConsoleAuditLogger class implementing IAuditLogger",
+        "Accept optional log level filter in constructor",
+        "Implement log() formatting event to console.log",
+        "Include timestamp, actor, action, outcome, duration in output",
+        "Color-code by outcome (green=success, red=failure, yellow=denied)",
+        "Optionally implement query() storing events in memory array",
+        "Export from ee/defaults/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Audit events are logged to console",
+        "Output is human-readable with clear formatting",
+        "Color coding helps identify issues",
+        "Suitable for development environments"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "008"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "017",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Create audit storage interface and in-memory implementation",
+      "description": "Define the audit event storage interface and implement in-memory storage.",
+      "files": [
+        "packages/core/src/storage/domains/audit/base.ts",
+        "packages/core/src/storage/domains/audit/inmemory.ts",
+        "packages/core/src/storage/domains/audit/types.ts",
+        "packages/core/src/storage/domains/audit/index.ts"
+      ],
+      "steps": [
+        "Create packages/core/src/storage/domains/audit/ directory",
+        "Define AuditEventRecord type in types.ts (extends AuditEvent with stored fields)",
+        "Define IAuditStorage interface in base.ts",
+        "Add store(event) returning Promise<AuditEventRecord>",
+        "Add query(filter: AuditFilter) returning Promise<AuditEventRecord[]>",
+        "Add getById(id) returning Promise<AuditEventRecord | null>",
+        "Add count(filter?) returning Promise<number>",
+        "Implement InMemoryAuditStorage class",
+        "Add filtering by actor, action, resource, outcome, date range",
+        "Add pagination support (offset, limit)",
+        "Export from index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Storage interface supports audit event persistence",
+        "In-memory implementation works for development",
+        "Filtering supports common audit queries",
+        "Pagination prevents memory issues with large result sets"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "008"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "018",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create auth API handlers",
+      "description": "Implement the server-side API endpoints for authentication.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts",
+        "packages/server/src/server/schemas/auth.ts"
+      ],
+      "steps": [
+        "Create Zod schemas for auth request/response validation",
+        "Define LoginRequestSchema, LoginResponseSchema",
+        "Define SignUpRequestSchema, SignUpResponseSchema",
+        "Define CapabilitiesResponseSchema",
+        "Implement GET /api/auth/capabilities - public and authenticated",
+        "Implement POST /api/auth/login - credentials login",
+        "Implement POST /api/auth/signup - credentials signup",
+        "Implement GET /api/auth/sso - initiate SSO redirect",
+        "Implement GET /api/auth/callback - handle SSO callback",
+        "Implement POST /api/auth/logout - destroy session",
+        "Implement GET /api/auth/me - get current user",
+        "Add proper error responses (401, 403, 400)"
+      ],
+      "acceptanceCriteria": [
+        "Capabilities endpoint works without authentication",
+        "Login/signup require valid credentials",
+        "SSO flow handles redirect and callback",
+        "Logout clears session cookies",
+        "Errors return appropriate status codes"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": [
+        "010",
+        "011"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "019",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Create audit API handlers",
+      "description": "Implement the server-side API endpoints for audit log access.",
+      "files": [
+        "packages/server/src/server/handlers/audit.ts",
+        "packages/server/src/server/schemas/audit.ts"
+      ],
+      "steps": [
+        "Create Zod schemas for audit request/response validation",
+        "Define AuditQuerySchema with actor, action, outcome, dateRange, pagination",
+        "Define AuditEventSchema and AuditListResponseSchema",
+        "Implement GET /api/audit - list audit events with filtering",
+        "Implement GET /api/audit/:id - get single audit event",
+        "Implement GET /api/audit/export - export as JSON or CSV",
+        "Add permission check (require audit:read permission)",
+        "Add proper error responses (401, 403, 404)"
+      ],
+      "acceptanceCriteria": [
+        "Audit list supports filtering and pagination",
+        "Export generates valid JSON and CSV formats",
+        "Access is restricted by RBAC permissions",
+        "Response includes total count for pagination"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "017",
+        "018"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "020",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Register auth and audit routes",
+      "description": "Wire up the auth and audit handlers to the server router.",
+      "files": [
+        "packages/server/src/server/server-adapter/routes/auth.ts",
+        "packages/server/src/server/server-adapter/routes/audit.ts",
+        "packages/server/src/server/server-adapter/routes/index.ts"
+      ],
+      "steps": [
+        "Create auth.ts route file with auth route definitions",
+        "Create audit.ts route file with audit route definitions",
+        "Register routes in the main routes index",
+        "Add auth middleware for protected routes",
+        "Add permission middleware for audit routes",
+        "Ensure routes are included in OpenAPI documentation",
+        "Add appropriate route tags for API organization"
+      ],
+      "acceptanceCriteria": [
+        "Auth routes are accessible at /api/auth/*",
+        "Audit routes are accessible at /api/audit/*",
+        "Routes appear in OpenAPI/Swagger documentation",
+        "Auth middleware protects appropriate routes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "018",
+        "019"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "021",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create WorkOS auth provider package structure",
+      "description": "Set up the WorkOS authentication provider package with configuration.",
+      "files": [
+        "auth/workos/package.json",
+        "auth/workos/tsconfig.json",
+        "auth/workos/src/index.ts",
+        "auth/workos/src/types.ts"
+      ],
+      "steps": [
+        "Create auth/workos/ directory structure",
+        "Create package.json with @mastra/auth-workos name",
+        "Add dependencies: @workos-inc/node, @mastra/core",
+        "Create tsconfig.json extending base config",
+        "Define WorkOSConfig interface with clientId, apiKey, redirectUri, cookiePassword",
+        "Define WorkOSUser extending EEUser with workos-specific fields",
+        "Create main index.ts exporting provider and types",
+        "Set up build scripts"
+      ],
+      "acceptanceCriteria": [
+        "Package builds successfully",
+        "TypeScript types are properly defined",
+        "Package can be installed as npm dependency",
+        "Configuration interface covers all WorkOS options"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "009"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "022",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Implement WorkOS SSO and session providers",
+      "description": "Implement the WorkOS SSO flow and session management using AuthKit.",
+      "files": [
+        "auth/workos/src/sso.ts",
+        "auth/workos/src/session.ts"
+      ],
+      "steps": [
+        "Create WorkOSSSOProvider class implementing ISSOProvider",
+        "Implement getLoginUrl using WorkOS AuthKit authorization URL",
+        "Implement handleCallback exchanging code for tokens and user",
+        "Implement getLogoutUrl for WorkOS logout",
+        "Create WorkOSSessionProvider class implementing ISessionProvider",
+        "Implement cookie-based encrypted sessions using iron-session pattern",
+        "Store WorkOS tokens in session for API calls",
+        "Implement session refresh using WorkOS refresh tokens",
+        "Handle session expiry and token refresh"
+      ],
+      "acceptanceCriteria": [
+        "SSO redirects to WorkOS AuthKit login",
+        "Callback exchanges code for user and tokens",
+        "Sessions are stored in encrypted cookies",
+        "Token refresh extends session lifetime"
+      ],
+      "estimatedComplexity": "large",
+      "dependencies": [
+        "021"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "023",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Implement WorkOS user provider and RBAC",
+      "description": "Implement WorkOS user management and role-based access control.",
+      "files": [
+        "auth/workos/src/user.ts",
+        "auth/workos/src/rbac.ts"
+      ],
+      "steps": [
+        "Create WorkOSUserProvider class implementing IUserProvider",
+        "Implement getCurrentUser parsing session and fetching user",
+        "Implement getUser fetching user by ID from WorkOS API",
+        "Map WorkOS user fields to EEUser interface",
+        "Create MastraRBACWorkos class implementing IRBACProvider",
+        "Extract roles from WorkOS organization membership",
+        "Support role mapping from WorkOS roles to Mastra permissions",
+        "Implement permission expansion with wildcard support"
+      ],
+      "acceptanceCriteria": [
+        "Users are fetched from WorkOS API",
+        "User fields map correctly to EEUser",
+        "Roles are extracted from organization membership",
+        "Role mapping translates to Mastra permissions"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "021",
+        "022"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "024",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Implement WorkOS directory sync and audit export",
+      "description": "Implement WorkOS Directory Sync (SCIM) and audit log export.",
+      "files": [
+        "auth/workos/src/directory-sync.ts",
+        "auth/workos/src/audit-export.ts"
+      ],
+      "steps": [
+        "Create WorkOSDirectorySync class for SCIM webhooks",
+        "Handle user provisioning events (create, update, delete)",
+        "Handle group membership events",
+        "Create WorkOSAuditExporter implementing IAuditLogger",
+        "Export audit events to WorkOS Audit Logs API",
+        "Map Mastra audit events to WorkOS event format",
+        "Support SIEM integration via WorkOS"
+      ],
+      "acceptanceCriteria": [
+        "Directory sync handles user provisioning",
+        "Group membership updates role assignments",
+        "Audit events are exported to WorkOS",
+        "Events are queryable via WorkOS dashboard"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "023"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "025",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create main WorkOS auth provider class",
+      "description": "Create the main WorkOS auth provider combining all sub-providers.",
+      "files": [
+        "auth/workos/src/provider-ee.ts"
+      ],
+      "steps": [
+        "Create MastraAuthWorkosEE class extending MastraAuthProvider",
+        "Accept WorkOSConfig in constructor",
+        "Initialize WorkOS SDK client",
+        "Compose SSO, session, user providers internally",
+        "Optionally compose RBAC provider if roleMapping provided",
+        "Optionally compose audit exporter if enabled",
+        "Implement getCurrentUser delegating to user provider",
+        "Override buildCapabilities for WorkOS-specific features",
+        "Export from package"
+      ],
+      "acceptanceCriteria": [
+        "Provider composes all WorkOS capabilities",
+        "Single configuration point for all options",
+        "Provider works with Mastra server integration",
+        "Capabilities correctly report available features"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "022",
+        "023",
+        "024"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "026",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create Better Auth provider package structure",
+      "description": "Set up the Better Auth self-hosted authentication provider package.",
+      "files": [
+        "auth/better-auth/package.json",
+        "auth/better-auth/tsconfig.json",
+        "auth/better-auth/src/index.ts",
+        "auth/better-auth/src/types.ts"
+      ],
+      "steps": [
+        "Create auth/better-auth/ directory structure",
+        "Create package.json with @mastra/auth-better-auth name",
+        "Add dependencies: better-auth, @mastra/core",
+        "Create tsconfig.json extending base config",
+        "Define BetterAuthConfig interface with database, secret, options",
+        "Define BetterAuthUser extending EEUser",
+        "Create main index.ts exporting provider and types",
+        "Set up build scripts"
+      ],
+      "acceptanceCriteria": [
+        "Package builds successfully",
+        "TypeScript types are properly defined",
+        "Package can be installed as npm dependency",
+        "Configuration supports various database backends"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "009"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "027",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Implement Better Auth credentials and user providers",
+      "description": "Implement email/password authentication and user management with Better Auth.",
+      "files": [
+        "auth/better-auth/src/credentials.ts",
+        "auth/better-auth/src/user.ts",
+        "auth/better-auth/src/provider.ts"
+      ],
+      "steps": [
+        "Create BetterAuthCredentialsProvider implementing ICredentialsProvider",
+        "Implement signIn with email/password validation",
+        "Implement signUp with user creation and password hashing",
+        "Implement password reset flow if enabled",
+        "Create BetterAuthUserProvider implementing IUserProvider",
+        "Implement getCurrentUser from session/cookie",
+        "Implement getUser by ID from database",
+        "Create MastraAuthBetterAuth class extending MastraAuthProvider",
+        "Initialize Better Auth instance with database config",
+        "Compose credentials and user providers"
+      ],
+      "acceptanceCriteria": [
+        "Email/password login works correctly",
+        "Sign up creates user with hashed password",
+        "Password reset flow is optional but functional",
+        "User data is stored in configured database"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "026"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "028",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Create Mastra Cloud auth provider package",
+      "description": "Set up the zero-config Mastra Cloud authentication provider.",
+      "files": [
+        "auth/cloud/package.json",
+        "auth/cloud/tsconfig.json",
+        "auth/cloud/src/index.ts",
+        "auth/cloud/src/types.ts",
+        "auth/cloud/src/provider.ts"
+      ],
+      "steps": [
+        "Create auth/cloud/ directory structure",
+        "Create package.json with @mastra/auth-cloud name",
+        "Add dependencies: @mastra/core",
+        "Define CloudAuthConfig with optional apiKey, endpoint",
+        "Define CloudUser extending EEUser",
+        "Create MastraAuthCloud class extending MastraAuthProvider",
+        "Set isMastraCloudAuth = true for license bypass",
+        "Implement getCurrentUser via Mastra Cloud API",
+        "Implement SSO via Mastra Cloud redirect",
+        "Implement RBAC via Mastra Cloud permissions API",
+        "Export as default from package"
+      ],
+      "acceptanceCriteria": [
+        "Provider works with zero configuration (uses defaults)",
+        "isMastraCloudAuth flag bypasses license checks",
+        "SSO redirects to Mastra Cloud login",
+        "RBAC permissions are managed in Mastra Cloud"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "009"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "029",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Create auth capabilities React Query hook",
+      "description": "Build the React Query hook for fetching authentication capabilities.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts"
+      ],
+      "steps": [
+        "Create packages/playground-ui/src/domains/auth/hooks/ directory",
+        "Implement useAuthCapabilities hook",
+        "Fetch from /api/auth/capabilities endpoint",
+        "Handle loading, error, and success states",
+        "Cache capabilities appropriately (short TTL for auth state)",
+        "Return typed PublicAuthCapabilities or AuthenticatedCapabilities",
+        "Export from hooks/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "Hook fetches capabilities from API",
+        "Loading and error states are exposed",
+        "Capabilities are properly typed",
+        "Cache invalidates on auth state changes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "020"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "030",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Create current user and auth actions hooks",
+      "description": "Build hooks for current user state and authentication actions.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/hooks/use-current-user.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-actions.ts"
+      ],
+      "steps": [
+        "Implement useCurrentUser hook",
+        "Derive user from useAuthCapabilities when authenticated",
+        "Return null when not authenticated",
+        "Implement useAuthActions hook",
+        "Add signIn(email, password) action calling POST /api/auth/login",
+        "Add signUp(email, password, name) action calling POST /api/auth/signup",
+        "Add signOut() action calling POST /api/auth/logout",
+        "Invalidate capabilities query on auth actions",
+        "Handle redirects for SSO login"
+      ],
+      "acceptanceCriteria": [
+        "useCurrentUser returns authenticated user or null",
+        "signIn/signUp call correct endpoints",
+        "signOut clears session and redirects",
+        "Auth state updates after actions"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "029"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "031",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Create permissions and credentials hooks",
+      "description": "Build hooks for permission checking and credentials login/signup.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/hooks/use-permissions.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-login.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-signup.ts"
+      ],
+      "steps": [
+        "Implement usePermissions hook",
+        "Derive permissions from useAuthCapabilities",
+        "Add hasPermission(permission) check function",
+        "Add hasAnyPermission(permissions[]) check function",
+        "Add hasAllPermissions(permissions[]) check function",
+        "Implement useCredentialsLogin hook with mutation",
+        "Handle login form state, validation, submission",
+        "Implement useCredentialsSignup hook with mutation",
+        "Handle signup form state, validation, submission",
+        "Export all hooks from index.ts"
+      ],
+      "acceptanceCriteria": [
+        "usePermissions provides permission checking functions",
+        "Credentials hooks manage form state",
+        "Validation errors are properly handled",
+        "Loading states during submission"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "030"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "032",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Create login page component",
+      "description": "Build the main login page with SSO and credentials support.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/login-page.tsx"
+      ],
+      "steps": [
+        "Create packages/playground-ui/src/domains/auth/components/ directory",
+        "Implement LoginPage component",
+        "Use useAuthCapabilities to determine available login methods",
+        "Render SSO login button if sso config available",
+        "Render email/password form if credentials available",
+        "Support 'both' login type showing both options",
+        "Handle form validation with zod",
+        "Show loading states during authentication",
+        "Display error messages for failed attempts",
+        "Redirect to original URL after successful login"
+      ],
+      "acceptanceCriteria": [
+        "Login page renders based on capabilities",
+        "SSO button redirects to provider",
+        "Credentials form validates and submits",
+        "Error messages display correctly",
+        "Redirect works after successful login"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "030",
+        "031"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "033",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Create login button component",
+      "description": "Build the SSO login button component with provider branding.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/login-button.tsx"
+      ],
+      "steps": [
+        "Implement LoginButton component",
+        "Accept provider config from capabilities",
+        "Display provider icon if available",
+        "Display provider text (e.g., 'Sign in with Google')",
+        "Handle click to redirect to SSO URL",
+        "Support loading state during redirect",
+        "Style according to design system"
+      ],
+      "acceptanceCriteria": [
+        "Button displays provider branding",
+        "Click initiates SSO redirect",
+        "Loading state shows during redirect",
+        "Accessible and keyboard navigable"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "029"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "034",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Create AuthRequired guard component",
+      "description": "Build the auth guard component for protecting routes.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/auth-required.tsx"
+      ],
+      "steps": [
+        "Implement AuthRequired component",
+        "Accept children prop for protected content",
+        "Accept optional redirectTo prop for login redirect",
+        "Accept optional requiredPermissions prop",
+        "Use useAuthCapabilities to check auth state",
+        "Show loading spinner while checking auth",
+        "Redirect to login if not authenticated",
+        "Check permissions if requiredPermissions specified",
+        "Show access denied message if lacking permissions",
+        "Render children if authenticated and authorized"
+      ],
+      "acceptanceCriteria": [
+        "Unauthenticated users are redirected to login",
+        "Loading state shows while checking auth",
+        "Permission checks prevent unauthorized access",
+        "Authorized users see protected content"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "030",
+        "031"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "035",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Create auth status and user menu components",
+      "description": "Build the auth status indicator and user dropdown menu.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/auth-status.tsx",
+        "packages/playground-ui/src/domains/auth/components/user-menu.tsx",
+        "packages/playground-ui/src/domains/auth/components/user-avatar.tsx"
+      ],
+      "steps": [
+        "Implement UserAvatar component",
+        "Display user avatar image or initials fallback",
+        "Support different sizes (sm, md, lg)",
+        "Implement AuthStatus component",
+        "Show 'Sign In' button if not authenticated",
+        "Show UserMenu if authenticated",
+        "Implement UserMenu component",
+        "Display user name and email",
+        "Add 'Profile' link if profile URL available",
+        "Add 'Sign Out' button",
+        "Add role/permissions display if available"
+      ],
+      "acceptanceCriteria": [
+        "Avatar shows image or initials",
+        "Auth status adapts to auth state",
+        "User menu shows user info and actions",
+        "Sign out clears session and refreshes"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "030"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "036",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Create signup and OAuth callback pages",
+      "description": "Build the signup page and OAuth callback handler page.",
+      "files": [
+        "packages/playground/src/pages/signup/index.tsx",
+        "packages/playground/src/pages/oauth/callback.tsx"
+      ],
+      "steps": [
+        "Create packages/playground/src/pages/signup/ directory",
+        "Implement SignUpPage component",
+        "Check if signup is enabled via capabilities",
+        "Show signup form with email, password, name fields",
+        "Validate form with zod schema",
+        "Handle submission with useCredentialsSignup",
+        "Redirect to dashboard after successful signup",
+        "Create packages/playground/src/pages/oauth/ directory",
+        "Implement OAuthCallbackPage component",
+        "Extract code and state from URL params",
+        "Call POST /api/auth/callback with code and state",
+        "Show loading state during token exchange",
+        "Redirect to original URL or dashboard on success",
+        "Show error message on failure"
+      ],
+      "acceptanceCriteria": [
+        "Signup form validates and submits",
+        "Signup redirects after success",
+        "OAuth callback exchanges code for session",
+        "Errors are displayed appropriately"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "031",
+        "032"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "037",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Create login page in playground",
+      "description": "Create the login page route in the playground application.",
+      "files": [
+        "packages/playground/src/pages/login/index.tsx"
+      ],
+      "steps": [
+        "Create packages/playground/src/pages/login/ directory",
+        "Implement LoginPageWrapper component",
+        "Import LoginPage from playground-ui",
+        "Handle redirect parameter from query string",
+        "Check if already authenticated and redirect",
+        "Apply appropriate layout for login page",
+        "Add route to app router"
+      ],
+      "acceptanceCriteria": [
+        "Login page is accessible at /login",
+        "Already authenticated users are redirected",
+        "Redirect parameter is preserved through login",
+        "Page has appropriate layout"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [
+        "032"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "038",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Create audit log page",
+      "description": "Build the audit log viewer page for administrators.",
+      "files": [
+        "packages/playground/src/pages/audit/index.tsx",
+        "packages/playground-ui/src/domains/audit/components/audit-log-list.tsx",
+        "packages/playground-ui/src/domains/audit/hooks/use-audit-logs.ts"
+      ],
+      "steps": [
+        "Create packages/playground-ui/src/domains/audit/ directory structure",
+        "Implement useAuditLogs hook with filtering and pagination",
+        "Create AuditLogList component",
+        "Display audit events in table format",
+        "Show timestamp, actor, action, outcome columns",
+        "Add expandable row for event details",
+        "Add filters for actor, action, outcome, date range",
+        "Add pagination controls",
+        "Create AuditPage in playground",
+        "Wrap with AuthRequired requiring audit:read permission",
+        "Add export button for CSV/JSON download"
+      ],
+      "acceptanceCriteria": [
+        "Audit page shows event list with pagination",
+        "Filters narrow down results",
+        "Event details are expandable",
+        "Export downloads correct format",
+        "Page requires audit:read permission"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "019",
+        "034"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "039",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Integrate auth into playground layout",
+      "description": "Update the playground layout to include auth status and protected routes.",
+      "files": [
+        "packages/playground/src/app/layout.tsx",
+        "packages/playground/src/components/header.tsx"
+      ],
+      "steps": [
+        "Update header component to include AuthStatus",
+        "Position user menu in header right section",
+        "Conditionally show auth UI based on capabilities.enabled",
+        "Add AuthRequired wrapper to protected routes",
+        "Update navigation to show/hide based on permissions",
+        "Handle auth state loading in layout",
+        "Add redirect to login for unauthenticated access to protected routes"
+      ],
+      "acceptanceCriteria": [
+        "Auth status appears in header when enabled",
+        "Protected routes redirect to login",
+        "Navigation adapts to user permissions",
+        "Layout handles auth loading state"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "034",
+        "035",
+        "037"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "040",
+      "category": "testing",
+      "priority": "P0",
+      "title": "Verify build and typecheck pass",
+      "description": "Ensure the complete PR builds and passes type checking.",
+      "files": [],
+      "steps": [
+        "Run pnpm build from monorepo root",
+        "Fix any build errors in auth packages",
+        "Fix any build errors in core EE module",
+        "Fix any build errors in server handlers",
+        "Fix any build errors in playground-ui",
+        "Run pnpm typecheck from monorepo root",
+        "Fix any type errors",
+        "Verify no regressions in existing functionality"
+      ],
+      "acceptanceCriteria": [
+        "pnpm build completes without errors",
+        "pnpm typecheck completes without errors",
+        "All auth packages build successfully",
+        "No TypeScript strict mode violations"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007",
+        "008",
+        "009",
+        "010",
+        "011",
+        "012",
+        "013",
+        "014",
+        "015",
+        "016",
+        "017",
+        "018",
+        "019",
+        "020",
+        "021",
+        "022",
+        "023",
+        "024",
+        "025",
+        "026",
+        "027",
+        "028",
+        "029",
+        "030",
+        "031",
+        "032",
+        "033",
+        "034",
+        "035",
+        "036",
+        "037",
+        "038",
+        "039"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "041",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Run and fix affected package tests",
+      "description": "Run tests for all packages modified in this PR and fix failures.",
+      "files": [],
+      "steps": [
+        "Run pnpm test in packages/core for EE module tests",
+        "Run pnpm test in packages/server for auth handler tests",
+        "Run pnpm test in packages/playground-ui for auth component tests",
+        "Run pnpm test in auth/workos for WorkOS provider tests",
+        "Run pnpm test in auth/better-auth for Better Auth tests",
+        "Run pnpm test in auth/cloud for Cloud auth tests",
+        "Fix any test failures",
+        "Ensure test coverage for critical auth flows"
+      ],
+      "acceptanceCriteria": [
+        "All existing tests pass",
+        "New auth code has test coverage",
+        "No regressions in test coverage",
+        "Critical auth flows are tested"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "040"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "042",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Manual end-to-end testing",
+      "description": "Manually test the complete auth feature flows in the playground.",
+      "files": [],
+      "steps": [
+        "Start playground with pnpm dev in packages/playground",
+        "Test unauthenticated access redirects to login",
+        "Test credentials login flow (if configured)",
+        "Test SSO login flow (if WorkOS configured)",
+        "Verify user menu shows after login",
+        "Test sign out flow",
+        "Test permission-based navigation hiding",
+        "Test audit log page access (admin only)",
+        "Verify session persistence across page refreshes",
+        "Test session expiry handling"
+      ],
+      "acceptanceCriteria": [
+        "Login flows work end-to-end",
+        "Session persists correctly",
+        "Sign out clears session",
+        "Permissions affect UI visibility",
+        "Audit logs are viewable by admins"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [
+        "041"
+      ],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "043",
+      "category": "testing",
+      "priority": "P1",
+      "title": "Add changeset for PR",
+      "description": "Create changeset for the auth feature PR.",
+      "files": [
+        ".changeset/auth-enterprise-features.md"
+      ],
+      "steps": [
+        "Create changeset file in .changeset directory",
+        "Include @mastra/core, @mastra/server, @mastra/playground-ui packages",
+        "Include @mastra/auth-workos, @mastra/auth-better-auth, @mastra/auth-cloud packages",
+        "Use 'minor' version bump for new feature",
+        "Write descriptive changelog entry covering SSO, RBAC, session management, audit logging"
+      ],
+      "acceptanceCriteria": [
+        "Changeset file exists and is valid",
+        "All affected packages are listed",
+        "Changelog message describes auth capabilities"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "044",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix CVE-2024-56734: Upgrade better-auth to ≥1.1.6",
+      "description": "The better-auth dependency v1.1.4 has a critical open-redirect vulnerability (CVE-2024-56734) in the email verification endpoint. Must upgrade to at least v1.1.6.",
+      "files": [
+        "auth/better-auth/package.json"
+      ],
+      "steps": [
+        "Update better-auth version from ^1.1.4 to ^1.1.6 in package.json",
+        "Run pnpm install to update lockfile",
+        "Verify the package builds successfully",
+        "Run tests to ensure no breaking changes"
+      ],
+      "acceptanceCriteria": [
+        "better-auth version is ≥1.1.6 in package.json",
+        "pnpm-lock.yaml reflects the updated version",
+        "Package builds successfully",
+        "Tests pass"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "045",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix invalid TypeScript syntax in WorkOS audit-export.ts",
+      "description": "The method declaration 'async query?' uses invalid TypeScript syntax. The ? modifier on method names is only valid in interface/type declarations, not in class method implementations.",
+      "files": [
+        "auth/workos/src/audit-export.ts"
+      ],
+      "steps": [
+        "Remove the ? from 'async query?' method declaration",
+        "Keep the thrown Error behavior until WorkOS SDK supports query",
+        "Verify typecheck passes",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "Method declaration is 'async query(filter: AuditFilter): Promise<AuditEvent[]>'",
+        "TypeScript compiles without errors",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "046",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix open redirect vulnerability in OAuth callback page",
+      "description": "The OAuth callback page allows user-controlled redirects via the state parameter without validation, enabling phishing attacks. Must validate redirects are same-origin only.",
+      "files": [
+        "packages/playground/src/pages/oauth/callback.tsx"
+      ],
+      "steps": [
+        "Add validation for redirect URL from state parameter",
+        "Ensure redirects only go to same-origin (starts with '/')",
+        "Fall back to '/' for invalid or external URLs",
+        "Clean up all timeouts with proper return statements in useEffect",
+        "Remove default export (use named export only per guidelines)"
+      ],
+      "acceptanceCriteria": [
+        "Redirects are validated to be same-origin only",
+        "External URLs (http://evil.com) are rejected and fallback to '/'",
+        "All useEffect branches return cleanup functions",
+        "Only named export is used"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "047",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix open redirect vulnerability in signup page",
+      "description": "The signup page allows arbitrary redirect URLs from query parameters, enabling phishing attacks. Must validate redirects are same-origin only.",
+      "files": [
+        "packages/playground/src/pages/signup/index.tsx"
+      ],
+      "steps": [
+        "Add validation for redirect URL from query parameter",
+        "Parse URL and check origin matches window.location.origin",
+        "Extract only pathname/search/hash for same-origin URLs",
+        "Fall back to '/' for invalid or cross-origin URLs",
+        "Remove direct window.location.href assignment for external URLs"
+      ],
+      "acceptanceCriteria": [
+        "Redirects are validated to be same-origin only",
+        "Cross-origin URLs are rejected and fallback to '/'",
+        "No window.location.href with user-controlled URLs",
+        "Uses navigate() for all redirects"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "048",
+      "category": "security",
+      "priority": "P1",
+      "title": "Fix CSV injection in audit export",
+      "description": "The audit CSV export doesn't sanitize formula prefixes (=, +, -, @) which can execute arbitrary formulas when opened in spreadsheet applications.",
+      "files": [
+        "packages/server/src/server/handlers/audit.ts"
+      ],
+      "steps": [
+        "Create sanitize function to neutralize formula prefixes",
+        "Prefix values starting with =, +, -, @ with a single quote",
+        "Apply sanitization to all CSV fields before quoting",
+        "Test with malicious payloads to verify protection"
+      ],
+      "acceptanceCriteria": [
+        "Values starting with =, +, -, @ are prefixed with single quote",
+        "CSV export is safe from formula injection",
+        "Legitimate data is not corrupted"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "049",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix Set-Cookie parsing that truncates values with = characters",
+      "description": "The WorkOS SSO cookie parsing truncates values containing = characters, which corrupts encrypted/base64 session cookies. Also need to handle header casing variations.",
+      "files": [
+        "auth/workos/src/sso.ts"
+      ],
+      "steps": [
+        "Handle both 'Set-Cookie' and 'set-cookie' header casing",
+        "Fix cookie value parsing to preserve = in values using spread operator",
+        "Split on first = only, join remaining parts",
+        "Test with encrypted cookies containing = characters"
+      ],
+      "acceptanceCriteria": [
+        "Cookie values containing = are preserved correctly",
+        "Both Set-Cookie and set-cookie headers are handled",
+        "Encrypted session cookies work correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "050",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Move @mastra/core to dependencies in auth/cloud package",
+      "description": "The MastraAuthCloud class extends MastraAuthProvider from @mastra/core/ee at runtime. Having it in devDependencies will break consumers after publish.",
+      "files": [
+        "auth/cloud/package.json"
+      ],
+      "steps": [
+        "Move @mastra/core from devDependencies to dependencies",
+        "Alternatively, move to peerDependencies if intended",
+        "Run pnpm install to update lockfile",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "@mastra/core is in dependencies or peerDependencies",
+        "Package installs correctly for consumers",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "051",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix cookie secret validation to check byte length",
+      "description": "CookieSessionProvider validates string length (32 chars) but derives key from UTF-8 bytes. Multi-byte characters could result in less than 32 bytes, causing cryptographic issues.",
+      "files": [
+        "packages/core/src/ee/defaults/session/cookie.ts"
+      ],
+      "steps": [
+        "Convert secret to Buffer first, then check byte length",
+        "Change error message to mention bytes instead of characters",
+        "Use the Buffer directly for key derivation",
+        "Consider adding HKDF or PBKDF2 key derivation for production"
+      ],
+      "acceptanceCriteria": [
+        "Validation checks Buffer byte length, not string length",
+        "Error message mentions '32 bytes' not '32 characters'",
+        "Multi-byte UTF-8 secrets are handled correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "052",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix customDomain being ignored for SSO URLs in auth/cloud",
+      "description": "The customDomain config option is accepted but never used. SSO URLs are always built from endpoint, making the option ineffective.",
+      "files": [
+        "auth/cloud/src/provider.ts"
+      ],
+      "steps": [
+        "Use customDomain ?? endpoint for browser-facing SSO URLs",
+        "Update getLoginUrl to use customDomain if set",
+        "Update getLogoutUrl to use customDomain if set",
+        "Add tests for customDomain configuration"
+      ],
+      "acceptanceCriteria": [
+        "getLoginUrl uses customDomain when provided",
+        "getLogoutUrl uses customDomain when provided",
+        "Falls back to endpoint when customDomain is not set"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "053",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Replace default exports with named exports in playground pages",
+      "description": "Multiple files in packages/playground use default exports which are forbidden per coding guidelines. Must convert to named exports.",
+      "files": [
+        "packages/playground/src/pages/login/index.tsx",
+        "packages/playground/src/pages/signup/index.tsx",
+        "packages/playground/src/pages/oauth/callback.tsx",
+        "packages/playground/src/App.tsx"
+      ],
+      "steps": [
+        "Change 'export default Login' to 'export { Login }' in login/index.tsx",
+        "Change 'export default SignUp' to 'export { SignUp }' in signup/index.tsx",
+        "Remove default export from oauth/callback.tsx (keep named export)",
+        "Update imports in App.tsx to use named imports",
+        "Verify build passes"
+      ],
+      "acceptanceCriteria": [
+        "No default exports in packages/playground files",
+        "All imports use named import syntax",
+        "Build passes",
+        "Routes work correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "054",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Replace direct fetch() calls with useMastraClient in auth hooks",
+      "description": "Multiple auth hooks use direct fetch() calls which is forbidden in packages/playground-ui. Must use useMastraClient to ensure consistent API handling.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-capabilities.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-auth-actions.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-login.ts",
+        "packages/playground-ui/src/domains/auth/hooks/use-credentials-signup.ts",
+        "packages/playground-ui/src/domains/audit/hooks/use-audit-logs.ts"
+      ],
+      "steps": [
+        "Import useMastraClient in each hook",
+        "Get baseUrl from client.options?.baseUrl",
+        "Replace hardcoded '/api/' URLs with baseUrl + path",
+        "Use useMutation pattern for export function",
+        "Remove (client as any) type casting if possible"
+      ],
+      "acceptanceCriteria": [
+        "No direct fetch() calls with hardcoded URLs",
+        "All hooks use useMastraClient for baseUrl",
+        "Credentials are properly included",
+        "Type casting is minimized"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "055",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Replace arbitrary Tailwind width with design token",
+      "description": "The audit-log-list.tsx uses w-[180px] which violates coding guidelines. Must use design system tokens.",
+      "files": [
+        "packages/playground-ui/src/domains/audit/components/audit-log-list.tsx"
+      ],
+      "steps": [
+        "Review available width tokens in src/ds/tokens/index.ts",
+        "Replace w-[180px] with appropriate token or add new token",
+        "Ensure consistent styling across components"
+      ],
+      "acceptanceCriteria": [
+        "No arbitrary Tailwind values in the file",
+        "Uses design system tokens",
+        "Visual appearance is preserved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "056",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Remove unused EEUser import in auth/cloud provider",
+      "description": "The EEUser type is imported but never used in auth/cloud/src/provider.ts, which causes lint failures in CI.",
+      "files": [
+        "auth/cloud/src/provider.ts"
+      ],
+      "steps": [
+        "Remove EEUser from the import statement on line 2",
+        "Keep other imports (ISSOProvider, IRBACProvider, SSOLoginConfig, SSOCallbackResult) intact",
+        "Verify lint passes"
+      ],
+      "acceptanceCriteria": [
+        "No unused imports in the file",
+        "Lint passes",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "057",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix session token parsing in auth/cloud that truncates values with = characters",
+      "description": "The extractSessionToken method in auth/cloud/src/provider.ts uses split('=')[1] which truncates session tokens containing = characters (common in base64/opaque tokens), breaking authentication.",
+      "files": [
+        "auth/cloud/src/provider.ts"
+      ],
+      "steps": [
+        "Update extractSessionToken method to preserve = in cookie values",
+        "Use slice or indexOf approach to get everything after the first =",
+        "Test with session tokens containing = characters"
+      ],
+      "acceptanceCriteria": [
+        "Session tokens containing = are preserved correctly",
+        "Authentication works with base64-encoded tokens",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "058",
+      "category": "backend",
+      "priority": "P0",
+      "title": "Fix audit route ordering: /export captured by :id parameter route",
+      "description": "The parameterized GET_AUDIT_EVENT_BY_ID_ROUTE is registered before GET_AUDIT_EXPORT_ROUTE, causing '/api/audit/export' to be captured as id='export' instead of matching the export route.",
+      "files": [
+        "packages/server/src/server/handlers/audit.ts"
+      ],
+      "steps": [
+        "Reorder AUDIT_ROUTES constant to place literal routes before parameterized ones",
+        "Ensure GET_AUDIT_EXPORT_ROUTE is listed before GET_AUDIT_EVENT_BY_ID_ROUTE",
+        "Verify /api/audit/export endpoint works correctly"
+      ],
+      "acceptanceCriteria": [
+        "GET /api/audit/export returns export data, not 404 or audit event",
+        "GET /api/audit/:id still works for valid audit IDs",
+        "Route ordering follows literal-before-parameterized pattern"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "059",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix cookie value parsing in better-auth user.ts that truncates = characters",
+      "description": "The cookie parsing in auth/better-auth/src/user.ts uses split('=') and only takes the first segment, truncating values containing = characters (common in base64-encoded tokens).",
+      "files": [
+        "auth/better-auth/src/user.ts"
+      ],
+      "steps": [
+        "Update cookie parsing to use indexOf and slice instead of split",
+        "Preserve everything after the first = character",
+        "Test with cookies containing base64-encoded values"
+      ],
+      "acceptanceCriteria": [
+        "Cookie values containing = are preserved correctly",
+        "Authentication works with base64-encoded session tokens",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "060",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix session createdAt using user creation date in better-auth",
+      "description": "The session's createdAt field is incorrectly set to betterAuthUser.createdAt (user account creation) instead of the session creation timestamp, causing incorrect audit data.",
+      "files": [
+        "auth/better-auth/src/credentials.ts"
+      ],
+      "steps": [
+        "Update signIn method to set session.createdAt to new Date()",
+        "Update signUp method to set session.createdAt to new Date()",
+        "Ensure session timestamps are accurate for auditing"
+      ],
+      "acceptanceCriteria": [
+        "Session createdAt reflects when the session was created, not user account creation",
+        "Both signIn and signUp methods create sessions with correct timestamps",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "061",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix WorkOS expiresAt incorrectly derived from emailVerified",
+      "description": "The token expiresAt in WorkOS SSO is incorrectly derived from user.emailVerified instead of the auth response. Should use result.authResponse.expiresAt or compute from expiresIn.",
+      "files": [
+        "auth/workos/src/sso.ts"
+      ],
+      "steps": [
+        "Update expiresAt calculation to use auth response data",
+        "Use result.authResponse.expiresAt if present",
+        "Fall back to computing Date.now() + (expiresIn * 1000) if needed",
+        "Remove dependency on user.emailVerified for expiration"
+      ],
+      "acceptanceCriteria": [
+        "Token expiration is derived from auth response, not user profile",
+        "expiresAt is a valid millisecond timestamp",
+        "Session expiration works correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "062",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix WorkOS getLogoutUrl hardcodes api.workos.com instead of using customDomain",
+      "description": "The getLogoutUrl method hardcodes 'api.workos.com' and doesn't respect WorkOSConfig.customDomain, making custom domains ineffective for logout.",
+      "files": [
+        "auth/workos/src/sso.ts"
+      ],
+      "steps": [
+        "Update getLogoutUrl to use this.config.customDomain when present",
+        "Fall back to 'api.workos.com' only when customDomain is not configured",
+        "Keep existing query params (client_id, redirect_uri) intact"
+      ],
+      "acceptanceCriteria": [
+        "Logout URL uses customDomain when configured",
+        "Falls back to api.workos.com when no customDomain",
+        "SSO logout works with custom domains"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "063",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Fix user menu permissions never showing when more than 5 permissions",
+      "description": "The condition 'access.permissions.length <= 5' prevents the entire permissions block from rendering when there are more than 5 permissions, but the inner logic is designed to show first 5 with '+N more' badge.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/user-menu.tsx"
+      ],
+      "steps": [
+        "Change outer condition from 'length > 0 && length <= 5' to 'length > 0'",
+        "The inner truncation logic (slice 0-5 with +N more badge) already handles > 5 case",
+        "Test with users having more than 5 permissions"
+      ],
+      "acceptanceCriteria": [
+        "Permissions section shows for users with any number of permissions",
+        "Shows first 5 permissions with '+N more' badge when > 5",
+        "UI renders correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "064",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Fix SSO icon rendered as text instead of image in login page",
+      "description": "The sso.icon is a URL string but is rendered inside a <span> which prints the URL text. Should be rendered as an <img> element to display the provider logo.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/login-page.tsx"
+      ],
+      "steps": [
+        "Update the SSO button icon rendering to use an <img> tag",
+        "Set src to sso.icon and add appropriate alt and aria-hidden attributes",
+        "Apply appropriate sizing classes (e.g., h-5 w-5)"
+      ],
+      "acceptanceCriteria": [
+        "SSO provider logo displays correctly as an image",
+        "Image has appropriate alt text and accessibility attributes",
+        "Visual appearance matches design expectations"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "065",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix WorkOS authKitConfig declared but not passed to createAuthService",
+      "description": "In auth/workos/src/provider-ee.ts, authKitConfig is declared but never passed to createAuthService(), causing the AuthKit service to be instantiated without proper configuration.",
+      "files": [
+        "auth/workos/src/provider-ee.ts"
+      ],
+      "steps": [
+        "Pass authKitConfig to createAuthService options",
+        "Verify SSO callbacks and session handling work correctly",
+        "Remove unused variable warning"
+      ],
+      "acceptanceCriteria": [
+        "authKitConfig is passed to createAuthService",
+        "No TypeScript noUnusedLocals warning",
+        "SSO flow works with AuthKit configuration"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "066",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix open redirect vulnerability in login page",
+      "description": "The login page allows arbitrary redirect URLs from query parameters, enabling phishing attacks. Must validate redirects are same-origin only (similar fix to Task 047 for signup page).",
+      "files": [
+        "packages/playground/src/pages/login/index.tsx"
+      ],
+      "steps": [
+        "Add validation for redirect URL from query parameter",
+        "Ensure redirects only go to same-origin (paths starting with '/')",
+        "Fall back to '/' for invalid or external URLs",
+        "Use validated redirect in both navigate() and LoginPage redirectUri prop"
+      ],
+      "acceptanceCriteria": [
+        "Redirects are validated to be same-origin only",
+        "External URLs (http://evil.com) are rejected and fallback to '/'",
+        "Paths starting with '//' are rejected (protocol-relative URLs)",
+        "Uses navigate() for all redirects"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "067",
+      "category": "security",
+      "priority": "P1",
+      "title": "Fix open redirect vulnerability in auth handler SSO callback",
+      "description": "The SSO callback handler extracts redirectTo from state parameter without validation, enabling open-redirect attacks. The redirectTo at lines 176, 186, 209 should be validated to be same-origin.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts"
+      ],
+      "steps": [
+        "Add validation for redirectTo extracted from state parameter",
+        "Ensure redirectTo only accepts paths starting with '/'",
+        "Reject URLs with protocols or external hosts",
+        "Fall back to '/' for invalid redirects",
+        "Apply validation at lines 176-179 and before use at lines 186, 209"
+      ],
+      "acceptanceCriteria": [
+        "Redirects from state are validated to be same-origin only",
+        "External URLs are rejected and fallback to '/'",
+        "SSO callback flow works correctly with validated redirects",
+        "Error redirects also use validated paths"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "068",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix SSO callback returns raw token instead of Set-Cookie value in auth/cloud",
+      "description": "The handleCallback in auth/cloud returns bare session tokens in the cookies object, but the server expects properly serialized Set-Cookie values with attributes (HttpOnly, SameSite, Path, etc.).",
+      "files": [
+        "auth/cloud/src/provider.ts"
+      ],
+      "steps": [
+        "Update handleCallback to return properly serialized Set-Cookie values",
+        "Include security attributes: HttpOnly, SameSite=Lax, Path=/",
+        "Add Secure flag when using HTTPS (check endpoint/customDomain)",
+        "Serialize as 'mastra_cloud_session=<token>; Path=/; HttpOnly; SameSite=Lax'"
+      ],
+      "acceptanceCriteria": [
+        "cookies object contains properly serialized Set-Cookie strings",
+        "Cookie includes HttpOnly, SameSite=Lax, Path=/ attributes",
+        "Secure flag is conditionally added for HTTPS",
+        "Server can append values directly as Set-Cookie headers"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "069",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix logout handler doesn't clear session cookies",
+      "description": "POST /api/auth/logout returns success but never destroys the session or sets clearing cookies, so users remain authenticated. Need to call session provider to destroy session and return Set-Cookie headers with Max-Age=0.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts"
+      ],
+      "steps": [
+        "Update logout handler to return proper Response with headers",
+        "Get session from request (once Request object is available)",
+        "Call session provider's destroySession if available",
+        "Include Set-Cookie headers with Max-Age=0 to clear session cookies",
+        "Return response with clearing cookies"
+      ],
+      "acceptanceCriteria": [
+        "Logout clears session cookies via Set-Cookie headers",
+        "Session is destroyed on the server side",
+        "Response includes proper cookie clearing headers",
+        "Users are actually logged out after calling endpoint"
+      ],
+      "estimatedComplexity": "medium",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "070",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Add try-catch for JSON.stringify in flattenMetadata",
+      "description": "The flattenMetadata function in audit-export.ts calls JSON.stringify without try-catch, which can throw on circular references or BigInt values, causing the entire audit logging operation to fail.",
+      "files": [
+        "auth/workos/src/audit-export.ts"
+      ],
+      "steps": [
+        "Wrap JSON.stringify(value) in a try-catch block",
+        "On error, fall back to String(value) for BigInt",
+        "Fall back to '<unserializable>' placeholder for circular refs",
+        "Ensure single bad metadata entry doesn't break whole operation"
+      ],
+      "acceptanceCriteria": [
+        "JSON.stringify errors are caught and handled gracefully",
+        "BigInt values are converted to strings",
+        "Circular references don't crash the logger",
+        "Audit logging continues even with problematic metadata"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "071",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Guard cookie decoding against malformed percent-encoding",
+      "description": "decodeURIComponent in WorkOS session-storage.ts throws on malformed cookie values (user-controlled via Cookie header). A single bad cookie could break the entire auth flow.",
+      "files": [
+        "auth/workos/src/session-storage.ts"
+      ],
+      "steps": [
+        "Wrap decodeURIComponent in try-catch block",
+        "Fall back to raw value on decode failure",
+        "Ensure malformed cookies don't break auth flow"
+      ],
+      "acceptanceCriteria": [
+        "Malformed cookie values don't throw exceptions",
+        "Auth flow continues with raw value on decode failure",
+        "Build passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "072",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Escape regex metacharacters in audit filter wildcard patterns",
+      "description": "The wildcard pattern conversion in InMemoryAuditStorage doesn't escape regex metacharacters, leading to unexpected behavior or potential ReDoS if filter.action contains characters like '.', '[', ']', etc.",
+      "files": [
+        "packages/core/src/storage/domains/audit/inmemory.ts"
+      ],
+      "steps": [
+        "Escape regex metacharacters before converting wildcards",
+        "Use pattern.replace(/[.+?^${}()|[\\]\\\\]/g, '\\\\$&') before wildcard conversion",
+        "Test with action filters containing metacharacters"
+      ],
+      "acceptanceCriteria": [
+        "Regex metacharacters in filter values are escaped",
+        "Wildcards still work correctly",
+        "No ReDoS vulnerability from malicious filter values"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "073",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Fix loading state shows 'No audit events found' instead of loading message",
+      "description": "The audit-log-list component doesn't use isLoading state, so the empty-state message renders while the query is still in flight. Should show a loading message instead.",
+      "files": [
+        "packages/playground-ui/src/domains/audit/components/audit-log-list.tsx"
+      ],
+      "steps": [
+        "Check isLoading state before rendering empty state",
+        "Show 'Loading audit logs...' message when isLoading is true",
+        "Only show 'No audit events found' when not loading and data is empty"
+      ],
+      "acceptanceCriteria": [
+        "Loading state shows appropriate loading message",
+        "Empty state only shows after loading completes",
+        "Error state still shows error message"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "074",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Remove or apply unused className prop in UserAvatar",
+      "description": "The UserAvatar component accepts a className prop that is never used. Either remove it from the interface or apply it via a wrapper element.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/user-avatar.tsx"
+      ],
+      "steps": [
+        "Remove className from UserAvatarProps interface",
+        "Remove className from function parameter destructuring",
+        "Verify component still works correctly"
+      ],
+      "acceptanceCriteria": [
+        "No unused props in component",
+        "TypeScript compiles without errors",
+        "Component renders correctly"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "075",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Clear credential errors when switching login modes",
+      "description": "The toggleMode function in login-page.tsx doesn't reset mutation errors, so errors persist across sign-in/sign-up mode switches. Should call reset() on both form hooks.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/login-page.tsx"
+      ],
+      "steps": [
+        "Call loginHook.reset() when toggling mode",
+        "Call signupHook.reset() when toggling mode",
+        "Ensure errors are cleared before switching modes"
+      ],
+      "acceptanceCriteria": [
+        "Errors are cleared when switching between sign-in and sign-up",
+        "Form state is reset on mode toggle",
+        "UX is improved by not showing stale errors"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "076",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Replace error colors with design tokens in login page",
+      "description": "The login-page.tsx uses raw Tailwind colors (bg-red-500/10, text-red-400) which bypass the design token palette. Should use semantic token classes from the design system.",
+      "files": [
+        "packages/playground-ui/src/domains/auth/components/login-page.tsx"
+      ],
+      "steps": [
+        "Review available error color tokens in src/ds/tokens/index.ts",
+        "Replace bg-red-500/10 with appropriate design token",
+        "Replace text-red-400 with appropriate design token",
+        "Ensure consistent error styling across components"
+      ],
+      "acceptanceCriteria": [
+        "No raw Tailwind color values for errors",
+        "Uses design system tokens for error styling",
+        "Visual appearance is preserved or improved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "077",
+      "category": "security",
+      "priority": "P0",
+      "title": "Fix missing backslash validation in open redirect protection",
+      "description": "The sanitizeRedirectUrl function in auth.ts doesn't validate backslashes. Some browsers normalize backslashes to forward slashes, meaning /\\evil.com could be interpreted as //evil.com (protocol-relative URL). This is a known open redirect bypass technique.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts"
+      ],
+      "steps": [
+        "Add backslash validation after the protocol-relative URL check",
+        "Reject URLs containing backslashes or normalize them to forward slashes",
+        "Test with payloads like /\\evil.com to verify protection"
+      ],
+      "acceptanceCriteria": [
+        "URLs containing backslashes are rejected or normalized",
+        "/\\evil.com returns '/' fallback",
+        "Open redirect bypass via backslash is prevented"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "078",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Add maximum limit to audit export query to prevent OOM",
+      "description": "The audit export endpoint fetches all matching events without pagination limits. Enterprise audit logs can accumulate millions of records, potentially causing out-of-memory errors or request timeouts.",
+      "files": [
+        "packages/server/src/server/handlers/audit.ts"
+      ],
+      "steps": [
+        "Add a maximum export limit constant (e.g., 100,000 records)",
+        "Apply the limit in the export query",
+        "Return a warning header or response field if results were truncated",
+        "Consider adding date range requirements for export queries"
+      ],
+      "acceptanceCriteria": [
+        "Export query has a maximum record limit",
+        "Large exports don't cause memory exhaustion",
+        "Users are informed if results were truncated"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "079",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix error handling that masks internal server errors as auth failures",
+      "description": "In auth.ts, the sign-in route (line 369) converts all non-HTTPException errors to 401, and sign-up route (line 428) converts them to 400. This masks internal errors like database failures, making debugging difficult and returning misleading status codes.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts"
+      ],
+      "steps": [
+        "Distinguish between authentication errors and internal server errors",
+        "Log internal errors for debugging before re-throwing",
+        "Return 500 for actual server errors, keep 401/400 for auth-specific errors",
+        "Apply fix to both sign-in and sign-up error handlers"
+      ],
+      "acceptanceCriteria": [
+        "Internal server errors return 500 status code",
+        "Auth-specific errors still return appropriate 401/400 codes",
+        "Internal errors are logged for debugging",
+        "Error messages don't leak sensitive information"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "080",
+      "category": "backend",
+      "priority": "P1",
+      "title": "Fix WorkOS Audit targets array required to be non-empty",
+      "description": "The WorkOS Audit Logs createEvent API requires a non-empty targets array. The current implementation may pass an empty targets array which would cause API errors.",
+      "files": [
+        "auth/workos/src/audit-export.ts"
+      ],
+      "steps": [
+        "Ensure targets array is always non-empty when calling WorkOS createEvent",
+        "Add a default target (e.g., the resource being audited) if none provided",
+        "Validate targets array before making API call",
+        "Add error handling for WorkOS API validation failures"
+      ],
+      "acceptanceCriteria": [
+        "WorkOS createEvent always receives non-empty targets array",
+        "Default target is provided when none specified",
+        "API calls don't fail due to empty targets"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "081",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Fix query string concatenation producing malformed URLs",
+      "description": "In auth.ts line 248, if redirectTo already contains query parameters (e.g., /dashboard?tab=home), concatenating ?error=... produces a malformed URL like /dashboard?tab=home?error=sso_not_configured.",
+      "files": [
+        "packages/server/src/server/handlers/auth.ts"
+      ],
+      "steps": [
+        "Create a helper function to safely append query parameters",
+        "Check if path already contains '?' and use '&' instead",
+        "Apply fix to all error redirect concatenations",
+        "Consider using URL API for proper query string handling"
+      ],
+      "acceptanceCriteria": [
+        "Query parameters are correctly appended with & when URL has existing params",
+        "Error redirects produce valid URLs",
+        "Existing query params are preserved"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "082",
+      "category": "backend",
+      "priority": "P2",
+      "title": "URI-encode cookie values in better-auth credentials provider",
+      "description": "The createSessionCookie method in better-auth credentials.ts doesn't URI-encode the cookie value. If the session token contains characters like ';', ',', or spaces, the cookie header will be malformed.",
+      "files": [
+        "auth/better-auth/src/credentials.ts"
+      ],
+      "steps": [
+        "Add encodeURIComponent to cookie value before serialization",
+        "Ensure corresponding decoding in cookie parsing",
+        "Test with session tokens containing special characters"
+      ],
+      "acceptanceCriteria": [
+        "Cookie values are URI-encoded",
+        "Session tokens with special characters work correctly",
+        "Cookie parsing correctly decodes values"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "083",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Fix potential Invalid Date on missing timestamp fields in better-auth",
+      "description": "In better-auth user.ts line 169, mapToBetterAuthUser creates dates with new Date(user.createdAt) and new Date(user.updatedAt). If these are undefined or an unexpected format, new Date(undefined) produces Invalid Date.",
+      "files": [
+        "auth/better-auth/src/user.ts"
+      ],
+      "steps": [
+        "Add defensive checks for createdAt and updatedAt fields",
+        "Default to new Date() when field is undefined or invalid",
+        "Validate date format before creating Date object"
+      ],
+      "acceptanceCriteria": [
+        "Missing timestamps default to current date",
+        "Invalid date formats don't produce Invalid Date",
+        "User mapping handles edge cases gracefully"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "084",
+      "category": "backend",
+      "priority": "P2",
+      "title": "Fix import ordering and type-only imports in WorkOS provider-ee.ts",
+      "description": "Static analysis flags import order and duplicate @mastra/core/ee imports in auth/workos/src/provider-ee.ts. Consolidate and reorder to satisfy lint.",
+      "files": [
+        "auth/workos/src/provider-ee.ts"
+      ],
+      "steps": [
+        "Consolidate duplicate @mastra/core/ee imports into single import statement",
+        "Use type-only import syntax where appropriate",
+        "Reorder imports according to project lint rules",
+        "Verify lint passes"
+      ],
+      "acceptanceCriteria": [
+        "No duplicate imports from same module",
+        "Import ordering follows lint rules",
+        "Type-only imports use proper syntax",
+        "Lint passes"
+      ],
+      "estimatedComplexity": "small",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    }
+  ]
+}

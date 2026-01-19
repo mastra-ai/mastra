@@ -370,8 +370,28 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
       return new Response(responseBody, { status: 200, headers });
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      // Return a generic error for auth failures to avoid leaking info
-      throw new HTTPException(401, { message: 'Invalid email or password' });
+
+      // Log internal errors for debugging
+      console.error('Sign-in error:', error);
+
+      // Check if this is an authentication-specific error (e.g., invalid credentials)
+      // vs. a server error (e.g., database failure, network issue)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAuthError =
+        errorMessage.toLowerCase().includes('invalid') ||
+        errorMessage.toLowerCase().includes('incorrect') ||
+        errorMessage.toLowerCase().includes('password') ||
+        errorMessage.toLowerCase().includes('credentials') ||
+        errorMessage.toLowerCase().includes('not found') ||
+        errorMessage.toLowerCase().includes('unauthorized');
+
+      if (isAuthError) {
+        // Return a generic error for auth failures to avoid leaking info
+        throw new HTTPException(401, { message: 'Invalid email or password' });
+      } else {
+        // Return 500 for server errors (DB, network, etc.)
+        throw new HTTPException(500, { message: 'Internal server error' });
+      }
     }
   },
 });
@@ -429,8 +449,28 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
       return new Response(responseBody, { status: 201, headers });
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      // Return generic error to avoid leaking info
-      throw new HTTPException(400, { message: 'Failed to create account' });
+
+      // Log internal errors for debugging
+      console.error('Sign-up error:', error);
+
+      // Check if this is an authentication-specific error (e.g., user already exists)
+      // vs. a server error (e.g., database failure, network issue)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAuthError =
+        errorMessage.toLowerCase().includes('exists') ||
+        errorMessage.toLowerCase().includes('duplicate') ||
+        errorMessage.toLowerCase().includes('taken') ||
+        errorMessage.toLowerCase().includes('invalid') ||
+        errorMessage.toLowerCase().includes('weak') ||
+        errorMessage.toLowerCase().includes('password');
+
+      if (isAuthError) {
+        // Return generic error to avoid leaking info
+        throw new HTTPException(400, { message: 'Failed to create account' });
+      } else {
+        // Return 500 for server errors (DB, network, etc.)
+        throw new HTTPException(500, { message: 'Internal server error' });
+      }
     }
   },
 });
