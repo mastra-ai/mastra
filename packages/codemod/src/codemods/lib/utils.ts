@@ -59,12 +59,20 @@ export function trackClassInstances(
 ): Set<string> {
   const instances = new Set<string>();
 
-  // Find all names that refer to this class (original name + any aliases)
-  const classNames = new Set<string>([className]);
+  // Find all names that refer to this class
+  let classNames: Set<string>;
 
   if (moduleName) {
+    // When moduleName is specified, only track usages if the class is actually imported from that module
     const aliases = findImportAliases(j, root, className, moduleName);
-    aliases.forEach(alias => classNames.add(alias));
+    if (aliases.size === 0) {
+      // Class is not imported from the specified module, skip transformation
+      return instances;
+    }
+    classNames = aliases;
+  } else {
+    // When no moduleName is specified, use the className directly
+    classNames = new Set<string>([className]);
   }
 
   root.find(j.NewExpression).forEach(path => {
