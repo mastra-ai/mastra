@@ -17,9 +17,13 @@ import type { Workspace } from './workspace';
  */
 export function createWorkspaceTools(workspace: Workspace) {
   const tools: Record<string, any> = {};
+  const safetyConfig = workspace.getSafetyConfig();
+  const isReadOnly = safetyConfig?.readOnly ?? false;
+  const sandboxApproval = safetyConfig?.requireSandboxApproval ?? 'none';
 
   // Only add filesystem tools if filesystem is available
   if (workspace.filesystem) {
+    // Read tools are always available
     tools.workspace_read_file = createTool({
       id: 'workspace_read_file',
       description: 'Read the contents of a file from the workspace filesystem',
@@ -48,28 +52,31 @@ export function createWorkspaceTools(workspace: Workspace) {
       },
     });
 
-    tools.workspace_write_file = createTool({
-      id: 'workspace_write_file',
-      description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
-      inputSchema: z.object({
-        path: z.string().describe('The path where to write the file (e.g., "/data/output.txt")'),
-        content: z.string().describe('The content to write to the file'),
-        overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        path: z.string().describe('The path where the file was written'),
-        size: z.number().describe('The size of the written content in bytes'),
-      }),
-      execute: async ({ path, content, overwrite }) => {
-        await workspace.writeFile(path, content, { overwrite });
-        return {
-          success: true,
-          path,
-          size: Buffer.byteLength(content, 'utf-8'),
-        };
-      },
-    });
+    // Write tools are only available if not in readonly mode
+    if (!isReadOnly) {
+      tools.workspace_write_file = createTool({
+        id: 'workspace_write_file',
+        description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
+        inputSchema: z.object({
+          path: z.string().describe('The path where to write the file (e.g., "/data/output.txt")'),
+          content: z.string().describe('The content to write to the file'),
+          overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          path: z.string().describe('The path where the file was written'),
+          size: z.number().describe('The size of the written content in bytes'),
+        }),
+        execute: async ({ path, content, overwrite }) => {
+          await workspace.writeFile(path, content, { overwrite });
+          return {
+            success: true,
+            path,
+            size: Buffer.byteLength(content, 'utf-8'),
+          };
+        },
+      });
+    }
 
     tools.workspace_list_files = createTool({
       id: 'workspace_list_files',
@@ -107,22 +114,25 @@ export function createWorkspaceTools(workspace: Workspace) {
       },
     });
 
-    tools.workspace_delete_file = createTool({
-      id: 'workspace_delete_file',
-      description: 'Delete a file from the workspace filesystem',
-      inputSchema: z.object({
-        path: z.string().describe('The path to the file to delete'),
-        force: z.boolean().optional().default(false).describe('Whether to ignore errors if the file does not exist'),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        path: z.string(),
-      }),
-      execute: async ({ path, force }) => {
-        await workspace.filesystem!.deleteFile(path, { force });
-        return { success: true, path };
-      },
-    });
+    // Delete file is a write operation
+    if (!isReadOnly) {
+      tools.workspace_delete_file = createTool({
+        id: 'workspace_delete_file',
+        description: 'Delete a file from the workspace filesystem',
+        inputSchema: z.object({
+          path: z.string().describe('The path to the file to delete'),
+          force: z.boolean().optional().default(false).describe('Whether to ignore errors if the file does not exist'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          path: z.string(),
+        }),
+        execute: async ({ path, force }) => {
+          await workspace.filesystem!.deleteFile(path, { force });
+          return { success: true, path };
+        },
+      });
+    }
 
     tools.workspace_file_exists = createTool({
       id: 'workspace_file_exists',
@@ -147,26 +157,29 @@ export function createWorkspaceTools(workspace: Workspace) {
       },
     });
 
-    tools.workspace_mkdir = createTool({
-      id: 'workspace_mkdir',
-      description: 'Create a directory in the workspace filesystem',
-      inputSchema: z.object({
-        path: z.string().describe('The path of the directory to create'),
-        recursive: z
-          .boolean()
-          .optional()
-          .default(true)
-          .describe('Whether to create parent directories if they do not exist'),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        path: z.string(),
-      }),
-      execute: async ({ path, recursive }) => {
-        await workspace.filesystem!.mkdir(path, { recursive });
-        return { success: true, path };
-      },
-    });
+    // mkdir is a write operation
+    if (!isReadOnly) {
+      tools.workspace_mkdir = createTool({
+        id: 'workspace_mkdir',
+        description: 'Create a directory in the workspace filesystem',
+        inputSchema: z.object({
+          path: z.string().describe('The path of the directory to create'),
+          recursive: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe('Whether to create parent directories if they do not exist'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          path: z.string(),
+        }),
+        execute: async ({ path, recursive }) => {
+          await workspace.filesystem!.mkdir(path, { recursive });
+          return { success: true, path };
+        },
+      });
+    }
   }
 
   // Only add search tools if search is available
@@ -267,6 +280,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_execute_code = createTool({
       id: 'workspace_execute_code',
       description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
+      // Require approval when sandboxApproval is 'all'
+      requireApproval: sandboxApproval === 'all',
       inputSchema: z.object({
         code: z.string().describe('The code to execute'),
         runtime: z
@@ -301,6 +316,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
       description: `Execute a shell command in the workspace sandbox.${pathInfo}`,
+      // Require approval when sandboxApproval is 'all' or 'commands'
+      requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
       inputSchema: z.object({
         command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
         args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
@@ -332,6 +349,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_install_package = createTool({
       id: 'workspace_install_package',
       description: 'Install a package in the workspace sandbox environment',
+      // Require approval when sandboxApproval is 'all' or 'commands'
+      requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
       inputSchema: z.object({
         packageName: z.string().describe('The name of the package to install'),
         packageManager: z

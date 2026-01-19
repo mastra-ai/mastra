@@ -44,7 +44,9 @@ export {
   SandboxNotAvailableError,
   SearchNotAvailableError,
   WorkspaceNotReadyError,
+  WorkspaceReadOnlyError,
   type WorkspaceConfig,
+  type WorkspaceSafetyConfig,
   type WorkspaceScope,
   type WorkspaceOwner,
   type WorkspaceStatus,
@@ -90,7 +92,15 @@ export {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
+  FileReadRequiredError,
 } from './filesystem';
+
+// =============================================================================
+// File Read Tracking (for safety features)
+// =============================================================================
+
+export type { FileReadRecord, FileReadTracker } from './file-read-tracker';
+export { InMemoryFileReadTracker } from './file-read-tracker';
 
 // =============================================================================
 // Sandbox Interface (for provider implementers)

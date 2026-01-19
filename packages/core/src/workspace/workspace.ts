@@ -33,6 +33,7 @@
 import type { MastraVector } from '../vector';
 
 import type { BM25Config } from './bm25';
+import { FileReadRequiredError } from './filesystem';
 import type {
   WorkspaceFilesystem,
   WorkspaceState,
@@ -42,6 +43,8 @@ import type {
   WriteOptions,
   ListOptions,
 } from './filesystem';
+import { InMemoryFileReadTracker } from './file-read-tracker';
+import type { FileReadTracker } from './file-read-tracker';
 import type {
   WorkspaceSandbox,
   SandboxRuntime,
@@ -154,6 +157,51 @@ export interface WorkspaceConfig {
 
   /** Timeout for individual operations in milliseconds */
   operationTimeout?: number;
+
+  // ---------------------------------------------------------------------------
+  // Safety Options
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Safety options for workspace operations.
+   */
+  safety?: WorkspaceSafetyConfig;
+}
+
+/**
+ * Safety configuration for workspace operations.
+ */
+export interface WorkspaceSafetyConfig {
+  /**
+   * Require files to be read before they can be written to.
+   * If enabled, writeFile will throw an error if:
+   * - The file exists but was never read in this session
+   * - The file was modified since the last read
+   *
+   * New files (that don't exist yet) can be written without reading.
+   *
+   * @default false
+   */
+  requireReadBeforeWrite?: boolean;
+
+  /**
+   * Require approval for sandbox code/command execution.
+   * - 'all': Require approval for all sandbox operations (code, commands, package installs)
+   * - 'commands': Require approval only for executeCommand and installPackage (not executeCode)
+   * - 'none': No approval required (default)
+   *
+   * @default 'none'
+   */
+  requireSandboxApproval?: 'all' | 'commands' | 'none';
+
+  /**
+   * When true, all write operations to the filesystem are blocked.
+   * Read operations and sandbox execution are still allowed.
+   * Write tools will not be included in the workspace tools.
+   *
+   * @default false
+   */
+  readOnly?: boolean;
 }
 
 // =============================================================================
@@ -314,6 +362,11 @@ export class Workspace {
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
+  // Safety-related properties
+  private readonly _readOnly: boolean;
+  private readonly _requireReadBeforeWrite: boolean;
+  private readonly _readTracker?: FileReadTracker;
+
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
@@ -323,6 +376,13 @@ export class Workspace {
     this._config = config;
     this._fs = config.filesystem;
     this._sandbox = config.sandbox;
+
+    // Initialize safety features
+    this._readOnly = config.safety?.readOnly ?? false;
+    this._requireReadBeforeWrite = config.safety?.requireReadBeforeWrite ?? false;
+    if (this._requireReadBeforeWrite) {
+      this._readTracker = new InMemoryFileReadTracker();
+    }
 
     // Create state layer if filesystem is available
     if (this._fs) {
@@ -413,6 +473,30 @@ export class Workspace {
   }
 
   /**
+   * Whether the workspace is in read-only mode.
+   */
+  get readOnly(): boolean {
+    return this._readOnly;
+  }
+
+  /**
+   * Get the safety configuration for this workspace.
+   */
+  getSafetyConfig(): WorkspaceSafetyConfig | undefined {
+    return this._config.safety;
+  }
+
+  /**
+   * Assert that the workspace is writable (not in read-only mode).
+   * @throws {WorkspaceReadOnlyError} if workspace is read-only
+   */
+  private assertWritable(operation: string): void {
+    if (this._readOnly) {
+      throw new WorkspaceReadOnlyError(operation);
+    }
+  }
+
+  /**
    * Access skills stored in this workspace.
    * Skills are SKILL.md files discovered from the configured skillsPaths.
    *
@@ -482,19 +566,53 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    return this._fs.readFile(path, options);
+
+    const content = await this._fs.readFile(path, options);
+
+    // Track the read if requireReadBeforeWrite is enabled
+    if (this._readTracker) {
+      const stat = await this._fs.stat(path);
+      this._readTracker.recordRead(path, stat.modifiedAt);
+    }
+
+    return content;
   }
 
   /**
    * Write a file to the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
+   * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
+   * @throws {FileReadRequiredError} if requireReadBeforeWrite is enabled and file wasn't read or was modified
    */
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
+
+    // Check readonly mode
+    this.assertWritable('writeFile');
+
+    // Check read-before-write requirement (only for existing files)
+    if (this._readTracker) {
+      const exists = await this._fs.exists(path);
+      if (exists) {
+        const stat = await this._fs.stat(path);
+        const check = this._readTracker.needsReRead(path, stat.modifiedAt);
+        if (check.needsReRead) {
+          throw new FileReadRequiredError(path, check.reason!);
+        }
+      }
+      // New files don't require reading first
+    }
+
     this.lastAccessedAt = new Date();
-    return this._fs.writeFile(path, content, options);
+    await this._fs.writeFile(path, content, options);
+
+    // Clear the read record after successful write
+    // (requires a new read to write again)
+    if (this._readTracker) {
+      this._readTracker.clearReadRecord(path);
+    }
   }
 
   /**
@@ -1198,5 +1316,12 @@ export class WorkspaceNotReadyError extends WorkspaceError {
   constructor(workspaceId: string, status: WorkspaceStatus) {
     super(`Workspace is not ready (status: ${status})`, 'NOT_READY', workspaceId);
     this.name = 'WorkspaceNotReadyError';
+  }
+}
+
+export class WorkspaceReadOnlyError extends WorkspaceError {
+  constructor(operation: string) {
+    super(`Workspace is in read-only mode. Cannot perform: ${operation}`, 'READ_ONLY');
+    this.name = 'WorkspaceReadOnlyError';
   }
 }

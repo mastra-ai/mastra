@@ -405,3 +405,10 @@ export class PermissionError extends FilesystemError {
     this.name = 'PermissionError';
   }
 }
+
+export class FileReadRequiredError extends FilesystemError {
+  constructor(path: string, reason: string) {
+    super(reason, 'EREAD_REQUIRED', path);
+    this.name = 'FileReadRequiredError';
+  }
+}
