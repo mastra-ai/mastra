@@ -115,95 +115,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
   /**
    * Override to fix JSON schema issues that OpenAI doesn't support:
-   * 1. additionalProperties: {} -> true
-   * 2. anyOf: [{type: X}, {type: "null"}] -> type: [X, "null"]
-   * 3. Empty property schemas {} -> type with null fallback
+   * - additionalProperties: {} -> true
+   *
+   * Note: anyOf nullable pattern fixing is now handled in zodToJsonSchema() for all Zod v4 schemas.
    */
   processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
     const jsonSchema = super.processToJSONSchema(zodSchema);
-    const withFixedAnyOf = this.fixAnyOfNullable(jsonSchema);
-    return this.fixAdditionalProperties(withFixedAnyOf);
-  }
-
-  /**
-   * Recursively fixes anyOf patterns that OpenAI doesn't accept.
-   * OpenAI requires properties to have a 'type' key directly, not just anyOf.
-   *
-   * Converts:
-   * - anyOf: [{type: X}, {type: "null"}] -> type: [X, "null"]
-   * - Empty {} properties -> type: ["string", "null"] (safe fallback for nullable)
-   */
-  private fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
-    if (typeof schema !== 'object' || schema === null) {
-      return schema;
-    }
-
-    const result = { ...schema };
-
-    // Fix anyOf pattern: [{type: X}, {type: "null"}] or [{type: "null"}, {type: X}]
-    if (result.anyOf && Array.isArray(result.anyOf) && result.anyOf.length === 2) {
-      const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
-      const otherSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type !== 'null');
-
-      if (nullSchema && otherSchema && typeof otherSchema === 'object' && otherSchema.type) {
-        // Convert anyOf to type array format
-        const { anyOf, ...rest } = result;
-        const fixedOther = this.fixAnyOfNullable(otherSchema as JSONSchema7);
-        return {
-          ...rest,
-          ...fixedOther,
-          type: (Array.isArray(fixedOther.type)
-            ? [...fixedOther.type, 'null']
-            : [fixedOther.type, 'null']) as JSONSchema7['type'],
-        };
-      }
-    }
-
-    // Fix empty property schemas {} - this happens with Zod v4 for optional fields
-    // that don't get proper type information. Convert to nullable string as safe fallback.
-    if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
-      result.properties = Object.fromEntries(
-        Object.entries(result.properties).map(([key, value]) => {
-          const propSchema = value as JSONSchema7;
-
-          // If property is an empty object {}, convert to nullable type
-          if (
-            typeof propSchema === 'object' &&
-            propSchema !== null &&
-            !Array.isArray(propSchema) &&
-            Object.keys(propSchema).length === 0
-          ) {
-            // Return a nullable string type as a safe fallback
-            return [key, { type: ['string', 'null'] as JSONSchema7['type'] }];
-          }
-
-          // Recursively fix nested schemas
-          return [key, this.fixAnyOfNullable(propSchema)];
-        }),
-      );
-    }
-
-    // Recursively fix items in arrays
-    if (result.items) {
-      if (Array.isArray(result.items)) {
-        result.items = result.items.map(item => this.fixAnyOfNullable(item as JSONSchema7));
-      } else {
-        result.items = this.fixAnyOfNullable(result.items as JSONSchema7);
-      }
-    }
-
-    // Recursively fix anyOf/oneOf schemas
-    if (result.anyOf && Array.isArray(result.anyOf)) {
-      result.anyOf = result.anyOf.map(s => this.fixAnyOfNullable(s as JSONSchema7));
-    }
-    if (result.oneOf && Array.isArray(result.oneOf)) {
-      result.oneOf = result.oneOf.map(s => this.fixAnyOfNullable(s as JSONSchema7));
-    }
-    if (result.allOf && Array.isArray(result.allOf)) {
-      result.allOf = result.allOf.map(s => this.fixAnyOfNullable(s as JSONSchema7));
-    }
-
-    return result;
+    return this.fixAdditionalProperties(jsonSchema);
   }
 
   /**

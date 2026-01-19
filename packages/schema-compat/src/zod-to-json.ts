@@ -85,6 +85,82 @@ function patchRecordSchemas(schema: any): any {
   return schema;
 }
 
+/**
+ * Recursively fixes anyOf patterns that some providers (like OpenAI) don't accept.
+ * Converts anyOf: [{type: X}, {type: "null"}] to type: [X, "null"]
+ * Also fixes empty {} property schemas by converting to nullable string.
+ */
+function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  // Fix anyOf pattern: [{type: X}, {type: "null"}] or [{type: "null"}, {type: X}]
+  if (result.anyOf && Array.isArray(result.anyOf) && result.anyOf.length === 2) {
+    const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
+    const otherSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type !== 'null');
+
+    if (nullSchema && otherSchema && typeof otherSchema === 'object' && otherSchema.type) {
+      // Convert anyOf to type array format
+      const { anyOf, ...rest } = result;
+      const fixedOther = fixAnyOfNullable(otherSchema as JSONSchema7);
+      return {
+        ...rest,
+        ...fixedOther,
+        type: (Array.isArray(fixedOther.type)
+          ? [...fixedOther.type, 'null']
+          : [fixedOther.type, 'null']) as JSONSchema7['type'],
+      };
+    }
+  }
+
+  // Fix empty property schemas {} - convert to nullable string as safe fallback
+  if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => {
+        const propSchema = value as JSONSchema7;
+
+        // If property is an empty object {}, convert to nullable type
+        if (
+          typeof propSchema === 'object' &&
+          propSchema !== null &&
+          !Array.isArray(propSchema) &&
+          Object.keys(propSchema).length === 0
+        ) {
+          return [key, { type: ['string', 'null'] as JSONSchema7['type'] }];
+        }
+
+        // Recursively fix nested schemas
+        return [key, fixAnyOfNullable(propSchema)];
+      }),
+    );
+  }
+
+  // Recursively fix items in arrays
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => fixAnyOfNullable(item as JSONSchema7));
+    } else {
+      result.items = fixAnyOfNullable(result.items as JSONSchema7);
+    }
+  }
+
+  // Recursively fix anyOf/oneOf/allOf schemas
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+
+  return result;
+}
+
 export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
@@ -96,7 +172,7 @@ export function zodToJsonSchema(
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    return (z as any)[fn](zodSchema, {
+    const jsonSchema = (z as any)[fn](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
@@ -108,6 +184,9 @@ export function zodToJsonSchema(
         }
       },
     }) satisfies JSONSchema7;
+
+    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
+    return fixAnyOfNullable(jsonSchema);
   } else {
     // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
