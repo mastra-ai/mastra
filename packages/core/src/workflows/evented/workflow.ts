@@ -586,6 +586,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
+        state: state ?? {},
       };
 
       // Pass-through data that should flow to the next processor in a chain

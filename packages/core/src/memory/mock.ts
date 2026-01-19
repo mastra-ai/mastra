@@ -95,15 +95,9 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
   }> {
     const memoryStorage = await this.getMemoryStore();
-    const result = await memoryStorage.listMessages({
-      threadId: args.threadId,
-      resourceId: args.resourceId,
-      perPage: args.perPage,
-      page: args.page,
-      orderBy: args.orderBy,
-      filter: args.filter,
-      include: args.include,
-    });
+    // Extract only the StorageListMessagesInput properties, excluding threadConfig and vectorSearchString
+    const { threadConfig: _threadConfig, vectorSearchString: _vectorSearchString, ...listMessagesArgs } = args;
+    const result = await memoryStorage.listMessages(listMessagesArgs);
 
     return result;
   }

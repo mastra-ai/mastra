@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageHistory } from '@mastra/core/processors';
-import { InMemoryMemory } from '@mastra/core/storage';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
@@ -42,15 +42,8 @@ function createTestMessages(count: number, baseContent = 'Test message'): Mastra
 }
 
 function createInMemoryStorage(): InMemoryMemory {
-  return new InMemoryMemory({
-    collection: {
-      threads: new Map(),
-      resources: new Map(),
-      messages: new Map(),
-      observationalMemory: new Map(),
-    },
-    operations: {} as any, // Not needed for OM tests
-  });
+  const db = new InMemoryDB();
+  return new InMemoryMemory({ db });
 }
 
 // =============================================================================

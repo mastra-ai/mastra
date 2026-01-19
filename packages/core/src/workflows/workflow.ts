@@ -683,11 +683,13 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Base context for all processor methods - includes requestContext for memory processors
       // and tracingContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
+        state: state ?? {},
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -753,20 +755,23 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processInput({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
 
               if (result instanceof MessageList) {
                 // Validate same instance
-                if (result !== passThrough.messageList) {
+                if (result !== checkedMessageList) {
                   throw new MastraError({
                     category: ErrorCategory.USER,
                     domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -783,7 +788,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'input',
@@ -794,12 +799,12 @@ function createStepFromProcessor<TProcessorId extends string>(
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'input',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -822,14 +827,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processInputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
@@ -844,7 +852,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 processor,
                 stepNumber: stepNumber ?? 0,
               });
@@ -852,14 +860,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (validatedResult.messages) {
                 ProcessorRunner.applyMessagesToMessageList(
                   validatedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                 );
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1023,14 +1031,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
                 toolCalls: toolCalls as any,
@@ -1041,7 +1052,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               if (result instanceof MessageList) {
                 // Validate same instance
-                if (result !== passThrough.messageList) {
+                if (result !== checkedMessageList) {
                   throw new MastraError({
                     category: ErrorCategory.USER,
                     domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -1058,7 +1069,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'response',
@@ -1069,12 +1080,12 @@ function createStepFromProcessor<TProcessorId extends string>(
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'response',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -1466,7 +1477,7 @@ export class Workflow<
           id: mappingStep.id,
           mapConfig:
             mappingConfig.toString()?.length > 1000
-              ? mappingConfig.toString().slice(0, 1000) + '...\n}'
+              ? mappingConfig.toString().slice(0, 1000) + '...'
               : mappingConfig.toString(),
         },
       });
@@ -1567,7 +1578,7 @@ export class Workflow<
         id: mappingStep.id,
         mapConfig:
           JSON.stringify(newMappingConfig, null, 2)?.length > 1000
-            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...\n}'
+            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...'
             : JSON.stringify(newMappingConfig, null, 2),
       },
     });
@@ -2544,7 +2555,7 @@ export class Run<
 
       if (!validatedInputData.success) {
         const errors = getZodErrors(validatedInputData.error);
-        throw new Error('Invalid input data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
+        throw new Error('Invalid input data: ' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
       }
 
       inputDataToUse = validatedInputData.data;
@@ -2563,9 +2574,7 @@ export class Run<
 
         if (!validatedInitialState.success) {
           const errors = getZodErrors(validatedInitialState.error);
-          throw new Error(
-            'Invalid initial state: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
+          throw new Error('Invalid initial state: ' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
         }
 
         initialStateToUse = validatedInitialState.data;
@@ -2585,7 +2594,7 @@ export class Run<
 
       if (!validatedResumeData.success) {
         const errors = getZodErrors(validatedResumeData.error);
-        throw new Error('Invalid resume data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
+        throw new Error('Invalid resume data: ' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
       }
 
       resumeDataToUse = validatedResumeData.data;
@@ -2608,7 +2617,7 @@ export class Run<
       if (!validatedInputData.success) {
         const errors = getZodErrors(validatedInputData.error);
         const errorMessages = errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-        throw new Error('Invalid inputData: \n' + errorMessages);
+        throw new Error('Invalid inputData: ' + errorMessages);
       }
 
       inputDataToUse = validatedInputData.data;
