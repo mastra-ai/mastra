@@ -18,6 +18,8 @@ declare global {
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
@@ -66,6 +68,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  processorsLink: () => `/processors`,
+  processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -139,8 +143,10 @@ function App() {
                 </Route>
 
                 <Route path="/tools" element={<Tools />} />
-
                 <Route path="/tools/:toolId" element={<Tool />} />
+
+                <Route path="/processors" element={<Processors />} />
+                <Route path="/processors/:processorId" element={<Processor />} />
                 <Route path="/mcps" element={<MCPs />} />
 
                 <Route path="/mcps/:serverId" element={<McpServerPage />} />

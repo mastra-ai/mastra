@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { PaginationInfo } from '../../types';
+import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
 import type {
@@ -344,7 +345,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     // Use != null to handle both null and undefined (nullish filter fields)
     if (filters.scope != null && rootSpan.scope != null) {
       for (const [key, value] of Object.entries(filters.scope)) {
-        if (!this.jsonValueEquals(rootSpan.scope[key], value)) {
+        if (!jsonValueEquals(rootSpan.scope[key], value)) {
           return false;
         }
       }
@@ -356,7 +357,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     // Use != null to handle both null and undefined (nullish filter fields)
     if (filters.metadata != null && rootSpan.metadata != null) {
       for (const [key, value] of Object.entries(filters.metadata)) {
-        if (!this.jsonValueEquals(rootSpan.metadata[key], value)) {
+        if (!jsonValueEquals(rootSpan.metadata[key], value)) {
           return false;
         }
       }
@@ -388,44 +389,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     return true;
-  }
-
-  /**
-   * Deep equality check for JSON values
-   */
-  private jsonValueEquals(a: unknown, b: unknown): boolean {
-    if (a === undefined || b === undefined) {
-      return a === b;
-    }
-    if (a === null || b === null) {
-      return a === b;
-    }
-    if (typeof a !== typeof b) {
-      return false;
-    }
-    // Handle Date objects
-    if (a instanceof Date && b instanceof Date) {
-      return a.getTime() === b.getTime();
-    }
-    if (a instanceof Date || b instanceof Date) {
-      return false; // One is Date, other is not
-    }
-    if (typeof a === 'object') {
-      if (Array.isArray(a) && Array.isArray(b)) {
-        if (a.length !== b.length) return false;
-        return a.every((val, i) => this.jsonValueEquals(val, b[i]));
-      }
-      if (Array.isArray(a) || Array.isArray(b)) {
-        return false;
-      }
-      const aKeys = Object.keys(a as object);
-      const bKeys = Object.keys(b as object);
-      if (aKeys.length !== bKeys.length) return false;
-      return aKeys.every(key =>
-        this.jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
-      );
-    }
-    return a === b;
   }
 
   async updateSpan(args: UpdateSpanArgs): Promise<void> {

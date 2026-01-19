@@ -242,6 +242,7 @@ export function WorkflowTrigger({
                   handleExecuteWorkflow(data);
                 }}
                 withoutSubmit={!!paramsRunId}
+                isProcessorWorkflow={workflow?.isProcessorWorkflow}
               />
             ) : !!paramsRunId ? null : (
               <Button
