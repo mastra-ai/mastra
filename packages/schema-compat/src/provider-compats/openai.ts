@@ -142,12 +142,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
     // Fix anyOf pattern: [{type: X}, {type: "null"}] or [{type: "null"}, {type: X}]
     if (result.anyOf && Array.isArray(result.anyOf) && result.anyOf.length === 2) {
-      const nullSchema = result.anyOf.find(
-        (s: any) => typeof s === 'object' && s !== null && s.type === 'null',
-      );
-      const otherSchema = result.anyOf.find(
-        (s: any) => typeof s === 'object' && s !== null && s.type !== 'null',
-      );
+      const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
+      const otherSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type !== 'null');
 
       if (nullSchema && otherSchema && typeof otherSchema === 'object' && otherSchema.type) {
         // Convert anyOf to type array format
@@ -156,20 +152,16 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         return {
           ...rest,
           ...fixedOther,
-          type: Array.isArray(fixedOther.type)
+          type: (Array.isArray(fixedOther.type)
             ? [...fixedOther.type, 'null']
-            : [fixedOther.type as string, 'null'],
+            : [fixedOther.type, 'null']) as JSONSchema7['type'],
         };
       }
     }
 
     // Fix empty property schemas {} - this happens with Zod v4 for optional fields
     // that don't get proper type information. Convert to nullable string as safe fallback.
-    if (
-      result.properties &&
-      typeof result.properties === 'object' &&
-      !Array.isArray(result.properties)
-    ) {
+    if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
       result.properties = Object.fromEntries(
         Object.entries(result.properties).map(([key, value]) => {
           const propSchema = value as JSONSchema7;

@@ -1,10 +1,10 @@
 import { it, describe, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { MessageListInput } from '../../agent/message-list';
-import { getLastMessage, getRoutingAgent } from './index';
+import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows';
-import { RequestContext } from '../../request-context';
+import { getLastMessage, getRoutingAgent } from './index';
 
 describe('getLastMessage', () => {
   it('returns string directly', () => {

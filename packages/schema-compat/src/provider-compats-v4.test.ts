@@ -270,10 +270,7 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Optional/Nullable Fields (GitHub
   it('should produce JSON schema with type key for optional string fields', () => {
     // This is the exact pattern used in validation.ts finalResultSchema
     const schema = z.object({
-      finalResult: z
-        .string()
-        .optional()
-        .describe('The final result text to return to the user'),
+      finalResult: z.string().optional().describe('The final result text to return to the user'),
     });
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
@@ -301,10 +298,7 @@ describe('OpenAISchemaCompatLayer with Zod v4 - Optional/Nullable Fields (GitHub
     const schema = z.object({
       isComplete: z.boolean().describe('Whether the task is complete'),
       completionReason: z.string().describe('Explanation'),
-      finalResult: z
-        .string()
-        .optional()
-        .describe('The final result text'),
+      finalResult: z.string().optional().describe('The final result text'),
     });
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);

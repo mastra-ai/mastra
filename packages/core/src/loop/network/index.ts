@@ -105,9 +105,9 @@ export async function getRoutingAgent({
   const memoryTools = await memoryToUse?.listTools?.();
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(tool.inputSchema ?? z.object({})),
-      )}`;
+      // Use 'in' check for type narrowing, then nullish coalescing for undefined values
+      const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
