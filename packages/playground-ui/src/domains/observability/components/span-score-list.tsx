@@ -1,20 +1,26 @@
-import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
+import { Table, Thead, Th, Tbody, Row, TxtCell, Cell } from '@/ds/components/Table';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Button } from '@/ds/components/Button';
 import { getShortId } from '@/ds/components/Text';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
+import { Icon } from '@/ds/icons';
+import { getToNextEntryFn, getToPreviousEntryFn } from '../helpers';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
+import { ArrowLeftIcon, ArrowRightIcon, GaugeIcon } from 'lucide-react';
 
 export const traceScoresListColumns = [
-  { name: 'shortId', label: 'ID', size: '1fr' },
-  { name: 'date', label: 'Date', size: '1fr' },
-  { name: 'time', label: 'Time', size: '1fr' },
-  { name: 'score', label: 'Score', size: '1fr' },
-  { name: 'scorer', label: 'Scorer', size: '1fr' },
+  { name: 'shortId', label: 'ID', width: undefined },
+  { name: 'date', label: 'Date', width: undefined },
+  { name: 'time', label: 'Time', width: undefined },
+  { name: 'score', label: 'Score', width: undefined },
+  { name: 'scorer', label: 'Scorer', width: undefined },
 ];
 
-type SpanScoreListProps = {
+export type SpanScoreListProps = {
   scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
   initialScoreId?: string;
@@ -25,6 +31,43 @@ type SpanScoreListProps = {
 };
 
 type SelectedScore = ScoreRowData | undefined;
+
+export function SpanScoreListSkeleton() {
+  return (
+    <div className="rounded-lg border border-border1 overflow-clip">
+      <Table>
+        <Thead>
+          {traceScoresListColumns.map(col => (
+            <Th key={col.name} style={{ width: col.width }}>
+              {col.label}
+            </Th>
+          ))}
+        </Thead>
+        <Tbody>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Row key={index}>
+              <Cell>
+                <Skeleton className="h-4 w-full" />
+              </Cell>
+              <Cell>
+                <Skeleton className="h-4 w-full" />
+              </Cell>
+              <Cell>
+                <Skeleton className="h-4 w-full" />
+              </Cell>
+              <Cell>
+                <Skeleton className="h-4 w-8" />
+              </Cell>
+              <Cell>
+                <Skeleton className="h-4 w-full" />
+              </Cell>
+            </Row>
+          ))}
+        </Tbody>
+      </Table>
+    </div>
+  );
+}
 
 export function SpanScoreList({
   scoresData,
@@ -52,7 +95,7 @@ export function SpanScoreList({
   };
 
   if (isLoadingScoresData) {
-    return <EntryListSkeleton columns={traceScoresListColumns} />;
+    return <SpanScoreListSkeleton />;
   }
 
   const updateSelectedScore = (scoreId: string) => {
@@ -72,56 +115,91 @@ export function SpanScoreList({
     update: updateSelectedScore,
   });
 
+  const scores = scoresData?.scores || [];
+  const pagination = scoresData?.pagination;
+  const hasMore = pagination?.hasMore;
+  const currentPage = pagination?.page || 0;
+
+  const handleNextPage = () => {
+    if (hasMore) {
+      onPageChange?.(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 0) {
+      onPageChange?.(currentPage - 1);
+    }
+  };
+
+  if (scores.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center py-8">
+        <EmptyState
+          iconSlot={<GaugeIcon className="h-8 w-8 text-neutral3" />}
+          titleSlot="No Scores"
+          descriptionSlot="No scores found"
+        />
+      </div>
+    );
+  }
+
   return (
     <>
-      <EntryList>
-        <EntryList.Trim>
-          <EntryList.Header columns={traceScoresListColumns} />
-          {scoresData?.scores && scoresData.scores.length > 0 ? (
-            <EntryList.Entries>
-              {scoresData?.scores?.map((score: ScoreRowData) => {
+      <div>
+        <div className="rounded-lg border border-border1 overflow-clip">
+          <Table>
+            <Thead>
+              {traceScoresListColumns.map(col => (
+                <Th key={col.name} style={{ width: col.width }}>
+                  {col.label}
+                </Th>
+              ))}
+            </Thead>
+            <Tbody>
+              {scores.map((score: ScoreRowData) => {
                 const createdAtDate = new Date(score.createdAt);
                 const isTodayDate = isToday(createdAtDate);
 
-                const entry = {
-                  id: score?.id,
-                  shortId: getShortId(score?.id) || 'n/a',
-                  date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-                  time: format(createdAtDate, 'h:mm:ss aaa'),
-                  score: score?.score,
-                  scorer: score?.scorer?.name || score?.scorer?.id,
-                };
-
                 return (
-                  <EntryList.Entry
-                    key={score.id}
-                    columns={traceScoresListColumns}
-                    onClick={() => handleOnScore(score.id)}
-                    entry={entry}
-                  >
-                    {traceScoresListColumns.map(col => {
-                      const key = `col-${col.name}`;
-                      return (
-                        <EntryList.EntryText key={key}>
-                          {String(entry?.[col.name as keyof typeof entry] ?? '')}
-                        </EntryList.EntryText>
-                      );
-                    })}
-                  </EntryList.Entry>
+                  <Row key={score.id} onClick={() => handleOnScore(score.id)}>
+                    <TxtCell>{getShortId(score?.id) || 'n/a'}</TxtCell>
+                    <TxtCell>{isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd')}</TxtCell>
+                    <TxtCell>{format(createdAtDate, 'h:mm:ss aaa')}</TxtCell>
+                    <TxtCell>{String(score?.score ?? '')}</TxtCell>
+                    <TxtCell>{String(score?.scorer?.name || score?.scorer?.id || '')}</TxtCell>
+                  </Row>
                 );
               })}
-            </EntryList.Entries>
-          ) : (
-            <EntryList.Message message="No scores found" type="info" />
-          )}
-        </EntryList.Trim>
-        <EntryList.Pagination
-          currentPage={scoresData?.pagination?.page || 0}
-          hasMore={scoresData?.pagination?.hasMore}
-          onNextPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) + 1)}
-          onPrevPage={() => onPageChange && onPageChange((scoresData?.pagination?.page || 0) - 1)}
-        />
-      </EntryList>
+            </Tbody>
+          </Table>
+        </div>
+        {(pagination?.page !== undefined || hasMore) && (
+          <div className="flex pt-6 items-center justify-center text-neutral3 text-ui-md gap-8">
+            <span>
+              Page <b>{currentPage + 1}</b>
+            </span>
+            <div className="flex gap-4">
+              {currentPage > 0 && (
+                <Button variant="outline" size="sm" onClick={handlePrevPage}>
+                  <Icon>
+                    <ArrowLeftIcon />
+                  </Icon>
+                  Previous
+                </Button>
+              )}
+              {hasMore && (
+                <Button variant="outline" size="sm" onClick={handleNextPage}>
+                  Next
+                  <Icon>
+                    <ArrowRightIcon />
+                  </Icon>
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <ScoreDialog
         scorerName={(selectedScore?.scorer?.name as string) || (selectedScore?.scorer?.id as string) || ''}
         score={selectedScore as ScoreRowData}

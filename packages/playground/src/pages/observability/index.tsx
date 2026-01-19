@@ -4,7 +4,7 @@ import {
   Header,
   MainContentLayout,
   TracesList,
-  tracesListColumns,
+  TracesListSkeleton,
   PageHeader,
   EntityOptions,
   TracesTools,
@@ -14,7 +14,6 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -198,7 +197,7 @@ export default function Observability() {
             />
 
             {isTracesLoading ? (
-              <EntryListSkeleton columns={tracesListColumns} />
+              <TracesListSkeleton />
             ) : (
               <TracesList
                 traces={traces}
