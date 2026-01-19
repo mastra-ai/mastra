@@ -4,6 +4,11 @@
   "version": "0.0.5",
   "type": "module",
   "homepage": "https://mastra.ai",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "./**/*.d.ts"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
