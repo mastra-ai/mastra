@@ -1,340 +1,489 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthBetterAuth } from './index';
-import type { BetterAuthUser } from './index';
+import type { BetterAuthUser, BetterAuthConfig } from './types';
 
-// Mock the better-auth library to avoid real database initialization
+// Mock the better-auth library
+const mockGetSession = vi.fn();
+const mockSignInEmail = vi.fn();
+const mockSignUpEmail = vi.fn();
+const mockForgetPassword = vi.fn();
+const mockResetPassword = vi.fn();
+
 vi.mock('better-auth', () => ({
   betterAuth: vi.fn(() => ({
     api: {
-      getSession: vi.fn(),
+      getSession: mockGetSession,
+      signInEmail: mockSignInEmail,
+      signUpEmail: mockSignUpEmail,
+      forgetPassword: mockForgetPassword,
+      resetPassword: mockResetPassword,
     },
   })),
 }));
 
+// Mock console to avoid noise
+vi.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, 'warn').mockImplementation(() => {});
+
 describe('MastraAuthBetterAuth', () => {
-  const mockSession = {
-    id: 'session-123',
-    userId: 'user-123',
-    expiresAt: new Date(Date.now() + 86400000), // 1 day from now
-    token: 'test-session-token',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockUser = {
-    id: 'user-123',
-    email: 'test@example.com',
-    name: 'Test User',
-    emailVerified: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockAuth = {
-    api: {
-      getSession: vi.fn(),
-    },
-  };
-
-  const mockRequest = {
-    header: vi.fn(),
-  } as any;
-
-  const validConfig = {
-    auth: mockAuth as any,
+  const validConfig: BetterAuthConfig = {
     database: {
-      provider: 'postgresql' as const,
+      provider: 'postgresql',
       url: 'postgresql://localhost:5432/test',
     },
     secret: 'test-secret-key-that-is-at-least-32-characters-long',
     baseURL: 'http://localhost:3000',
   };
 
+  const mockBetterAuthUser = {
+    id: 'user-123',
+    email: 'test@example.com',
+    name: 'Test User',
+    image: 'https://example.com/avatar.png',
+    emailVerified: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-02T00:00:00Z',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequest.header.mockReset();
   });
 
-  describe('initialization', () => {
-    it('should initialize with provided auth instance', () => {
+  describe('constructor and initialization', () => {
+    it('should initialize with valid config', () => {
       const auth = new MastraAuthBetterAuth(validConfig);
+
       expect(auth).toBeInstanceOf(MastraAuthBetterAuth);
+      expect(auth.name).toBe('better-auth');
+      expect(auth.credentials).toBeDefined();
+      expect(auth.user).toBeDefined();
     });
 
-    it('should throw error when auth instance is not provided', () => {
+    it('should throw error when database config is missing', () => {
       expect(() => new MastraAuthBetterAuth({} as any)).toThrow('Better Auth: database configuration is required');
     });
 
-    it('should use default name "better-auth" when not provided', () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      expect(auth.name).toBe('better-auth');
+    it('should throw error when database provider is missing', () => {
+      expect(
+        () =>
+          new MastraAuthBetterAuth({
+            database: { url: 'test' } as any,
+            secret: 'test-secret-key-that-is-at-least-32-characters-long',
+            baseURL: 'http://localhost:3000',
+          }),
+      ).toThrow('Better Auth: database.provider is required');
     });
 
-    it('should use custom name when provided', () => {
-      const auth = new MastraAuthBetterAuth({
-        ...validConfig,
-        name: 'custom-auth',
-      });
-      expect(auth.name).toBe('custom-auth');
+    it('should throw error when database url is missing', () => {
+      expect(
+        () =>
+          new MastraAuthBetterAuth({
+            database: { provider: 'postgresql' } as any,
+            secret: 'test-secret-key-that-is-at-least-32-characters-long',
+            baseURL: 'http://localhost:3000',
+          }),
+      ).toThrow('Better Auth: database.url is required');
+    });
+
+    it('should throw error when secret is missing', () => {
+      expect(
+        () =>
+          new MastraAuthBetterAuth({
+            database: { provider: 'postgresql', url: 'test' },
+            baseURL: 'http://localhost:3000',
+          } as any),
+      ).toThrow('Better Auth: secret is required');
+    });
+
+    it('should throw error when secret is too short', () => {
+      expect(
+        () =>
+          new MastraAuthBetterAuth({
+            database: { provider: 'postgresql', url: 'test' },
+            secret: 'short',
+            baseURL: 'http://localhost:3000',
+          }),
+      ).toThrow('Better Auth: secret must be at least 32 characters');
+    });
+
+    it('should throw error when baseURL is missing', () => {
+      expect(
+        () =>
+          new MastraAuthBetterAuth({
+            database: { provider: 'postgresql', url: 'test' },
+            secret: 'test-secret-key-that-is-at-least-32-characters-long',
+          } as any),
+      ).toThrow('Better Auth: baseURL is required');
+    });
+
+    it('should return Better Auth instance via getBetterAuthInstance', () => {
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const instance = auth.getBetterAuthInstance();
+
+      expect(instance).toBeDefined();
+      expect(instance.api).toBeDefined();
     });
   });
 
-  describe('authenticateToken', () => {
-    it('should authenticate valid session token and return user', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
-      });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer test-token';
-        return undefined;
-      });
+  describe('getCurrentUser', () => {
+    it('should return user when valid session exists', async () => {
+      mockGetSession.mockResolvedValue({ user: mockBetterAuthUser });
 
       const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authenticateToken('test-token', mockRequest);
-
-      expect(mockAuth.api.getSession).toHaveBeenCalled();
-      expect(result).toEqual({
-        session: mockSession,
-        user: mockUser,
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=test-session-token' },
       });
+
+      const result = await auth.getCurrentUser(request);
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('user-123');
+      expect(result?.email).toBe('test@example.com');
+      expect(result?.betterAuth.emailVerified).toBe(true);
     });
 
-    it('should return null when session is not found', async () => {
-      mockAuth.api.getSession.mockResolvedValue(null);
-      mockRequest.header.mockReturnValue(undefined);
-
+    it('should return null when no cookie is present', async () => {
       const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authenticateToken('invalid-token', mockRequest);
+      const request = new Request('http://localhost:3000');
+
+      const result = await auth.getCurrentUser(request);
 
       expect(result).toBeNull();
     });
 
-    it('should return null when getSession throws an error', async () => {
-      mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
-      mockRequest.header.mockReturnValue(undefined);
-
+    it('should return null when session cookie is not found', async () => {
       const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authenticateToken('expired-token', mockRequest);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'other_cookie=value' },
+      });
+
+      const result = await auth.getCurrentUser(request);
 
       expect(result).toBeNull();
     });
 
-    it('should return null when session is missing user', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: null,
-      });
-      mockRequest.header.mockReturnValue(undefined);
+    it('should return null when session is invalid', async () => {
+      mockGetSession.mockResolvedValue(null);
 
       const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authenticateToken('test-token', mockRequest);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=invalid-token' },
+      });
+
+      const result = await auth.getCurrentUser(request);
 
       expect(result).toBeNull();
     });
 
-    it('should return null when session is missing session object', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: null,
-        user: mockUser,
-      });
-      mockRequest.header.mockReturnValue(undefined);
+    it('should return null when getSession throws', async () => {
+      mockGetSession.mockRejectedValue(new Error('Session error'));
 
       const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authenticateToken('test-token', mockRequest);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=test-token' },
+      });
+
+      const result = await auth.getCurrentUser(request);
 
       expect(result).toBeNull();
     });
 
-    it('should pass Authorization header when present', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
+    it('should use custom cookie name from config', async () => {
+      mockGetSession.mockResolvedValue({ user: mockBetterAuthUser });
+
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        session: { cookieName: 'my_custom_session' },
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer existing-token';
-        return undefined;
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'my_custom_session=test-session-token' },
+      });
+
+      const result = await auth.getCurrentUser(request);
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('user-123');
+    });
+  });
+
+  describe('credentials provider - signIn', () => {
+    it('should sign in with valid credentials', async () => {
+      mockSignInEmail.mockResolvedValue({
+        user: mockBetterAuthUser,
+        token: 'session-token',
       });
 
       const auth = new MastraAuthBetterAuth(validConfig);
-      await auth.authenticateToken('test-token', mockRequest);
+      const result = await auth.credentials.signIn('test@example.com', 'password123');
 
-      expect(mockAuth.api.getSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headers: expect.any(Headers),
-        }),
+      expect(mockSignInEmail).toHaveBeenCalledWith({
+        body: { email: 'test@example.com', password: 'password123' },
+      });
+      expect(result.user.id).toBe('user-123');
+      expect(result.session.userId).toBe('user-123');
+      expect(result.cookies['Set-Cookie']).toContain('better_auth_session=');
+    });
+
+    it('should throw error for invalid credentials', async () => {
+      mockSignInEmail.mockResolvedValue(null);
+
+      const auth = new MastraAuthBetterAuth(validConfig);
+
+      await expect(auth.credentials.signIn('test@example.com', 'wrong-password')).rejects.toThrow(
+        'Invalid credentials',
       );
-
-      // Verify the headers contain the Authorization
-      const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Authorization')).toBe('Bearer existing-token');
     });
 
-    it('should pass Cookie header when present for cookie-based sessions', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
-      });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Cookie') return 'better-auth.session_token=abc123';
-        return undefined;
+    it('should throw error when email verification required but not verified', async () => {
+      mockSignInEmail.mockResolvedValue({
+        user: { ...mockBetterAuthUser, emailVerified: false },
+        token: 'session-token',
       });
 
-      const auth = new MastraAuthBetterAuth(validConfig);
-      await auth.authenticateToken('test-token', mockRequest);
-
-      const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=abc123');
-    });
-
-    it('should set Authorization header from token when no existing header', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
-      });
-      mockRequest.header.mockReturnValue(undefined);
-
-      const auth = new MastraAuthBetterAuth(validConfig);
-      await auth.authenticateToken('my-bearer-token', mockRequest);
-
-      const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Authorization')).toBe('Bearer my-bearer-token');
-    });
-  });
-
-  describe('authorizeUser', () => {
-    it('should return true for valid user with session', async () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authorizeUser({
-        session: mockSession,
-        user: mockUser,
-      } as BetterAuthUser);
-
-      expect(result).toBe(true);
-    });
-
-    it('should return false when session id is missing', async () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authorizeUser({
-        session: { ...mockSession, id: '' },
-        user: mockUser,
-      } as BetterAuthUser);
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false when user id is missing', async () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authorizeUser({
-        session: mockSession,
-        user: { ...mockUser, id: '' },
-      } as BetterAuthUser);
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false when user is null', async () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authorizeUser(null as any);
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false when session is null', async () => {
-      const auth = new MastraAuthBetterAuth(validConfig);
-      const result = await auth.authorizeUser({
-        session: null,
-        user: mockUser,
-      } as any);
-
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('custom authorization', () => {
-    it('can be overridden with custom authorization logic', async () => {
       const auth = new MastraAuthBetterAuth({
         ...validConfig,
-        async authorizeUser(user: BetterAuthUser): Promise<boolean> {
-          // Custom logic: only allow verified emails
-          return user?.user?.emailVerified === true;
+        emailAndPassword: { requireEmailVerification: true },
+      });
+
+      await expect(auth.credentials.signIn('test@example.com', 'password123')).rejects.toThrow(
+        'Email verification required',
+      );
+    });
+  });
+
+  describe('credentials provider - signUp', () => {
+    it('should sign up new user', async () => {
+      mockSignUpEmail.mockResolvedValue({
+        user: mockBetterAuthUser,
+        token: 'session-token',
+      });
+
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const result = await auth.credentials.signUp('test@example.com', 'password123', 'Test User');
+
+      expect(mockSignUpEmail).toHaveBeenCalledWith({
+        body: { email: 'test@example.com', password: 'password123', name: 'Test User' },
+      });
+      expect(result.user.id).toBe('user-123');
+      expect(result.session).toBeDefined();
+    });
+
+    it('should throw error when password is too short', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { minPasswordLength: 12 },
+      });
+
+      await expect(auth.credentials.signUp('test@example.com', 'short')).rejects.toThrow(
+        'Password must be at least 12 characters',
+      );
+    });
+
+    it('should throw error when signUp is disabled', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { enabled: false },
+      });
+
+      await expect(auth.credentials.signUp('test@example.com', 'password123')).rejects.toThrow('Sign up is disabled');
+    });
+
+    it('should check if signUp is enabled', () => {
+      const authEnabled = new MastraAuthBetterAuth(validConfig);
+      expect(authEnabled.credentials.isSignUpEnabled()).toBe(true);
+
+      const authDisabled = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { enabled: false },
+      });
+      expect(authDisabled.credentials.isSignUpEnabled()).toBe(false);
+    });
+  });
+
+  describe('credentials provider - password reset', () => {
+    it('should request password reset', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { allowPasswordReset: true },
+      });
+
+      await auth.credentials.requestPasswordReset('test@example.com');
+
+      expect(mockForgetPassword).toHaveBeenCalledWith({
+        body: {
+          email: 'test@example.com',
+          redirectTo: 'http://localhost:3000/reset-password',
+        },
+      });
+    });
+
+    it('should throw when password reset is disabled', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { allowPasswordReset: false },
+      });
+
+      await expect(auth.credentials.requestPasswordReset('test@example.com')).rejects.toThrow(
+        'Password reset is disabled',
+      );
+    });
+
+    it('should reset password with valid token', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { allowPasswordReset: true },
+      });
+
+      await auth.credentials.resetPassword('reset-token', 'newPassword123');
+
+      expect(mockResetPassword).toHaveBeenCalledWith({
+        body: { token: 'reset-token', newPassword: 'newPassword123' },
+      });
+    });
+
+    it('should throw when new password is too short', async () => {
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        emailAndPassword: { allowPasswordReset: true, minPasswordLength: 10 },
+      });
+
+      await expect(auth.credentials.resetPassword('reset-token', 'short')).rejects.toThrow(
+        'Password must be at least 10 characters',
+      );
+    });
+  });
+
+  describe('user provider', () => {
+    it('should get user profile URL', () => {
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const user: BetterAuthUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test User',
+        metadata: {},
+        betterAuth: {
+          userId: 'user-123',
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      };
+
+      const url = auth.user.getUserProfileUrl(user);
+
+      expect(url).toBe('http://localhost:3000/profile/user-123');
+    });
+
+    it('should return null for getUser (not implemented)', async () => {
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const result = await auth.user.getUser('user-123');
+
+      expect(result).toBeNull();
+    });
+
+    it('should get current user from request', async () => {
+      mockGetSession.mockResolvedValue({ user: mockBetterAuthUser });
+
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=test-session-token' },
+      });
+
+      const result = await auth.user.getCurrentUser(request);
+
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('user-123');
+      expect(result?.email).toBe('test@example.com');
+    });
+  });
+
+  describe('user mapping', () => {
+    it('should map Better Auth user to BetterAuthUser format', async () => {
+      mockGetSession.mockResolvedValue({ user: mockBetterAuthUser });
+
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=test-token' },
+      });
+
+      const result = await auth.getCurrentUser(request);
+
+      expect(result).toEqual({
+        id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test User',
+        avatarUrl: 'https://example.com/avatar.png',
+        metadata: {},
+        betterAuth: {
+          userId: 'user-123',
+          emailVerified: true,
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should handle missing optional fields', async () => {
+      mockGetSession.mockResolvedValue({
+        user: {
+          id: 'user-123',
+          email: 'test@example.com',
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-02T00:00:00Z',
         },
       });
 
-      // Test with verified user
-      const verifiedUser = {
-        session: mockSession,
-        user: { ...mockUser, emailVerified: true },
-      } as BetterAuthUser;
-      expect(await auth.authorizeUser(verifiedUser)).toBe(true);
-
-      // Test with unverified user
-      const unverifiedUser = {
-        session: mockSession,
-        user: { ...mockUser, emailVerified: false },
-      } as BetterAuthUser;
-      expect(await auth.authorizeUser(unverifiedUser)).toBe(false);
-    });
-
-    it('can implement role-based access control', async () => {
-      const auth = new MastraAuthBetterAuth({
-        ...validConfig,
-        async authorizeUser(user: BetterAuthUser): Promise<boolean> {
-          // Custom logic: check for admin role
-          const userWithRole = user?.user as any;
-          return userWithRole?.role === 'admin';
-        },
+      const auth = new MastraAuthBetterAuth(validConfig);
+      const request = new Request('http://localhost:3000', {
+        headers: { cookie: 'better_auth_session=test-token' },
       });
 
-      // Test with admin user
-      const adminUser = {
-        session: mockSession,
-        user: { ...mockUser, role: 'admin' },
-      } as BetterAuthUser;
-      expect(await auth.authorizeUser(adminUser)).toBe(true);
+      const result = await auth.getCurrentUser(request);
 
-      // Test with regular user
-      const regularUser = {
-        session: mockSession,
-        user: { ...mockUser, role: 'user' },
-      } as BetterAuthUser;
-      expect(await auth.authorizeUser(regularUser)).toBe(false);
+      expect(result).not.toBeNull();
+      expect(result?.name).toBeUndefined();
+      expect(result?.avatarUrl).toBeUndefined();
+      expect(result?.betterAuth.emailVerified).toBe(false);
     });
   });
 
-  describe('route configuration options', () => {
-    it('should store public routes configuration when provided', () => {
-      const publicRoutes = ['/health', '/api/status'];
-      const auth = new MastraAuthBetterAuth({
-        ...validConfig,
-        public: publicRoutes,
+  describe('session configuration', () => {
+    it('should use custom session expiry', async () => {
+      mockSignInEmail.mockResolvedValue({
+        user: mockBetterAuthUser,
+        token: 'session-token',
       });
 
-      expect(auth.public).toEqual(publicRoutes);
+      const auth = new MastraAuthBetterAuth({
+        ...validConfig,
+        session: { expiresIn: 3600 }, // 1 hour
+      });
+
+      const result = await auth.credentials.signIn('test@example.com', 'password123');
+
+      // Session should expire in approximately 1 hour
+      const now = Date.now();
+      const expiresAt = result.session.expiresAt.getTime();
+      const hourInMs = 3600 * 1000;
+
+      expect(expiresAt).toBeGreaterThan(now);
+      expect(expiresAt).toBeLessThanOrEqual(now + hourInMs + 1000); // Allow 1 second tolerance
     });
 
-    it('should store protected routes configuration when provided', () => {
-      const protectedRoutes = ['/api/*', '/admin/*'];
-      const auth = new MastraAuthBetterAuth({
-        ...validConfig,
-        protected: protectedRoutes,
+    it('should use custom cookie name in Set-Cookie header', async () => {
+      mockSignInEmail.mockResolvedValue({
+        user: mockBetterAuthUser,
+        token: 'session-token',
       });
-
-      expect(auth.protected).toEqual(protectedRoutes);
-    });
-
-    it('should handle both public and protected routes together', () => {
-      const publicRoutes = ['/health', '/api/status'];
-      const protectedRoutes = ['/api/*', '/admin/*'];
 
       const auth = new MastraAuthBetterAuth({
         ...validConfig,
-        public: publicRoutes,
-        protected: protectedRoutes,
+        session: { cookieName: 'my_session' },
       });
 
-      expect(auth.public).toEqual(publicRoutes);
-      expect(auth.protected).toEqual(protectedRoutes);
+      const result = await auth.credentials.signIn('test@example.com', 'password123');
+
+      expect(result.cookies['Set-Cookie']).toContain('my_session=');
     });
   });
 });
