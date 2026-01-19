@@ -199,6 +199,12 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCall method - returns object with fullStream property
   vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock approveToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'approveToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Mock declineToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
