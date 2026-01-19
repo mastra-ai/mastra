@@ -354,6 +354,7 @@ export type ProviderModelsMap = {
     'bfl/flux-pro-1.1',
     'bfl/flux-pro-1.1-ultra',
     'bytedance/seed-1.6',
+    'bytedance/seed-1.8',
     'cohere/command-a',
     'cohere/embed-v4.0',
     'deepseek/deepseek-r1',
@@ -446,6 +447,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.1-thinking',
     'openai/gpt-5.2',
     'openai/gpt-5.2-chat',
+    'openai/gpt-5.2-codex',
     'openai/gpt-5.2-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -464,6 +466,8 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning',
     'perplexity/sonar-reasoning-pro',
     'prime-intellect/intellect-3',
+    'recraft/recraft-v2',
+    'recraft/recraft-v3',
     'vercel/v0-1.0-md',
     'vercel/v0-1.5-md',
     'voyage/voyage-3-large',
@@ -682,6 +686,7 @@ export type ProviderModelsMap = {
   ];
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
+    'Kwaipilot/KAT-Dev',
     'MiniMaxAI/MiniMax-M1-80k',
     'MiniMaxAI/MiniMax-M2',
     'Qwen/QwQ-32B',
@@ -723,20 +728,19 @@ export type ProviderModelsMap = {
     'THUDM/GLM-4.1V-9B-Thinking',
     'THUDM/GLM-Z1-32B-0414',
     'THUDM/GLM-Z1-9B-0414',
+    'ascend-tribe/pangu-pro-moe',
     'baidu/ERNIE-4.5-300B-A47B',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
     'deepseek-ai/DeepSeek-V3',
-    'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
-    'deepseek-ai/DeepSeek-V3.2-Exp',
+    'deepseek-ai/DeepSeek-V3.2',
     'deepseek-ai/deepseek-vl2',
     'inclusionAI/Ling-flash-2.0',
     'inclusionAI/Ling-mini-2.0',
     'inclusionAI/Ring-flash-2.0',
-    'meta-llama/Meta-Llama-3.1-8B-Instruct',
     'moonshotai/Kimi-Dev-72B',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
@@ -747,12 +751,11 @@ export type ProviderModelsMap = {
     'stepfun-ai/step3',
     'tencent/Hunyuan-A13B-Instruct',
     'tencent/Hunyuan-MT-7B',
-    'z-ai/GLM-4.5',
-    'z-ai/GLM-4.5-Air',
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5V',
     'zai-org/GLM-4.6',
+    'zai-org/GLM-4.6V',
   ];
   readonly vivgrid: readonly ['gpt-5.1-codex'];
   readonly chutes: readonly [
@@ -977,8 +980,6 @@ export type ProviderModelsMap = {
     'stepfun-ai/step3',
     'tencent/Hunyuan-A13B-Instruct',
     'tencent/Hunyuan-MT-7B',
-    'z-ai/GLM-4.5',
-    'z-ai/GLM-4.5-Air',
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5V',
@@ -1871,7 +1872,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.1-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.6', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',

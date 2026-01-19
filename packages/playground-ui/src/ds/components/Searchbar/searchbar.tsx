@@ -8,6 +8,7 @@ import {
   formElementRadius,
   type FormElementSize,
 } from '@/ds/primitives/form-element';
+import { transitions } from '@/ds/primitives/transitions';
 
 export type SearchbarProps = {
   onSearch: (search: string) => void;
@@ -65,10 +66,12 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
         'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
         formElementRadius,
         formElementFocusWithin,
+        transitions.all,
+        'hover:border-neutral2',
         searchbarSizeClasses[size],
       )}
     >
-      <SearchIcon className="text-neutral3 h-4 w-4" />
+      <SearchIcon className={cn('text-neutral3 h-4 w-4', transitions.colors)} />
 
       <div className="flex-1">
         <label htmlFor={id} className="sr-only">
@@ -80,7 +83,7 @@ export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-surface2 text-ui-md placeholder:text-icon-3 block w-full px-2 outline-none',
+            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-none',
             searchbarSizeClasses[size],
           )}
           name={id}

@@ -45,15 +45,13 @@ When using the client SDK agent methods, use the `memory` option instead of `thr
 const agent = client.getAgent('my-agent');
 
 // Before
-await agent.generate({
-  messages: [...],
+await agent.generate([...], {
   threadId: 'thread-123',
   resourceId: 'user-456',
 });
 
 // After
-await agent.generate({
-  messages: [...],
+await agent.generate([...], {
   memory: {
     thread: 'thread-123',
     resource: 'user-456',

@@ -808,6 +808,10 @@ export const memoryAgent = new Agent({
 });
 ```
 
+:::warning[Mastra Cloud Store limitation]
+Agent-level storage is not supported when using [Mastra Cloud Store](/docs/v1/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+:::
+
 ## Message history
 
 Include a `memory` object with both `resource` and `thread` to track message history during agent calls.
@@ -839,6 +843,10 @@ const response = await memoryAgent.generate("What's my favorite color?", {
   },
 });
 ```
+
+:::warning
+Each thread has an owner (`resourceId`) that cannot be changed after creation. Avoid reusing the same thread ID for threads with different owners, as this will cause errors when querying.
+:::
 
 To learn more about memory see the [Memory](../memory/overview) documentation.
 
@@ -5704,6 +5712,53 @@ Click the **Deployments** menu item to view build logs. Open **Settings** to con
 Changes to settings require a new deployment to take effect
 :::
 
+## Storage configuration
+
+Mastra Cloud offers two storage options:
+
+1. **Mastra Cloud Store**: Managed storage provided by Mastra Cloud
+1. **Bring your own database**: Connect to your own external database
+
+### Using Mastra Cloud Store
+
+When using the managed Mastra Cloud Store (enabled in your project settings), storage must be configured on the `Mastra` instance, not on individual agent `Memory` instances.
+
+Configure storage on your Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-store",
+    url: "file:./mastra.db",
+  }),
+  agents: { myAgent },
+});
+```
+
+Agents can use Memory without specifying storage as they inherit from the Mastra instance:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+export const myAgent = new Agent({
+  id: "my-agent",
+  memory: new Memory({
+    // No storage here - uses instance-level storage from Mastra Cloud Store
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+
+### Bring your own database
+
+If you don't use Mastra Cloud Store, you can use any [storage provider](/docs/v1/memory/storage#supported-providers) with any configuration. Set your database connection strings as environment variables in your project's **Settings** page.
+
 ## Using your deployment
 
 After deployment, interact with your agents using the [Mastra Client](/docs/v1/server/mastra-client) or call the REST API endpoints directly.
@@ -7308,6 +7363,10 @@ export const agent = new Agent({
 
 This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
 
+:::warning[Mastra Cloud Store limitation]
+Agent-level storage is not supported when using [Mastra Cloud Store](/docs/v1/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+:::
+
 ## Threads and resources
 
 Mastra organizes memory into threads using two identifiers:
@@ -7329,6 +7388,21 @@ const stream = await agent.stream("message for agent", {
 :::note
 [Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
+
+### Thread and resource relationship
+
+Each thread has an owner (its `resourceId`) that is set when the thread is created and cannot be changed. When you query a thread, you must use the correct owner's resource ID. Attempting to query a thread with a different resource ID will result in an error:
+
+```text
+Thread with id <thread_id> is for resource with id <resource_a>
+but resource <resource_b> was queried
+```
+
+Note that while each thread has one owner, messages within that thread can have different `resourceId` values. This is used for message attribution and filtering (e.g., distinguishing between different agents in a multi-agent system, or filtering messages for analytics).
+
+**Security:** Memory is a storage layer, not an authorization layer. Your application must implement access control before calling memory APIs. The `resourceId` parameter controls both validation and filtering - provide it to validate ownership and filter messages, or omit it for server-side access without validation.
+
+To avoid accidentally reusing thread IDs across different owners, use UUIDs: `crypto.randomUUID()`
 
 ### Thread title generation
 
@@ -36160,7 +36234,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
 
     />    <CardGridItem
       title="Vercel"
-      description="179 models"
+      description="183 models"
       href="/models/v1/gateways/vercel"
       logo="https://models.dev/logos/vercel.svg"
 
@@ -36480,7 +36554,7 @@ description: "Use AI models through Vercel."
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
 [EN] Source: https://mastra.ai/en/models/gateways/vercel
 
-Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 179 models through Mastra's model router.
+Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 183 models through Mastra's model router.
 
 Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers).
 
@@ -36560,6 +36634,7 @@ ANTHROPIC_API_KEY=ant-...
 | `bfl/flux-pro-1.1` |
 | `bfl/flux-pro-1.1-ultra` |
 | `bytedance/seed-1.6` |
+| `bytedance/seed-1.8` |
 | `cohere/command-a` |
 | `cohere/embed-v4.0` |
 | `deepseek/deepseek-r1` |
@@ -36652,6 +36727,7 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-thinking` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-chat` |
+| `openai/gpt-5.2-codex` |
 | `openai/gpt-5.2-pro` |
 | `openai/gpt-oss-120b` |
 | `openai/gpt-oss-20b` |
@@ -36670,6 +36746,8 @@ ANTHROPIC_API_KEY=ant-...
 | `perplexity/sonar-reasoning` |
 | `perplexity/sonar-reasoning-pro` |
 | `prime-intellect/intellect-3` |
+| `recraft/recraft-v2` |
+| `recraft/recraft-v3` |
 | `vercel/v0-1.0-md` |
 | `vercel/v0-1.5-md` |
 | `voyage/voyage-3-large` |
@@ -40217,7 +40295,7 @@ const agent = new Agent({
 
 ---
 title: "Cerebras | Models | Mastra"
-description: "Use Cerebras models with Mastra. 4 models available."
+description: "Use Cerebras models with Mastra. 3 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -40228,7 +40306,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 [EN] Source: https://mastra.ai/en/models/providers/cerebras
 
-Access 4 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
+Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
@@ -40289,18 +40367,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 0.6,
     "outputCost": 1.2
-  },
-  {
-    "model": "cerebras/zai-glm-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 40960,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "cerebras/zai-glm-4.7",
@@ -43222,7 +43288,7 @@ description: "Use Firmware models with Mastra. 18 models available."
 
 Access 18 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
 
-Learn more in the [Firmware documentation](https://firmware.ai).
+Learn more in the [Firmware documentation](https://docs.firmware.ai).
 
 ```bash
 FIRMWARE_API_KEY=your-api-key
@@ -43250,7 +43316,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://firmware.ai) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://docs.firmware.ai) for details.
 
 :::
 
@@ -43411,8 +43477,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.25,
-    "outputCost": 2
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "firmware/gpt-5-nano",
@@ -43423,8 +43489,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.05,
-    "outputCost": 0.4
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "firmware/gpt-5.2",
@@ -47190,7 +47256,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
-      description="4 models"
+      description="3 models"
       href="/models/v1/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
@@ -47380,12 +47446,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/scaleway.svg"
     />    <CardGridItem
       title="SiliconFlow"
-      description="75 models"
+      description="73 models"
       href="/models/v1/providers/siliconflow"
       logo="https://models.dev/logos/siliconflow.svg"
     />    <CardGridItem
       title="SiliconFlow (China)"
-      description="72 models"
+      description="71 models"
       href="/models/v1/providers/siliconflow-cn"
       logo="https://models.dev/logos/siliconflow-cn.svg"
     />    <CardGridItem
@@ -56527,7 +56593,7 @@ const agent = new Agent({
 
 ---
 title: "SiliconFlow (China) | Models | Mastra"
-description: "Use SiliconFlow (China) models with Mastra. 72 models available."
+description: "Use SiliconFlow (China) models with Mastra. 71 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -56537,7 +56603,7 @@ description: "Use SiliconFlow (China) models with Mastra. 72 models available."
 # <img src="https://models.dev/logos/siliconflow-cn.svg" alt="SiliconFlow (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow (China)
 [EN] Source: https://mastra.ai/en/models/providers/siliconflow-cn
 
-Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
+Access 71 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_CN_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models).
 
@@ -56575,6 +56641,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "siliconflow-cn/ascend-tribe/pangu-pro-moe",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
   {
     "model": "siliconflow-cn/baidu/ERNIE-4.5-300B-A47B",
     "imageInput": false,
@@ -56660,18 +56738,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 164000,
-    "maxOutput": 164000,
-    "inputCost": 0.27,
-    "outputCost": 1
-  },
-  {
     "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.1-Terminus",
     "imageInput": false,
     "audioInput": false,
@@ -56684,7 +56750,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.2-Exp",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -56693,7 +56759,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 164000,
     "maxOutput": 164000,
     "inputCost": 0.27,
-    "outputCost": 0.41
+    "outputCost": 0.42
   },
   {
     "model": "siliconflow-cn/deepseek-ai/deepseek-vl2",
@@ -56744,16 +56810,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "model": "siliconflow-cn/Kwaipilot/KAT-Dev",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 33000,
-    "maxOutput": 4000,
-    "inputCost": 0.06,
-    "outputCost": 0.06
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.2,
+    "outputCost": 0.6
   },
   {
     "model": "siliconflow-cn/MiniMaxAI/MiniMax-M1-80k",
@@ -57368,30 +57434,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.086
   },
   {
-    "model": "siliconflow-cn/z-ai/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 131000,
-    "inputCost": 0.4,
-    "outputCost": 2
-  },
-  {
-    "model": "siliconflow-cn/z-ai/GLM-4.5-Air",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 131000,
-    "inputCost": 0.14,
-    "outputCost": 0.86
-  },
-  {
     "model": "siliconflow-cn/zai-org/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
@@ -57438,6 +57480,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 205000,
     "inputCost": 0.5,
     "outputCost": 1.9
+  },
+  {
+    "model": "siliconflow-cn/zai-org/GLM-4.6V",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   }
 ]}
 />
@@ -57470,7 +57524,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "siliconflow-cn/zai-org/GLM-4.6"
+      ? "siliconflow-cn/zai-org/GLM-4.6V"
       : "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct";
   }
 });
@@ -57481,7 +57535,7 @@ const agent = new Agent({
 
 ---
 title: "SiliconFlow | Models | Mastra"
-description: "Use SiliconFlow models with Mastra. 75 models available."
+description: "Use SiliconFlow models with Mastra. 73 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -57491,7 +57545,7 @@ description: "Use SiliconFlow models with Mastra. 75 models available."
 # <img src="https://models.dev/logos/siliconflow.svg" alt="SiliconFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow
 [EN] Source: https://mastra.ai/en/models/providers/siliconflow
 
-Access 75 SiliconFlow models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
+Access 73 SiliconFlow models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
 
 Learn more in the [SiliconFlow documentation](https://cloud.siliconflow.com/models).
 
@@ -58332,30 +58386,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131000,
     "inputCost": 0.086,
     "outputCost": 0.086
-  },
-  {
-    "model": "siliconflow/z-ai/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 131000,
-    "inputCost": 0.4,
-    "outputCost": 2
-  },
-  {
-    "model": "siliconflow/z-ai/GLM-4.5-Air",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131000,
-    "maxOutput": 131000,
-    "inputCost": 0.14,
-    "outputCost": 0.86
   },
   {
     "model": "siliconflow/zai-org/GLM-4.5",
