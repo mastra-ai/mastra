@@ -846,6 +846,18 @@ export class PrepareCommand {
       // Use PersistableInMemoryMemory for ObservationalMemory (has persist/hydrate)
       omStorage = new PersistableInMemoryMemory();
 
+      // Set prompt environment variables if configured
+      if (configDef.observerUseLegacyPrompt) {
+        process.env.OM_USE_LEGACY_PROMPT = '1';
+      } else {
+        delete process.env.OM_USE_LEGACY_PROMPT;
+      }
+      if (configDef.observerUseCondensedPrompt) {
+        process.env.OM_USE_CONDENSED_PROMPT = '1';
+      } else {
+        delete process.env.OM_USE_CONDENSED_PROMPT;
+      }
+
       // For OM: use REAL model for Observer/Reflector subagents (they need real LLMs to extract observations)
       // For shortcut mode: use Infinity thresholds to skip observation during processing
       // (finalize() will be called at the end to do a single observation pass)
@@ -861,6 +873,10 @@ export class PrepareCommand {
           // Shortcut: use Infinity to skip observation during processing (finalize() does it at the end)
           observationThreshold: usesShortcutOM ? Infinity : 30000,
           recognizePatterns: false,
+          // Allow config to override maxTokensPerBatch (default is 5000 in OM)
+          ...(configDef.observerMaxTokensPerBatch && { maxTokensPerBatch: configDef.observerMaxTokensPerBatch }),
+          // Allow config to enable sequential batch processing (default is parallel)
+          ...(configDef.observerSequentialBatches && { sequentialBatches: configDef.observerSequentialBatches }),
         },
         reflector: {
           model: omModel, // Real model for Reflector

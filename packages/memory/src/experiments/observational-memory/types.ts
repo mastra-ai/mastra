@@ -120,6 +120,15 @@ export interface ObserverConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
+
+  /**
+   * Process batches sequentially instead of in parallel.
+   * When true, each batch sees the observations from previous batches,
+   * which may improve quality but increases latency.
+   *
+   * @default false
+   */
+  sequentialBatches?: boolean;
 }
 
 /**

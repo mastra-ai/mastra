@@ -52,6 +52,14 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     prepareConcurrency: 5,
     benchConcurrency: 10,
   },
+  'full-fast': {
+    name: 'full-fast',
+    description: 'Full benchmark run with all questions',
+    dataset: 'longmemeval_s',
+    subset: undefined,
+    prepareConcurrency: 10,
+    benchConcurrency: 15,
+  },
   'full-slow': {
     name: 'full',
     description: 'Full benchmark run with all questions but with low concurrency',
@@ -73,7 +81,7 @@ export const RUN_VARIANTS: Record<string, RunVariant> = {
     description: 'Stratified sample: 10 questions per type (60 total)',
     dataset: 'longmemeval_s',
     perTypeCount: 10,
-    prepareConcurrency: 5,
+    prepareConcurrency: 20,
     benchConcurrency: 10,
   },
   'sample-comb': {
@@ -257,6 +265,18 @@ export interface MemoryConfigDefinition {
 
   /** Enable preference boost queries for RAG (default: false) */
   ragPreferenceBoost?: boolean;
+
+  /** Max tokens per batch for Observer (default: 5000) */
+  observerMaxTokensPerBatch?: number;
+
+  /** Process batches sequentially (default: false = parallel) */
+  observerSequentialBatches?: boolean;
+
+  /** Use legacy (Jan 7) Observer prompt for A/B testing (default: false) */
+  observerUseLegacyPrompt?: boolean;
+
+  /** Use condensed V3 Observer prompt for A/B testing (default: false) */
+  observerUseCondensedPrompt?: boolean;
 }
 
 // --- Shared config values ---
@@ -317,6 +337,14 @@ export const CONFIG_ALIASES: Record<string, MemoryConfigType> = {
   'working-memory': 'working-memory',
   'working-memory-tailored': 'working-memory-tailored',
   'observational-memory': 'observational-memory',
+  'om-batch-10k': 'om-batch-10k',
+  'om-legacy-prompt': 'om-legacy-prompt',
+  'om-legacy-prompt-gpt5-mini': 'om-legacy-prompt-gpt5-mini',
+  'om-batch-10k-gpt5-mini': 'om-batch-10k-gpt5-mini',
+  'om-batch-10k-sequential': 'om-batch-10k-sequential',
+  'om-batch-10k-sequential-gpt5-mini': 'om-batch-10k-sequential-gpt5-mini',
+  'om-condensed-prompt': 'om-condensed-prompt',
+  'om-condensed-prompt-gpt5-mini': 'om-condensed-prompt-gpt5-mini',
   'observational-memory-shortcut': 'observational-memory-shortcut',
   'observational-memory-shortcut-glm': 'observational-memory-shortcut-glm',
 };
@@ -487,6 +515,151 @@ const MEMORY_CONFIGS = {
     requiresSequential: true,
     agentModel: 'openai/gpt-4o',
     evalModel: 'openai/gpt-4o',
+  },
+
+  'om-batch-10k': {
+    type: 'om-batch-10k',
+    description: 'OM with 10k tokens per batch (vs default 5k) for comparison',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    observerMaxTokensPerBatch: 10000,
+  },
+
+  'om-batch-10k-sequential': {
+    type: 'om-batch-10k-sequential',
+    description: 'OM with 10k tokens per batch processed SEQUENTIALLY (batches see previous batch observations)',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    observerMaxTokensPerBatch: 10000,
+    observerSequentialBatches: true,
+  },
+
+  // ============================================================================
+  // Legacy Prompt Testing - A/B test to isolate prompt size impact
+  // ============================================================================
+
+  'om-legacy-prompt': {
+    type: 'om-legacy-prompt',
+    description: 'OM with Jan 7 legacy Observer prompt (smaller, ~574 lines vs ~873 lines)',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    observerUseLegacyPrompt: true,
+  },
+
+  'om-legacy-prompt-gpt5-mini': {
+    type: 'om-legacy-prompt-gpt5-mini',
+    description: 'OM with legacy Observer prompt + GPT-5 Mini agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5-mini',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om-legacy-prompt',
+    readOnlyConfig: true,
+  },
+
+  'om-condensed-prompt': {
+    type: 'om-condensed-prompt',
+    description: 'OM with condensed V3 Observer prompt - principle-based, shorter',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-4o',
+    evalModel: 'openai/gpt-4o',
+    observerUseCondensedPrompt: true,
+  },
+
+  'om-condensed-prompt-gpt5-mini': {
+    type: 'om-condensed-prompt-gpt5-mini',
+    description: 'OM with condensed V3 Observer prompt + GPT-5 Mini agent',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5-mini',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om-condensed-prompt',
+    readOnlyConfig: true,
   },
 
   'observational-memory-shortcut': {
@@ -997,6 +1170,56 @@ const MEMORY_CONFIGS = {
     agentModel: 'openai/gpt-5-mini',
     evalModel: 'openai/gpt-4o',
     baseConfig: 'observational-memory',
+    readOnlyConfig: true,
+  },
+
+  // Batch size comparison variant
+  'om-batch-10k-gpt5-mini': {
+    type: 'om-batch-10k-gpt5-mini',
+    description: 'OM with 10k tokens per batch, GPT-5 Mini agent (for batch size comparison)',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5-mini',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om-batch-10k',
+    readOnlyConfig: true,
+  },
+
+  // Sequential batch processing variants (batches see previous batch observations)
+  'om-batch-10k-sequential-gpt5-mini': {
+    type: 'om-batch-10k-sequential-gpt5-mini',
+    description: 'OM with 10k sequential batches, GPT-5 Mini agent (batches see previous observations)',
+    memoryOptions: {
+      lastMessages: 0,
+      semanticRecall: false,
+      workingMemory: { enabled: false },
+    },
+    needsRealModel: true,
+    usesSemanticRecall: false,
+    usesWorkingMemory: false,
+    usesTailored: false,
+    usesObservationalMemory: true,
+    usesShortcutOM: false,
+    usesGlmModel: false,
+    omModel: null,
+    omMaxInputTokens: null,
+    requiresSequential: true,
+    agentModel: 'openai/gpt-5-mini',
+    evalModel: 'openai/gpt-4o',
+    baseConfig: 'om-batch-10k-sequential',
     readOnlyConfig: true,
   },
 } satisfies Record<string, MemoryConfigDefinition>;

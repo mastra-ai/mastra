@@ -12,10 +12,121 @@ function omWarn(...args: unknown[]): void {
 }
 
 /**
+ * Legacy extraction instructions from Jan 7, 2026.
+ * Used for A/B testing prompt size impact on accuracy.
+ * Enable with OM_USE_LEGACY_PROMPT=1
+ */
+const LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
+
+When the user TELLS you something about themselves, mark it as an assertion:
+- "I have two kids" → 🔴 (14:30) User stated has two kids
+- "I work at Acme Corp" → 🔴 (14:31) User stated works at Acme Corp
+- "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
+
+When the user ASKS about something, mark it as a question/request:
+- "Can you help me with X?" → 🟡 (15:00) User asked help with X
+- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
+
+USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
+If a user previously stated something and later asks a question about the same topic,
+the assertion is the answer - the question doesn't invalidate what they already told you.
+
+TEMPORAL ANCHORING:
+Convert relative times to estimated dates based on the message timestamp.
+Include the user's original phrasing in quotes, then add an estimated date or range.
+Ranges may span multiple months - e.g., "within the last month" on July 15th could mean anytime in June to early July.
+
+BAD: User was given X by their friend last month.
+GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
+
+PRESERVE UNUSUAL PHRASING:
+When the user uses unexpected or non-standard terminology, quote their exact words.
+
+BAD: User exercised.
+GOOD: User stated they did a "movement session" (their term for exercise).
+
+CONVERSATION CONTEXT:
+- What the user is working on or asking about
+- Previous topics and their outcomes
+- What user understands or needs clarification on
+- Specific requirements or constraints mentioned
+- Contents of assistant learnings and summaries
+- Answers to users questions including full context to remember detailed summaries and explanations
+- Assistant explanations, especially complex ones. observe the fine details so that the assistant does not forget what they explained
+- Relevant code snippets
+- User preferences (like favourites, dislikes, preferences, etc)
+- Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
+- Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
+- When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
+
+ACTIONABLE INSIGHTS:
+- What worked well in explanations
+- What needs follow-up or clarification
+- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
+
+/**
+ * Check which prompt variant to use (for A/B testing)
+ */
+const USE_LEGACY_PROMPT = process.env.OM_USE_LEGACY_PROMPT === '1' || process.env.OM_USE_LEGACY_PROMPT === 'true';
+const USE_CONDENSED_PROMPT = process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
+
+/**
+ * Condensed V3 extraction instructions - principle-based, relies on model's common sense.
+ * ~45 lines vs ~200 lines in current prompt.
+ * Enable with OM_USE_CONDENSED_PROMPT=1
+ */
+const CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS = `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
+
+CORE PRINCIPLES:
+
+1. BE SPECIFIC - Vague observations are useless. Capture details that distinguish and identify.
+2. ANCHOR IN TIME - Note when things happened and when they were said.
+3. TRACK STATE CHANGES - When information updates or supersedes previous info, make it explicit.
+4. USE COMMON SENSE - If it would help the assistant remember later, observe it.
+
+ASSERTIONS VS QUESTIONS:
+- User TELLS you something → 🔴 "User stated [fact]"
+- User ASKS something → 🟡 "User asked [question]"
+- User assertions are authoritative. They are the source of truth about their own life.
+
+TEMPORAL ANCHORING:
+- Always include message time at the start: (14:30) User stated...
+- Add estimated date at the END only for relative time references:
+  "User will visit parents this weekend. (meaning Jan 18-19)"
+- Don't add end dates for present-moment statements or vague terms like "recently"
+- Split multi-event statements into separate observations, each with its own date
+
+DETAILS TO ALWAYS PRESERVE:
+- Names, handles, usernames, titles (@username, "Dr. Smith")
+- Numbers, counts, quantities (4 items, 3 sessions, 27th in list)
+- Measurements, percentages, statistics (5kg, 20% improvement, 85% accuracy)
+- Sequences and orderings (steps 1-5, chord progression, lucky numbers)
+- Prices, dates, times, durations ($50, March 15, 2 hours)
+- Locations and distinguishing attributes (near X, based in Y, specializes in Z)
+- User's specific role (presenter, volunteer, organizer - not just "attended")
+- Exact phrasing when unusual ("movement session" for exercise)
+- Verbatim text being collaborated on (code, formatted text, ASCII art)
+
+WHEN ASSISTANT PROVIDES LISTS/RECOMMENDATIONS:
+Don't just say "Assistant recommended 5 hotels." Capture what distinguishes each:
+"Assistant recommended: Hotel A (near station), Hotel B (pet-friendly), Hotel C (has pool)..."
+
+STATE CHANGES:
+When user updates information, note what changed:
+"User will use the new method (replacing the old approach)"
+
+WHO/WHAT/WHERE/WHEN:
+Capture all dimensions. Not just "User went on a trip" but who with, where, when, and what happened.
+
+Don't repeat observations that have already been captured in previous sessions.
+
+REMEMBER: These observations are your ENTIRE memory. Any detail you fail to observe is permanently forgotten. Use common sense - if something seems like it might be important to remember, it probably is. When in doubt, observe it.`;
+
+/**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
  */
-export const OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
+const CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
 
 When the user TELLS you something about themselves, mark it as an assertion:
 - "I have two kids" → 🔴 (14:30) User stated has two kids
@@ -212,6 +323,17 @@ ACTIONABLE INSIGHTS:
 - User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
 
 /**
+ * Select which extraction instructions to use based on environment variable.
+ * Set OM_USE_LEGACY_PROMPT=1 to use the smaller Jan 7 prompt for A/B testing.
+ * Set OM_USE_CONDENSED_PROMPT=1 to use the new condensed V3 prompt.
+ */
+export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
+  ? CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS
+  : USE_LEGACY_PROMPT 
+    ? LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS 
+    : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
+
+/**
  * Shared pattern instructions for Observer and Reflector agents.
  * This is exported so both agents use consistent pattern formatting.
  */
@@ -238,6 +360,53 @@ IMPORTANT:
  * The output format instructions for the Observer.
  * This is exported so the Reflector can use the same format.
  */
+
+/**
+ * Condensed output format with realistic examples that model desired patterns.
+ */
+const CONDENSED_OBSERVER_OUTPUT_FORMAT = `Use priority levels:
+- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🟡 Medium: project details, learned information, tool results
+- 🟢 Low: minor details, uncertain observations
+
+Group observations by date, then list each with 24-hour time.
+Group related observations (like tool sequences) by indenting.
+
+<observations>
+Date: Dec 4, 2025
+* 🔴 (09:15) User stated they have 3 kids: Emma (12), Jake (9), and Lily (5)
+* 🔴 (09:16) User's anniversary is March 15
+* 🟡 (09:20) User asked how to optimize database queries
+* 🟡 (10:30) User working on auth refactor - targeting 50% latency reduction
+* 🟡 (10:45) Assistant recommended hotels: Grand Plaza (downtown, $180/night), Seaside Inn (near beach, pet-friendly), Mountain Lodge (has pool, free breakfast)
+* 🔴 (11:00) User's friend @maria_dev recommended using Redis for caching
+* 🟡 (11:15) User attended the tech conference as a speaker (presented on microservices)
+* 🔴 (11:30) User will visit parents this weekend (meaning Dec 7-8, 2025)
+* 🟡 (14:00) Agent debugging auth issue
+  * -> ran git status, found 3 modified files
+  * -> viewed auth.ts:45-60, found missing null check
+  * -> applied fix, tests now pass
+* 🟡 (14:30) Assistant provided dataset stats: 7,342 samples, 89.6% accuracy, 23ms inference time
+* 🔴 (15:00) User's lucky numbers from fortune cookie: 7, 14, 23, 38, 42, 49
+
+Date: Dec 5, 2025
+* 🔴 (09:00) User switched from Python to TypeScript for the project (no longer using Python)
+* 🟡 (09:30) User bought running shoes for $120 at SportMart (downtown location)
+* 🔴 (10:00) User prefers morning meetings, not afternoon (updating previous preference)
+* 🟡 (10:30) User went to Italy with their sister last summer (meaning July 2025), visited Rome and Florence for 2 weeks
+* 🔴 (10:45) User's dentist appointment is next Tuesday (meaning Dec 10, 2025)
+* 🟢 (11:00) User mentioned they might try the new coffee shop
+</observations>
+
+<current-task>
+Primary: Implementing OAuth2 flow for the auth refactor
+Secondary: Waiting for user to confirm database schema changes
+</current-task>
+
+<suggested-response>
+The OAuth2 implementation is ready for testing. Would you like me to walk through the flow?
+</suggested-response>`;
+
 /**
  * Base output format for Observer (without patterns section)
  */
@@ -295,10 +464,25 @@ Only include patterns when there are 2+ related items to group.`;
 export const OBSERVER_OUTPUT_FORMAT = OBSERVER_OUTPUT_FORMAT_BASE + OBSERVER_PATTERNS_SECTION;
 
 /**
+ * Condensed guidelines - no GOOD/BAD examples, no arbitrary limits
+ */
+const CONDENSED_OBSERVER_GUIDELINES = `- Be specific: "User prefers short answers without lengthy explanations" not "User stated a preference"
+- Use terse language - dense sentences without unnecessary words
+- Don't repeat observations that have already been captured
+- When the agent calls tools, observe what was called, why, and what was learned
+- Include line numbers when observing code files
+- If the agent provides a detailed response, observe the key points so it could be repeated
+- Start each observation with a priority emoji (🔴, 🟡, 🟢)
+- Observe WHAT happened and WHAT it means, not HOW well it was done
+- If the user provides detailed messages or code snippets, observe all important details`;
+
+/**
  * The guidelines for the Observer.
  * This is exported so the Reflector can reference them.
  */
-export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to act on
+export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT 
+  ? CONDENSED_OBSERVER_GUIDELINES
+  : `- Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
@@ -317,8 +501,13 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  */
 export function buildObserverSystemPrompt(recognizePatterns: boolean = true, multiThread: boolean = false): string {
-  // Conditionally include patterns section based on config
-  const outputFormat = recognizePatterns ? OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
+  // Use condensed output format when condensed prompt is enabled
+  // Otherwise, conditionally include patterns section based on config
+  const outputFormat = USE_CONDENSED_PROMPT 
+    ? CONDENSED_OBSERVER_OUTPUT_FORMAT
+    : recognizePatterns 
+      ? OBSERVER_OUTPUT_FORMAT 
+      : OBSERVER_OUTPUT_FORMAT_BASE;
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
