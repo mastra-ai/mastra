@@ -7,7 +7,7 @@
  * @module auth-workos/user
  */
 
-import type { IUserProvider, EEUser } from '@mastra/core/ee';
+import type { IUserProvider } from '@mastra/core/ee';
 import type { AuthService } from '@workos/authkit-session';
 import type { WorkOS, User as WorkOSApiUser } from '@workos-inc/node';
 
@@ -56,7 +56,7 @@ export class WorkOSUserProvider implements IUserProvider<WorkOSUser> {
 
       // Map WorkOS API user to WorkOSUser format
       return this.mapToWorkOSUser(auth.user);
-    } catch (error) {
+    } catch {
       // Session invalid or expired
       return null;
     }
@@ -72,7 +72,7 @@ export class WorkOSUserProvider implements IUserProvider<WorkOSUser> {
     try {
       const user = await this.workos.userManagement.getUser(userId);
       return this.mapToWorkOSUser(user);
-    } catch (error) {
+    } catch {
       // User not found or API error
       return null;
     }

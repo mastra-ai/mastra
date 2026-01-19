@@ -1,5 +1,5 @@
-import type { EEUser } from './user.js';
 import type { Session } from './session.js';
+import type { EEUser } from './user.js';
 
 /**
  * Result returned after successful credentials authentication

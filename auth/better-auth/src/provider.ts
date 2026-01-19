@@ -14,8 +14,8 @@ import { betterAuth } from 'better-auth';
 import type { Auth } from 'better-auth';
 
 import { BetterAuthCredentialsProvider } from './credentials.js';
-import { BetterAuthUserProvider } from './user.js';
 import type { BetterAuthConfig, BetterAuthUser } from './types.js';
+import { BetterAuthUserProvider } from './user.js';
 
 /**
  * Mastra Better Auth provider.

@@ -232,7 +232,7 @@ export class BetterAuthCredentialsProvider implements ICredentialsProvider<Bette
           redirectTo: `${this.config.baseURL}/reset-password`,
         },
       });
-    } catch (error) {
+    } catch {
       // Don't expose whether email exists (security best practice)
       // Better Auth will handle the email sending if user exists
     }

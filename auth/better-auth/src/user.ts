@@ -64,7 +64,7 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
 
       // Map to BetterAuthUser format
       return this.mapToBetterAuthUser(betterAuthUser);
-    } catch (error) {
+    } catch {
       // Session invalid or expired
       return null;
     }
@@ -76,7 +76,7 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
    * @param userId - Better Auth user ID
    * @returns Better Auth user or null if not found
    */
-  async getUser(userId: string): Promise<BetterAuthUser | null> {
+  async getUser(_userId: string): Promise<BetterAuthUser | null> {
     try {
       // Better Auth doesn't have a direct getUserById API endpoint,
       // so we need to use the internal method or query the database directly
@@ -91,7 +91,7 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
       // This will be improved when Better Auth adds a getUserById method
       console.warn('BetterAuthUserProvider.getUser: Direct user lookup not implemented');
       return null;
-    } catch (error) {
+    } catch {
       // User not found or database error
       return null;
     }
@@ -141,7 +141,7 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
       }
 
       return null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }

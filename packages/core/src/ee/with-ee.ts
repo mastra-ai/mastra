@@ -10,17 +10,17 @@
  * @packageDocumentation
  */
 
-import type { EEUser } from './interfaces/user.js';
-import type { IUserProvider } from './interfaces/user.js';
-import type { ISessionProvider, Session } from './interfaces/session.js';
-import type { ISSOProvider } from './interfaces/sso.js';
-import type { ICredentialsProvider } from './interfaces/credentials.js';
-import type { IRBACProvider } from './interfaces/rbac.js';
-import type { IACLProvider } from './interfaces/acl.js';
-import type { IAuditLogger } from './interfaces/audit.js';
-import { MastraAuthProvider, type MastraAuthProviderConfig, type CapabilityFlags } from './auth-provider.js';
+import { MastraAuthProvider } from './auth-provider.js';
+import type { CapabilityFlags } from './auth-provider.js';
 import { buildPublicCapabilities, buildAuthenticatedCapabilities } from './capabilities.js';
 import type { PublicAuthCapabilities, AuthenticatedCapabilities } from './capabilities.js';
+import type { IACLProvider } from './interfaces/acl.js';
+import type { IAuditLogger } from './interfaces/audit.js';
+import type { ICredentialsProvider } from './interfaces/credentials.js';
+import type { IRBACProvider } from './interfaces/rbac.js';
+import type { ISessionProvider } from './interfaces/session.js';
+import type { ISSOProvider } from './interfaces/sso.js';
+import type { IUserProvider, EEUser } from './interfaces/user.js';
 
 /**
  * Options for withEE composition helper

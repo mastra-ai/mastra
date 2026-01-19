@@ -7,8 +7,8 @@
  * @packageDocumentation
  */
 
-import type { EEUser } from '../../interfaces/user.js';
 import type { IRBACProvider, RoleMapping } from '../../interfaces/rbac.js';
+import type { EEUser } from '../../interfaces/user.js';
 import { DEFAULT_ROLE_MAPPING } from '../roles.js';
 
 /**

@@ -10,7 +10,7 @@
  */
 
 import type { MastraAuthProvider, EEUser } from '@mastra/core/ee';
-import { AuditStorage } from '@mastra/core/storage';
+import type { AuditStorage } from '@mastra/core/storage';
 
 import { z } from 'zod';
 
@@ -34,7 +34,7 @@ const auditIdSchema = z.object({
  * Helper to get auth provider from Mastra instance.
  * This function will need to be updated once auth provider is integrated into Mastra config.
  */
-function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
+function getAuthProvider(_mastra: any): MastraAuthProvider<EEUser> | null {
   // TODO: Update once auth is integrated into Mastra config
   return null;
 }
@@ -43,7 +43,7 @@ function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
  * Helper to get audit storage from Mastra instance.
  * This function will need to be updated once storage is properly accessible.
  */
-function getAuditStorage(mastra: any): AuditStorage | null {
+function getAuditStorage(_mastra: any): AuditStorage | null {
   // TODO: Access audit storage from Mastra instance
   // This should become: return mastra.getStorage?.()?.audit ?? null;
   return null;
@@ -53,7 +53,7 @@ function getAuditStorage(mastra: any): AuditStorage | null {
  * Check if the current user has the required permission.
  * TODO: Once Request object is available, implement proper permission checking.
  */
-async function checkPermission(authProvider: MastraAuthProvider<EEUser> | null, permission: string): Promise<void> {
+async function checkPermission(authProvider: MastraAuthProvider<EEUser> | null, _permission: string): Promise<void> {
   if (!authProvider) {
     throw new HTTPException(401, { message: 'Authentication required' });
   }

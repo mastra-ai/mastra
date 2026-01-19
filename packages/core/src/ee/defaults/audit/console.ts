@@ -64,7 +64,7 @@ export class ConsoleAuditLogger implements IAuditLogger {
     };
 
     if (this.json) {
-      console.log(JSON.stringify(fullEvent));
+      console.info(JSON.stringify(fullEvent));
       return;
     }
 
@@ -96,7 +96,7 @@ export class ConsoleAuditLogger implements IAuditLogger {
         console.warn(message);
         break;
       default:
-        console.log(message);
+        console.info(message);
     }
   }
 

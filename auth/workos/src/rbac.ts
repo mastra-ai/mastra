@@ -101,7 +101,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       const role = membership.role?.slug || user.workos.role || 'viewer';
 
       return [role];
-    } catch (error) {
+    } catch {
       // Organization membership not found, return default viewer role
       return ['viewer'];
     }

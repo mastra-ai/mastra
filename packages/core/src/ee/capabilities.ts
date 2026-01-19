@@ -7,9 +7,9 @@
  * @packageDocumentation
  */
 
-import type { EEUser } from './interfaces/user.js';
-import type { SSOLoginConfig } from './interfaces/sso.js';
 import type { MastraAuthProvider, CapabilityFlags } from './auth-provider.js';
+import type { SSOLoginConfig } from './interfaces/sso.js';
+import type { EEUser } from './interfaces/user.js';
 import { isEELicenseValid } from './license.js';
 
 /**

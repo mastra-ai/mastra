@@ -1,4 +1,4 @@
-import type { AuditEvent, AuditFilter, AuditExportFormat, IAuditLogger, AuditOutcome } from '@mastra/core/ee';
+import type { AuditEvent, AuditFilter, AuditExportFormat, IAuditLogger } from '@mastra/core/ee';
 import type { WorkOS } from '@workos-inc/node';
 
 /**
@@ -114,7 +114,7 @@ export class WorkOSAuditExporter implements IAuditLogger {
    * query API directly. For production use, query events via the WorkOS dashboard
    * or use SIEM integrations.
    */
-  async query(filter: AuditFilter): Promise<AuditEvent[]> {
+  async query(_filter: AuditFilter): Promise<AuditEvent[]> {
     // TODO: Implement when WorkOS SDK exposes the Audit Logs query API
     // For now, throw an error indicating this feature is not available
     throw new Error(
@@ -129,7 +129,7 @@ export class WorkOSAuditExporter implements IAuditLogger {
    * Note: This method is a placeholder. For production use, export events via
    * the WorkOS dashboard or SIEM integrations (Splunk, Datadog, etc.).
    */
-  async export(filter: AuditFilter, format: AuditExportFormat): Promise<ReadableStream> {
+  async export(_filter: AuditFilter, _format: AuditExportFormat): Promise<ReadableStream> {
     // TODO: Implement when WorkOS SDK exposes the Audit Logs export API
     // For now, throw an error indicating this feature is not available
     throw new Error(
@@ -195,7 +195,7 @@ export class WorkOSAuditExporter implements IAuditLogger {
       } else if (value !== null && value !== undefined) {
         try {
           flattened[key] = JSON.stringify(value);
-        } catch (error) {
+        } catch {
           // Handle BigInt values
           if (typeof value === 'bigint') {
             flattened[key] = String(value);

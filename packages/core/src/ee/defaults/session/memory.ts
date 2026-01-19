@@ -217,8 +217,8 @@ export class MemorySessionProvider implements ISessionProvider<Session> {
     }
 
     // Fallback to Node.js crypto
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto');
+
+    const nodeCrypto = require('node:crypto');
     return nodeCrypto.randomBytes(16).toString('hex');
   }
 

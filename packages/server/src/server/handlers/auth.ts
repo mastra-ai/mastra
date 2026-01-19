@@ -38,7 +38,7 @@ import { handleError } from './error';
  * @param mastra - Mastra instance
  * @returns Auth provider or null if not configured
  */
-function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
+function getAuthProvider(_mastra: any): MastraAuthProvider<EEUser> | null {
   // TODO: Once auth is integrated into Mastra config, access it properly
   // For now, return null to indicate auth is not configured
   // This should become: return mastra.getAuthProvider?.() ?? null;

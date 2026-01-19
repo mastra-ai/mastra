@@ -68,7 +68,7 @@ export class WorkOSSessionProvider implements ISessionProvider<Session> {
    * @param sessionId - Session ID to validate
    * @returns Session object or null if invalid
    */
-  async validateSession(sessionId: string): Promise<Session | null> {
+  async validateSession(_sessionId: string): Promise<Session | null> {
     // AuthKit handles validation internally via withAuth()
     // The encrypted cookie contains all session data
     // This method cannot be fully implemented without the request context
@@ -83,7 +83,7 @@ export class WorkOSSessionProvider implements ISessionProvider<Session> {
    *
    * @param sessionId - Session ID to destroy
    */
-  async destroySession(sessionId: string): Promise<void> {
+  async destroySession(_sessionId: string): Promise<void> {
     // AuthKit handles session clearing via signOut()
     // The actual cookie clearing happens in the response headers
     // This is a no-op since we can't modify cookies without response context
@@ -98,7 +98,7 @@ export class WorkOSSessionProvider implements ISessionProvider<Session> {
    * @param sessionId - Session ID to refresh
    * @returns Updated session or null if invalid
    */
-  async refreshSession(sessionId: string): Promise<Session | null> {
+  async refreshSession(_sessionId: string): Promise<Session | null> {
     // AuthKit handles refresh automatically when calling withAuth()
     // The refreshed session data is returned via the response
     return null;
@@ -113,7 +113,7 @@ export class WorkOSSessionProvider implements ISessionProvider<Session> {
    * @param request - Incoming HTTP request
    * @returns Session ID or null (always null with AuthKit)
    */
-  getSessionIdFromRequest(request: Request): string | null {
+  getSessionIdFromRequest(_request: Request): string | null {
     // With AuthKit, the session ID is not exposed directly
     // The session is managed via encrypted cookies
     // Use authService.withAuth(request) to access session data

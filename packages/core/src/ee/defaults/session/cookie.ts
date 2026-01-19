@@ -140,7 +140,7 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
       }
 
       return session;
-    } catch (error) {
+    } catch {
       // Invalid or corrupted session cookie
       return null;
     }
@@ -248,8 +248,8 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
    */
   private encryptSession(session: Session): string {
     // Use Node.js crypto for AES-GCM
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const crypto = require('crypto');
+
+    const crypto = require('node:crypto');
 
     // Generate random IV (12 bytes for GCM)
     const iv = crypto.randomBytes(12);
@@ -285,8 +285,7 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
    */
   private async decryptSession(encryptedValue: string): Promise<Session | null> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const crypto = require('crypto');
+      const crypto = require('node:crypto');
 
       // Decode from base64url
       const combined = Buffer.from(encryptedValue, 'base64url');
@@ -315,7 +314,7 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
         createdAt: new Date(sessionData.createdAt),
         metadata: sessionData.metadata,
       };
-    } catch (error) {
+    } catch {
       // Decryption failed - invalid or tampered cookie
       return null;
     }
@@ -331,8 +330,8 @@ export class CookieSessionProvider implements ISessionProvider<Session> {
     }
 
     // Fallback to Node.js crypto
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto');
+
+    const nodeCrypto = require('node:crypto');
     return nodeCrypto.randomBytes(16).toString('hex');
   }
 }
