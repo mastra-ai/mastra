@@ -22,3 +22,6 @@ node_modules
 .env
 .env.local
 omm.md
+
+# Cache files
+.prep-token-cache.json

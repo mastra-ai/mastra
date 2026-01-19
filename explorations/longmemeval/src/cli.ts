@@ -3,7 +3,7 @@
 import 'dotenv/config';
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { readFile, readdir } from 'fs/promises';
+import { readFile, readdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync, statSync } from 'fs';
 import { execSync } from 'child_process';
@@ -116,6 +116,99 @@ interface PreparationTokenUsage {
   questionCount: number;
 }
 
+// Cache for per-question preparation token usage
+interface QuestionTokenCache {
+  [questionId: string]: {
+    mtime: number; // mtime of om-debug.jsonl when cached
+    usage: {
+      observerInputTokens: number;
+      observerOutputTokens: number;
+      reflectorInputTokens: number;
+      reflectorOutputTokens: number;
+    };
+  };
+}
+
+interface PrepTokenCache {
+  [memoryConfig: string]: QuestionTokenCache;
+}
+
+const PREP_TOKEN_CACHE_FILE = '.prep-token-cache.json';
+
+async function loadPrepTokenCache(): Promise<PrepTokenCache> {
+  try {
+    const content = await readFile(PREP_TOKEN_CACHE_FILE, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+
+async function savePrepTokenCache(cache: PrepTokenCache): Promise<void> {
+  await writeFile(PREP_TOKEN_CACHE_FILE, JSON.stringify(cache, null, 2));
+}
+
+async function parseDebugFileForTokens(debugFile: string): Promise<{
+  observerInputTokens: number;
+  observerOutputTokens: number;
+  reflectorInputTokens: number;
+  reflectorOutputTokens: number;
+} | null> {
+  try {
+    const content = await readFile(debugFile, 'utf-8');
+    
+    const result = {
+      observerInputTokens: 0,
+      observerOutputTokens: 0,
+      reflectorInputTokens: 0,
+      reflectorOutputTokens: 0,
+    };
+    
+    // Parse pretty-printed JSON objects
+    const events: any[] = [];
+    let currentJson = '';
+    let braceCount = 0;
+    
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      
+      if (braceCount === 0 && trimmed.startsWith('{')) {
+        currentJson = line;
+        braceCount = (trimmed.match(/{/g) || []).length - (trimmed.match(/}/g) || []).length;
+      } else if (braceCount > 0) {
+        currentJson += '\n' + line;
+        braceCount += (trimmed.match(/{/g) || []).length;
+        braceCount -= (trimmed.match(/}/g) || []).length;
+      }
+      
+      if (braceCount === 0 && currentJson) {
+        try {
+          events.push(JSON.parse(currentJson));
+        } catch {
+          // Skip malformed JSON
+        }
+        currentJson = '';
+      }
+    }
+
+    for (const event of events) {
+      if (event.usage && event.usage.inputTokens) {
+        if (event.type === 'observation_complete') {
+          result.observerInputTokens += event.usage.inputTokens || 0;
+          result.observerOutputTokens += event.usage.outputTokens || 0;
+        } else if (event.type === 'reflection_complete') {
+          result.reflectorInputTokens += event.usage.inputTokens || 0;
+          result.reflectorOutputTokens += event.usage.outputTokens || 0;
+        }
+      }
+    }
+    
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 async function loadPreparationTokenUsage(
   preparedDataDir: string,
   memoryConfig: string,
@@ -137,6 +230,14 @@ async function loadPreparationTokenUsage(
       return null;
     }
 
+    // Load cache
+    const cache = await loadPrepTokenCache();
+    if (!cache[memoryConfig]) {
+      cache[memoryConfig] = {};
+    }
+    const configCache = cache[memoryConfig];
+    let cacheUpdated = false;
+
     const questionDirs = await readdir(configDir);
     const dirsToProcess = questionIds
       ? questionDirs.filter(d => questionIds.includes(d))
@@ -147,53 +248,44 @@ async function loadPreparationTokenUsage(
       if (!existsSync(debugFile)) continue;
 
       try {
-        const content = await readFile(debugFile, 'utf-8');
+        const fileStat = statSync(debugFile);
+        const fileMtime = fileStat.mtimeMs;
         
-        // Parse pretty-printed JSON objects
-        // Each event starts with { (possibly with content on same line) and ends with } on its own line
-        const events: any[] = [];
-        let currentJson = '';
-        let braceCount = 0;
-        
-        for (const line of content.split('\n')) {
-          const trimmed = line.trim();
-          
-          // Check if this line starts a new JSON object
-          if (braceCount === 0 && trimmed.startsWith('{')) {
-            currentJson = line;
-            braceCount = (trimmed.match(/{/g) || []).length - (trimmed.match(/}/g) || []).length;
-          } else if (braceCount > 0) {
-            currentJson += '\n' + line;
-            braceCount += (trimmed.match(/{/g) || []).length;
-            braceCount -= (trimmed.match(/}/g) || []).length;
-          }
-          
-          // If we've closed all braces, parse the JSON
-          if (braceCount === 0 && currentJson) {
-            try {
-              events.push(JSON.parse(currentJson));
-            } catch {
-              // Skip malformed JSON
-            }
-            currentJson = '';
+        // Check if we have a valid cache entry
+        const cached = configCache[questionDir];
+        if (cached && cached.mtime === fileMtime) {
+          // Use cached values
+          usage.observerInputTokens += cached.usage.observerInputTokens;
+          usage.observerOutputTokens += cached.usage.observerOutputTokens;
+          usage.reflectorInputTokens += cached.usage.reflectorInputTokens;
+          usage.reflectorOutputTokens += cached.usage.reflectorOutputTokens;
+          usage.questionCount++;
+        } else {
+          // Parse the file and update cache
+          const parsed = await parseDebugFileForTokens(debugFile);
+          if (parsed) {
+            usage.observerInputTokens += parsed.observerInputTokens;
+            usage.observerOutputTokens += parsed.observerOutputTokens;
+            usage.reflectorInputTokens += parsed.reflectorInputTokens;
+            usage.reflectorOutputTokens += parsed.reflectorOutputTokens;
+            usage.questionCount++;
+            
+            // Update cache
+            configCache[questionDir] = {
+              mtime: fileMtime,
+              usage: parsed,
+            };
+            cacheUpdated = true;
           }
         }
-
-        for (const event of events) {
-          if (event.usage && event.usage.inputTokens) {
-            if (event.type === 'observation_complete') {
-              usage.observerInputTokens += event.usage.inputTokens || 0;
-              usage.observerOutputTokens += event.usage.outputTokens || 0;
-            } else if (event.type === 'reflection_complete') {
-              usage.reflectorInputTokens += event.usage.inputTokens || 0;
-              usage.reflectorOutputTokens += event.usage.outputTokens || 0;
-            }
-          }
-        }
-        usage.questionCount++;
       } catch {
         // Skip files that can't be read
       }
+    }
+
+    // Save cache if updated
+    if (cacheUpdated) {
+      await savePrepTokenCache(cache);
     }
 
     usage.totalInputTokens = usage.observerInputTokens + usage.reflectorInputTokens;
