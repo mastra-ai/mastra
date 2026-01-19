@@ -1,6 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
-import { isProcessorWorkflow } from '@mastra/core/processors';
+import { isProcessorWorkflow, type Processor, type ProcessorWorkflow } from '@mastra/core/processors';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -97,8 +97,9 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
       > = {};
 
       // Iterate through all individual processors registered with Mastra
-      for (const [processorKey, processor] of Object.entries(processors)) {
-        const processorId = (processor as any).id || processorKey;
+      for (const [processorKey, processorEntry] of Object.entries(processors)) {
+        const processor = processorEntry as Processor | ProcessorWorkflow;
+        const processorId = processor.id || processorKey;
 
         // Check if it's a workflow processor
         const isWorkflow = isProcessorWorkflow(processor);
@@ -113,7 +114,8 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
 
         result[processorId] = {
           id: processorId,
-          name: (processor as any).name || processorId,
+          name: processor.name || processorId,
+          description: processor.description,
           phases,
           agentIds,
           configurations,
@@ -140,24 +142,24 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
   handler: async ({ mastra, processorId }) => {
     try {
       // Get the processor from Mastra's registered processors
-      let processor: any;
+      let processorEntry: Processor | ProcessorWorkflow | undefined;
       try {
-        processor = mastra.getProcessorById(processorId);
+        processorEntry = mastra.getProcessorById(processorId) as Processor | ProcessorWorkflow;
       } catch {
         // getProcessorById throws if not found, try by key
         const processors = mastra.listProcessors() || {};
-        processor = processors[processorId as keyof typeof processors];
+        processorEntry = processors[processorId as keyof typeof processors] as Processor | ProcessorWorkflow;
       }
 
-      if (!processor) {
+      if (!processorEntry) {
         throw new HTTPException(404, { message: 'Processor not found' });
       }
 
       // Check if it's a workflow processor
-      const isWorkflow = isProcessorWorkflow(processor);
+      const isWorkflow = isProcessorWorkflow(processorEntry);
 
       // Detect phases (handles both individual processors and workflow processors)
-      const phases = detectProcessorPhases(processor);
+      const phases = detectProcessorPhases(processorEntry);
 
       // Get agent configurations for this processor
       const configs = mastra.getProcessorConfigurations(processorId);
@@ -169,8 +171,9 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       }));
 
       return {
-        id: processor.id,
-        name: processor.name || processor.id,
+        id: processorEntry.id,
+        name: processorEntry.name || processorEntry.id,
+        description: processorEntry.description,
         phases,
         configurations,
         isWorkflow,

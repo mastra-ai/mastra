@@ -17,6 +17,7 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -307,6 +308,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     description: 'Test scorer for observability tests',
   });
 
+  // Create test processor
+  const testProcessor = createTestProcessor({ id: 'test-processor' });
+
   mockLogger.transports = new Map([
     ['console', {}],
     ['file', {}],
@@ -416,6 +420,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     mcpServers: {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
+    },
+    processors: {
+      'test-processor': testProcessor,
     },
   });
 
@@ -598,6 +605,27 @@ export function createMockMemory() {
   const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
+}
+
+/**
+ * Creates a test processor for integration tests
+ */
+export function createTestProcessor(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+  } = {},
+): Processor {
+  return {
+    id: overrides.id || 'test-processor',
+    name: overrides.name || 'Test Processor',
+    description: overrides.description || 'A test processor for integration tests',
+    async processInput({ messages }: ProcessInputArgs): Promise<ProcessInputResult> {
+      // Simple pass-through processor
+      return messages;
+    },
+  };
 }
 
 /**

@@ -16,7 +16,7 @@ const NameCell = ({ row }: { row: Row<ProcessorRow> }) => {
           {processor.name || processor.id}
         </Link>
       }
-      description={processor.id !== processor.name ? processor.id : undefined}
+      description={processor.description}
     />
   );
 };

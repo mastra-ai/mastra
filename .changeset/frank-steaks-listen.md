@@ -1,8 +1,5 @@
 ---
 '@mastra/client-js': minor
-'@mastra/playground-ui': patch
-'@mastra/server': patch
-'@mastra/core': patch
 ---
 
 Added processor resource to the JavaScript client SDK. You can now list processors, get processor details, and execute processors via the client:
