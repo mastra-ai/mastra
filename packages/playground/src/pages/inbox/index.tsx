@@ -146,23 +146,28 @@ function Inbox() {
         </HeaderAction>
       </Header>
 
-      {activeInboxId && stats && (
-        <div className="px-6 py-4 border-b border-border1">
-          <InboxStatsDisplay stats={stats} isLoading={isLoadingStats} />
-        </div>
-      )}
-
-      <MainContentContent isCentered={!isLoading && tasks.length === 0}>
-        {activeInboxId ? (
-          <TasksTable
-            tasks={tasks}
-            inboxId={activeInboxId}
-            isLoading={!!isLoadingTasks}
-            onTaskClick={handleTaskClick}
-          />
-        ) : (
+      <MainContentContent isCentered={!isLoading && (!activeInboxId || tasks.length === 0)}>
+        {!activeInboxId ? (
           <div className="flex items-center justify-center h-full text-text3">
             {isLoadingInboxes ? 'Loading inboxes...' : 'No inboxes configured'}
+          </div>
+        ) : tasks.length === 0 && !isLoadingTasks ? (
+          <TasksTable tasks={[]} inboxId={activeInboxId} isLoading={false} onTaskClick={handleTaskClick} />
+        ) : (
+          <div className="flex flex-col h-full">
+            {stats && (
+              <div className="px-6 py-4 border-b border-border1 shrink-0">
+                <InboxStatsDisplay stats={stats} isLoading={isLoadingStats} />
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              <TasksTable
+                tasks={tasks}
+                inboxId={activeInboxId}
+                isLoading={!!isLoadingTasks}
+                onTaskClick={handleTaskClick}
+              />
+            </div>
           </div>
         )}
       </MainContentContent>
