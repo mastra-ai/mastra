@@ -7,6 +7,8 @@ import {
   ensureDate,
 } from '@mastra/core/storage';
 import type {
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -304,6 +306,84 @@ export class WorkflowsUpstash extends WorkflowsStorage {
             namespace: 'workflows',
             runId,
             workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    try {
+      // Get all workflow snapshot keys
+      const pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
+      const keys = await this.#db.scanKeys(pattern);
+
+      if (keys.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Use pipeline for batch fetching
+      const pipeline = this.client.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
+
+      // Find keys to delete based on filters
+      const keysToDelete: string[] = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const record = results[i] as Record<string, any> | null;
+        if (!record || typeof record !== 'object') continue;
+
+        // Check date filter
+        const createdAt = ensureDate(record.createdAt);
+        if (!createdAt || createdAt >= args.beforeDate) continue;
+
+        // Check optional filters
+        if (args.filters?.workflowName !== undefined && record.workflow_name !== args.filters.workflowName) {
+          continue;
+        }
+
+        if (args.filters?.resourceId !== undefined && record.resourceId !== args.filters.resourceId) {
+          continue;
+        }
+
+        if (args.filters?.status !== undefined) {
+          let snapshot = record.snapshot;
+          if (typeof snapshot === 'string') {
+            try {
+              snapshot = JSON.parse(snapshot) as WorkflowRunState;
+            } catch {
+              continue;
+            }
+          }
+          if (!snapshot || snapshot.status !== args.filters.status) {
+            continue;
+          }
+        }
+
+        keysToDelete.push(keys[i]!);
+      }
+
+      if (keysToDelete.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      // Delete matching keys
+      await this.client.del(...keysToDelete);
+
+      return { deletedCount: keysToDelete.length };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            beforeDate: args.beforeDate.toISOString(),
+            filters: JSON.stringify(args.filters),
           },
         },
         error,

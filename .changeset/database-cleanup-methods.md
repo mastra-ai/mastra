@@ -4,6 +4,9 @@
 '@mastra/clickhouse': minor
 '@mastra/libsql': minor
 '@mastra/mongodb': minor
+'@mastra/mssql': minor
+'@mastra/dynamodb': minor
+'@mastra/upstash': minor
 ---
 
 Added database cleanup methods for data retention
