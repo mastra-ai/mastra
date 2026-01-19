@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.24
+
+### Minor Changes
+
+- Enhance design system components with visual polish and micro-interactions. ([#12045](https://github.com/mastra-ai/mastra/pull/12045))
+
+  Phase 2 of DS enhancement covering 40+ components:
+  - **Form Controls**: Checkbox, RadioGroup, Switch, Slider, Combobox with focus rings, hover states, and smooth transitions
+  - **Navigation**: Tabs with animated indicator, Steps with progress animation, Collapsible with icon rotation
+  - **Feedback**: Alert with entrance animation, Notification with slide animations, Skeleton with gradient shimmer
+  - **Display**: Badge with semantic variants, Avatar with interactive mode, StatusBadge enhancements
+  - **Layout**: SideDialog with backdrop blur, ScrollArea with visibility transitions
+
+  All components now use consistent design tokens (duration-normal, ease-out-custom, shadow-focus-ring) and GPU-accelerated properties for smooth 60fps animations.
+
+### Patch Changes
+
+- Updated dependencies [[`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`c59e13c`](https://github.com/mastra-ai/mastra/commit/c59e13c7688284bd96b2baee3e314335003548de), [`f93e2f5`](https://github.com/mastra-ai/mastra/commit/f93e2f575e775e627e5c1927cefdd72db07858ed), [`461e448`](https://github.com/mastra-ai/mastra/commit/461e448852fe999506a6046d50b1efc27d8aa378), [`f9a2509`](https://github.com/mastra-ai/mastra/commit/f9a25093ea72d210a5e52cfcb3bcc8b5e02dc25c), [`64554f4`](https://github.com/mastra-ai/mastra/commit/64554f48f26f028b738a04576d34ff992983529e), [`7a010c5`](https://github.com/mastra-ai/mastra/commit/7a010c56b846a313a49ae42fccd3d8de2b9f292d)]:
+  - @mastra/core@1.0.0-beta.24
+  - @mastra/schema-compat@1.0.0-beta.7
+  - @mastra/client-js@1.0.0-beta.24
+  - @mastra/react@1.0.0-beta.24
+
 ## 7.0.0-beta.23
 
 ### Patch Changes

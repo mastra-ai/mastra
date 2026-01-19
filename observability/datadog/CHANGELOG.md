@@ -1,5 +1,35 @@
 # @mastra/datadog
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Added `flush()` method to observability exporters and instances for serverless environments ([#12003](https://github.com/mastra-ai/mastra/pull/12003))
+
+  This feature allows flushing buffered spans without shutting down the exporter, which is useful in serverless environments like Vercel's fluid compute where runtime instances can be reused across multiple requests.
+
+  **New API:**
+
+  ```typescript
+  // Flush all exporters via the observability instance
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  // Or flush individual exporters
+  const exporters = observability.getExporters();
+  await exporters[0].flush();
+  ```
+
+  **Why this matters:**
+
+  In serverless environments, you may need to ensure all spans are exported before the runtime instance is terminated, while keeping the exporter active for future requests. Unlike shutdown(), flush() does not release resources or prevent future exports.
+
+  Closes #11372
+
+- Updated dependencies [[`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`c59e13c`](https://github.com/mastra-ai/mastra/commit/c59e13c7688284bd96b2baee3e314335003548de), [`f9a2509`](https://github.com/mastra-ai/mastra/commit/f9a25093ea72d210a5e52cfcb3bcc8b5e02dc25c), [`7a010c5`](https://github.com/mastra-ai/mastra/commit/7a010c56b846a313a49ae42fccd3d8de2b9f292d)]:
+  - @mastra/core@1.0.0-beta.24
+  - @mastra/observability@1.0.0-beta.13
+
 ## 1.0.0-beta.4
 
 ### Patch Changes
