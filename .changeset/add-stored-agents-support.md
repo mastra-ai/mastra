@@ -33,7 +33,7 @@ await mastra.getStorage().createAgent({
 
 // Load and use the agent
 const agent = await mastra.getStoredAgentById('my-agent');
-const response = await agent.generate({ messages: 'Hello!' });
+const response = await agent.generate('Hello!');
 
 // List all stored agents with pagination
 const { agents, total, hasMore } = await mastra.listStoredAgents({
