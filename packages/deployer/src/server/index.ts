@@ -21,6 +21,7 @@ import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled 
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
+import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
 
@@ -161,6 +162,22 @@ export async function createHonoServer(
     }),
     healthHandler,
   );
+
+  if (options?.isDev || server?.build?.swaggerUI) {
+    app.get(
+      '/api',
+      describeRoute({
+        description: 'API Welcome Page',
+        tags: ['system'],
+        responses: {
+          200: {
+            description: 'Success',
+          },
+        },
+      }),
+      rootHandler,
+    );
+  }
 
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
@@ -316,6 +333,7 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
+      requestPath === '/api' ||
       requestPath.startsWith('/api/') ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
