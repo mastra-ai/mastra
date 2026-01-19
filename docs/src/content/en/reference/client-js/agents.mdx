@@ -133,7 +133,7 @@ import { createUIMessageStream } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
 import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
-const response = await agent.stream({ messages: "Tell me a story" });
+const response = await agent.stream("Tell me a story");
 
 const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
   start(controller) {
