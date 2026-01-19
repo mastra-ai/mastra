@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { StorageDomains } from '@mastra/core/storage';
-import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { describe, it, expect, afterAll, beforeEach } from 'vitest';
 
 const dbFile = 'file:storage-init-test.db';
