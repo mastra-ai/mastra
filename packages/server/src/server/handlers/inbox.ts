@@ -34,11 +34,11 @@ export const LIST_INBOXES_ROUTE = createRoute({
   handler: async ({ mastra }) => {
     try {
       const inboxesMap = mastra.listInboxes();
-      const inboxes = Object.values(inboxesMap);
       return {
-        inboxes: inboxes.map(inbox => ({
-          id: inbox.id,
-          name: inbox.id, // Inboxes don't have a separate name, use id
+        // Use config key as id since getInbox() expects the config key
+        inboxes: Object.entries(inboxesMap).map(([key, inbox]) => ({
+          id: key,
+          name: inbox.name ?? inbox.id,
         })),
       };
     } catch (error) {
