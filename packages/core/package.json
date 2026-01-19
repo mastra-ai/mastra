@@ -200,7 +200,7 @@
     "typecheck:zod-compat": "NODE_OPTIONS='--max-old-space-size=4096' tsc --project tsconfig.zod-compat.json",
     "lint": "eslint .",
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
-    "build:patch-commonjs": "node ./tools/commonjs-tsc-fixer.js",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
