@@ -163,7 +163,13 @@ export class WorkOSAuditExporter implements IAuditLogger {
               name: event.resource.name,
             },
           ]
-        : [],
+        : [
+            {
+              id: 'system',
+              type: 'system',
+              name: 'System',
+            },
+          ],
       context: {
         location: event.actor.ip || 'unknown',
         user_agent: event.actor.userAgent,

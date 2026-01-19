@@ -2238,3 +2238,42 @@ This was the final task for PR5! All 76 tasks are now complete. The Auth feature
 - Server logs now capture full error details for debugging without exposing to clients
 - Remaining P1 tasks: Task 080 (WorkOS Audit targets validation), Task 081 (Query string concatenation)
 - Remaining P2 tasks: Task 082 (URI-encode cookies), Task 083 (Invalid Date handling), Task 084 (Import ordering)
+
+---
+
+## Task 080: Fix WorkOS Audit targets array required to be non-empty
+
+**Date:** 2026-01-18
+**Status:** ✅ COMPLETED
+
+### What was done:
+- Fixed WorkOS Audit Logs createEvent API requirement for non-empty targets array
+- Modified mapToWorkOSEvent function in auth/workos/src/audit-export.ts to always provide a target
+- Added default 'system' target when no resource is specified in the audit event
+- Ensured API calls will never fail due to empty targets array
+
+### Implementation details:
+- Modified auth/workos/src/audit-export.ts lines 158-172
+- Changed the conditional targets array to always return at least one target
+- When event.resource is present, maps to target with resource details
+- When event.resource is absent, provides default target: {id: 'system', type: 'system', name: 'System'}
+- This prevents API validation failures while maintaining semantic meaning
+
+### Verification:
+- Verified full monorepo typecheck passes with pnpm typecheck (exit code 0)
+- Verified full monorepo build passes with pnpm build (124 tasks successful in 3.802s)
+- Pre-existing test failures remain (unrelated to this change - in @mastra/server agent.test.ts and @mastra/mcp configuration.test.ts)
+- Updated tasks.json to mark task 080 as completed with passing: true
+
+### Acceptance criteria met:
+✓ WorkOS createEvent always receives non-empty targets array (default 'system' target provided)
+✓ Default target is provided when none specified (system target with id, type, and name)
+✓ API calls don't fail due to empty targets (array always has at least one element)
+
+### Notes for next engineer:
+- The default 'system' target is used when audit events don't have a specific resource
+- This aligns with WorkOS Audit Logs best practices for system-level events
+- No breaking changes - optional resource field behavior is preserved
+- Remaining incomplete tasks: Task 081 (P2), Task 082 (P2), Task 083 (P2), Task 084 (P2)
+- Task 081 (query string concatenation) is the next logical P2 task to work on
+
