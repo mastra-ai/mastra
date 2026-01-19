@@ -153,6 +153,21 @@ const stream = await agent.stream("message for agent", {
 [Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
 
+### Thread and resource relationship
+
+Each thread has an owner (its `resourceId`) that is set when the thread is created and cannot be changed. When you query a thread, you must use the correct owner's resource ID. Attempting to query a thread with a different resource ID will result in an error:
+
+```text
+Thread with id <thread_id> is for resource with id <resource_a>
+but resource <resource_b> was queried
+```
+
+Note that while each thread has one owner, messages within that thread can have different `resourceId` values. This is used for message attribution and filtering (e.g., distinguishing between different agents in a multi-agent system, or filtering messages for analytics).
+
+**Security:** Memory is a storage layer, not an authorization layer. Your application must implement access control before calling memory APIs. The `resourceId` parameter controls both validation and filtering - provide it to validate ownership and filter messages, or omit it for server-side access without validation.
+
+To avoid accidentally reusing thread IDs across different owners, use UUIDs: `crypto.randomUUID()`
+
 ### Thread title generation
 
 Mastra can automatically generate descriptive thread titles based on the user's first message.
