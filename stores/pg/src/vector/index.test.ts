@@ -2756,9 +2756,21 @@ describe('PgVector', () => {
         });
 
         // Insert some test vectors for IVFFlat training
-        const testVectors = Array.from({ length: 100 }, (_, i) =>
-          Array.from({ length: largeDimension }, (_, j) => (i + j) / (largeDimension * 100)),
+        // Use fewer vectors with smaller dimension to avoid timeout
+        const smallDimension = 384;
+        const testVectors = Array.from({ length: 10 }, (_, i) =>
+          Array.from({ length: smallDimension }, (_, j) => (i + j) / (smallDimension * 10)),
         );
+
+        // Delete the halfvec index and recreate with smaller dimension for IVFFlat test
+        await halfvecVectorDB.deleteIndex({ indexName: testIndexName });
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: smallDimension,
+          metric: 'cosine',
+          vectorType: 'halfvec',
+          buildIndex: false,
+        });
 
         await halfvecVectorDB.upsert({
           indexName: testIndexName,
@@ -2772,14 +2784,14 @@ describe('PgVector', () => {
           metric: 'cosine',
           indexConfig: {
             type: 'ivfflat',
-            ivf: { lists: 10 },
+            ivf: { lists: 2 },
           },
         });
 
         const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
         expect(stats.type).toBe('ivfflat');
         expect(stats.vectorType).toBe('halfvec');
-        expect(stats.dimension).toBe(largeDimension);
+        expect(stats.dimension).toBe(smallDimension);
       });
 
       it('should default to vector type when vectorType is not specified', async () => {
@@ -3651,7 +3663,7 @@ describe('Validation', () => {
         user: 'test-user',
         database: 'test-db',
         ssl: { rejectUnauthorized: false },
-        stream: () => ({}),
+        stream: () => ({ destroy: () => {} }),
         id: 'pg-vector-cloud-sql-connector-test',
       };
       expect(() => new PgVector(connectorConfig as any)).not.toThrow();

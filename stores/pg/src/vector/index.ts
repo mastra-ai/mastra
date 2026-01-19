@@ -109,6 +109,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           ...config.pgPoolOptions,
         };
       } else if (isCloudSqlConfig(config)) {
+        // Cloud SQL connector config
         poolConfig = {
           ...config,
           max: config.pgPoolOptions?.max ?? 20,
@@ -116,6 +117,35 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         } as pg.PoolConfig;
+
+        // Ensure Cloud SQL stream is compatible with pg/pg-pool cleanup logic.
+        // pg-pool calls .destroy() on the stream during connection cleanup,
+        // so we need to ensure the stream has this method.
+        if (config.stream !== undefined) {
+          if (typeof config.stream === 'function') {
+            // Stream factory: ensure returned streams have destroy()
+            const originalStreamFn = config.stream;
+            (poolConfig as any).stream = () => {
+              const stream = originalStreamFn.call(config);
+              if (!stream) return undefined;
+              if (typeof stream.destroy !== 'function') {
+                // Add destroy method if missing - pg-pool will call this during cleanup
+                (stream as any).destroy = (error?: Error) => {
+                  stream.end?.();
+                };
+              }
+              return stream;
+            };
+          } else {
+            // Direct stream: add destroy() if missing
+            const streamConfig = config.stream as any;
+            if (typeof streamConfig.destroy !== 'function') {
+              streamConfig.destroy = (err: Error | null) => {
+                streamConfig.end?.();
+              };
+            }
+          }
+        }
       } else if (isHostConfig(config)) {
         poolConfig = {
           host: config.host,

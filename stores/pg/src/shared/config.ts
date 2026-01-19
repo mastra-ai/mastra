@@ -156,6 +156,29 @@ export const isCloudSqlConfig = (cfg: PostgresStoreConfig): cfg is PostgresBaseC
 };
 
 /**
+ * Validates that a Cloud SQL connector stream configuration is properly configured.
+ * The stream function must return a stream object with a destroy method.
+ *
+ * @param stream - The stream property from the config (function or object)
+ * @param name - The name of the class/function for error messages
+ */
+export const validateStreamConfig = (stream: any, name: string): void => {
+  if (typeof stream === 'function') {
+    // Stream factory: we just check it’s a function; runtime return type not validated
+    return;
+  } else if (stream !== undefined && stream !== null) {
+    // Stream is a direct stream object - check it has destroy method
+    if (typeof stream.destroy !== 'function') {
+      throw new Error(
+        `${name}: stream configuration must return a stream with a destroy method. ` +
+          `The stream property should be a function that returns a duplex stream, ` +
+          `or a stream object with a destroy() method.`,
+      );
+    }
+  }
+};
+
+/**
  * Validate PostgresStore configuration.
  */
 export const validateConfig = (name: string, config: PostgresStoreConfig) => {
@@ -182,6 +205,10 @@ export const validateConfig = (name: string, config: PostgresStoreConfig) => {
       );
     }
   } else if (isCloudSqlConfig(config)) {
+    // Validate stream config if present
+    if ('stream' in config) {
+      validateStreamConfig(config.stream, name);
+    }
     // valid connector config; no-op
   } else if (isHostConfig(config)) {
     const required = ['host', 'database', 'user', 'password'] as const;
