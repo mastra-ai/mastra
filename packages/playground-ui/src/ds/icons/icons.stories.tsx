@@ -180,7 +180,7 @@ export const IconColors: Story = {
       <Icon className="text-accent1">
         <AgentIcon />
       </Icon>
-      <Icon className="text-success">
+      <Icon className="text-accent1">
         <AgentIcon />
       </Icon>
       <Icon className="text-error">

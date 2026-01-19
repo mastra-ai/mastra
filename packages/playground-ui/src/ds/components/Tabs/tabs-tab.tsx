@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { X } from 'lucide-react';
+import { transitions } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 
 export type TabProps = {
   children: React.ReactNode;
@@ -15,7 +17,11 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
     <RadixTabs.Trigger
       value={value}
       className={cn(
-        'text-xs p-3 text-neutral3 data-[state=active]:text-neutral5 data-[state=active]:border-b-2 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
+        'text-xs p-3 text-neutral3 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
+        transitions.all,
+        focusRing.visible,
+        'hover:text-neutral4',
+        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-accent1',
         className,
       )}
       onClick={onClick}
@@ -27,7 +33,7 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
             e.stopPropagation();
             onClose();
           }}
-          className="p-0.5 hover:bg-surface3 rounded transition-colors"
+          className={cn('p-0.5 hover:bg-surface4 rounded', transitions.colors, 'hover:text-neutral5')}
           aria-label="Close tab"
         >
           <X className="w-3 h-3" />
