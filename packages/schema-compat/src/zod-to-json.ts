@@ -116,20 +116,21 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
     }
   }
 
-  // Fix empty property schemas {} - convert to nullable string as safe fallback
+  // Fix empty property schemas {} - convert to any type to preserve "allow anything" semantics
   if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
     result.properties = Object.fromEntries(
       Object.entries(result.properties).map(([key, value]) => {
         const propSchema = value as JSONSchema7;
 
-        // If property is an empty object {}, convert to nullable type
+        // If property is an empty object {}, convert to allow any type
+        // {} in JSON Schema means "allow anything", so we use all types
         if (
           typeof propSchema === 'object' &&
           propSchema !== null &&
           !Array.isArray(propSchema) &&
           Object.keys(propSchema).length === 0
         ) {
-          return [key, { type: ['string', 'null'] as JSONSchema7['type'] }];
+          return [key, { type: ['string', 'number', 'boolean', 'object', 'array', 'null'] as JSONSchema7['type'] }];
         }
 
         // Recursively fix nested schemas
