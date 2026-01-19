@@ -28,8 +28,10 @@ function looksLikeProcessorStepSchema(schema: ZodType | undefined): boolean {
 
       const phaseSchema = properties.phase as Record<string, unknown>;
       const phaseConst = phaseSchema?.const as string | undefined;
+      const phaseEnum = Array.isArray(phaseSchema?.enum) ? (phaseSchema.enum as string[]) : [];
+      const phaseValues = phaseConst ? [phaseConst] : phaseEnum;
 
-      if (!phaseConst || !processorPhases.has(phaseConst)) {
+      if (!phaseValues.length || phaseValues.some(phase => !processorPhases.has(phase))) {
         return false;
       }
     }
