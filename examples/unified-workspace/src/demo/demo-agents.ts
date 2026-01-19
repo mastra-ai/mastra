@@ -33,9 +33,13 @@ async function main() {
   console.log();
 
   console.log('Agent workspace configuration:');
-  console.log('  - docsAgent: Own workspace (/skills + /docs-skills)');
-  console.log('  - developerAgent: Uses global workspace (/skills)');
-  console.log('  - supportAgent: Uses global workspace (/skills) + FAQ search');
+  console.log('  - supportAgent: Inherits globalWorkspace from Mastra');
+  console.log('  - docsAgent: docsAgentWorkspace (global + agent-specific skills)');
+  console.log('  - isolatedAgent: isolatedDocsWorkspace (agent-specific skills only)');
+  console.log('  - readonlyAgent: readonlyWorkspace (readOnly: true)');
+  console.log('  - safeWriteAgent: safeWriteWorkspace (requireReadBeforeWrite: true)');
+  console.log('  - supervisedAgent: supervisedSandboxWorkspace (requireSandboxApproval: all)');
+  console.log('  - commandApprovalAgent: commandApprovalWorkspace (requireSandboxApproval: commands)');
   console.log();
 
   // Show skills available to each workspace
@@ -118,26 +122,25 @@ async function main() {
   console.log();
 
   // =========================================================================
-  // PART 4: Developer Agent (Global Workspace)
+  // PART 4: Editor Agent (Code Editing)
   // =========================================================================
   console.log('='.repeat(70));
-  console.log('PART 4: DEVELOPER AGENT (GLOBAL WORKSPACE)');
+  console.log('PART 4: EDITOR AGENT');
   console.log('='.repeat(70));
   console.log();
 
-  console.log('The developer agent uses the global workspace with code-review');
-  console.log('and api-design skills for development assistance.');
+  console.log('The editor agent helps with editing code files.');
   console.log();
 
-  const devAgent = mastra.getAgent('developerAgent');
-  const devPrompt = 'What are the key things to check when reviewing TypeScript code?';
-  console.log(`Prompt: ${devPrompt}`);
+  const editorAgent = mastra.getAgent('editorAgent');
+  const editorPrompt = 'What can you help me with?';
+  console.log(`Prompt: ${editorPrompt}`);
   console.log();
 
   try {
     console.log('Generating response...');
-    const devResponse = await devAgent.generate(devPrompt);
-    console.log(`Response: ${devResponse.text}`);
+    const editorResponse = await editorAgent.generate(editorPrompt);
+    console.log(`Response: ${editorResponse.text}`);
   } catch (error) {
     console.log(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -177,10 +180,12 @@ async function main() {
   console.log('='.repeat(70));
   console.log();
   console.log('Agent workspace patterns demonstrated:');
+  console.log('  - Agent inheriting global workspace (supportAgent)');
+  console.log('    → Uses shared skills from Mastra instance workspace');
   console.log('  - Agent with own workspace (docsAgent)');
   console.log('    → Has access to global + agent-specific skills');
-  console.log('  - Agent with global workspace (developerAgent, supportAgent)');
-  console.log('    → Uses shared skills from global workspace');
+  console.log('  - Agent with safety config (safeWriteAgent)');
+  console.log('    → Must read files before writing');
   console.log();
   console.log('Workspace provides agents with:');
   console.log('  - Filesystem tools for reading/writing files');

@@ -33,6 +33,8 @@
 import type { MastraVector } from '../vector';
 
 import type { BM25Config } from './bm25';
+import { InMemoryFileReadTracker } from './file-read-tracker';
+import type { FileReadTracker } from './file-read-tracker';
 import { FileReadRequiredError } from './filesystem';
 import type {
   WorkspaceFilesystem,
@@ -43,8 +45,6 @@ import type {
   WriteOptions,
   ListOptions,
 } from './filesystem';
-import { InMemoryFileReadTracker } from './file-read-tracker';
-import type { FileReadTracker } from './file-read-tracker';
 import type {
   WorkspaceSandbox,
   SandboxRuntime,

@@ -1,10 +1,26 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { docsAgent, supportAgent, developerAgent } from './agents';
+import {
+  developerAgent,
+  docsAgent,
+  supportAgent,
+  researchAgent,
+  editorAgent,
+  automationAgent,
+  scriptRunnerAgent,
+} from './agents';
 import { globalWorkspace } from './workspaces';
 
 // Re-export workspaces for demo scripts
-export { globalWorkspace, docsAgentWorkspace, isolatedDocsWorkspace } from './workspaces';
+export {
+  globalWorkspace,
+  docsAgentWorkspace,
+  isolatedDocsWorkspace,
+  readonlyWorkspace,
+  safeWriteWorkspace,
+  supervisedSandboxWorkspace,
+  commandApprovalWorkspace,
+} from './workspaces';
 
 /**
  * Storage for Mastra (threads, memory, etc.)
@@ -15,27 +31,28 @@ const storage = new LibSQLStore({
 });
 
 /**
- * Mastra instance configured with the unified Workspace.
+ * Mastra instance with agents demonstrating different workspace configurations.
  *
- * Workspace inheritance pattern:
- * - Global workspace: Registered with Mastra, has /skills (code-review, api-design, customer-support)
- * - docsAgent: Has own workspace with /skills + /docs-skills (inherits global + brand-guidelines)
- * - developerAgent: Uses global workspace (no agent-specific workspace)
- * - supportAgent: Uses global workspace + FAQ search
- *
- * Agents can access the workspace via:
- * - Agent's own workspace (if configured): agent.workspace
- * - Global workspace: mastra.getWorkspace()
- * - Workspace skills: workspace.skills.list(), workspace.skills.get(), workspace.skills.search()
- * - Workspace search: workspace.search()
+ * Agent Workspace Configurations:
+ * - developerAgent: Inherits globalWorkspace from Mastra (no agent-specific workspace)
+ * - docsAgent: docsAgentWorkspace (global + agent-specific skills)
+ * - supportAgent: isolatedDocsWorkspace (agent-specific skills only)
+ * - researchAgent: readonlyWorkspace (safety: readOnly)
+ * - editorAgent: safeWriteWorkspace (safety: requireReadBeforeWrite)
+ * - automationAgent: supervisedSandboxWorkspace (safety: requireSandboxApproval: 'all')
+ * - scriptRunnerAgent: commandApprovalWorkspace (safety: requireSandboxApproval: 'commands')
  */
 export const mastra = new Mastra({
   agents: {
-    docsAgent, // Has own workspace (inherits global skills + brand-guidelines)
-    supportAgent, // Uses global workspace (FAQ search)
-    developerAgent, // Uses global workspace (code-review, api-design skills)
+    developerAgent,
+    docsAgent,
+    supportAgent,
+    researchAgent,
+    editorAgent,
+    automationAgent,
+    scriptRunnerAgent,
   },
-  workspace: globalWorkspace, // Register global workspace with Mastra
+  workspace: globalWorkspace,
   storage,
 });
 

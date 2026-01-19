@@ -125,3 +125,100 @@ export const isolatedDocsWorkspace = new Workspace({
   // Auto-initialize on construction
   autoInit: true,
 });
+
+/**
+ * Readonly workspace - blocks all write operations.
+ *
+ * Safety feature: readOnly: true
+ * - Write tools (workspace_write_file, workspace_delete_file, workspace_mkdir) are excluded
+ * - Direct write operations throw WorkspaceReadOnlyError
+ */
+export const readonlyWorkspace = new Workspace({
+  id: 'readonly-workspace',
+  name: 'Readonly Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    readOnly: true,
+  },
+});
+
+/**
+ * Safe write workspace - requires reading files before writing.
+ *
+ * Safety feature: requireReadBeforeWrite: true
+ * - Agent must read a file before writing to it
+ * - If file was modified externally since last read, write fails
+ * - Prevents accidental overwrites of changed content
+ */
+export const safeWriteWorkspace = new Workspace({
+  id: 'safe-write-workspace',
+  name: 'Safe Write Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    requireReadBeforeWrite: true,
+  },
+});
+
+/**
+ * Supervised sandbox workspace - requires approval for all sandbox operations.
+ *
+ * Safety feature: requireSandboxApproval: 'all'
+ * - Both execute_code and execute_command require approval
+ * - Tools have requireApproval: true flag for approval flow
+ */
+export const supervisedSandboxWorkspace = new Workspace({
+  id: 'supervised-sandbox-workspace',
+  name: 'Supervised Sandbox Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    requireSandboxApproval: 'all',
+  },
+});
+
+/**
+ * Command approval workspace - requires approval only for shell commands.
+ *
+ * Safety feature: requireSandboxApproval: 'commands'
+ * - execute_code runs without approval (sandboxed code execution)
+ * - execute_command requires approval (shell commands are riskier)
+ */
+export const commandApprovalWorkspace = new Workspace({
+  id: 'command-approval-workspace',
+  name: 'Command Approval Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    requireSandboxApproval: 'commands',
+  },
+});

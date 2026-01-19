@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { Workspace, WorkspaceReadOnlyError } from './workspace';
+import * as path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { FileReadRequiredError } from './filesystem';
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
-import { FileReadRequiredError } from './filesystem';
 import { createWorkspaceTools } from './tools';
+import { Workspace, WorkspaceReadOnlyError } from './workspace';
 
 describe('Workspace Safety Features', () => {
   let tempDir: string;
