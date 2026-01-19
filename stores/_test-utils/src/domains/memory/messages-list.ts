@@ -590,7 +590,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         // Create a third thread with the same resourceId as thread
         const thread3 = createSampleThread();
         thread3.resourceId = thread.resourceId; // Same resource as thread
-        await storage.saveThread({ thread: thread3 });
+        await memoryStorage.saveThread({ thread: thread3 });
 
         // Add messages to thread3
         const thread3Messages = [
@@ -607,10 +607,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 11000),
           }),
         ];
-        await storage.saveMessages({ messages: thread3Messages });
+        await memoryStorage.saveMessages({ messages: thread3Messages });
 
         // Query by resourceId only - should get messages from thread AND thread3
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: thread.resourceId,
           perPage: false,
         });
@@ -628,7 +628,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       it('should filter by dateRange.start when querying by resourceId', async () => {
         // Create a thread with specific timestamps
         const resourceThread = createSampleThread();
-        await storage.saveThread({ thread: resourceThread });
+        await memoryStorage.saveThread({ thread: resourceThread });
 
         const now = Date.now();
         const cutoffTime = new Date(now + 3000);
@@ -659,10 +659,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(now + 5000),
           }),
         ];
-        await storage.saveMessages({ messages: resourceMessages });
+        await memoryStorage.saveMessages({ messages: resourceMessages });
 
         // Query by resourceId with dateRange.start (cursor-based loading)
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: resourceThread.resourceId,
           filter: {
             dateRange: { start: cutoffTime },
@@ -685,8 +685,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         threadA.resourceId = sharedResourceId;
         const threadB = createSampleThread();
         threadB.resourceId = sharedResourceId;
-        await storage.saveThread({ thread: threadA });
-        await storage.saveThread({ thread: threadB });
+        await memoryStorage.saveThread({ thread: threadA });
+        await memoryStorage.saveThread({ thread: threadB });
 
         const now = Date.now();
         const cutoffTime = new Date(now + 3000);
@@ -723,10 +723,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         ];
 
-        await storage.saveMessages({ messages: [...threadAMessages, ...threadBMessages] });
+        await memoryStorage.saveMessages({ messages: [...threadAMessages, ...threadBMessages] });
 
         // Query by resourceId with dateRange.start
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: sharedResourceId,
           filter: {
             dateRange: { start: cutoffTime },
@@ -745,7 +745,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should return empty array when no messages match resourceId', async () => {
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: 'non-existent-resource',
           perPage: false,
         });
@@ -757,7 +757,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       it('should isolate messages by resourceId', async () => {
         // thread and thread2 have different resourceIds
         // Query for thread's resourceId should not include thread2's messages
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: thread.resourceId,
           perPage: false,
         });
@@ -769,7 +769,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should support pagination when querying by resourceId', async () => {
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           resourceId: thread.resourceId,
           perPage: 2,
           page: 0,

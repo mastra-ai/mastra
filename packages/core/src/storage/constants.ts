@@ -10,8 +10,13 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
-export type TABLE_NAMES =
+/**
+ * Core table names that all storage adapters must implement.
+ * Does NOT include optional/experimental tables like observational memory.
+ */
+export type CORE_TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
@@ -20,6 +25,12 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS;
+
+/**
+ * All table names including optional/experimental tables.
+ * Use CORE_TABLE_NAMES for required table mappings.
+ */
+export type TABLE_NAMES = CORE_TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +116,33 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  lookupKey: { type: 'text', nullable: false }, // 'resource:{resourceId}' or 'thread:{threadId}'
+  scope: { type: 'text', nullable: false }, // 'resource' or 'thread'
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  activeObservations: { type: 'text', nullable: false }, // JSON array of observations
+  activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
+  patterns: { type: 'text', nullable: true }, // JSON array (currently unused, reserved for future)
+  originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
+  config: { type: 'text', nullable: false }, // JSON object
+  generationCount: { type: 'integer', nullable: false },
+  lastObservedAt: { type: 'timestamp', nullable: true },
+  lastReflectionAt: { type: 'timestamp', nullable: true },
+  pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
+  totalTokensObserved: { type: 'integer', nullable: false }, // Running total of all observed tokens
+  observationTokenCount: { type: 'integer', nullable: false }, // Current observation size in tokens
+  isObserving: { type: 'boolean', nullable: false },
+  isReflecting: { type: 'boolean', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Schema definitions for all tables.
+ * Includes both core tables and optional tables like observational memory.
+ */
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +205,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };
