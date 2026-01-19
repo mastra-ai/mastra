@@ -372,6 +372,14 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // Span Interfaces
 // ============================================================================
 
+export interface SpanErrorInfo {
+  message: string;
+  id?: string;
+  domain?: string;
+  category?: string;
+  details?: Record<string, any>;
+}
+
 /**
  * Base Span interface
  */
@@ -405,13 +413,7 @@ interface BaseSpan<TType extends SpanType> {
   /** Output generated at the end of the span */
   output?: any;
   /** Error information if span failed */
-  errorInfo?: {
-    message: string;
-    id?: string;
-    domain?: string;
-    category?: string;
-    details?: Record<string, any>;
-  };
+  errorInfo?: SpanErrorInfo;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }
@@ -634,6 +636,28 @@ export interface ObservabilityInstance {
   startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
 
   /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have end()/update()/error() called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+
+  /**
+   * Force flush any buffered/queued spans from all exporters and the bridge
+   * without shutting down the observability instance.
+   *
+   * This is useful in serverless environments (like Vercel's fluid compute) where
+   * you need to ensure all spans are exported before the runtime instance is
+   * terminated, while keeping the observability system active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future tracing.
+   */
+  flush(): Promise<void>;
+
+  /**
    * Shutdown tracing and clean up resources
    */
   shutdown(): Promise<void>;
@@ -689,10 +713,20 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    */
   traceId?: string;
   /**
+   * Span ID to use for this span (1-16 hexadecimal characters).
+   * Only used when rebuilding a span from cached data.
+   */
+  spanId?: string;
+  /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /**
+   * Start time for this span.
+   * Only used when rebuilding a span from cached data.
+   */
+  startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
 }
@@ -839,6 +873,14 @@ export interface TraceState {
    * with the per-request requestContextKeys.
    */
   requestContextKeys: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   */
+  hideOutput?: boolean;
 }
 
 /**
@@ -869,6 +911,16 @@ export interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 
 export interface SpanIds {
@@ -1063,6 +1115,16 @@ export interface ObservabilityExporter {
     metadata?: Record<string, any>;
   }): Promise<void>;
 
+  /**
+   * Force flush any buffered/queued spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the exporter active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
@@ -1119,6 +1181,16 @@ export interface ObservabilityBridge {
    */
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
 
+  /**
+   * Force flush any buffered/queued spans without shutting down the bridge.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the bridge active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
+
   /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;
 }
@@ -1134,6 +1206,56 @@ export interface SpanOutputProcessor {
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }
+
+/**
+ * Function type for formatting exported spans at the exporter level.
+ *
+ * This allows customization of how spans appear in vendor-specific observability platforms
+ * (e.g., Langfuse, Braintrust). Unlike SpanOutputProcessor which operates on the internal
+ * Span object before export, this formatter operates on the ExportedSpan data structure
+ * after the span has been prepared for export.
+ *
+ * Formatters can be synchronous or asynchronous, enabling use cases like:
+ * - Extract plain text from structured AI SDK messages for better readability
+ * - Transform input/output format for specific vendor requirements
+ * - Add or remove fields based on the target platform
+ * - Redact or transform sensitive data in a vendor-specific way
+ * - Enrich spans with data from external APIs (async)
+ * - Perform database lookups to add context (async)
+ *
+ * @param span - The exported span to format
+ * @returns The formatted span (sync) or a Promise resolving to the formatted span (async)
+ *
+ * @example
+ * ```typescript
+ * // Synchronous formatter that extracts plain text from AI messages
+ * const plainTextFormatter: CustomSpanFormatter = (span) => {
+ *   if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+ *     const userMessage = span.input.find(m => m.role === 'user');
+ *     return {
+ *       ...span,
+ *       input: userMessage?.content ?? span.input,
+ *     };
+ *   }
+ *   return span;
+ * };
+ *
+ * // Async formatter that enriches spans with external data
+ * const enrichmentFormatter: CustomSpanFormatter = async (span) => {
+ *   const userData = await fetchUserData(span.metadata?.userId);
+ *   return {
+ *     ...span,
+ *     metadata: { ...span.metadata, userName: userData.name },
+ *   };
+ * };
+ *
+ * // Use with an exporter
+ * new BraintrustExporter({
+ *   customSpanFormatter: plainTextFormatter,
+ * });
+ * ```
+ */
+export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan | Promise<AnyExportedSpan>;
 
 // ============================================================================
 // Tracing Config Selector Interfaces

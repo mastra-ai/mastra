@@ -16,7 +16,7 @@ import type {
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -1129,8 +1129,11 @@ describe('Tracing Integration Tests', () => {
         });
 
         const resourceId = 'test-resource-id';
+        const threadId = 'test-thread-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
+        const result = await method(agent, 'Calculate 5 + 3', {
+          memory: { thread: threadId, resource: resourceId },
+        });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
@@ -1311,88 +1314,6 @@ describe('Tracing Integration Tests', () => {
     },
   );
 
-  describe.each(agentMethods)(
-    'should trace agent with multiple tools using aisdk output format using $name',
-    ({ name, method, model }) => {
-      it(`should trace spans correctly`, async () => {
-        const testAgent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'You are a test agent',
-          model,
-          tools: {
-            calculator: calculatorTool,
-            apiCall: apiTool,
-            workflowExecutor: workflowExecutorTool,
-          },
-        });
-
-        const mastra = new Mastra({
-          ...getBaseMastraConfig(testExporter),
-          agents: { testAgent },
-        });
-
-        const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { format: 'aisdk' });
-        expect(result.text).toBeDefined();
-        expect(result.traceId).toBeDefined();
-
-        const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
-        const llmStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
-        const toolCallSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
-        const workflowSpans = testExporter.getSpansByType(SpanType.WORKFLOW_RUN);
-        const workflowSteps = testExporter.getSpansByType(SpanType.WORKFLOW_STEP);
-
-        expect(agentRunSpans.length).toBe(1); // one agent run
-        expect(llmGenerationSpans.length).toBe(1); // tool call
-        expect(toolCallSpans.length).toBe(1); // one tool call (calculator)
-        expect(workflowSpans.length).toBe(0); // no workflows
-        expect(workflowSteps.length).toBe(0); // no workflows
-
-        const agentRunSpan = agentRunSpans[0];
-        const llmGenerationSpan = llmGenerationSpans[0];
-        const toolCallSpan = toolCallSpans[0];
-
-        expect(agentRunSpan?.traceId).toBe(result.traceId);
-
-        // verify span nesting
-        expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        if (name.includes('Legacy')) {
-          expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        } else {
-          const llmStepSpan = llmStepSpans[0];
-          expect(llmStepSpan).toBeDefined();
-          expect(toolCallSpan?.parentSpanId).toEqual(llmStepSpan?.id);
-        }
-
-        expect(llmGenerationSpan?.name).toBe("llm: 'mock-model-id'");
-        expect(llmGenerationSpan?.input.messages).toHaveLength(2);
-        switch (name) {
-          case 'generateLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock response');
-            expect(agentRunSpan?.output.text).toBe('Mock response');
-            break;
-          case 'streamLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock streaming response');
-            break;
-          default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            break;
-        }
-        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
-
-        expect(llmGenerationSpan?.endTime).toBeDefined();
-        expect(agentRunSpan?.endTime).toBeDefined();
-        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
-
-        testExporter.finalExpectations();
-      });
-    },
-  );
-
   describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'should trace agent using structuredOutput format using $name',
     ({ name, method, model }) => {
@@ -1408,7 +1329,7 @@ describe('Tracing Integration Tests', () => {
           items: z.string(),
         });
 
-        const structuredOutput: StructuredOutputOptions<OutputSchema> = {
+        const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
           schema: outputSchema,
           model,
         };

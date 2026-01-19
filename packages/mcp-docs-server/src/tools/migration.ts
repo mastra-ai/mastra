@@ -276,7 +276,7 @@ export type MigrationInput = z.infer<typeof migrationInputSchema>;
 
 export const migrationTool = {
   name: 'mastraMigration',
-  description: `Get migration guidance for Mastra version upgrades and breaking changes.
+  description: `[🌐 REMOTE] Get migration guidance for Mastra version upgrades and breaking changes.
 
 This tool works like a file browser - navigate through directories to find migration guides:
 

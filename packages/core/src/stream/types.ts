@@ -12,7 +12,6 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
-import type z from 'zod';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -22,7 +21,7 @@ import type { TracingContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
-import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
+import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -193,7 +192,7 @@ interface ToolCallInputStreamingEndPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface FinishPayload<Tools extends ToolSet = ToolSet> {
+interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
@@ -216,6 +215,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet> {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  response?: LLMStepResult<OUTPUT>['response'];
   [key: string]: unknown;
 }
 
@@ -242,7 +242,7 @@ export interface StepStartPayload {
   [key: string]: unknown;
 }
 
-export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   id?: string;
   providerMetadata?: ProviderMetadata;
   totalUsage?: LanguageModelUsage;
@@ -260,7 +260,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
-    object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
+    object?: OUTPUT;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -396,6 +396,21 @@ interface AgentExecutionStartPayload {
   runId: string;
 }
 
+interface AgentExecutionApprovalPayload extends ToolCallApprovalPayload {
+  agentId: string;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
+interface AgentExecutionSuspendedPayload extends ToolCallSuspendedPayload {
+  agentId: string;
+  suspendPayload: any;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
 interface AgentExecutionEndPayload {
   task: string;
   agentId: string;
@@ -435,6 +450,15 @@ interface WorkflowExecutionEndPayload {
   runId: string;
 }
 
+interface WorkflowExecutionSuspendPayload extends ToolCallSuspendedPayload {
+  name: string;
+  workflowId: string;
+  suspendPayload: any;
+  usage: LanguageModelUsage;
+  runId: string;
+  selectionReason: string;
+}
+
 interface ToolExecutionStartPayload {
   args: Record<string, unknown> & {
     toolName?: string;
@@ -445,6 +469,16 @@ interface ToolExecutionStartPayload {
     // Other inputData fields spread here
     [key: string]: unknown;
   };
+  runId: string;
+}
+
+interface ToolExecutionApprovalPayload extends ToolCallApprovalPayload {
+  selectionReason: string;
+  runId: string;
+}
+
+interface ToolExecutionSuspendedPayload extends ToolCallSuspendedPayload {
+  selectionReason: string;
   runId: string;
 }
 
@@ -467,12 +501,14 @@ interface NetworkStepFinishPayload {
   runId: string;
 }
 
-interface NetworkFinishPayload {
+interface NetworkFinishPayload<OUTPUT = undefined> {
   task: string;
   primitiveId: string;
   primitiveType: string;
   prompt: string;
   result: string;
+  /** Structured output object when structuredOutput option is provided */
+  object?: OUTPUT;
   isComplete?: boolean;
   completionReason: string;
   iteration: number;
@@ -503,7 +539,7 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 interface ToolCallSuspendedPayload {
@@ -511,7 +547,7 @@ interface ToolCallSuspendedPayload {
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 }
 
 export type DataChunkType = {
@@ -520,26 +556,33 @@ export type DataChunkType = {
   id?: string;
 };
 
-export type NetworkChunkType =
+export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
+  | (BaseChunkType & { type: 'agent-execution-approval'; payload: AgentExecutionApprovalPayload })
+  | (BaseChunkType & { type: 'agent-execution-suspended'; payload: AgentExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
   | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
   | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
+  | (BaseChunkType & { type: 'workflow-execution-suspended'; payload: WorkflowExecutionSuspendPayload })
   | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
+  | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
+  | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
-  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
+  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
   | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
   | (BaseChunkType & { type: 'network-validation-end'; payload: NetworkValidationEndPayload })
   | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent })
+  | (BaseChunkType & { type: 'network-object'; payload: { object: Partial<OUTPUT> } })
+  | (BaseChunkType & { type: 'network-object-result'; payload: { object: OUTPUT } });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
-export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =
+export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -568,14 +611,14 @@ export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
-      object: PartialSchemaOutput<OUTPUT>;
+      object: Partial<OUTPUT>;
     })
   | (BaseChunkType & {
       /**
        * The object promise is resolved with the object from the object-result chunk
        */
       type: 'object-result';
-      object: InferSchemaOutput<OUTPUT>;
+      object: OUTPUT;
     })
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
@@ -668,14 +711,14 @@ export type WorkflowStreamEvent =
     });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
-export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
+export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
-  | NetworkChunkType
+  | NetworkChunkType<OUTPUT>
   | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
-export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;
+export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
@@ -726,24 +769,24 @@ export type partialModel = {
   version?: string;
 };
 
-export type MastraOnStepFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
   event: LLMStepResult<OUTPUT> & { model?: partialModel; runId?: string },
 ) => Promise<void> | void;
 
-export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult<OUTPUT> & {
+export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
   steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
 };
 
-export type MastraOnFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
 ) => Promise<void> | void;
 
-export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -782,7 +825,7 @@ export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools
   tripwire?: StepTripwireData;
 };
 
-export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
+export type LLMStepResult<OUTPUT = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
   toolResults: ToolResultChunk[];
@@ -803,11 +846,11 @@ export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
     uiMessages?: UIMessage<
-      OUTPUT extends OutputSchema
-        ? {
-            structuredOutput?: InferSchemaOutput<OUTPUT>;
+      [OUTPUT] extends [undefined]
+        ? undefined
+        : {
+            structuredOutput?: OUTPUT;
           } & Record<string, unknown>
-        : unknown
     >[];
     id?: string;
     timestamp?: Date;

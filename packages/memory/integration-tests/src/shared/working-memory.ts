@@ -95,7 +95,13 @@ function isV5PlusModel(model: MastraModelConfig): boolean {
 // Helper to generate with the appropriate API
 async function agentGenerate(agent: Agent, message: string | any[], options: any, model: MastraModelConfig) {
   if (isV5PlusModel(model)) {
-    return agent.generate(message, options);
+    // Transform deprecated threadId/resourceId to memory format for v5+
+    const { threadId, resourceId, ...rest } = options;
+    const transformedOptions = {
+      ...rest,
+      ...(threadId || resourceId ? { memory: { thread: threadId, resource: resourceId } } : {}),
+    };
+    return agent.generate(message, transformedOptions);
   } else {
     return agent.generateLegacy(message, options);
   }
@@ -120,7 +126,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'working-memory-template-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with working memory enabled
@@ -241,7 +247,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           }),
           vector: new LibSQLVector({
             id: 'disabled-working-memory-vector',
-            connectionUrl: `file:${dbPath}`,
+            url: `file:${dbPath}`,
           }),
           embedder: openai.embedding('text-embedding-3-small'),
           options: {
@@ -647,7 +653,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           });
           vector = new LibSQLVector({
             id: 'schema-working-memory-vector',
-            connectionUrl: `file:${dbPath}`,
+            url: `file:${dbPath}`,
           });
 
           memory = new Memory({
@@ -826,7 +832,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'jsonschema7-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         const jsonSchema: JSONSchema7 = {
@@ -1065,7 +1071,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'resource-scoped-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with resource-scoped working memory enabled
@@ -1426,7 +1432,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'thread-scoped-metadata-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
 
         // Create memory instance with thread-scoped working memory
@@ -1568,7 +1574,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
         vector = new LibSQLVector({
           id: 'agent-network-vector',
-          connectionUrl: `file:${dbPath}`,
+          url: `file:${dbPath}`,
         });
       });
 

@@ -184,6 +184,61 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
       return [...newConversation, newMessage];
     }
 
+    if (chunk.type === 'agent-execution-approval') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            requireApprovalMetadata: {
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                runId: chunk.payload.runId,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    if (chunk.type === 'agent-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
+        },
+      ];
+    }
+
     if (chunk.type === 'agent-execution-end') {
       const lastMessage = newConversation[newConversation.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
@@ -373,6 +428,33 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
       return [...newConversation, newMessage];
     }
 
+    if (chunk.type === 'workflow-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
+        },
+      ];
+    }
+
     if (chunk.type.startsWith('workflow-execution-event-')) {
       const lastMessage = newConversation[newConversation.length - 1];
 
@@ -461,6 +543,61 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
         {
           ...lastMessage,
           parts,
+        },
+      ];
+    }
+
+    if (chunk.type === 'tool-execution-approval') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            requireApprovalMetadata: {
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                runId: chunk.payload.runId,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    if (chunk.type === 'tool-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
         },
       ];
     }

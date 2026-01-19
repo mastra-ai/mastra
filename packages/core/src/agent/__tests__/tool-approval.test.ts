@@ -959,7 +959,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             message: z.string(),
           }),
           resumeSchema: z.object({
-            age: z.number(),
+            noOfYears: z.number(),
           }),
           outputSchema: z.object({
             name: z.string(),
@@ -974,7 +974,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             return {
               name: inputData?.name,
               email: 'test@test.com',
-              age: resumeData?.age,
+              age: resumeData?.noOfYears,
             };
           },
         });

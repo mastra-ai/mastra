@@ -66,9 +66,14 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
   const _currentRunId = useRef<string | undefined>(initialRunId);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
+  const _networkRunId = useRef<string | undefined>(undefined);
+  const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const [messages, setMessages] = useState<MastraUIMessage[]>(() => resolveInitialMessages(initialMessages));
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
+  }>({});
+  const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
+    [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
 
   const baseClient = useMastraClient();
@@ -106,8 +111,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const response = await agent.generate({
-      messages: coreUserMessages,
+    const response = await agent.generate(coreUserMessages, {
       runId: uuid(),
       maxSteps,
       modelSettings: {
@@ -121,7 +125,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
     });
@@ -177,8 +181,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.stream({
-      messages: coreUserMessages,
+    const response = await agent.stream(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {
@@ -192,7 +195,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       instructions,
       requestContext,
-      ...(threadId ? { threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
@@ -239,8 +242,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
     const runId = uuid();
 
-    const response = await agent.network({
-      messages: coreUserMessages,
+    const response = await agent.network(coreUserMessages, {
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -253,9 +255,12 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       },
       runId,
       requestContext,
-      ...(threadId ? { thread: threadId, resourceId: resourceId || agentId } : {}),
+      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
+
+    _onNetworkChunk.current = onNetworkChunk;
+    _networkRunId.current = runId;
 
     const transformer = new AISdkNetworkTransformer();
 
@@ -273,6 +278,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
+    _networkRunId.current = undefined;
+    _onNetworkChunk.current = undefined;
   };
 
   const approveToolCall = async (toolCallId: string) => {
@@ -324,6 +331,66 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(false);
   };
 
+  const approveNetworkToolCall = async (toolName: string, runId?: string) => {
+    const onNetworkChunk = _onNetworkChunk.current;
+    const networkRunId = runId || _networkRunId.current;
+
+    if (!networkRunId)
+      return console.info(
+        '[approveNetworkToolCall] approveNetworkToolCall can only be called after a network stream has started',
+      );
+
+    setIsRunning(true);
+    setNetworkToolCallApprovals(prev => ({
+      ...prev,
+      [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
+    }));
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.approveNetworkToolCall({ runId: networkRunId });
+
+    const transformer = new AISdkNetworkTransformer();
+
+    await response.processDataStream({
+      onChunk: async (chunk: NetworkChunkType) => {
+        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        onNetworkChunk?.(chunk);
+      },
+    });
+
+    setIsRunning(false);
+  };
+
+  const declineNetworkToolCall = async (toolName: string, runId?: string) => {
+    const onNetworkChunk = _onNetworkChunk.current;
+    const networkRunId = runId || _networkRunId.current;
+
+    if (!networkRunId)
+      return console.info(
+        '[declineNetworkToolCall] declineNetworkToolCall can only be called after a network stream has started',
+      );
+
+    setIsRunning(true);
+    setNetworkToolCallApprovals(prev => ({
+      ...prev,
+      [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
+    }));
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.declineNetworkToolCall({ runId: networkRunId });
+
+    const transformer = new AISdkNetworkTransformer();
+
+    await response.processDataStream({
+      onChunk: async (chunk: NetworkChunkType) => {
+        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        onNetworkChunk?.(chunk);
+      },
+    });
+
+    setIsRunning(false);
+  };
+
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
     const coreUserMessages = [nextMessage];
@@ -353,5 +420,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     declineToolCall,
     cancelRun: handleCancelRun,
     toolCallApprovals,
+    approveNetworkToolCall,
+    declineNetworkToolCall,
+    networkToolCallApprovals,
   };
 };

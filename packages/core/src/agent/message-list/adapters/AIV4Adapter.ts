@@ -54,7 +54,7 @@ export class AIV4Adapter {
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
-        : m.content.parts.reduce((prev, part) => {
+        : (m.content.parts ?? []).reduce((prev, part) => {
             if (part.type === `text`) {
               // return only the last text part like AI SDK does
               return part.text;
@@ -63,9 +63,10 @@ export class AIV4Adapter {
           }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
+    const sourceParts = m.content.parts ?? [];
 
-    if (m.content.parts.length) {
-      for (const part of m.content.parts) {
+    if (sourceParts.length) {
+      for (const part of sourceParts) {
         if (part.type === `file`) {
           // Normalize part.data to ensure it's a valid URL or data URI
           let normalizedUrl: string;
@@ -100,7 +101,7 @@ export class AIV4Adapter {
           // Find the step number for this tool invocation
           let currentStep = -1;
           let toolStep = -1;
-          for (const innerPart of m.content.parts) {
+          for (const innerPart of sourceParts) {
             if (innerPart.type === `step-start`) currentStep++;
             if (
               innerPart.type === `tool-invocation` &&

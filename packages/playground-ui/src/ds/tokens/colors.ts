@@ -7,7 +7,6 @@ export const Colors = {
   accent1: '#1AFB6F',
   accent2: '#FF4931',
   accent3: '#267AD2',
-  accent4: '#9E57B3',
   accent5: '#4A9DF2',
   accent6: '#ECB047',
   accent1Dark: '#16281f',
@@ -20,18 +19,21 @@ export const Colors = {
   accent3Darker: '#14141a',
   accent5Darker: '#14161a',
   accent6Darker: '#1a1a14',
+  neutral1: '#5C5C5C',
+  neutral2: '#707070',
+  neutral3: '#939393',
+  neutral4: '#A9A9A9',
+  neutral5: '#E6E6E6',
+  neutral6: '#FFFFFF',
+
+  // Semantic state colors
+  error: '#FF4931',
+
+  // Overlay colors
+  overlay: 'rgba(0, 0, 0, 0.8)',
 };
 
 export const BorderColors = {
   border1: 'rgba(48, 48, 48, 1)',
   border2: 'rgba(66, 66, 66, 1)',
-};
-
-export const IconColors = {
-  icon1: '#5C5C5C',
-  icon2: '#707070',
-  icon3: '#939393',
-  icon4: '#A9A9A9',
-  icon5: '#E6E6E6',
-  icon6: '#FFFFFF',
 };

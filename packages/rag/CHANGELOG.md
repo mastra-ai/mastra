@@ -1,5 +1,162 @@
 # @mastra/rag
 
+## 2.0.0-beta.7
+
+### Major Changes
+
+- Refactor workflow and tool types to remove Zod-specific constraints ([#11814](https://github.com/mastra-ai/mastra/pull/11814))
+
+  Removed Zod-specific type constraints across all workflow implementations and tool types, replacing them with generic types. This ensures type consistency across default, evented, and inngest workflows while preparing for Zod v4 migration.
+
+  **Workflow Changes:**
+  - Removed `z.ZodObject<any>` and `z.ZodType<any>` constraints from all workflow generic types
+  - Updated method signatures to use `TInput` and `TState` directly instead of `z.infer<TInput>` and `z.infer<TState>`
+  - Aligned conditional types across all workflow implementations using `TInput extends unknown` pattern
+  - Fixed `TSteps` generic to properly use `TEngineType` instead of `any`
+
+  **Tool Changes:**
+  - Removed Zod schema constraints from `ToolExecutionContext` and related interfaces
+  - Simplified type parameters from `TSuspendSchema extends ZodLikeSchema` to `TSuspend` and `TResume`
+  - Updated tool execution context types to use generic types
+
+  **Type Utilities:**
+  - Refactored type helpers to work with generic schemas instead of Zod-specific types
+  - Updated type extraction utilities for better compatibility
+
+  This change maintains backward compatibility while improving type consistency and preparing for Zod v4 support across all affected packages.
+
+### Minor Changes
+
+- Add schema-driven metadata extraction with Zod support ([#11833](https://github.com/mastra-ai/mastra/pull/11833))
+
+  Introduces a new `SchemaExtractor` that enables extraction of custom structured metadata from document chunks using user-defined Zod schemas. This allows for domain-specific metadata structures (e.g., product details, legal entities, sentiment analysis) to be reliably extracted via LLM structured output.
+  - Extract domain-specific metadata using your own Zod schemas (e.g., product details, legal entities, sentiment)
+  - Customize extraction behavior with your own LLM model and instructions
+  - Organize extracted data by nesting it under custom metadata keys
+  - Existing extractors (title, summary, keywords, questions) remain unchanged and fully compatible
+
+  **Before** (limited to built-in extractors):
+
+  ```typescript
+  await document.extractMetadata({
+    extract: {
+      title: true,
+      summary: true,
+    },
+  });
+  ```
+
+  **After** (with custom Zod schema):
+
+  ```typescript
+  import { z } from 'zod';
+
+  const productSchema = z.object({
+    name: z.string(),
+    price: z.number(),
+    category: z.string(),
+  });
+
+  await document.extractMetadata({
+    extract: {
+      title: true,
+      schema: {
+        schema: productSchema,
+        instructions: 'Extract product details from the document',
+        metadataKey: 'product',
+      },
+    },
+  });
+  ```
+
+  With `metadataKey`, extracted data is nested under the key:
+
+  ```typescript
+  {
+    title: "Product Document",
+    summary: "A comprehensive guide",
+    product: {
+      name: "Wireless Headphones",
+      price: 149.99,
+      category: "Electronics"
+    }
+  }
+  ```
+
+  Without `metadataKey`, extracted data is returned inline:
+
+  ```typescript
+  {
+    title: "Product Document",
+    summary: "A comprehensive guide",
+    name: "Wireless Headphones",
+    price: 149.99,
+    category: "Electronics"
+  }
+  ```
+
+  Fixes #11799
+
+- Renamed `keepSeparator` parameter to `separatorPosition` with a cleaner type. ([#11802](https://github.com/mastra-ai/mastra/pull/11802))
+
+  The `keepSeparator` parameter had a confusing `boolean | 'start' | 'end'` type where `true` was secretly an alias for `'start'`. The new `separatorPosition` parameter uses explicit `'start' | 'end'` values, and omitting the parameter discards the separator (previous default behavior).
+
+  **Migration**
+
+  ```typescript
+  // Before
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    keepSeparator: true, // or 'start'
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    keepSeparator: 'end',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    keepSeparator: false, // or omit entirely
+  });
+
+  // After
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    separatorPosition: 'start',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    separatorPosition: 'end',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+    // omit separatorPosition to discard separator
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ebae12a`](https://github.com/mastra-ai/mastra/commit/ebae12a2dd0212e75478981053b148a2c246962d), [`c61a0a5`](https://github.com/mastra-ai/mastra/commit/c61a0a5de4904c88fd8b3718bc26d1be1c2ec6e7), [`69136e7`](https://github.com/mastra-ai/mastra/commit/69136e748e32f57297728a4e0f9a75988462f1a7), [`449aed2`](https://github.com/mastra-ai/mastra/commit/449aed2ba9d507b75bf93d427646ea94f734dfd1), [`eb648a2`](https://github.com/mastra-ai/mastra/commit/eb648a2cc1728f7678768dd70cd77619b448dab9), [`0131105`](https://github.com/mastra-ai/mastra/commit/0131105532e83bdcbb73352fc7d0879eebf140dc), [`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`b00ccd3`](https://github.com/mastra-ai/mastra/commit/b00ccd325ebd5d9e37e34dd0a105caae67eb568f), [`3bdfa75`](https://github.com/mastra-ai/mastra/commit/3bdfa7507a91db66f176ba8221aa28dd546e464a), [`e770de9`](https://github.com/mastra-ai/mastra/commit/e770de941a287a49b1964d44db5a5763d19890a6), [`52e2716`](https://github.com/mastra-ai/mastra/commit/52e2716b42df6eff443de72360ae83e86ec23993), [`27b4040`](https://github.com/mastra-ai/mastra/commit/27b4040bfa1a95d92546f420a02a626b1419a1d6), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151), [`8dc7f55`](https://github.com/mastra-ai/mastra/commit/8dc7f55900395771da851dc7d78d53ae84fe34ec), [`8379099`](https://github.com/mastra-ai/mastra/commit/8379099fc467af6bef54dd7f80c9bd75bf8bbddf), [`8c0ec25`](https://github.com/mastra-ai/mastra/commit/8c0ec25646c8a7df253ed1e5ff4863a0d3f1316c), [`ff4d9a6`](https://github.com/mastra-ai/mastra/commit/ff4d9a6704fc87b31a380a76ed22736fdedbba5a), [`69821ef`](https://github.com/mastra-ai/mastra/commit/69821ef806482e2c44e2197ac0b050c3fe3a5285), [`1ed5716`](https://github.com/mastra-ai/mastra/commit/1ed5716830867b3774c4a1b43cc0d82935f32b96), [`4186bdd`](https://github.com/mastra-ai/mastra/commit/4186bdd00731305726fa06adba0b076a1d50b49f), [`7aaf973`](https://github.com/mastra-ai/mastra/commit/7aaf973f83fbbe9521f1f9e7a4fd99b8de464617)]:
+  - @mastra/core@1.0.0-beta.22
+
+## 2.0.0-beta.6
+
+### Patch Changes
+
+- Remove unnecessary `ai` package peer dependency to enable compatibility with AI SDK v6. The rag package doesn't directly use the ai package, so this peer dependency was unnecessarily constraining version compatibility. ([#11724](https://github.com/mastra-ai/mastra/pull/11724))
+
+- Updated dependencies [[`08766f1`](https://github.com/mastra-ai/mastra/commit/08766f15e13ac0692fde2a8bd366c2e16e4321df), [`ae8baf7`](https://github.com/mastra-ai/mastra/commit/ae8baf7d8adcb0ff9dac11880400452bc49b33ff), [`cfabdd4`](https://github.com/mastra-ai/mastra/commit/cfabdd4aae7a726b706942d6836eeca110fb6267), [`a0e437f`](https://github.com/mastra-ai/mastra/commit/a0e437fac561b28ee719e0302d72b2f9b4c138f0), [`bec5efd`](https://github.com/mastra-ai/mastra/commit/bec5efde96653ccae6604e68c696d1bc6c1a0bf5), [`9eedf7d`](https://github.com/mastra-ai/mastra/commit/9eedf7de1d6e0022a2f4e5e9e6fe1ec468f9b43c)]:
+  - @mastra/core@1.0.0-beta.21
+
 ## 2.0.0-beta.5
 
 ### Minor Changes

@@ -55,7 +55,8 @@
       "@mastra/libsql": "link:../../../../stores/libsql",
       "@mastra/observability": "link:../../../mastra",
       "@mastra/otel-bridge": "link:../../../otel-bridge",
-      "@mastra/server": "link:../../../../packages/server"
+      "@mastra/server": "link:../../../../packages/server",
+      "systeminformation": "^5.27.14"
     }
   }
 }

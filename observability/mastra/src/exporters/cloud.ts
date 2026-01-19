@@ -40,10 +40,16 @@ interface MastraCloudSpanRecord {
   updatedAt: Date | null;
 }
 
+/** Config type with required fields resolved (excludes optional BaseExporterConfig fields) */
+type ResolvedCloudConfig = Required<Omit<CloudExporterConfig, keyof BaseExporterConfig>> & {
+  logger: BaseExporterConfig['logger'];
+  logLevel: NonNullable<BaseExporterConfig['logLevel']>;
+};
+
 export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-observability-exporter';
 
-  private config: Required<CloudExporterConfig>;
+  private cloudConfig: ResolvedCloudConfig;
   private buffer: MastraCloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
 
@@ -58,7 +64,7 @@ export class CloudExporter extends BaseExporter {
     const endpoint =
       config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? 'https://api.mastra.ai/ai/spans/publish';
 
-    this.config = {
+    this.cloudConfig = {
       logger: this.logger,
       logLevel: config.logLevel ?? LogLevel.INFO,
       maxBatchSize: config.maxBatchSize ?? 1000,
@@ -128,14 +134,14 @@ export class CloudExporter extends BaseExporter {
 
   private shouldFlush(): boolean {
     // Size-based flush
-    if (this.buffer.totalSize >= this.config.maxBatchSize) {
+    if (this.buffer.totalSize >= this.cloudConfig.maxBatchSize) {
       return true;
     }
 
     // Time-based flush
     if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
       const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
-      if (elapsed >= this.config.maxBatchWaitMs) {
+      if (elapsed >= this.cloudConfig.maxBatchWaitMs) {
         return true;
       }
     }
@@ -160,10 +166,10 @@ export class CloudExporter extends BaseExporter {
         this.logger.trackException(mastraError);
         this.logger.error('Scheduled flush failed', mastraError);
       });
-    }, this.config.maxBatchWaitMs);
+    }, this.cloudConfig.maxBatchWaitMs);
   }
 
-  private async flush(): Promise<void> {
+  private async flushBuffer(): Promise<void> {
     // Clear timer since we're flushing
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -176,7 +182,7 @@ export class CloudExporter extends BaseExporter {
 
     const startTime = Date.now();
     const spansCopy = [...this.buffer.spans];
-    const flushReason = this.buffer.totalSize >= this.config.maxBatchSize ? 'size' : 'time';
+    const flushReason = this.buffer.totalSize >= this.cloudConfig.maxBatchSize ? 'size' : 'time';
 
     // Reset buffer immediately to prevent blocking new events
     this.resetBuffer();
@@ -214,7 +220,7 @@ export class CloudExporter extends BaseExporter {
    */
   private async batchUpload(spans: MastraCloudSpanRecord[]): Promise<void> {
     const headers = {
-      Authorization: `Bearer ${this.config.accessToken}`,
+      Authorization: `Bearer ${this.cloudConfig.accessToken}`,
       'Content-Type': 'application/json',
     };
 
@@ -224,13 +230,32 @@ export class CloudExporter extends BaseExporter {
       body: JSON.stringify({ spans }),
     };
 
-    await fetchWithRetry(this.config.endpoint, options, this.config.maxRetries);
+    await fetchWithRetry(this.cloudConfig.endpoint, options, this.cloudConfig.maxRetries);
   }
 
   private resetBuffer(): void {
     this.buffer.spans = [];
     this.buffer.firstEventTime = undefined;
     this.buffer.totalSize = 0;
+  }
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    // Skip if disabled
+    if (this.isDisabled) {
+      return;
+    }
+
+    if (this.buffer.totalSize > 0) {
+      this.logger.debug('Flushing buffered events', {
+        bufferedEvents: this.buffer.totalSize,
+      });
+      await this.flushBuffer();
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -246,28 +271,23 @@ export class CloudExporter extends BaseExporter {
     }
 
     // Flush any remaining events
-    if (this.buffer.totalSize > 0) {
-      this.logger.info('Flushing remaining events on shutdown', {
-        remainingEvents: this.buffer.totalSize,
-      });
-      try {
-        await this.flush();
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
-            domain: ErrorDomain.MASTRA_OBSERVABILITY,
-            category: ErrorCategory.USER,
-            details: {
-              remainingEvents: this.buffer.totalSize,
-            },
+    try {
+      await this.flush();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.USER,
+          details: {
+            remainingEvents: this.buffer.totalSize,
           },
-          error,
-        );
+        },
+        error,
+      );
 
-        this.logger.trackException(mastraError);
-        this.logger.error('Failed to flush remaining events during shutdown', mastraError);
-      }
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to flush remaining events during shutdown', mastraError);
     }
 
     this.logger.info('CloudExporter shutdown complete');

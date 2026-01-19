@@ -49,7 +49,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
 | New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                           |
 
 ## Provider Configurations
 
@@ -243,7 +243,7 @@ new OtelExporter({
 
 ### Laminar
 
-[Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
 
 #### Zero-Config Setup
 
@@ -253,7 +253,6 @@ LMNR_PROJECT_API_KEY=your-api-key
 
 # Optional
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
 ```
 
 ```typescript title="src/mastra/index.ts"
@@ -267,17 +266,22 @@ new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
-      // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     },
   },
 });
 ```
 
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/v1/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
+
 ### Datadog
 
 [Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
 
-Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and [bundler configuration](/reference/v1/configuration#bundlerexternals) to work correctly:
 
 ```typescript title="src/mastra/index.ts"
 // Explicitly import gRPC dependencies for the bundler
@@ -292,7 +296,6 @@ export const mastra = new Mastra({
   bundler: {
     externals: ["@grpc/grpc-js"],
   },
-
   observability: new Observability({
     configs: {
       default: {
@@ -335,7 +338,13 @@ The default OTLP endpoint is `http://localhost:4317` when running the Datadog Ag
 
 :::warning
 
-The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the `bundler.externals` configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the [`bundler.externals`](/reference/v1/configuration#bundlerexternals) configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+
+:::
+
+:::tip Datadog-Native Exporter
+
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/v1/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
 
 :::
 
@@ -439,25 +448,6 @@ Install the suggested package for your provider.
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 2. **Invalid endpoint**: Check endpoint format matches provider requirements
 3. **Authentication failures**: Verify API keys and headers are correct
-
-## Using Tags
-
-Tags help you categorize and filter traces in your observability platform. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 

@@ -4,7 +4,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
-import type { Span, SpanType, TracingContext } from '../observability';
+import type { Span, SpanType, TracingContext, TracingPolicy } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -153,9 +153,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns The index if condition is truthy, null otherwise
    */
   async evaluateCondition(
-    conditionFn: ConditionFunction<any, any, any, any, DefaultEngineType>,
+    conditionFn: ConditionFunction<any, any, any, any, any, DefaultEngineType>,
     index: number,
-    context: ConditionFunctionParams<any, any, any, any, DefaultEngineType>,
+    context: ConditionFunctionParams<any, any, any, any, any, DefaultEngineType>,
     operationId: string,
   ): Promise<number | null> {
     return this.wrapDurableOperation(operationId, async () => {
@@ -235,6 +235,143 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // Default: return null to use standard execution
     // Subclasses (like Inngest) override to use platform-specific invocation
     return null;
+  }
+
+  // =============================================================================
+  // Span Lifecycle Hooks
+  // These methods can be overridden by subclasses (e.g., Inngest) to make span
+  // creation/end durable across workflow replays.
+  // =============================================================================
+
+  /**
+   * Create a child span for a workflow step.
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: creates span directly via parent span's createChildSpan.
+   *
+   * @param params - Parameters for span creation
+   * @returns The created span, or undefined if no parent span or tracing disabled
+   */
+  async createStepSpan(params: {
+    parentSpan: Span<SpanType> | undefined;
+    stepId: string;
+    operationId: string;
+    options: {
+      name: string;
+      type: SpanType;
+      input?: unknown;
+      entityType?: string;
+      entityId?: string;
+      tracingPolicy?: TracingPolicy;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<Span<SpanType> | undefined> {
+    // Default: create span directly (no durability)
+    return params.parentSpan?.createChildSpan(params.options as any);
+  }
+
+  /**
+   * End a workflow step span.
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: calls span.end() directly.
+   *
+   * @param params - Parameters for ending the span
+   */
+  async endStepSpan(params: {
+    span: Span<SpanType> | undefined;
+    operationId: string;
+    endOptions: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    // Default: end span directly (no durability)
+    params.span?.end(params.endOptions as any);
+  }
+
+  /**
+   * Record an error on a workflow step span.
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: calls span.error() directly.
+   *
+   * @param params - Parameters for recording the error
+   */
+  async errorStepSpan(params: {
+    span: Span<SpanType> | undefined;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    // Default: error span directly (no durability)
+    params.span?.error(params.errorOptions as any);
+  }
+
+  /**
+   * Create a generic child span (for control-flow operations like parallel, conditional, loop).
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: creates span directly via parent span's createChildSpan.
+   *
+   * @param params - Parameters for span creation
+   * @returns The created span, or undefined if no parent span or tracing disabled
+   */
+  async createChildSpan(params: {
+    parentSpan: Span<SpanType> | undefined;
+    operationId: string;
+    options: {
+      name: string;
+      type: SpanType;
+      input?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+    executionContext: ExecutionContext;
+  }): Promise<Span<SpanType> | undefined> {
+    // Default: create span directly (no durability)
+    return params.parentSpan?.createChildSpan(params.options as any);
+  }
+
+  /**
+   * End a generic child span (for control-flow operations).
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: calls span.end() directly.
+   *
+   * @param params - Parameters for ending the span
+   */
+  async endChildSpan(params: {
+    span: Span<SpanType> | undefined;
+    operationId: string;
+    endOptions?: {
+      output?: unknown;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    // Default: end span directly (no durability)
+    params.span?.end(params.endOptions as any);
+  }
+
+  /**
+   * Record an error on a generic child span (for control-flow operations).
+   * Override to add durability (e.g., Inngest memoization).
+   *
+   * Default: calls span.error() directly.
+   *
+   * @param params - Parameters for recording the error
+   */
+  async errorChildSpan(params: {
+    span: Span<SpanType> | undefined;
+    operationId: string;
+    errorOptions: {
+      error: Error;
+      attributes?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    // Default: error span directly (no durability)
+    params.span?.error(params.errorOptions as any);
   }
 
   /**
@@ -493,6 +630,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    /** Trace IDs for creating child spans in durable execution */
+    tracingIds?: {
+      traceId: string;
+      workflowSpanId: string;
+    };
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -559,6 +701,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         retryConfig: { attempts, delay },
         format: params.format,
         state: lastState ?? initialState,
+        // Tracing IDs for durable span operations (Inngest)
+        tracingIds: params.tracingIds,
       };
       lastExecutionContext = executionContext;
 

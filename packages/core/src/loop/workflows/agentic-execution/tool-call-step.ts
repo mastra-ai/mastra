@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -13,7 +13,7 @@ type AddToolMetadataOptions = {
   toolCallId: string;
   toolName: string;
   args: unknown;
-  resumeSchema: z.ZodType<any>;
+  resumeSchema: string;
 } & (
   | {
       type: 'approval';
@@ -25,10 +25,7 @@ type AddToolMetadataOptions = {
     }
 );
 
-export function createToolCallStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
   messageList,
   options,
@@ -287,13 +284,17 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: z.object({
-                  approved: z
-                    .boolean()
-                    .describe(
-                      'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                    ),
-                }),
+                resumeSchema: JSON.stringify(
+                  zodToJsonSchema(
+                    z.object({
+                      approved: z
+                        .boolean()
+                        .describe(
+                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                        ),
+                    }),
+                  ),
+                ),
               },
             });
 
@@ -303,13 +304,17 @@ export function createToolCallStep<
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: z.object({
-                approved: z
-                  .boolean()
-                  .describe(
-                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                  ),
-              }),
+              resumeSchema: JSON.stringify(
+                zodToJsonSchema(
+                  z.object({
+                    approved: z
+                      .boolean()
+                      .describe(
+                        'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                      ),
+                  }),
+                ),
+              ),
             });
 
             // Flush messages before suspension to ensure they are persisted

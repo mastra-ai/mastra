@@ -6,105 +6,30 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
-import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import { TrackingExporter } from '@mastra/observability';
+import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
+import { removeNullish, convertAISDKMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
-
-// ==============================================================================
-// Type definitions for AI SDK message format conversion to OpenAI format
-// ==============================================================================
+import { reconstructThreadOutput } from './thread-reconstruction';
+import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-reconstruction';
 
 /**
- * AI SDK content part types (both v4 and v5)
+ * Extended Braintrust span data that includes span type and thread reconstruction data
  */
-interface AISDKTextPart {
-  type: 'text';
-  text: string;
+interface BraintrustSpanData {
+  span: Span;
+  spanType: SpanType;
+  threadData?: ThreadData; // only populated for MODEL_GENERATION spans
+  // Tool results stored when TOOL_CALL ends (may arrive before MODEL_STEP ends)
+  pendingToolResults?: Map<string, PendingToolResult>; // keyed by toolCallId
 }
 
-interface AISDKImagePart {
-  type: 'image';
-  image?: string | Uint8Array | URL;
-  mimeType?: string;
-}
-
-interface AISDKFilePart {
-  type: 'file';
-  data?: string | Uint8Array | URL;
-  filename?: string;
-  name?: string;
-  mimeType?: string;
-}
-
-interface AISDKReasoningPart {
-  type: 'reasoning';
-  text?: string;
-}
-
-interface AISDKToolCallPart {
-  type: 'tool-call';
-  toolCallId: string;
-  toolName: string;
-  args?: unknown; // AI SDK v4
-  input?: unknown; // AI SDK v5
-}
-
-interface AISDKToolResultPart {
-  type: 'tool-result';
-  toolCallId: string;
-  result?: unknown; // AI SDK v4
-  output?: unknown; // AI SDK v5
-}
-
-type AISDKContentPart =
-  | AISDKTextPart
-  | AISDKImagePart
-  | AISDKFilePart
-  | AISDKReasoningPart
-  | AISDKToolCallPart
-  | AISDKToolResultPart
-  | { type: string; [key: string]: unknown }; // Catch-all for unknown types
-
-/**
- * AI SDK message format (input format for conversion)
- */
-interface AISDKMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string | AISDKContentPart[];
-  [key: string]: unknown; // Allow additional properties
-}
-
-/**
- * OpenAI Chat Completion tool call format
- */
-interface OpenAIToolCall {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
-
-/**
- * OpenAI Chat Completion message format (output format)
- */
-interface OpenAIMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string;
-  tool_calls?: OpenAIToolCall[];
-  tool_call_id?: string;
-  [key: string]: unknown; // Allow additional properties
-}
-
-const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
-
-export interface BraintrustExporterConfig extends BaseExporterConfig {
+export interface BraintrustExporterConfig extends TrackingExporterConfig {
   /**
    * Optional Braintrust logger instance.
    * When provided, enables integration with Braintrust contexts such as:
@@ -124,12 +49,11 @@ export interface BraintrustExporterConfig extends BaseExporterConfig {
   tuningParameters?: Record<string, any>;
 }
 
-type SpanData = {
-  logger: Logger<true> | Span; // Braintrust logger (for root spans) or external span
-  spans: Map<string, Span>; // Maps span.id to Braintrust span
-  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
-  isExternal: boolean; // True if logger is an external span from logger.traced() or Eval()
-};
+type BraintrustRoot = Logger<true> | Span;
+type BraintrustSpan = BraintrustSpanData;
+type BraintrustEvent = Span;
+type BraintrustMetadata = unknown;
+type BraintrustTraceData = TraceData<BraintrustRoot, BraintrustSpan, BraintrustEvent, BraintrustMetadata>;
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'task';
@@ -148,518 +72,319 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter extends BaseExporter {
+export class BraintrustExporter extends TrackingExporter<
+  BraintrustRoot,
+  BraintrustSpan,
+  BraintrustEvent,
+  BraintrustMetadata,
+  BraintrustExporterConfig
+> {
   name = 'braintrust';
-  private traceMap = new Map<string, SpanData>();
-  private config: BraintrustExporterConfig;
 
   // Flags and logger for context-aware mode
-  private useProvidedLogger: boolean;
-  private providedLogger?: Logger<true>;
+  #useProvidedLogger: boolean;
+  #providedLogger?: Logger<true>;
+  #localLogger?: Logger<true>;
 
   constructor(config: BraintrustExporterConfig = {}) {
-    super(config);
+    // Resolve env vars BEFORE calling super (config is readonly in base class)
+    const resolvedApiKey = config.apiKey ?? process.env.BRAINTRUST_API_KEY;
+    const resolvedEndpoint = config.endpoint ?? process.env.BRAINTRUST_ENDPOINT;
 
-    if (config.braintrustLogger) {
+    super({
+      ...config,
+      apiKey: resolvedApiKey,
+      endpoint: resolvedEndpoint,
+    });
+
+    this.#useProvidedLogger = !!config.braintrustLogger;
+
+    if (this.#useProvidedLogger) {
       // Use provided logger - enables Braintrust context integration
-      this.useProvidedLogger = true;
-      this.providedLogger = config.braintrustLogger;
-      this.config = config;
+      this.#providedLogger = config.braintrustLogger;
     } else {
-      // Read credentials from config or environment variables
-      const apiKey = config.apiKey ?? process.env.BRAINTRUST_API_KEY;
-      const endpoint = config.endpoint ?? process.env.BRAINTRUST_ENDPOINT;
-
       // Validate apiKey for creating loggers per trace
-      if (!apiKey) {
+      if (!this.config.apiKey) {
         this.setDisabled(
           `Missing required API key. Set BRAINTRUST_API_KEY environment variable or pass apiKey in config.`,
         );
-        this.config = null as any;
-        this.useProvidedLogger = false;
         return;
       }
-      this.useProvidedLogger = false;
-      this.config = {
-        ...config,
-        apiKey,
-        endpoint,
-      };
+      // lazy create logger on first rootSpan
+      this.#localLogger = undefined;
     }
   }
 
-  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.exportedSpan.isEvent) {
-      await this.handleEventSpan(event.exportedSpan);
-      return;
+  private async getLocalLogger(): Promise<Logger<true> | undefined> {
+    if (this.#localLogger) {
+      return this.#localLogger;
     }
-
-    switch (event.type) {
-      case 'span_started':
-        await this.handleSpanStarted(event.exportedSpan);
-        break;
-      case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, false);
-        break;
-      case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, true);
-        break;
-    }
-  }
-
-  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      if (this.useProvidedLogger) {
-        // Use provided logger, detect external Braintrust spans
-        await this.initLoggerOrUseContext(span);
-      } else {
-        // Create new logger per trace
-        await this.initLoggerPerTrace(span);
-      }
-    }
-
-    const method = 'handleSpanStarted';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    // Refcount: track active non-event spans (including root)
-    if (!span.isEvent) {
-      spanData.activeIds.add(span.id);
-    }
-
-    const braintrustParent = this.getBraintrustParent({ spanData, span, method });
-    if (!braintrustParent) {
-      return;
-    }
-
-    const payload = this.buildSpanPayload(span);
-
-    const braintrustSpan = braintrustParent.startSpan({
-      spanId: span.id,
-      name: span.name,
-      type: mapSpanType(span.type),
-      ...payload,
-    });
-
-    // Include the Mastra trace ID in the span metadata for correlation
-    // Also include tags if present (only for root spans)
-    braintrustSpan.log({
-      metadata: {
-        [MASTRA_TRACE_ID_METADATA_KEY]: span.traceId,
-      },
-      ...(span.isRootSpan && span.tags?.length ? { tags: span.tags } : {}),
-    });
-
-    spanData.spans.set(span.id, braintrustSpan);
-  }
-
-  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
-    const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
-
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const braintrustSpan = spanData.spans.get(span.id);
-    if (!braintrustSpan) {
-      this.logger.warn('Braintrust exporter: No Braintrust span found for span update/end', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parentSpanId,
-        method,
-      });
-      return;
-    }
-
-    braintrustSpan.log(this.buildSpanPayload(span));
-
-    if (isEnd) {
-      // End the span with the correct endTime (convert milliseconds to seconds)
-      if (span.endTime) {
-        braintrustSpan.end({ endTime: span.endTime.getTime() / 1000 });
-      } else {
-        braintrustSpan.end();
-      }
-
-      // Refcount: mark this span as ended
-      if (!span.isEvent) {
-        spanData.activeIds.delete(span.id);
-      }
-
-      // If no more active spans remain for this trace, clean up the trace entry
-      // Don't clean up if using external spans (they're managed by Braintrust)
-      if (spanData.activeIds.size === 0 && !spanData.isExternal) {
-        this.traceMap.delete(span.traceId);
-      }
-    }
-  }
-
-  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      this.logger.debug('Braintrust exporter: Creating logger for event', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        method: 'handleEventSpan',
-      });
-
-      if (this.useProvidedLogger) {
-        // Use provided logger, detect external Braintrust spans
-        await this.initLoggerOrUseContext(span);
-      } else {
-        // Create new logger per trace
-        await this.initLoggerPerTrace(span);
-      }
-    }
-
-    const method = 'handleEventSpan';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const braintrustParent = this.getBraintrustParent({ spanData, span, method });
-    if (!braintrustParent) {
-      return;
-    }
-
-    const payload = this.buildSpanPayload(span);
-
-    // Create zero-duration span for event (convert milliseconds to seconds)
-    const braintrustSpan = braintrustParent.startSpan({
-      spanId: span.id,
-      name: span.name,
-      type: mapSpanType(span.type),
-      startTime: span.startTime.getTime() / 1000,
-      ...payload,
-    });
-
-    braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
-  }
-
-  private initTraceMap(params: { traceId: string; isExternal: boolean; logger: Logger<true> | Span }): void {
-    const { traceId, isExternal, logger } = params;
-
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId });
-      return;
-    }
-
-    this.traceMap.set(traceId, {
-      logger,
-      spans: new Map(),
-      activeIds: new Set(),
-      isExternal,
-    });
-  }
-
-  /**
-   * Creates a new logger per trace using config credentials
-   */
-  private async initLoggerPerTrace(span: AnyExportedSpan): Promise<void> {
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
-      return;
-    }
-
-    // Guard against null config (when exporter is disabled)
-    if (!this.config) {
-      return;
-    }
-
     try {
-      const loggerInstance = await initLogger({
+      const logger = await initLogger({
         projectName: this.config.projectName ?? 'mastra-tracing',
         apiKey: this.config.apiKey,
         appUrl: this.config.endpoint,
         ...this.config.tuningParameters,
       });
-
-      this.initTraceMap({ logger: loggerInstance, isExternal: false, traceId: span.traceId });
+      this.#localLogger = logger;
+      return logger;
     } catch (err) {
-      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err, traceId: span.traceId });
+      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err });
       this.setDisabled('Failed to initialize Braintrust logger');
     }
   }
 
-  /**
-   * Uses provided logger and detects external Braintrust spans.
-   * If a Braintrust span is detected (from logger.traced() or Eval()), attaches to it.
-   * Otherwise, uses the provided logger instance.
-   */
-  private async initLoggerOrUseContext(span: AnyExportedSpan): Promise<void> {
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+  private startSpan(args: { parent: Span | Logger<true>; span: AnyExportedSpan }): BraintrustSpanData {
+    const { parent, span } = args;
+    const payload = this.buildSpanPayload(span);
+    const braintrustSpan = parent.startSpan({
+      spanId: span.id,
+      name: span.name,
+      type: mapSpanType(span.type),
+      startTime: span.startTime.getTime() / 1000,
+      event: { id: span.id }, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
+      ...payload,
+    });
+
+    // Create BraintrustSpanData with span type for tree walking
+    // Initialize threadData and pendingToolResults for MODEL_GENERATION spans (used for Thread view reconstruction)
+    const isModelGeneration = span.type === SpanType.MODEL_GENERATION;
+    return {
+      span: braintrustSpan,
+      spanType: span.type,
+      threadData: isModelGeneration ? [] : undefined,
+      pendingToolResults: isModelGeneration ? new Map() : undefined,
+    };
+  }
+
+  protected override async _buildRoot(_args: {
+    span: AnyExportedSpan;
+    traceData: BraintrustTraceData;
+  }): Promise<BraintrustRoot | undefined> {
+    if (this.#useProvidedLogger) {
+      // Try to find a Braintrust span to attach to:
+      // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
+      // 2. Fall back to the configured logger
+      const externalSpan = currentSpan();
+
+      // Check if it's a valid span (not the NOOP_SPAN)
+      if (externalSpan && externalSpan.id) {
+        // External span detected - attach Mastra traces to it
+        return externalSpan;
+      } else {
+        // No external span - use provided logger
+        return this.#providedLogger!;
+      }
+    } else {
+      // Use the local logger
+      return this.getLocalLogger();
+    }
+  }
+
+  protected override async _buildSpan(args: {
+    span: AnyExportedSpan;
+    traceData: BraintrustTraceData;
+  }): Promise<BraintrustSpanData | undefined> {
+    const { span, traceData } = args;
+
+    if (span.isRootSpan) {
+      const root = traceData.getRoot();
+      if (root) {
+        return this.startSpan({ parent: root, span });
+      }
+    } else {
+      const parent = traceData.getParent(args);
+      if (parent) {
+        // Parent could be BraintrustSpanData (has .span) or BraintrustRoot (Logger/Span, no .span)
+        const parentSpan = 'span' in parent ? parent.span : parent;
+        return this.startSpan({ parent: parentSpan, span });
+      }
+    }
+  }
+
+  protected override async _buildEvent(args: {
+    span: AnyExportedSpan;
+    traceData: BraintrustTraceData;
+  }): Promise<Span | undefined> {
+    const spanData = await this._buildSpan(args);
+
+    if (!spanData) {
+      // parent doesn't exist and not creating rootSpan, return early data
       return;
     }
 
-    // Try to find a Braintrust span to attach to:
-    // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
-    // 2. Fall back to the configured logger
-    const braintrustSpan = currentSpan();
+    spanData.span.end({ endTime: args.span.startTime.getTime() / 1000 });
+    return spanData.span;
+  }
 
-    // Check if it's a valid span (not the NOOP_SPAN)
-    if (braintrustSpan && braintrustSpan.id) {
-      // External span detected - attach Mastra traces to it
-      this.initTraceMap({ logger: braintrustSpan, isExternal: true, traceId: span.traceId });
+  protected override async _updateSpan(args: { span: AnyExportedSpan; traceData: BraintrustTraceData }): Promise<void> {
+    const { span, traceData } = args;
+
+    const spanData = traceData.getSpan({ spanId: span.id });
+    if (!spanData) {
+      return;
+    }
+    spanData.span.log(this.buildSpanPayload(span, false));
+  }
+
+  protected override async _finishSpan(args: { span: AnyExportedSpan; traceData: BraintrustTraceData }): Promise<void> {
+    const { span, traceData } = args;
+
+    const spanData = traceData.getSpan({ spanId: span.id });
+    if (!spanData) {
+      return;
+    }
+
+    // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
+    if (span.type === SpanType.MODEL_STEP) {
+      this.accumulateModelStepData(span, traceData);
+    } else if (span.type === SpanType.TOOL_CALL) {
+      this.accumulateToolCallResult(span, traceData);
+    }
+
+    // Build payload - for MODEL_GENERATION, may reconstruct output from threadData
+    const payload =
+      span.type === SpanType.MODEL_GENERATION
+        ? this.buildModelGenerationPayload(span, spanData)
+        : this.buildSpanPayload(span, false);
+
+    spanData.span.log(payload);
+
+    if (span.endTime) {
+      spanData.span.end({ endTime: span.endTime.getTime() / 1000 });
     } else {
-      // No external span - use provided logger
-      this.initTraceMap({ logger: this.providedLogger!, isExternal: false, traceId: span.traceId });
+      spanData.span.end();
     }
   }
 
-  private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
-    const { span, method } = options;
-    if (this.traceMap.has(span.traceId)) {
-      return this.traceMap.get(span.traceId);
-    }
-
-    this.logger.warn('Braintrust exporter: No span data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
+  protected override async _abortSpan(args: { span: BraintrustSpan; reason: SpanErrorInfo }): Promise<void> {
+    const { span: spanData, reason } = args;
+    spanData.span.log({
+      error: reason.message,
+      metadata: { errorDetails: reason },
     });
+    spanData.span.end();
   }
 
-  private getBraintrustParent(options: {
-    spanData: SpanData;
-    span: AnyExportedSpan;
-    method: string;
-  }): Logger<true> | Span | undefined {
-    const { spanData, span, method } = options;
+  // ==============================================================================
+  // Thread view reconstruction helpers
+  // ==============================================================================
 
-    const parentId = span.parentSpanId;
-    if (!parentId) {
-      return spanData.logger;
+  /**
+   * Walk up the tree to find the MODEL_GENERATION ancestor span.
+   * Returns the BraintrustSpanData if found, undefined otherwise.
+   */
+  private findModelGenerationAncestor(spanId: string, traceData: BraintrustTraceData): BraintrustSpanData | undefined {
+    let currentId: string | undefined = spanId;
+
+    while (currentId) {
+      const parentId = traceData.getParentId({ spanId: currentId });
+      if (!parentId) return undefined;
+
+      const parentSpanData = traceData.getSpan({ spanId: parentId });
+      if (parentSpanData?.spanType === SpanType.MODEL_GENERATION) {
+        return parentSpanData;
+      }
+      currentId = parentId;
     }
 
-    if (spanData.spans.has(parentId)) {
-      return spanData.spans.get(parentId);
+    return undefined;
+  }
+
+  /**
+   * Accumulate MODEL_STEP data to the parent MODEL_GENERATION's threadData.
+   * Called when a MODEL_STEP span ends.
+   */
+  private accumulateModelStepData(span: AnyExportedSpan, traceData: BraintrustTraceData): void {
+    const modelGenSpanData = this.findModelGenerationAncestor(span.id, traceData);
+    if (!modelGenSpanData?.threadData) {
+      return;
     }
 
-    // If the parent exists but is the root span (not represented as a Braintrust
-    // span because we use the logger as the root), attach to the logger so the
-    // span is not orphaned. We need to check if parentSpanId exists but the
-    // parent span is not in our spans map (indicating it's the root span).
-    if (parentId && !spanData.spans.has(parentId)) {
-      // This means the parent exists but isn't tracked as a Braintrust span,
-      // which happens when the parent is the root span (we use logger as root)
-      return spanData.logger;
+    // Extract step data from MODEL_STEP output and attributes
+    const output = span.output as
+      | { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> }
+      | undefined;
+    const attributes = span.attributes as { stepIndex?: number } | undefined;
+
+    const stepData: ThreadStepData = {
+      stepSpanId: span.id,
+      stepIndex: attributes?.stepIndex ?? 0,
+      text: output?.text,
+      toolCalls: output?.toolCalls?.map(tc => ({
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        args: tc.args,
+      })),
+    };
+
+    modelGenSpanData.threadData.push(stepData);
+  }
+
+  /**
+   * Store TOOL_CALL result in parent MODEL_GENERATION's pendingToolResults.
+   * Called when a TOOL_CALL span ends.
+   * Results are merged into threadData when MODEL_GENERATION ends.
+   */
+  private accumulateToolCallResult(span: AnyExportedSpan, traceData: BraintrustTraceData): void {
+    const modelGenSpanData = this.findModelGenerationAncestor(span.id, traceData);
+    if (!modelGenSpanData?.pendingToolResults) {
+      return;
     }
 
-    this.logger.warn('Braintrust exporter: No parent data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
+    // Extract tool call ID from TOOL_CALL span input
+    const input = span.input as { toolCallId?: string } | undefined;
+    const toolCallId = input?.toolCallId;
+    if (!toolCallId) {
+      return;
+    }
+
+    // Store the result for later merging
+    modelGenSpanData.pendingToolResults.set(toolCallId, {
+      result: span.output,
+      startTime: span.startTime,
     });
   }
 
   /**
-   * Converts AI SDK message format to OpenAI Chat Completion format for Braintrust.
-   *
-   * Supports both AI SDK v4 and v5 formats:
-   *   - v4 uses 'args' for tool calls and 'result' for tool results
-   *   - v5 uses 'input' for tool calls and 'output' for tool results
-   *
-   * AI SDK format:
-   *   { role: "user", content: [{ type: "text", text: "hello" }] }
-   *   { role: "assistant", content: [{ type: "text", text: "..." }, { type: "tool-call", toolCallId: "...", toolName: "...", args: {...} }] }
-   *   { role: "tool", content: [{ type: "tool-result", toolCallId: "...", result: {...} }] }
-   *
-   * OpenAI format (what Braintrust expects):
-   *   { role: "user", content: "hello" }
-   *   { role: "assistant", content: "...", tool_calls: [{ id: "...", type: "function", function: { name: "...", arguments: "..." } }] }
-   *   { role: "tool", content: "result", tool_call_id: "..." }
+   * Build the payload for MODEL_GENERATION span, reconstructing output from threadData if available.
    */
-  private convertAISDKMessage(message: AISDKMessage | OpenAIMessage | unknown): OpenAIMessage | unknown {
-    if (!message || typeof message !== 'object') {
-      return message;
+  private buildModelGenerationPayload(span: AnyExportedSpan, spanData: BraintrustSpanData): Record<string, any> {
+    const basePayload = this.buildSpanPayload(span, false);
+
+    // Check if we have threadData with tool calls to reconstruct
+    const threadData = spanData.threadData;
+    if (!threadData || threadData.length === 0) {
+      return basePayload;
     }
 
-    const { role, content, ...rest } = message as AISDKMessage;
-
-    // If content is already a string, return as-is (already in OpenAI format)
-    if (typeof content === 'string') {
-      return message;
-    }
-
-    // If content is an array (AI SDK format), convert based on role
-    if (Array.isArray(content)) {
-      // Handle empty content arrays
-      if (content.length === 0) {
-        return { role, content: '', ...rest };
-      }
-
-      // For user/system messages, extract text and represent non-text content
-      if (role === 'user' || role === 'system') {
-        const contentParts = content.map((part: any) => this.convertContentPart(part)).filter(Boolean);
-
-        return {
-          role,
-          content: contentParts.length > 0 ? contentParts.join('\n') : '',
-          ...rest,
-        };
-      }
-
-      // For assistant messages, extract text, non-text content, AND tool calls
-      if (role === 'assistant') {
-        const contentParts = content
-          .filter((part: any) => part?.type !== 'tool-call')
-          .map((part: any) => this.convertContentPart(part))
-          .filter(Boolean);
-
-        const toolCallParts = content.filter((part: any) => part?.type === 'tool-call');
-
-        const result: any = {
-          role,
-          content: contentParts.length > 0 ? contentParts.join('\n') : '',
-          ...rest,
-        };
-
-        // Add tool_calls array if there are tool calls
-        if (toolCallParts.length > 0) {
-          result.tool_calls = toolCallParts.map((tc: any) => {
-            const toolCallId = tc.toolCallId;
-            const toolName = tc.toolName;
-            // Support both v4 'args' and v5 'input'
-            const args = tc.args ?? tc.input;
-
-            let argsString: string;
-            if (typeof args === 'string') {
-              argsString = args;
-            } else if (args !== undefined && args !== null) {
-              argsString = JSON.stringify(args);
-            } else {
-              argsString = '{}';
+    // Merge pending tool results into threadData
+    if (spanData.pendingToolResults && spanData.pendingToolResults.size > 0) {
+      for (const step of threadData) {
+        if (step.toolCalls) {
+          for (const toolCall of step.toolCalls) {
+            const pendingResult = spanData.pendingToolResults.get(toolCall.toolCallId);
+            if (pendingResult) {
+              toolCall.result = pendingResult.result;
+              toolCall.startTime = pendingResult.startTime;
             }
-
-            return {
-              id: toolCallId,
-              type: 'function',
-              function: {
-                name: toolName,
-                arguments: argsString,
-              },
-            };
-          });
-        }
-
-        return result;
-      }
-
-      // For tool messages, convert to OpenAI tool message format
-      if (role === 'tool') {
-        const toolResult = content.find((part): part is AISDKToolResultPart => part?.type === 'tool-result');
-        if (toolResult) {
-          // Support both v4 'result' and v5 'output' fields
-          const resultData = toolResult.output ?? toolResult.result;
-          const resultContent = this.serializeToolResult(resultData);
-
-          return {
-            role: 'tool',
-            content: resultContent,
-            tool_call_id: toolResult.toolCallId,
-          } as OpenAIMessage;
+          }
         }
       }
     }
 
-    return message;
-  }
-
-  /**
-   * Converts a content part to a string representation.
-   * Handles text, image, file, reasoning, and other content types.
-   */
-  private convertContentPart(part: AISDKContentPart | null | undefined): string | null {
-    if (!part || typeof part !== 'object') {
-      return null;
+    // Check if any step has tool calls
+    const hasToolCalls = threadData.some(step => step.toolCalls && step.toolCalls.length > 0);
+    if (!hasToolCalls) {
+      return basePayload;
     }
 
-    switch (part.type) {
-      case 'text':
-        return (part as AISDKTextPart).text || null;
-
-      case 'image':
-        // Represent image content with a placeholder
-        return '[image]';
-
-      case 'file': {
-        // Represent file content with filename if available
-        const filePart = part as AISDKFilePart;
-        if (filePart.filename || filePart.name) {
-          return `[file: ${filePart.filename || filePart.name}]`;
-        }
-        return '[file]';
-      }
-
-      case 'reasoning': {
-        // Represent reasoning/thinking content
-        const reasoningPart = part as AISDKReasoningPart;
-        if (typeof reasoningPart.text === 'string' && reasoningPart.text.length > 0) {
-          return `[reasoning: ${reasoningPart.text.substring(0, 100)}${reasoningPart.text.length > 100 ? '...' : ''}]`;
-        }
-        return '[reasoning]';
-      }
-
-      case 'tool-call':
-        // Tool calls are handled separately in assistant messages
-        return null;
-
-      case 'tool-result':
-        // Tool results are handled separately in tool messages
-        return null;
-
-      default: {
-        // For unknown types, try to extract any text-like content
-        const unknownPart = part as { type?: string; text?: string; content?: string };
-        if (typeof unknownPart.text === 'string') {
-          return unknownPart.text;
-        }
-        if (typeof unknownPart.content === 'string') {
-          return unknownPart.content;
-        }
-        // Represent unknown content type
-        return `[${unknownPart.type || 'unknown'}]`;
-      }
-    }
-  }
-
-  /**
-   * Serializes tool result data to a string for OpenAI format.
-   */
-  private serializeToolResult(resultData: any): string {
-    if (typeof resultData === 'string') {
-      return resultData;
-    }
-    if (resultData && typeof resultData === 'object' && 'value' in resultData) {
-      return typeof resultData.value === 'string' ? resultData.value : JSON.stringify(resultData.value);
-    }
-    if (resultData === undefined || resultData === null) {
-      return '';
-    }
-    try {
-      return JSON.stringify(resultData);
-    } catch {
-      return '[unserializable result]';
-    }
+    // Reconstruct output as OpenAI messages
+    const reconstructedOutput = reconstructThreadOutput(threadData, span.output);
+    return {
+      ...basePayload,
+      output: reconstructedOutput,
+    };
   }
 
   /**
@@ -667,16 +392,21 @@ export class BraintrustExporter extends BaseExporter {
    * Converts AI SDK messages (v4/v5) to OpenAI Chat Completion format, which Braintrust requires
    * for proper rendering of threads (fixes #11023).
    */
-  private transformInput(input: any, spanType: SpanType): any {
+  private transformInput(input: unknown, spanType: SpanType): unknown {
     if (spanType === SpanType.MODEL_GENERATION) {
       // If input is already an array of messages, convert AI SDK format to OpenAI format
       if (Array.isArray(input)) {
-        return input.map((msg: AISDKMessage) => this.convertAISDKMessage(msg));
+        return input.map((msg: unknown) => convertAISDKMessage(msg));
       }
 
       // If input has a messages array
-      if (input && Array.isArray(input.messages)) {
-        return input.messages.map((msg: AISDKMessage) => this.convertAISDKMessage(msg));
+      if (
+        input &&
+        typeof input === 'object' &&
+        'messages' in input &&
+        Array.isArray((input as { messages: unknown[] }).messages)
+      ) {
+        return (input as { messages: unknown[] }).messages.map((msg: unknown) => convertAISDKMessage(msg));
       }
     }
 
@@ -688,14 +418,18 @@ export class BraintrustExporter extends BaseExporter {
    */
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
+      if (!output || typeof output !== 'object') {
+        return output;
+      }
       const { text, ...rest } = output;
-      return { role: 'assistant', content: text, ...rest };
+      // Remove null/undefined values from rest to keep Thread view clean
+      return { role: 'assistant', content: text, ...removeNullish(rest) };
     }
 
     return output;
   }
 
-  private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
+  private buildSpanPayload(span: AnyExportedSpan, isCreate = true): Record<string, any> {
     const payload: Record<string, any> = {};
 
     if (span.input !== undefined) {
@@ -706,12 +440,21 @@ export class BraintrustExporter extends BaseExporter {
       payload.output = this.transformOutput(span.output, span.type);
     }
 
+    if (isCreate && span.isRootSpan && span.tags?.length) {
+      payload.tags = span.tags;
+    }
+
     // Initialize metrics and metadata objects
     payload.metrics = {};
+    // Spread span.metadata first, then set spanType to prevent accidental override
     payload.metadata = {
-      spanType: span.type,
       ...span.metadata,
+      spanType: span.type,
     };
+
+    if (isCreate) {
+      payload.metadata['mastra-trace-id'] = span.traceId;
+    }
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
@@ -768,22 +511,9 @@ export class BraintrustExporter extends BaseExporter {
       delete payload.metrics;
     }
 
+    // Remove null/undefined values from metadata to keep Braintrust UI clean
+    payload.metadata = removeNullish(payload.metadata);
+
     return payload;
-  }
-
-  async shutdown(): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
-    // End all active spans
-    for (const [_traceId, spanData] of this.traceMap) {
-      for (const [_spanId, span] of spanData.spans) {
-        span.end();
-      }
-      // Loggers don't have an explicit shutdown method
-    }
-    this.traceMap.clear();
-    await super.shutdown();
   }
 }

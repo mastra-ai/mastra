@@ -839,7 +839,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
   const appendValue = (prefix: string, value: unknown) => {
     if (value === undefined || value === null) return;
     if (Array.isArray(value)) {
-      query[prefix] = value.map(item => convertQueryValue(item));
+      // JSON-encode arrays for complex query params (e.g., tags=["tag1","tag2"])
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     if (value instanceof Date) {
@@ -847,9 +849,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
       return;
     }
     if (typeof value === 'object') {
-      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-        appendValue(`${prefix}[${key}]`, nested);
-      }
+      // JSON-encode objects for complex query params (e.g., dateRange={"gte":"2024-01-01"})
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     query[prefix] = convertQueryValue(value);
