@@ -2277,3 +2277,40 @@ This was the final task for PR5! All 76 tasks are now complete. The Auth feature
 - Remaining incomplete tasks: Task 081 (P2), Task 082 (P2), Task 083 (P2), Task 084 (P2)
 - Task 081 (query string concatenation) is the next logical P2 task to work on
 
+
+---
+
+## Task 081: Fix query string concatenation producing malformed URLs
+
+**Date:** 2026-01-18
+**Status:** ✅ COMPLETED
+
+### What was done:
+- Fixed query string concatenation bug in auth.ts SSO callback handler
+- Created helper function appendQueryParams() to safely append query parameters
+- Applied fix to both error redirect locations in the file
+
+### Implementation details:
+- Added appendQueryParams() helper function at packages/server/src/server/handlers/auth.ts:98-104
+- Helper checks if URL already contains '?' and uses '&' separator instead of '?'
+- Fixed line 246: Changed `redirectTo + '?error=sso_not_configured'` to use helper
+- Fixed line 269: Changed `redirectTo + '?error=${errorMessage}'` to use helper
+- Function supports multiple parameters via Record<string, string> for future extensibility
+
+### Verification:
+- Verified full monorepo typecheck passes with pnpm typecheck (exit code 0)
+- Verified full monorepo build passes with pnpm build (124 tasks successful)
+- Server package tests pass (410 passed, 1 pre-existing failure unrelated to this change)
+- Updated tasks.json to mark task 081 as completed with passing: true
+
+### Acceptance criteria met:
+✓ Query parameters are correctly appended with & when URL has existing params
+✓ Error redirects produce valid URLs (appendQueryParams handles both cases)
+✓ Existing query params are preserved (separator logic checks for existing '?')
+
+### Notes for next engineer:
+- The appendQueryParams helper is generic and can be used for other query param concatenation needs
+- All error redirects in SSO callback now properly handle existing query parameters
+- No breaking changes - function signature remains compatible
+- Remaining incomplete tasks: Task 082 (P2), Task 083 (P2), Task 084 (P2)
+- Task 082 (URI-encode cookies) is the next logical P2 task to work on

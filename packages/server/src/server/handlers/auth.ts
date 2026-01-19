@@ -87,6 +87,22 @@ function validateRedirectUrl(url: string): string {
   return url;
 }
 
+/**
+ * Safely appends query parameters to a URL.
+ * Correctly uses '&' if the URL already contains '?', otherwise uses '?'.
+ *
+ * @param url - Base URL (may or may not contain existing query params)
+ * @param params - Object with key-value pairs to append
+ * @returns URL with query parameters appended
+ */
+function appendQueryParams(url: string, params: Record<string, string>): string {
+  const separator = url.includes('?') ? '&' : '?';
+  const queryString = Object.entries(params)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  return url + separator + queryString;
+}
+
 // ============================================================================
 // GET /api/auth/capabilities
 // ============================================================================
@@ -227,7 +243,7 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
       const authProvider = getAuthProvider(mastra);
 
       if (!authProvider?.sso) {
-        return Response.redirect(redirectTo + '?error=sso_not_configured', 302);
+        return Response.redirect(appendQueryParams(redirectTo, { error: 'sso_not_configured' }), 302);
       }
 
       const result = await authProvider.sso.handleCallback(code, stateId);
@@ -250,7 +266,7 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
     } catch (error) {
       // Redirect with error
       const errorMessage = encodeURIComponent(error instanceof Error ? error.message : 'Unknown error');
-      return Response.redirect(redirectTo + `?error=${errorMessage}`, 302);
+      return Response.redirect(appendQueryParams(redirectTo, { error: errorMessage }), 302);
     }
   },
 });
