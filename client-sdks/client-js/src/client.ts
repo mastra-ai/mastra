@@ -105,23 +105,32 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists memory threads for a resource with pagination support
-   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * Lists memory threads with optional filtering by resourceId and/or metadata
+   * @param params - Parameters containing optional filters, pagination options, and request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
-  public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
-    const queryParams = new URLSearchParams({
-      resourceId: params.resourceId,
-      resourceid: params.resourceId,
-      ...(params.agentId && { agentId: params.agentId }),
-      ...(params.page !== undefined && { page: params.page.toString() }),
-      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
-      ...(params.orderBy && { orderBy: params.orderBy }),
-      ...(params.sortDirection && { sortDirection: params.sortDirection }),
-    });
+  public async listMemoryThreads(params: ListMemoryThreadsParams = {}): Promise<ListMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams();
 
+    // Add resourceId if provided (backwards compatible - also add lowercase version)
+    if (params.resourceId) {
+      queryParams.set('resourceId', params.resourceId);
+    }
+
+    // Add metadata filter as JSON string if provided
+    if (params.metadata) {
+      queryParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    if (params.agentId) queryParams.set('agentId', params.agentId);
+    if (params.page !== undefined) queryParams.set('page', params.page.toString());
+    if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
+    if (params.orderBy) queryParams.set('orderBy', params.orderBy);
+    if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+
+    const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
-      `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
+      `/api/memory/threads${queryString ? `?${queryString}` : ''}${requestContextQueryString(params.requestContext, queryString ? '&' : '?')}`,
     );
 
     const actualResponse: ListMemoryThreadsResponse =
