@@ -72,6 +72,28 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       });
     }
 
+    // Observational Memory section
+    const omConfig = (config as any).observationalMemory;
+    if (omConfig?.enabled) {
+      const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
+        if (!threshold) return 'Default';
+        if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
+        return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
+      };
+
+      sections.push({
+        title: 'Observational Memory',
+        items: [
+          { label: 'Enabled', value: true, badge: 'success' },
+          { label: 'Scope', value: omConfig.scope || 'resource' },
+          { label: 'Observation Threshold', value: formatThreshold(omConfig.observationThreshold) },
+          { label: 'Reflection Threshold', value: formatThreshold(omConfig.reflectionThreshold) },
+          ...(omConfig.observerModel ? [{ label: 'Observer Model', value: omConfig.observerModel }] : []),
+          ...(omConfig.reflectorModel ? [{ label: 'Reflector Model', value: omConfig.reflectorModel }] : []),
+        ],
+      });
+    }
+
     return sections;
   }, [config]);
 

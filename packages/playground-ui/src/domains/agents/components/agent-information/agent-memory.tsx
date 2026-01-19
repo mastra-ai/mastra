@@ -1,11 +1,12 @@
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
+import { AgentObservationalMemory } from './agent-observational-memory';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
+import { useMemoryConfig, useMemorySearch, useCloneThread, useMemoryWithOMStatus } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -26,6 +27,14 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   // Check if semantic recall is enabled
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
+
+  // Check if observational memory is enabled
+  const { data: omStatus } = useMemoryWithOMStatus({
+    agentId,
+    resourceId: agentId, // In playground, agentId is the resourceId
+    threadId,
+  });
+  const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
 
   // Get memory search hook
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
@@ -145,6 +154,13 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
           </div>
         )}
       </div>
+
+      {/* Observational Memory Section */}
+      {isOMEnabled && (
+        <div className="border-b border-border1">
+          <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
+        </div>
+      )}
 
       {/* Working Memory Section */}
       <div className="flex-1 overflow-y-auto">

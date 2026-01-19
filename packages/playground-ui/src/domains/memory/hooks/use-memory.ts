@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
+import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
@@ -122,5 +123,76 @@ export const useCloneThread = () => {
     onError: () => {
       toast.error('Failed to clone thread');
     },
+  });
+};
+
+/**
+ * Hook to fetch Observational Memory data for an agent
+ * Returns the current OM record and history for a given resource/thread
+ */
+export const useObservationalMemory = ({
+  agentId,
+  resourceId,
+  threadId,
+  enabled = true,
+}: {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  enabled?: boolean;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery<GetObservationalMemoryResponse | null>({
+    queryKey: ['observational-memory', agentId, resourceId, threadId],
+    queryFn: async () => {
+      if (!resourceId && !threadId) return null;
+      return client.getObservationalMemory({
+        agentId,
+        resourceId,
+        threadId,
+        requestContext,
+      });
+    },
+    enabled: enabled && Boolean(agentId) && (Boolean(resourceId) || Boolean(threadId)),
+    staleTime: 30 * 1000, // 30 seconds - OM data changes less frequently
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+};
+
+/**
+ * Hook to get OM-aware memory status
+ * Extends useMemory with OM-specific status information
+ */
+export const useMemoryWithOMStatus = ({
+  agentId,
+  resourceId,
+  threadId,
+}: {
+  agentId?: string;
+  resourceId?: string;
+  threadId?: string;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery<GetMemoryStatusResponse | null>({
+    queryKey: ['memory-status', agentId, resourceId, threadId],
+    queryFn: () =>
+      agentId
+        ? client.getMemoryStatus(agentId, {
+            resourceId,
+            threadId,
+            requestContext,
+          })
+        : null,
+    enabled: Boolean(agentId),
+    staleTime: 30 * 1000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 };

@@ -34,7 +34,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow, Processor } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
@@ -494,6 +494,41 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Finds a processor by its ID from both input and output processors.
+   * Returns the processor if found, null otherwise.
+   *
+   * @example
+   * ```typescript
+   * const omProcessor = await agent.findProcessor('observational-memory');
+   * if (omProcessor) {
+   *   // Observational memory is configured
+   * }
+   * ```
+   */
+  public async findProcessor<TId extends string = string>(
+    processorId: TId,
+    requestContext?: RequestContext,
+  ): Promise<Processor<TId> | null> {
+    // Search input processors
+    const inputProcessors = await this.listInputProcessors(requestContext);
+    for (const p of inputProcessors) {
+      if (!isProcessorWorkflow(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    // Search output processors
+    const outputProcessors = await this.listOutputProcessors(requestContext);
+    for (const p of outputProcessors) {
+      if (!isProcessorWorkflow(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    return null;
   }
 
   /**

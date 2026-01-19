@@ -23,7 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
+import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -776,4 +776,59 @@ export interface ExecuteProcessorResponse {
   };
   tripwire?: ProcessorTripwireResult;
   error?: string;
+}
+
+// ============================================================================
+// Observational Memory Types
+// ============================================================================
+
+/**
+ * Parameters for getting observational memory
+ */
+export interface GetObservationalMemoryParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Response for observational memory endpoint
+ */
+export interface GetObservationalMemoryResponse {
+  record: ObservationalMemoryRecord | null;
+  history?: ObservationalMemoryRecord[];
+}
+
+/**
+ * Extended memory status response with OM info
+ */
+export interface GetMemoryStatusResponse {
+  result: boolean;
+  observationalMemory?: {
+    enabled: boolean;
+    hasRecord?: boolean;
+    originType?: string;
+    lastObservedAt?: Date | null;
+    tokenCount?: number;
+    observationTokenCount?: number;
+    isObserving?: boolean;
+    isReflecting?: boolean;
+  };
+}
+
+/**
+ * Extended memory config response with OM config
+ */
+export interface GetMemoryConfigResponseExtended {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      observationThreshold?: number | { min: number; max: number };
+      reflectionThreshold?: number | { min: number; max: number };
+      observerModel?: string;
+      reflectorModel?: string;
+    };
+  };
 }

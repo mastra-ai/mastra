@@ -1,7 +1,7 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import {
@@ -41,6 +41,8 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  getObservationalMemoryQuerySchema,
+  getObservationalMemoryResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -132,6 +134,121 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
   return mastra.getStorage();
 }
 
+/**
+ * Gets the agent from context for OM processor detection.
+ */
+async function getAgentFromContext({
+  mastra,
+  agentId,
+}: Pick<MemoryContext, 'mastra' | 'agentId'>): Promise<Agent | null> {
+  if (!agentId) return null;
+
+  const logger = mastra.getLogger();
+  let agent = null;
+
+  try {
+    agent = mastra.getAgentById(agentId);
+  } catch (error) {
+    logger.debug('Error getting agent from mastra, searching agents for agent', error);
+  }
+
+  if (!agent) {
+    logger.debug('Agent not found, searching agents for agent', { agentId });
+    const agents = mastra.listAgents();
+    if (Object.keys(agents || {}).length) {
+      for (const [_, ag] of Object.entries(agents)) {
+        try {
+          const nestedAgents = await ag.listAgents();
+          if (nestedAgents[agentId]) {
+            agent = nestedAgents[agentId];
+            break;
+          }
+        } catch (error) {
+          logger.debug('Error getting agent from agent', error);
+        }
+      }
+    }
+  }
+
+  return agent;
+}
+
+/**
+ * Gets Observational Memory configuration from an agent's processors.
+ * Returns null if OM is not enabled.
+ */
+async function getOMConfigFromAgent(
+  agent: Agent,
+  requestContext?: RequestContext,
+): Promise<{
+  enabled: boolean;
+  scope?: 'thread' | 'resource';
+  observationThreshold?: number | { min: number; max: number };
+  reflectionThreshold?: number | { min: number; max: number };
+  observerModel?: string;
+  reflectorModel?: string;
+} | null> {
+  try {
+    const omProcessor = await agent.findProcessor('observational-memory', requestContext);
+    if (!omProcessor) {
+      return null;
+    }
+
+    // The processor config is available on the processor instance
+    // We need to extract the relevant config fields
+    const processorConfig = (omProcessor as any).config || {};
+
+    return {
+      enabled: true,
+      scope: processorConfig.scope || 'resource',
+      observationThreshold: processorConfig.observer?.observationThreshold,
+      reflectionThreshold: processorConfig.reflector?.reflectionThreshold,
+      observerModel:
+        typeof processorConfig.observer?.model === 'string' ? processorConfig.observer.model : undefined,
+      reflectorModel:
+        typeof processorConfig.reflector?.model === 'string' ? processorConfig.reflector.model : undefined,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Gets Observational Memory status for a specific resource/thread.
+ */
+async function getOMStatus(
+  memoryStorage: MemoryStorage,
+  resourceId: string,
+  threadId?: string,
+): Promise<{
+  hasRecord: boolean;
+  originType?: string;
+  lastObservedAt?: Date | null;
+  tokenCount?: number;
+  observationTokenCount?: number;
+  isObserving?: boolean;
+  isReflecting?: boolean;
+} | null> {
+  try {
+    const record = await memoryStorage.getObservationalMemory(threadId ?? null, resourceId);
+    if (!record) {
+      return { hasRecord: false };
+    }
+
+    return {
+      hasRecord: true,
+      originType: record.originType,
+      lastObservedAt: record.lastObservedAt ?? null,
+      tokenCount: record.totalTokensObserved,
+      observationTokenCount: record.observationTokenCount,
+      isObserving: record.isObserving,
+      isReflecting: record.isReflecting,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
@@ -145,12 +262,49 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   summary: 'Get memory status',
   description: 'Returns the current status of the memory system including configuration and health information',
   tags: ['Memory'],
-  handler: async ({ mastra, agentId, requestContext }) => {
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (memory) {
-        return { result: true };
+        // Check for Observational Memory
+        const agent = await getAgentFromContext({ mastra, agentId });
+        let omStatus: {
+          enabled: boolean;
+          hasRecord?: boolean;
+          originType?: string;
+          lastObservedAt?: Date | null;
+          tokenCount?: number;
+          observationTokenCount?: number;
+          isObserving?: boolean;
+          isReflecting?: boolean;
+        } | undefined;
+
+        if (agent) {
+          const omConfig = await getOMConfigFromAgent(agent, requestContext);
+          if (omConfig?.enabled && resourceId) {
+            // Get OM status from storage
+            const storage = getStorageFromContext({ mastra });
+            if (storage) {
+              const memoryStore = await storage.getStore('memory');
+              if (memoryStore) {
+                const status = await getOMStatus(memoryStore, resourceId, threadId);
+                if (status) {
+                  omStatus = {
+                    enabled: true,
+                    ...status,
+                  };
+                } else {
+                  omStatus = { enabled: true, hasRecord: false };
+                }
+              }
+            }
+          } else if (omConfig?.enabled) {
+            omStatus = { enabled: true };
+          }
+        }
+
+        return { result: true, observationalMemory: omStatus };
       }
 
       // Only fallback to storage if no agentId was provided
@@ -188,9 +342,84 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       // Get the merged configuration (defaults + custom)
       const config = memory.getMergedThreadConfig({});
 
-      return { config };
+      // Check for Observational Memory config
+      const agent = await getAgentFromContext({ mastra, agentId });
+      let omConfig: {
+        enabled: boolean;
+        scope?: 'thread' | 'resource';
+        observationThreshold?: number | { min: number; max: number };
+        reflectionThreshold?: number | { min: number; max: number };
+        observerModel?: string;
+        reflectorModel?: string;
+      } | undefined;
+
+      if (agent) {
+        omConfig = (await getOMConfigFromAgent(agent, requestContext)) ?? { enabled: false };
+      }
+
+      return {
+        config: {
+          ...config,
+          observationalMemory: omConfig,
+        },
+      };
     } catch (error) {
       return handleError(error, 'Error getting memory configuration');
+    }
+  },
+});
+
+export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/observational-memory',
+  responseType: 'json',
+  queryParamSchema: getObservationalMemoryQuerySchema,
+  responseSchema: getObservationalMemoryResponseSchema,
+  summary: 'Get observational memory data',
+  description: 'Returns the current observational memory record and optional history for a resource/thread',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
+    try {
+      // Verify agent has OM enabled
+      const agent = await getAgentFromContext({ mastra, agentId });
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const omConfig = await getOMConfigFromAgent(agent, requestContext);
+      if (!omConfig?.enabled) {
+        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+      }
+
+      // Get storage
+      const storage = getStorageFromContext({ mastra });
+      if (!storage) {
+        throw new HTTPException(400, { message: 'Storage is not initialized' });
+      }
+
+      const memoryStore = await storage.getStore('memory');
+      if (!memoryStore) {
+        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+      }
+
+      // Determine the resourceId to use
+      const effectiveResourceId = resourceId;
+      if (!effectiveResourceId) {
+        throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
+      }
+
+      // Get current record
+      const record = await memoryStore.getObservationalMemory(threadId ?? null, effectiveResourceId);
+
+      // Get history (last 5 generations)
+      const history = await memoryStore.getObservationalMemoryHistory(threadId ?? null, effectiveResourceId, 5);
+
+      return {
+        record: record ?? null,
+        history: history.length > 0 ? history : undefined,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting observational memory');
     }
   },
 });
