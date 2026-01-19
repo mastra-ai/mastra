@@ -189,10 +189,7 @@ export function AppSidebar() {
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const [_, pagePath] = pathname.split('/');
-                  const lowercasedPagePath = link.name.toLowerCase();
-                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
-
+                  const isActive = pathname.startsWith(link.url);
                   return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>
