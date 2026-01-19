@@ -135,7 +135,8 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
         const value = cookie.slice(equalsIndex + 1);
 
         if (name === cookieName) {
-          return value || null;
+          // Decode URI-encoded cookie value
+          return value ? decodeURIComponent(value) : null;
         }
       }
 
@@ -153,6 +154,15 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
    * @returns BetterAuthUser with all fields mapped
    */
   private mapToBetterAuthUser(user: any): BetterAuthUser {
+    // Helper to safely parse dates, defaulting to current date if invalid
+    const parseDate = (dateValue: any): Date => {
+      if (!dateValue) {
+        return new Date();
+      }
+      const parsed = new Date(dateValue);
+      return isNaN(parsed.getTime()) ? new Date() : parsed;
+    };
+
     return {
       id: user.id,
       email: user.email,
@@ -162,8 +172,8 @@ export class BetterAuthUserProvider implements IUserProvider<BetterAuthUser> {
       betterAuth: {
         userId: user.id,
         emailVerified: user.emailVerified ?? false,
-        createdAt: new Date(user.createdAt),
-        updatedAt: new Date(user.updatedAt),
+        createdAt: parseDate(user.createdAt),
+        updatedAt: parseDate(user.updatedAt),
       },
     };
   }

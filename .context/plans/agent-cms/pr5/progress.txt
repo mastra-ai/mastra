@@ -2355,3 +2355,39 @@ This was the final task for PR5! All 76 tasks are now complete. The Auth feature
 - No edge cases found - implementation handles null/undefined values gracefully
 - Remaining incomplete tasks: Task 083 (P2 - Invalid Date handling), Task 084 (P2 - Import ordering)
 - Task 083 is the next logical P2 task to work on
+
+---
+
+## Task 083: Fix potential Invalid Date on missing timestamp fields in better-auth
+
+**Date:** 2026-01-18
+**Status:** ✅ COMPLETED
+
+### What was done:
+- Fixed potential Invalid Date bug in mapToBetterAuthUser method
+- Added defensive parseDate helper function to handle missing/invalid timestamps
+- Ensured createdAt and updatedAt always resolve to valid Date objects
+
+### Implementation details:
+- Added parseDate() helper function at auth/better-auth/src/user.ts:158-164
+- Helper checks if dateValue is falsy (undefined, null, empty string) and returns new Date()
+- Validates parsed date using isNaN(parsed.getTime()) to catch invalid formats
+- Defaults to current date (new Date()) for both missing and invalid dates
+- Applied to both createdAt and updatedAt fields at lines 175-176
+
+### Verification:
+- Verified full monorepo typecheck passes with pnpm typecheck (exit code 0)
+- Verified full monorepo build passes with pnpm build (124 tasks successful in 3.281s)
+- Updated tasks.json to mark task 083 as completed with passing: true
+
+### Acceptance criteria met:
+✓ Missing timestamps default to current date (parseDate returns new Date() when dateValue is falsy)
+✓ Invalid date formats don't produce Invalid Date (isNaN check validates parsed dates)
+✓ User mapping handles edge cases gracefully (function safely handles undefined, null, invalid strings)
+
+### Notes for next engineer:
+- The parseDate helper is scoped to the private method to keep it close to its usage
+- Better Auth should always provide these timestamps, but this defensive approach prevents runtime errors
+- No breaking changes - function still returns BetterAuthUser type with valid Date objects
+- Remaining incomplete task: Task 084 (P2 - Import ordering in WorkOS provider-ee.ts)
+- Task 084 is the final task for PR5
