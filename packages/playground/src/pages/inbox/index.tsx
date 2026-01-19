@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { InboxIcon } from 'lucide-react';
-import type { Task } from '@mastra/core';
+import { InboxIcon, PlusIcon } from 'lucide-react';
+import type { Task, CreateTaskInput } from '@mastra/core';
 import {
   Header,
   HeaderTitle,
@@ -16,12 +16,14 @@ import {
   InboxStatsDisplay,
   TaskDetailDialog,
   ResumeTaskDialog,
+  AddTaskDialog,
   useInboxes,
   useTasks,
   useInboxStats,
   useCancelTask,
   useRetryTask,
   useResumeTask,
+  useCreateTask,
 } from '@mastra/playground-ui';
 
 function Inbox() {
@@ -30,6 +32,7 @@ function Inbox() {
   const [selectedInboxId, setSelectedInboxId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [resumeTask, setResumeTask] = useState<Task | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   // Auto-select first inbox if none selected
   const activeInboxId = selectedInboxId ?? inboxes[0]?.id ?? null;
@@ -40,6 +43,7 @@ function Inbox() {
   const cancelTaskMutation = useCancelTask(activeInboxId ?? '');
   const releaseTaskMutation = useRetryTask(activeInboxId ?? '');
   const resumeTaskMutation = useResumeTask(activeInboxId ?? '');
+  const createTaskMutation = useCreateTask(activeInboxId ?? '');
 
   const isLoading = isLoadingInboxes || (activeInboxId && isLoadingTasks);
 
@@ -90,6 +94,14 @@ function Inbox() {
     );
   };
 
+  const handleAddTask = (taskInput: CreateTaskInput) => {
+    createTaskMutation.mutate(taskInput, {
+      onSuccess: () => {
+        setIsAddDialogOpen(false);
+      },
+    });
+  };
+
   // Navigate to next/previous task in the list
   const currentTaskIndex = selectedTask ? tasks.findIndex(t => t.id === selectedTask.id) : -1;
 
@@ -117,6 +129,14 @@ function Inbox() {
             onSelect={setSelectedInboxId}
             isLoading={isLoadingInboxes}
           />
+          {activeInboxId && (
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Icon>
+                <PlusIcon />
+              </Icon>
+              Add Task
+            </Button>
+          )}
           <Button as={Link} to="https://mastra.ai/en/docs/inbox/overview" target="_blank">
             <Icon>
               <DocsIcon />
@@ -164,6 +184,13 @@ function Inbox() {
         onClose={handleCloseResumeDialog}
         onResume={handleResumeTask}
         isLoading={resumeTaskMutation.isPending}
+      />
+
+      <AddTaskDialog
+        isOpen={isAddDialogOpen}
+        onClose={() => setIsAddDialogOpen(false)}
+        onAdd={handleAddTask}
+        isLoading={createTaskMutation.isPending}
       />
     </MainContentLayout>
   );

@@ -5,3 +5,4 @@ export * from './task-table';
 export * from './inbox-stats';
 export * from './inbox-selector';
 export * from './resume-task-dialog';
+export * from './add-task-dialog';

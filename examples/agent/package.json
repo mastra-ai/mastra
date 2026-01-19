@@ -44,6 +44,7 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
+    "inbox-worker": "npx bun src/inbox-worker.ts",
     "inbox-demo": "npx bun src/inbox-demo.ts",
     "inbox-hitl-demo": "npx bun src/inbox-hitl-demo.ts",
     "mastra:dev": "mastra dev",
