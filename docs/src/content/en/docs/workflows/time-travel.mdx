@@ -164,18 +164,20 @@ Use `timeTravelStream()` to receive streaming events during time travel executio
 ```typescript
 const run = await workflow.createRun();
 
-const output = run.timeTravelStream({
+const stream = run.timeTravelStream({
   step: "step2",
   inputData: { value: 10 },
 });
 
-// Access the stream
-for await (const event of output.fullStream) {
+for await (const event of stream.fullStream) {
   console.log(event.type, event.payload);
 }
 
-// Get final result
-const result = await output.result;
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
 
 ## Time travel with initial state

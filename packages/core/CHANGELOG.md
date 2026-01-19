@@ -1,5 +1,50 @@
 # @mastra/core
 
+## 1.0.0-beta.23
+
+### Patch Changes
+
+- Added `customSpanFormatter` option to exporters for per-exporter span transformation. This allows different formatting per exporter and supports both synchronous and asynchronous operations, including async data enrichment. ([#11985](https://github.com/mastra-ai/mastra/pull/11985))
+
+  **Configuration example:**
+
+  ```ts
+  import { DefaultExporter } from '@mastra/observability';
+  import { SpanType } from '@mastra/core/observability';
+  import type { CustomSpanFormatter } from '@mastra/core/observability';
+
+  // Sync formatter
+  const plainTextFormatter: CustomSpanFormatter = span => {
+    if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+      const userMessage = span.input.find(m => m.role === 'user');
+      return { ...span, input: userMessage?.content ?? span.input };
+    }
+    return span;
+  };
+
+  // Async formatter for data enrichment
+  const enrichmentFormatter: CustomSpanFormatter = async span => {
+    const userData = await fetchUserData(span.metadata?.userId);
+    return { ...span, metadata: { ...span.metadata, userName: userData.name } };
+  };
+
+  const exporter = new DefaultExporter({
+    customSpanFormatter: plainTextFormatter,
+  });
+  ```
+
+  Also added `chainFormatters` utility to combine multiple formatters (supports mixed sync/async):
+
+  ```ts
+  import { chainFormatters } from '@mastra/observability';
+
+  const exporter = new BraintrustExporter({
+    customSpanFormatter: chainFormatters([syncFormatter, asyncFormatter]),
+  });
+  ```
+
+- Fix type recursion by importing from 'zod' instead of 'zod/v3' ([#12009](https://github.com/mastra-ai/mastra/pull/12009))
+
 ## 1.0.0-beta.22
 
 ### Major Changes

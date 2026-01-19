@@ -26,7 +26,64 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
   dotproduct: 'Dot',
 };
 
-type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
+/**
+ * Configuration for a named vector space in Qdrant.
+ * @see https://qdrant.tech/documentation/concepts/vectors/#named-vectors
+ */
+export interface NamedVectorConfig {
+  /** The dimension (size) of vectors in this space. */
+  size: number;
+  /** The distance metric for similarity search. */
+  distance: 'cosine' | 'euclidean' | 'dotproduct';
+}
+
+/**
+ * Query parameters for Qdrant vector store.
+ * Extends the base QueryVectorParams with Qdrant-specific options.
+ */
+export interface QdrantQueryVectorParams extends QueryVectorParams<QdrantVectorFilter> {
+  /**
+   * Name of the vector field to query against when using named vectors.
+   * Use this when your collection has multiple named vector fields.
+   * @see https://qdrant.tech/documentation/concepts/vectors/#named-vectors
+   */
+  using?: string;
+}
+
+/**
+ * Parameters for creating a Qdrant index/collection.
+ * Extends the base CreateIndexParams with support for named vectors.
+ */
+export interface QdrantCreateIndexParams extends CreateIndexParams {
+  /**
+   * Configuration for named vector spaces.
+   * When provided, creates a collection with multiple named vector fields.
+   * Each key is the vector name, and the value defines its configuration.
+   * @see https://qdrant.tech/documentation/concepts/vectors/#named-vectors
+   *
+   * @example
+   * ```ts
+   * namedVectors: {
+   *   text: { size: 768, distance: 'cosine' },
+   *   image: { size: 512, distance: 'euclidean' },
+   * }
+   * ```
+   */
+  namedVectors?: Record<string, NamedVectorConfig>;
+}
+
+/**
+ * Parameters for upserting vectors into Qdrant.
+ * Extends the base UpsertVectorParams with support for named vectors.
+ */
+export interface QdrantUpsertVectorParams extends UpsertVectorParams {
+  /**
+   * Name of the vector space to upsert into when using named vectors.
+   * Required when the collection was created with namedVectors.
+   * @see https://qdrant.tech/documentation/concepts/vectors/#named-vectors
+   */
+  vectorName?: string;
+}
 
 /**
  * Supported payload schema types for Qdrant payload indexes.
@@ -62,7 +119,7 @@ export interface DeletePayloadIndexParams {
 }
 
 export class QdrantVector extends MastraVector {
-  private client: QdrantClient;
+  protected client: QdrantClient;
 
   /**
    * Creates a new QdrantVector client.
@@ -76,12 +133,53 @@ export class QdrantVector extends MastraVector {
     this.client = new QdrantClient(qdrantParams);
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  /**
+   * Validates that a named vector exists in the collection.
+   * @param indexName - The name of the collection to check.
+   * @param vectorName - The name of the vector space to validate.
+   * @throws Error if the vector name doesn't exist in the collection.
+   */
+  private async validateVectorName(indexName: string, vectorName: string): Promise<void> {
+    const { config } = await this.client.getCollection(indexName);
+    const vectorsConfig = config.params.vectors;
+    const isNamedVectors = vectorsConfig && typeof vectorsConfig === 'object' && !('size' in vectorsConfig);
+
+    if (!isNamedVectors || !(vectorName in vectorsConfig)) {
+      throw new Error(`Vector name "${vectorName}" does not exist in collection "${indexName}"`);
+    }
+  }
+
+  /**
+   * Upserts vectors into the index.
+   * @param indexName - The name of the index to upsert into.
+   * @param vectors - Array of embedding vectors.
+   * @param metadata - Optional metadata for each vector.
+   * @param ids - Optional vector IDs (auto-generated if not provided).
+   * @param vectorName - Optional name of the vector space when using named vectors.
+   */
+  async upsert({ indexName, vectors, metadata, ids, vectorName }: QdrantUpsertVectorParams): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
+    // Validate vector name if provided
+    if (vectorName) {
+      try {
+        await this.validateVectorName(indexName, vectorName);
+      } catch (validationError) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('QDRANT', 'UPSERT', 'INVALID_VECTOR_NAME'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, vectorName },
+          },
+          validationError,
+        );
+      }
+    }
+
     const records = vectors.map((vector, i) => ({
-      id: pointIds[i],
-      vector: vector,
+      id: pointIds[i]!,
+      vector: vectorName ? { [vectorName]: vector } : vector,
       payload: metadata?.[i] || {},
     }));
 
@@ -89,7 +187,6 @@ export class QdrantVector extends MastraVector {
       for (let i = 0; i < records.length; i += BATCH_SIZE) {
         const batch = records.slice(i, i + BATCH_SIZE);
         await this.client.upsert(indexName, {
-          // @ts-expect-error
           points: batch,
           wait: true,
         });
@@ -102,20 +199,63 @@ export class QdrantVector extends MastraVector {
           id: createVectorErrorId('QDRANT', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, vectorCount: vectors.length },
+          details: { indexName, vectorCount: vectors.length, ...(vectorName && { vectorName }) },
         },
         error,
       );
     }
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  /**
+   * Creates a new index (collection) in Qdrant.
+   * Supports both single vector and named vector configurations.
+   *
+   * @param indexName - The name of the collection to create.
+   * @param dimension - Vector dimension (required for single vector mode).
+   * @param metric - Distance metric (default: 'cosine').
+   * @param namedVectors - Optional named vector configurations for multi-vector collections.
+   *
+   * @example
+   * ```ts
+   * // Single vector collection
+   * await qdrant.createIndex({ indexName: 'docs', dimension: 768, metric: 'cosine' });
+   *
+   * // Named vectors collection
+   * await qdrant.createIndex({
+   *   indexName: 'multi-modal',
+   *   dimension: 768, // Used as fallback, can be omitted with namedVectors
+   *   namedVectors: {
+   *     text: { size: 768, distance: 'cosine' },
+   *     image: { size: 512, distance: 'euclidean' },
+   *   },
+   * });
+   * ```
+   */
+  async createIndex({ indexName, dimension, metric = 'cosine', namedVectors }: QdrantCreateIndexParams): Promise<void> {
     try {
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
-      }
-      if (!DISTANCE_MAPPING[metric]) {
-        throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+      if (namedVectors) {
+        // Validate named vectors configuration
+        if (Object.keys(namedVectors).length === 0) {
+          throw new Error('namedVectors must contain at least one named vector configuration');
+        }
+        for (const [name, config] of Object.entries(namedVectors)) {
+          if (!Number.isInteger(config.size) || config.size <= 0) {
+            throw new Error(`Named vector "${name}": size must be a positive integer`);
+          }
+          if (!DISTANCE_MAPPING[config.distance]) {
+            throw new Error(
+              `Named vector "${name}": invalid distance "${config.distance}". Must be one of: cosine, euclidean, dotproduct`,
+            );
+          }
+        }
+      } else {
+        // Validate single vector configuration
+        if (!Number.isInteger(dimension) || dimension <= 0) {
+          throw new Error('Dimension must be a positive integer');
+        }
+        if (!DISTANCE_MAPPING[metric]) {
+          throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+        }
       }
     } catch (validationError) {
       throw new MastraError(
@@ -123,25 +263,55 @@ export class QdrantVector extends MastraVector {
           id: createVectorErrorId('QDRANT', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { indexName, dimension, metric },
+          details: {
+            indexName,
+            dimension,
+            metric,
+            ...(namedVectors && { namedVectorNames: Object.keys(namedVectors).join(', ') }),
+          },
         },
         validationError,
       );
     }
 
     try {
-      await this.client.createCollection(indexName, {
-        vectors: {
-          size: dimension,
-          distance: DISTANCE_MAPPING[metric],
-        },
-      });
+      // Build vectors configuration
+      if (namedVectors) {
+        const namedVectorsConfig = Object.entries(namedVectors).reduce(
+          (acc, [name, config]) => {
+            acc[name] = {
+              size: config.size,
+              distance: DISTANCE_MAPPING[config.distance]!,
+            };
+            return acc;
+          },
+          {} as Record<string, { size: number; distance: Schemas['Distance'] }>,
+        );
+
+        await this.client.createCollection(indexName, {
+          vectors: namedVectorsConfig,
+        });
+      } else {
+        await this.client.createCollection(indexName, {
+          vectors: {
+            size: dimension,
+            distance: DISTANCE_MAPPING[metric]!,
+          },
+        });
+      }
     } catch (error: any) {
       const message = error?.message || error?.toString();
       // Qdrant typically returns 409 for existing collection
       if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
-        // Fetch collection info and check dimension
-        await this.validateExistingIndex(indexName, dimension, metric);
+        if (!namedVectors) {
+          // Fetch collection info and check dimension for single vector mode
+          await this.validateExistingIndex(indexName, dimension, metric);
+        } else {
+          // For named vectors, just log and continue (validation is complex)
+          this.logger.info(
+            `Collection "${indexName}" already exists. Skipping validation for named vectors configuration.`,
+          );
+        }
         return;
       }
 
@@ -162,12 +332,23 @@ export class QdrantVector extends MastraVector {
     return translator.translate(filter);
   }
 
+  /**
+   * Queries the index for similar vectors.
+   *
+   * @param indexName - The name of the index to query.
+   * @param queryVector - The query vector to find similar vectors for.
+   * @param topK - Number of results to return (default: 10).
+   * @param filter - Optional metadata filter.
+   * @param includeVector - Whether to include vectors in results (default: false).
+   * @param using - Name of the vector space to query when using named vectors.
+   */
   async query({
     indexName,
     queryVector,
     topK = 10,
     filter,
     includeVector = false,
+    using,
   }: QdrantQueryVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
@@ -179,18 +360,30 @@ export class QdrantVector extends MastraVector {
           filter: translatedFilter,
           with_payload: true,
           with_vector: includeVector,
+          ...(using ? { using } : {}),
         })
       ).points;
 
       return results.map(match => {
         let vector: number[] = [];
-        if (includeVector) {
+        if (includeVector && match.vector != null) {
           if (Array.isArray(match.vector)) {
-            // If it's already an array of numbers
+            // Single vector mode - already an array of numbers
             vector = match.vector as number[];
           } else if (typeof match.vector === 'object' && match.vector !== null) {
-            // If it's an object with vector data
-            vector = Object.values(match.vector).filter(v => typeof v === 'number');
+            // Named vectors mode - extract from the correct vector space
+            const namedVectors = match.vector as Record<string, unknown>;
+
+            // If `using` is specified, try to get that specific vector
+            // Otherwise, find the first array in the object
+            const sourceArray: unknown[] | undefined =
+              using && Array.isArray(namedVectors[using])
+                ? (namedVectors[using] as unknown[])
+                : (Object.values(namedVectors).find(v => Array.isArray(v)) as unknown[] | undefined);
+
+            if (sourceArray) {
+              vector = sourceArray.filter((v): v is number => typeof v === 'number');
+            }
           }
         }
 
@@ -207,7 +400,7 @@ export class QdrantVector extends MastraVector {
           id: createVectorErrorId('QDRANT', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, topK },
+          details: { indexName, topK, ...(using && { using }) },
         },
         error,
       );

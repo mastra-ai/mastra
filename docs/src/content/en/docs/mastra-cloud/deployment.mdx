@@ -29,6 +29,53 @@ Click the **Deployments** menu item to view build logs. Open **Settings** to con
 Changes to settings require a new deployment to take effect
 :::
 
+## Storage configuration
+
+Mastra Cloud offers two storage options:
+
+1. **Mastra Cloud Store**: Managed storage provided by Mastra Cloud
+1. **Bring your own database**: Connect to your own external database
+
+### Using Mastra Cloud Store
+
+When using the managed Mastra Cloud Store (enabled in your project settings), storage must be configured on the `Mastra` instance, not on individual agent `Memory` instances.
+
+Configure storage on your Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-store",
+    url: "file:./mastra.db",
+  }),
+  agents: { myAgent },
+});
+```
+
+Agents can use Memory without specifying storage as they inherit from the Mastra instance:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+export const myAgent = new Agent({
+  id: "my-agent",
+  memory: new Memory({
+    // No storage here - uses instance-level storage from Mastra Cloud Store
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+
+### Bring your own database
+
+If you don't use Mastra Cloud Store, you can use any [storage provider](/docs/v1/memory/storage#supported-providers) with any configuration. Set your database connection strings as environment variables in your project's **Settings** page.
+
 ## Using your deployment
 
 After deployment, interact with your agents using the [Mastra Client](/docs/server/mastra-client) or call the REST API endpoints directly.

@@ -67,5 +67,19 @@
   "/reference/server/mastra-server": "v1",
   "/reference/server/hono-adapter": "v1",
   "/docs/agents/structured-output": "v1",
-  "/guides/getting-started/nuxt": "v1"
+  "/guides/getting-started/nuxt": "v1",
+  "/docs/agents/network-approval": "v1",
+  "/docs/memory/storage": "v1",
+  "/guides/migrations/upgrade-to-v1/deployment": "v1",
+  "/guides/migrations/upgrade-to-v1/rag": "v1",
+  "/models/providers/abacus": "v1",
+  "/models/providers/firmware": "v1",
+  "/models/providers/friendli": "v1",
+  "/models/providers/nano-gpt": "v1",
+  "/models/providers/privatemode-ai": "v1",
+  "/models/providers/vivgrid": "v1",
+  "/reference/configuration": "v1",
+  "/reference/memory/clone-utilities": "v1",
+  "/reference/memory/cloneThread": "v1",
+  "/reference/storage/composite": "v1"
 }

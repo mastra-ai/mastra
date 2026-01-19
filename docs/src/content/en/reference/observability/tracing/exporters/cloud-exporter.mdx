@@ -87,6 +87,14 @@ Processes tracing events. Only exports SPAN_ENDED events to Cloud.
   ]}
 />
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to Mastra Cloud without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript

@@ -208,11 +208,7 @@ console.log(response.object);
 
 :::info[Gemini 2.5 with tools]
 
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error:
-
-```
-Function calling with a response mime type: 'application/json' is unsupported
-```
+Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
 
 ```typescript
 const response = await agentWithTools.generate("Your prompt", {
