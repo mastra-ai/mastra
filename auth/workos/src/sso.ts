@@ -6,8 +6,8 @@
  */
 
 import type { ISSOProvider, SSOCallbackResult, SSOLoginConfig, EEUser } from '@mastra/core/ee';
-import type { WorkOS } from '@workos-inc/node';
 import type { AuthService } from '@workos/authkit-session';
+import type { WorkOS } from '@workos-inc/node';
 
 import type { WorkOSUser, WorkOSConfig, WorkOSSSOConfig } from './types.js';
 import { mapWorkOSUserToEEUser } from './types.js';

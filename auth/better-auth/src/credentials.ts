@@ -293,7 +293,9 @@ export class BetterAuthCredentialsProvider implements ICredentialsProvider<Bette
     const maxAge = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
     const isProduction = process.env.NODE_ENV === 'production';
 
-    const parts = [`${name}=${value}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', `Max-Age=${maxAge}`];
+    // URI-encode cookie value to handle special characters (;, =, spaces, etc.)
+    const encodedValue = encodeURIComponent(value);
+    const parts = [`${name}=${encodedValue}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', `Max-Age=${maxAge}`];
 
     if (isProduction) {
       parts.push('Secure');

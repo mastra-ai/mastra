@@ -1,5 +1,5 @@
-import type { WorkOS } from '@workos-inc/node';
 import type { AuditEvent, AuditFilter, AuditExportFormat, IAuditLogger, AuditOutcome } from '@mastra/core/ee';
+import type { WorkOS } from '@workos-inc/node';
 
 /**
  * Configuration for WorkOS Audit Export

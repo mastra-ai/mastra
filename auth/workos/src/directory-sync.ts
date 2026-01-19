@@ -1,5 +1,4 @@
-import { WorkOS } from '@workos-inc/node';
-import type { DirectoryGroup, DirectoryUser } from '@workos-inc/node';
+import type { WorkOS, DirectoryGroup, DirectoryUser } from '@workos-inc/node';
 
 /**
  * Configuration for WorkOS Directory Sync (SCIM)

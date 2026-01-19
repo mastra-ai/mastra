@@ -8,8 +8,8 @@
  */
 
 import type { IUserProvider, EEUser } from '@mastra/core/ee';
-import type { WorkOS, User as WorkOSApiUser } from '@workos-inc/node';
 import type { AuthService } from '@workos/authkit-session';
+import type { WorkOS, User as WorkOSApiUser } from '@workos-inc/node';
 
 import type { WorkOSUser } from './types.js';
 import { mapWorkOSUserToEEUser } from './types.js';

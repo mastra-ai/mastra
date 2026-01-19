@@ -8,8 +8,8 @@
  */
 
 import type { IRBACProvider, RoleMapping } from '@mastra/core/ee';
-import type { WorkOS } from '@workos-inc/node';
 import { DEFAULT_ROLE_MAPPING } from '@mastra/core/ee';
+import type { WorkOS } from '@workos-inc/node';
 
 import type { WorkOSUser } from './types.js';
 
