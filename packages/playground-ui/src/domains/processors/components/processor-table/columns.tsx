@@ -5,7 +5,11 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useLinkComponent } from '@/lib/framework';
 import type { ProcessorRow } from './processor-table';
 
-const NameCell = ({ row }: { row: Row<ProcessorRow> }) => {
+export type NameCellProps = { row: Row<ProcessorRow> };
+export type PhasesCellProps = { row: Row<ProcessorRow> };
+export type AgentsCellProps = { row: Row<ProcessorRow> };
+
+const NameCell = ({ row }: NameCellProps) => {
   const { Link, paths } = useLinkComponent();
   const processor = row.original;
 
@@ -21,7 +25,7 @@ const NameCell = ({ row }: { row: Row<ProcessorRow> }) => {
   );
 };
 
-const PhasesCell = ({ row }: { row: Row<ProcessorRow> }) => {
+const PhasesCell = ({ row }: PhasesCellProps) => {
   const processor = row.original;
   const phases = processor.phases || [];
 
@@ -46,7 +50,7 @@ const PhasesCell = ({ row }: { row: Row<ProcessorRow> }) => {
   );
 };
 
-const AgentsCell = ({ row }: { row: Row<ProcessorRow> }) => {
+const AgentsCell = ({ row }: AgentsCellProps) => {
   const processor = row.original;
   const agentsCount = processor.agentIds?.length || 0;
 
