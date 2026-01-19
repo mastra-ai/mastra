@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 0.1.0-beta.6
+
+### Patch Changes
+
+- Remove incorrect codemod ([#11826](https://github.com/mastra-ai/mastra/pull/11826))
+
 ## 0.1.0-beta.5
 
 ### Patch Changes

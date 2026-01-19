@@ -493,6 +493,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    tracingIds?: {
+      traceId: string;
+      workflowSpanId: string;
+    };
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -508,6 +512,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       restart,
       timeTravel,
       perStep,
+      tracingIds,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -559,6 +564,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         retryConfig: { attempts, delay },
         format: params.format,
         state: lastState ?? initialState,
+        tracingIds,
       };
       lastExecutionContext = executionContext;
 

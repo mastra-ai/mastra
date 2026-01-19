@@ -72,6 +72,67 @@ const handleDecline = async () => {
 };
 ```
 
+## Tool approval with generate()
+
+Tool approval also works with the `generate()` method for non-streaming use cases. When using `generate()` with `requireToolApproval: true`, the method returns immediately when a tool requires approval instead of executing it.
+
+### How it works
+
+When a tool requires approval during a `generate()` call, the response includes:
+
+- `finishReason: 'suspended'` - indicates the agent is waiting for approval
+- `suspendPayload` - contains tool call details (`toolCallId`, `toolName`, `args`)
+- `runId` - needed to approve or decline the tool call
+
+### Approving tool calls
+
+To approve a tool call with `generate()`, use the `approveToolCallGenerate` method:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  console.log("Tool requires approval:", output.suspendPayload.toolName);
+  console.log("Arguments:", output.suspendPayload.args);
+
+  // Approve the tool call and get the final result
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log("Final result:", result.text);
+}
+```
+
+### Declining tool calls
+
+To decline a tool call, use the `declineToolCallGenerate` method:
+
+```typescript
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  // Agent will respond acknowledging the declined tool
+  console.log(result.text);
+}
+```
+
+### Stream vs Generate comparison
+
+| Aspect | `stream()` | `generate()` |
+|--------|-----------|--------------|
+| Response type | Streaming chunks | Complete response |
+| Approval detection | `tool-call-approval` chunk | `finishReason: 'suspended'` |
+| Approve method | `approveToolCall({ runId })` | `approveToolCallGenerate({ runId, toolCallId })` |
+| Decline method | `declineToolCall({ runId })` | `declineToolCallGenerate({ runId, toolCallId })` |
+| Result | Stream to iterate | Full output object |
+
 ## Tool-level approval
 
 There are two types of tool call approval. The first uses `requireApproval`, which is a property on the tool definition, while `requireToolApproval` is a parameter passed to `agent.stream()`. The second uses `suspend` and lets the agent provide context or confirmation prompts so the user can decide whether the tool call should continue.
@@ -93,8 +154,8 @@ export const testTool = createTool({
   resumeSchema: z.object({
     approved: z.boolean()
   }),
-  execute: async ({ location }) => {
-    const response = await fetch(`https://wttr.in/${location}?format=3`);
+  execute: async (inputData) => {
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
     const weather = await response.text();
 
     return { weather };
@@ -130,7 +191,6 @@ const handleResume = async () => {
 With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool implementation calls `suspend` to pause execution and return context or confirmation prompts to the user.
 
 ```typescript
-
 export const testToolB = createTool({
   id: "test-tool-b",
   description: "Fetches weather for a location",
@@ -146,14 +206,14 @@ export const testToolB = createTool({
   suspendSchema: z.object({
     reason: z.string()
   }),
-  execute: async ({ location }, { agent } = {}) => {
-    const { resumeData: { approved } = {}, suspend } = agent ?? {};
+  execute: async (inputData, context) => {
+    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {};
 
     if (!approved) {
       return suspend?.({ reason: "Approval required." });
     }
 
-    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
     const weather = await response.text();
 
     return { weather };

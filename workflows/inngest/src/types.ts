@@ -22,7 +22,7 @@ export type InngestWorkflowConfig<
   TState,
   TInput,
   TOutput,
-  TSteps extends Step[],
+  TSteps extends Step<string, any, any, any, any, any, any, any>[],
 > = WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps> &
   InngestFlowControlConfig &
   InngestFlowCronConfig<TInput, TState>;

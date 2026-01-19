@@ -1,5 +1,17 @@
 # create-mastra
 
+## 1.0.0-beta.16
+
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
 ## 1.0.0-beta.14
 
 ### Patch Changes

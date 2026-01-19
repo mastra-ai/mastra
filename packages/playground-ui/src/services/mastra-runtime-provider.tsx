@@ -12,7 +12,7 @@ import { fileToBase64 } from '@/lib/file/toBase64';
 import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
-import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
+import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
@@ -189,6 +189,8 @@ export function MastraRuntimeProvider({
     setMessages,
     approveToolCall,
     declineToolCall,
+    approveToolCallGenerate,
+    declineToolCallGenerate,
     toolCallApprovals,
     approveNetworkToolCall,
     declineNetworkToolCall,
@@ -744,6 +746,8 @@ export function MastraRuntimeProvider({
       <ToolCallProvider
         approveToolcall={approveToolCall}
         declineToolcall={declineToolCall}
+        approveToolcallGenerate={approveToolCallGenerate}
+        declineToolcallGenerate={declineToolCallGenerate}
         isRunning={isRunningStream}
         toolCallApprovals={toolCallApprovals}
         approveNetworkToolcall={approveNetworkToolCall}

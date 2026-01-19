@@ -21,13 +21,13 @@ After completing frontend changes:
 1. **Build the CLI**
 
 ```sh
-   pnpm build:cli
+pnpm build:cli
 ```
 
 2. **Start the dev server**
 
 ```sh
-   cd examples/agent && node ../../packages/cli/dist/index.js dev
+cd examples/agent && node ../../packages/cli/dist/index.js dev
 ```
 
 3. **Verify server is running**
@@ -36,7 +36,7 @@ After completing frontend changes:
 
 4. **Identify impacted routes**
    - Routes are defined in `packages/playground/src/App.tsx`
-   - Determine which routes are affected by your changes
+   - Browse them ALL to verify behavior
 
 5. **Test with Playwright MCP**
    - Use `browser_navigate` to visit each impacted route

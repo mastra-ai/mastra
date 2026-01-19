@@ -64,6 +64,43 @@ export const tool = createTool({
 });
 ```
 
+## Example with MCP Annotations
+
+When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name or coordinates"),
+  }),
+  // MCP-specific properties
+  mcp: {
+    // Annotations for client behavior hints
+    annotations: {
+      title: "Weather Lookup",           // Human-readable display name
+      readOnlyHint: true,                // Tool doesn't modify environment
+      destructiveHint: false,            // Tool doesn't perform destructive updates
+      idempotentHint: true,              // Same args = same result
+      openWorldHint: true,               // Interacts with external API
+    },
+    // Custom metadata for client-specific functionality
+    _meta: {
+      version: "1.0.0",
+      category: "weather",
+    },
+  },
+  execute: async (inputData) => {
+    const weather = await fetchWeather(inputData.location);
+    return { weather };
+  },
+});
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -121,6 +158,13 @@ export const tool = createTool({
       type: "boolean",
       description:
         "When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.",
+      isOptional: true,
+    },
+    {
+      name: "mcp",
+      type: "MCPToolProperties",
+      description:
+        "MCP-specific properties for tools exposed via Model Context Protocol. Includes `annotations` (tool behavior hints like `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) and `_meta` (arbitrary metadata passed through to MCP clients).",
       isOptional: true,
     },
     {
@@ -336,6 +380,63 @@ Additionally:
 ### Error Handling
 
 Hook errors are caught and logged automatically, but do not prevent tool execution from continuing. If a hook throws an error, it will be logged to the console but will not fail the tool call.
+
+## MCP Tool Annotations
+
+When exposing tools via the Model Context Protocol (MCP), you can provide annotations that describe tool behavior. These annotations help MCP clients like OpenAI Apps SDK understand how to present and handle your tools.
+
+MCP-specific properties are grouped under the `mcp` property, which includes `annotations` and `_meta`:
+
+```typescript
+mcp: {
+  annotations: { /* behavior hints */ },
+  _meta: { /* custom metadata */ },
+}
+```
+
+### ToolAnnotations Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "title",
+      type: "string",
+      description:
+        "A human-readable title for the tool. Used for display purposes in UI components.",
+      isOptional: true,
+    },
+    {
+      name: "readOnlyHint",
+      type: "boolean",
+      description:
+        "If true, the tool does not modify its environment. This hint indicates the tool only reads data and has no side effects. Defaults to false.",
+      isOptional: true,
+    },
+    {
+      name: "destructiveHint",
+      type: "boolean",
+      description:
+        "If true, the tool may perform destructive updates to its environment. If false, the tool performs only additive updates. This hint helps clients determine if confirmation should be required. Defaults to true.",
+      isOptional: true,
+    },
+    {
+      name: "idempotentHint",
+      type: "boolean",
+      description:
+        "If true, calling the tool repeatedly with the same arguments will have no additional effect on its environment. This hint indicates idempotent behavior. Defaults to false.",
+      isOptional: true,
+    },
+    {
+      name: "openWorldHint",
+      type: "boolean",
+      description:
+        "If true, this tool may interact with an 'open world' of external entities (e.g., web search, external APIs). If false, the tool's domain is closed and fully defined. Defaults to true.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+These annotations follow the [MCP specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations) and are passed through when tools are listed via MCP.
 
 ## Related
 

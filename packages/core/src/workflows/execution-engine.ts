@@ -173,5 +173,9 @@ export abstract class ExecutionEngine extends MastraBase {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    tracingIds?: {
+      traceId: string;
+      workflowSpanId: string;
+    };
   }): Promise<TOutput>;
 }

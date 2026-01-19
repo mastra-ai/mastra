@@ -31,7 +31,7 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
-  StepParams,
+  StepParamsLegacy,
   ToolStep,
   DefaultEngineType,
 } from '../../workflows/types';
@@ -118,7 +118,7 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
   return input instanceof Tool;
 }
 
-function isStepParams(input: unknown): input is StepParams<any, any, any, any, any, any> {
+function isStepParams(input: unknown): input is StepParamsLegacy<any, any, any, any, any, any> {
   return (
     input !== null &&
     typeof input === 'object' &&
@@ -164,7 +164,7 @@ function isProcessor(obj: unknown): obj is Processor {
  * @returns A Step object that can be added to the workflow
  */
 export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
+  params: StepParamsLegacy<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
@@ -231,7 +231,7 @@ export function createStep<TProcessorId extends string>(
 
 export function createStep<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
   params:
-    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
+    | StepParamsLegacy<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>
     | Agent<TStepId, any>
     | ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>
     | (Processor<TStepId> & { inputSchema?: TStepInput }),
@@ -295,7 +295,7 @@ export function createStep<TStepId extends string, TState, TStepInput, TStepOutp
 // ============================================
 
 function createStepFromParams<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend>(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
+  params: StepParamsLegacy<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend>,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   return {
     id: params.id,

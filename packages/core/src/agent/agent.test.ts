@@ -1627,6 +1627,141 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
+    it('should generate title for pre-created thread with any title (issue #11757)', async () => {
+      // This test validates that generateTitle works for pre-created threads with ANY title.
+      // When generateTitle: true is configured, title generation should trigger on the first
+      // user message, regardless of the initial title. No metadata flags are needed.
+      // See: https://github.com/mastra-ai/mastra/issues/11757
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+      let updatedThreadTitle = '';
+
+      const mockMemory = new MockMemory();
+
+      // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
+      // This is a common pattern: apps create threads before the first message for URL routing
+      const customTitle = 'New Chat'; // Any custom title - generateTitle should still work
+      const threadId = 'pre-created-thread-custom-title';
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: customTitle,
+          resourceId: 'user-123',
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        },
+      });
+
+      // Override getMergedThreadConfig to return generateTitle: true
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: true,
+        };
+      };
+
+      // Track when createThread is called to update title
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async (params: any) => {
+        if (params.title && params.title !== customTitle) {
+          updatedThreadTitle = params.title;
+        }
+        return originalCreateThread(params);
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Help with coding project',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Help with coding project',
+                content: [{ type: 'text', text: 'Help with coding project' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'pre-created-thread-agent',
+        name: 'Pre-created Thread Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      // Send first message to the pre-created thread
+      if (version === 'v1') {
+        await agent.generateLegacy('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      } else {
+        await agent.generate('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Title generation should trigger because:
+      // 1. generateTitle: true is configured
+      // 2. This is the first user message (no existing user messages in memory)
+      // The initial title ("New Chat") doesn't matter - generateTitle option wins
+      expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(1); // Main agent should still be called
+      expect(updatedThreadTitle).toBe('Help with coding project');
+    });
+
     it('should handle errors in title generation gracefully', async () => {
       const mockMemory = new MockMemory();
 
@@ -3194,64 +3329,55 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(thread?.resourceId).toBe('user-1');
     });
 
-    it('generate - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
+    it.skipIf(version !== 'v1')(
+      'generate - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
 
-      if (version === 'v1') {
         await agent.generateLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      } else {
-        await agent.generate('hello', {
+
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
+
+    it.skipIf(version !== 'v1')(
+      'stream - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
+
+        const stream = await agent.streamLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      }
 
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        await stream.consumeStream();
 
-    it('stream - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      } else {
-        stream = await agent.stream('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      }
-
-      await stream.consumeStream();
-
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
   });
 
   describe(`${version} - Dynamic instructions with mastra instance`, () => {
@@ -4125,8 +4251,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             );
           } else {
             await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
+              memory: {
+                thread: 'thread-partial-rescue-generate',
+                resource: 'resource-partial-rescue-generate',
+              },
               savePerStep: true,
               onStepFinish: (result: any) => {
                 if (result.toolCalls && result.toolCalls.length > 1) {
@@ -4209,8 +4337,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo-generate',
-            resourceId: 'resource-echo-generate',
+            memory: {
+              thread: 'thread-echo-generate',
+              resource: 'resource-echo-generate',
+            },
             savePerStep: true,
           });
         }
@@ -4287,8 +4417,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           await agent.generate(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
-              threadId: 'thread-multi-generate',
-              resourceId: 'resource-multi-generate',
+              memory: {
+                thread: 'thread-multi-generate',
+                resource: 'resource-multi-generate',
+              },
               savePerStep: true,
             },
           );
@@ -4328,8 +4460,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('repeat tool calls', {
-            threadId: 'thread-1-generate',
-            resourceId: 'resource-1-generate',
+            memory: {
+              thread: 'thread-1-generate',
+              resource: 'resource-1-generate',
+            },
           });
         }
 
@@ -4371,8 +4505,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('no progress', {
-            threadId: `thread-2-${version}-generate`,
-            resourceId: `resource-2-${version}-generate`,
+            memory: {
+              thread: `thread-2-${version}-generate`,
+              resource: `resource-2-${version}-generate`,
+            },
           });
         }
 
@@ -4415,8 +4551,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
+            memory: {
+              thread: 'thread-3-generate',
+              resource: 'resource-3-generate',
+            },
           });
         }
       } catch (err: any) {

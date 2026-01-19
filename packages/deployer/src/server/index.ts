@@ -21,6 +21,7 @@ import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled 
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
+import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
 
@@ -114,7 +115,7 @@ export async function createHonoServer(
     tools: options.tools,
     taskStore: a2aTaskStore,
     bodyLimitOptions,
-    openapiPath: '/openapi.json',
+    openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
   });
 
@@ -161,6 +162,22 @@ export async function createHonoServer(
     }),
     healthHandler,
   );
+
+  if (options?.isDev || server?.build?.swaggerUI) {
+    app.get(
+      '/api',
+      describeRoute({
+        description: 'API Welcome Page',
+        tags: ['system'],
+        responses: {
+          200: {
+            description: 'Success',
+          },
+        },
+      }),
+      rootHandler,
+    );
+  }
 
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
@@ -218,6 +235,17 @@ export async function createHonoServer(
   await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
+    // Warn if Swagger UI is enabled but OpenAPI docs are not in production
+    if (!options?.isDev && server?.build?.swaggerUI && !server?.build?.openAPIDocs) {
+      const logger = mastra.getLogger();
+      logger.warn(
+        'Swagger UI is enabled but OpenAPI documentation is disabled. ' +
+          'The Swagger UI will not function properly without the OpenAPI endpoint. ' +
+          'Please enable openAPIDocs in your server.build configuration:\n' +
+          '  server: { build: { swaggerUI: true, openAPIDocs: true } }',
+      );
+    }
+
     app.get(
       '/swagger-ui',
       describeRoute({
@@ -305,6 +333,7 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
+      requestPath === '/api' ||
       requestPath.startsWith('/api/') ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
@@ -337,10 +366,13 @@ export async function createHonoServer(
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
 
+      const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
+
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly
       indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);

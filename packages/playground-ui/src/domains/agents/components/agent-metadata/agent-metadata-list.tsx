@@ -22,7 +22,7 @@ export interface AgentMetadataListEmptyProps {
 
 export const AgentMetadataListEmpty = ({ children }: AgentMetadataListEmptyProps) => {
   return (
-    <Txt variant="ui-sm" className="text-icon6">
+    <Txt variant="ui-sm" className="text-neutral6">
       {children}
     </Txt>
   );

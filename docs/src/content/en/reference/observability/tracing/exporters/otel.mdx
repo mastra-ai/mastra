@@ -199,7 +199,6 @@ interface TraceloopConfig {
 ```typescript
 interface LaminarConfig {
   apiKey?: string;
-  teamId?: string;
   endpoint?: string;
 }
 ```
@@ -210,12 +209,6 @@ interface LaminarConfig {
       name: "apiKey",
       type: "string",
       description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
-      required: false,
-    },
-    {
-      name: "teamId",
-      type: "string",
-      description: "Team identifier. Falls back to LAMINAR_TEAM_ID env var.",
       required: false,
     },
     {
@@ -269,6 +262,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to the configured OTEL backend.
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to the OTEL backend without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -347,8 +348,7 @@ The OtelExporter supports trace tagging for categorization and filtering. Tags a
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },

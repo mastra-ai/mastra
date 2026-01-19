@@ -223,12 +223,6 @@ const result = await agent.generate({
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
     },
     {
-      name: "evals",
-      type: "Record<string, Metric>",
-      isOptional: true,
-      description: "Evaluation metrics for scoring agent responses.",
-    },
-    {
       name: "memory",
       type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
@@ -278,7 +272,7 @@ const result = await agent.generate({
   content={[
     {
       name: "agent",
-      type: "Agent<TAgentId, TTools, TMetrics>",
+      type: "Agent<TAgentId, TTools>",
       description: "A new Agent instance with the specified configuration.",
     },
   ]}

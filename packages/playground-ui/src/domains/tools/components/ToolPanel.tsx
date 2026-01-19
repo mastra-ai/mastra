@@ -1,12 +1,12 @@
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { ToolExecutor } from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
@@ -145,7 +145,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     if (error) return null;
     return (
       <div className="py-12 text-center px-6">
-        <Txt variant="header-md" className="text-icon3">
+        <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
       </div>

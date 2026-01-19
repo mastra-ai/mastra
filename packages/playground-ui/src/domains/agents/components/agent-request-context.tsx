@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
 import { ZodType } from 'zod';
 import { CopyIcon } from 'lucide-react';
-import { DynamicForm } from '@/components/dynamic-form';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { DynamicForm, resolveSerializedZodOutput } from '@/lib/form';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { useAgent } from '../hooks/use-agent';
 import { Txt } from '@/ds/components/Txt/Txt';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton/skeleton';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { usePlaygroundStore } from '@/store/playground-store';

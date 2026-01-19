@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
@@ -10,6 +11,7 @@ import type {
   WorkflowResult,
   WorkflowStreamEvent,
   Run,
+  ZodLikeSchema,
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -25,13 +27,14 @@ import type {
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, any, any>[] = Step<string, any, any, any, any, any, any, any>[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContextSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -44,7 +47,7 @@ export class InngestWorkflow<
     const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
       params;
 
-    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
+    super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContextSchema>);
 
     this.engineType = 'inngest';
 
@@ -219,8 +222,18 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel, perStep } =
-          event.data;
+        let {
+          inputData,
+          initialState,
+          runId,
+          resourceId,
+          resume,
+          outputOptions,
+          format,
+          timeTravel,
+          perStep,
+          tracingOptions,
+        } = event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -234,45 +247,86 @@ export class InngestWorkflow<
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
-        const result = await engine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-          workflowId: this.id,
-          runId,
-          resourceId,
-          graph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          input: inputData,
-          initialState,
-          pubsub,
-          retryConfig: this.retryConfig,
-          requestContext,
-          resume,
-          timeTravel,
-          perStep,
-          format,
-          abortController: new AbortController(),
-          // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
-          outputOptions,
-          outputWriter: async (chunk: WorkflowStreamEvent) => {
-            try {
-              await pubsub.publish(`workflow.events.v2.${runId}`, {
-                type: 'watch',
-                runId,
-                data: chunk,
-              });
-            } catch (err) {
-              this.logger.debug?.('Failed to publish watch event:', err);
-            }
-          },
+        // Store mastra reference for use in proxy closure
+        const mastra = this.#mastra;
+        const tracingPolicy = this.options.tracingPolicy;
+
+        // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
+        // On replay, returns memoized ExportedSpan data without re-creating the span
+        const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+          if (!observability) return undefined;
+
+          const span = observability.startSpan({
+            type: SpanType.WORKFLOW_RUN,
+            name: `workflow run: '${this.id}'`,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: this.id,
+            input: inputData,
+            metadata: {
+              resourceId,
+              runId,
+            },
+            tracingPolicy,
+            tracingOptions,
+            requestContext,
+          });
+
+          return span?.exportSpan();
         });
 
-        // Final step to invoke lifecycle callbacks and check workflow status
-        // Wrapped in step.run for durability - callbacks are memoized on replay
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
+
+        let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+        try {
+          result = await engine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+            workflowId: this.id,
+            runId,
+            resourceId,
+            graph: this.executionGraph,
+            serializedStepGraph: this.serializedStepGraph,
+            input: inputData,
+            initialState,
+            pubsub,
+            retryConfig: this.retryConfig,
+            requestContext,
+            resume,
+            timeTravel,
+            perStep,
+            format,
+            abortController: new AbortController(),
+            // For Inngest, we don't pass workflowSpan - step spans use tracingIds instead
+            workflowSpan: undefined,
+            // Pass tracing IDs for durable span operations
+            tracingIds: workflowSpanData
+              ? {
+                  traceId: workflowSpanData.traceId,
+                  workflowSpanId: workflowSpanData.id,
+                }
+              : undefined,
+            outputOptions,
+            outputWriter: async (chunk: WorkflowStreamEvent) => {
+              try {
+                await pubsub.publish(`workflow.events.v2.${runId}`, {
+                  type: 'watch',
+                  runId,
+                  data: chunk,
+                });
+              } catch (err) {
+                this.logger.debug?.('Failed to publish watch event:', err);
+              }
+            },
+          });
+        } catch (error) {
+          // Re-throw - span will be ended in finalize if we reach it
+          throw error;
+        }
+
+        // Final step to invoke lifecycle callbacks and end workflow span.
+        // This step is memoized by step.run.
         await step.run(`workflow.${this.id}.finalize`, async () => {
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
-            // Use invokeLifecycleCallbacksInternal to call the real implementation
-            // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
             await engine.invokeLifecycleCallbacksInternal({
               status: result.status,
               result: 'result' in result ? result.result : undefined,
@@ -288,12 +342,35 @@ export class InngestWorkflow<
             });
           }
 
-          // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
+          // End the workflow span with appropriate status
+          // The workflow span was already created and SPAN_STARTED was exported in the span.start step
+          if (workflowSpanData) {
+            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            if (observability) {
+              // Rebuild the span from cached data to call end/error
+              const workflowSpan = observability.rebuildSpan(workflowSpanData);
+
+              if (result.status === 'failed') {
+                workflowSpan.error({
+                  error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+                  attributes: { status: 'failed' },
+                });
+              } else {
+                workflowSpan.end({
+                  output: result.status === 'success' ? result.result : undefined,
+                  attributes: { status: result.status },
+                });
+              }
+            }
+          }
+
+          // Throw after span ended for failed workflows
           if (result.status === 'failed') {
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,
             });
           }
+
           return result;
         });
 

@@ -5,6 +5,11 @@ export * from './types';
 export * from './agent';
 export * from './utils';
 
-export type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
+export type {
+  AgentExecutionOptions,
+  AgentExecutionOptionsBase,
+  InnerAgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+} from './agent.types';
 
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
