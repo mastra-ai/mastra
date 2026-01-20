@@ -226,7 +226,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       }
 
       const messageList = new MessageList();
-      messageList.add(messages as unknown as MessageInput, 'input');
+      messageList.add(messages as unknown as MessageInput[], 'input');
 
       // Check if this is a workflow processor
       if (isProcessorWorkflow(processor)) {

@@ -281,7 +281,14 @@ export interface CreateMemoryThreadParams {
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
-  resourceId: string;
+  /**
+   * Optional resourceId to filter threads. When not provided, returns all threads.
+   */
+  resourceId?: string;
+  /**
+   * Optional metadata filter. Threads must match all specified key-value pairs (AND logic).
+   */
+  metadata?: Record<string, unknown>;
   /**
    * Optional agentId. When not provided and storage is configured on the server,
    * threads will be retrieved using storage directly.

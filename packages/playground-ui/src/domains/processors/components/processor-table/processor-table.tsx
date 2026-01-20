@@ -3,7 +3,7 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Cpu } from 'lucide-react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
@@ -25,8 +25,10 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
 
-  // Filter out processors that don't implement any phases
-  const processorData = Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0);
+  const processorData = useMemo(() => {
+    // Filter out processors that don't implement any phases
+    return Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0);
+  }, [processors]);
 
   const table = useReactTable({
     data: processorData,
