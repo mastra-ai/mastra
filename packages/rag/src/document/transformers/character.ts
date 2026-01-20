@@ -391,15 +391,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           '',
         ];
       case Language.RST:
-        return [
-          '\\n={3,}\\n',
-          '\\n-{3,}\\n',
-          '\\n~{3,}\\n',
-          '\\n\\n',
-          '\\n',
-          ' ',
-          '',
-        ];
+        return ['\\n={3,}\\n', '\\n-{3,}\\n', '\\n~{3,}\\n', '\\n\\n', '\\n', ' ', ''];
       case Language.RUBY:
         return [
           '\\nmodule ',
