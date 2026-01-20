@@ -131,8 +131,8 @@ export function getPgStorageTests(connectionString: string) {
       beforeEach(async () => {
         // Clean up threads before each test in this block
         try {
-          const { threads } = await memory.listThreadsByResourceId({
-            resourceId,
+          const { threads } = await memory.listThreads({
+            filter: { resourceId },
             page: 0,
             perPage: 100,
           });
@@ -171,8 +171,8 @@ export function getPgStorageTests(connectionString: string) {
           title: 'Thread 2',
         });
 
-        const { threads, total } = await memory.listThreadsByResourceId({
-          resourceId,
+        const { threads, total } = await memory.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 10,
         });
@@ -339,7 +339,7 @@ export function getPgStorageTests(connectionString: string) {
 
       beforeEach(async () => {
         // Clean up any existing threads
-        const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
+        const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
         await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
 
         // Create a fresh thread for testing

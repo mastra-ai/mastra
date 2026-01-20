@@ -17,8 +17,8 @@ import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
 } from '../storage';
@@ -326,19 +326,38 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Lists all threads that belong to the specified resource.
-   * @param args.resourceId - The unique identifier of the resource
-   * @param args.offset - The number of threads to skip (for pagination)
-   * @param args.limit - The maximum number of threads to return
-   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
-   *                       and `direction` (`'ASC'` or `'DESC'`);
-   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
-   * @returns Promise resolving to paginated thread results with metadata;
-   *          resolves to an empty array if the resource has no threads
+   * Lists threads with optional filtering by resourceId and metadata.
+   * This method supports:
+   * - Optional resourceId filtering (not required)
+   * - Metadata filtering with AND logic (all key-value pairs must match)
+   * - Pagination via `page` / `perPage`, optional ordering via `orderBy`
+   *
+   * @param args.filter - Optional filters for resourceId and/or metadata
+   * @param args.filter.resourceId - Optional resource ID to filter by
+   * @param args.filter.metadata - Optional metadata key-value pairs to filter by (AND logic)
+   * @param args.page - Zero-indexed page number for pagination (defaults to 0)
+   * @param args.perPage - Number of items per page, or false to fetch all (defaults to 100)
+   * @param args.orderBy - Optional sorting configuration with `field` and `direction`
+   * @returns Promise resolving to paginated thread results with metadata
+   *
+   * @example
+   * ```typescript
+   * // Filter by resourceId only
+   * await memory.listThreads({ filter: { resourceId: 'user-123' } });
+   *
+   * // Filter by metadata only
+   * await memory.listThreads({ filter: { metadata: { category: 'support' } } });
+   *
+   * // Filter by both
+   * await memory.listThreads({
+   *   filter: {
+   *     resourceId: 'user-123',
+   *     metadata: { priority: 'high', status: 'open' }
+   *   }
+   * });
+   * ```
    */
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
    * Saves or updates a thread

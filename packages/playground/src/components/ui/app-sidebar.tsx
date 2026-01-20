@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  Cpu,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -42,6 +43,11 @@ const mainNavigation: NavSection[] = [
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Processors',
+        url: '/processors',
+        icon: <Cpu />,
       },
       {
         name: 'MCP Servers',

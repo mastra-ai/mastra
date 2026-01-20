@@ -137,13 +137,19 @@ export class BraintrustExporter extends TrackingExporter<
   private startSpan(args: { parent: Span | Logger<true>; span: AnyExportedSpan }): BraintrustSpanData {
     const { parent, span } = args;
     const payload = this.buildSpanPayload(span);
+
+    // Braintrust's startSpan() accepts data properties via the `event` parameter
+    // which maps to StartSpanEventArgs (ExperimentLogPartialArgs & Partial<IdField>)
+    // This includes: input, output, metadata, metrics, tags, scores, error, etc.
     const braintrustSpan = parent.startSpan({
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
       startTime: span.startTime.getTime() / 1000,
-      event: { id: span.id }, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
-      ...payload,
+      event: {
+        id: span.id, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
+        ...payload,
+      },
     });
 
     // Create BraintrustSpanData with span type for tree walking
