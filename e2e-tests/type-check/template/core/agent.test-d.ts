@@ -5,7 +5,7 @@ import type { GenerateTextResult, GenerateObjectResult, StreamTextResult, Stream
 import { openai as openaiV4 } from 'openai-v4';
 import { openai as openaiV5 } from 'openai-v5';
 import { z } from 'zod';
-import { z as zv4 } from 'zod-v4';
+import { z as zv4 } from 'zod/v4';
 
 // Extract the model property type from Agent constructor parameters
 type AgentConstructorParams = ConstructorParameters<typeof Agent>[0];

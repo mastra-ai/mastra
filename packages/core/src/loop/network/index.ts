@@ -1794,6 +1794,7 @@ export async function networkLoop<OUTPUT = undefined>({
   // If validation fails, marks isComplete=false and adds feedback for next iteration
   const validationStep = createStep({
     id: 'validation-step',
+    // @ts-expect-error - will be fixed by standard schema
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: z.object({
       task: z.string(),

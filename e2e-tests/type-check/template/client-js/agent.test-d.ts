@@ -6,8 +6,8 @@ import { expectTypeOf, describe, it } from 'vitest';
 import type { FullOutput } from '@mastra/core/stream';
 import { MastraClient } from '@mastra/client-js';
 import type { StreamParams, GenerateLegacyParams, StreamLegacyParams, NetworkStreamParams } from '@mastra/client-js';
-import { z } from 'zod';
-import { z as zv4 } from 'zod-v4';
+import { z } from 'zod/v3';
+import { z as zv4 } from 'zod/v4';
 
 // Create a client instance for testing
 const client = new MastraClient({ baseUrl: 'http://localhost:3000' });

@@ -2,7 +2,7 @@ import { expectTypeOf, describe, it } from 'vitest';
 import { createTool, Tool } from '@mastra/core/tools';
 import type { ToolExecutionContext, ToolAction } from '@mastra/core/tools';
 import { z } from 'zod';
-import { z as zv4 } from 'zod-v4';
+import { z as zv4 } from 'zod/v4';
 
 describe('createTool', () => {
   describe('basic tool creation', () => {
