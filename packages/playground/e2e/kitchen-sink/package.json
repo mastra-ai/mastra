@@ -1,0 +1,37 @@
+{
+  "name": "e2e-studio",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "dependencies": {
+    "ai": "5.1.0-beta.13",
+    "mastra": "latest",
+    "@ai-sdk/openai": "^2.0.44",
+    "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/mcp": "latest",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.17",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "mastra": "link:../../../../packages/cli",
+      "@mastra/core": "link:../../../../packages/core",
+      "@mastra/loggers": "link:../../../../packages/loggers",
+      "@mastra/memory": "link:../../../../packages/memory",
+      "@mastra/libsql": "link:../../../../stores/libsql",
+      "@mastra/mcp": "link:../../../../packages/mcp"
+    }
+  },
+  "packageManager": "pnpm@10.18.2"
+}

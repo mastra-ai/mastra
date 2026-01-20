@@ -1,5 +1,46 @@
 # @mastra/braintrust
 
+## 1.0.0-beta.16
+
+### Patch Changes
+
+- Fixed exporting tags for root observability spans in Braintrust exporter. ([#12057](https://github.com/mastra-ai/mastra/pull/12057))
+
+  This was broken in PR: 11870.
+
+- Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`6833c69`](https://github.com/mastra-ai/mastra/commit/6833c69607418d257750bbcdd84638993d343539), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`3a76a80`](https://github.com/mastra-ai/mastra/commit/3a76a80284cb71a0faa975abb3d4b2a9631e60cd), [`8538a0d`](https://github.com/mastra-ai/mastra/commit/8538a0d232619bf55dad7ddc2a8b0ca77c679a87), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5)]:
+  - @mastra/core@1.0.0-beta.25
+
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- Added `flush()` method to observability exporters and instances for serverless environments ([#12003](https://github.com/mastra-ai/mastra/pull/12003))
+
+  This feature allows flushing buffered spans without shutting down the exporter, which is useful in serverless environments like Vercel's fluid compute where runtime instances can be reused across multiple requests.
+
+  **New API:**
+
+  ```typescript
+  // Flush all exporters via the observability instance
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  // Or flush individual exporters
+  const exporters = observability.getExporters();
+  await exporters[0].flush();
+  ```
+
+  **Why this matters:**
+
+  In serverless environments, you may need to ensure all spans are exported before the runtime instance is terminated, while keeping the exporter active for future requests. Unlike shutdown(), flush() does not release resources or prevent future exports.
+
+  Closes #11372
+
+- Updated dependencies [[`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`1dbd8c7`](https://github.com/mastra-ai/mastra/commit/1dbd8c729fb6536ec52f00064d76b80253d346e9), [`c59e13c`](https://github.com/mastra-ai/mastra/commit/c59e13c7688284bd96b2baee3e314335003548de), [`f9a2509`](https://github.com/mastra-ai/mastra/commit/f9a25093ea72d210a5e52cfcb3bcc8b5e02dc25c), [`7a010c5`](https://github.com/mastra-ai/mastra/commit/7a010c56b846a313a49ae42fccd3d8de2b9f292d)]:
+  - @mastra/core@1.0.0-beta.24
+  - @mastra/observability@1.0.0-beta.13
+
 ## 1.0.0-beta.14
 
 ### Patch Changes

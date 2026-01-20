@@ -9,7 +9,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { providerMapToIcon } from '../provider-map-icon';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { ToolsIcon, WorkflowIcon, ProcessorIcon } from '@/ds/icons';
 import { extractPrompt } from '../../utils/extractPrompt';
 
 export type AgentTableColumn = {
@@ -84,10 +84,12 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
       const agentsCount = Object.keys(agent.agents || {}).length;
       const toolsCount = Object.keys(agent.tools || {}).length;
       const workflowsCount = Object.keys(agent.workflows || {}).length;
+      const inputProcessorsCount = (agent.inputProcessors || []).length;
+      const outputProcessorsCount = (agent.outputProcessors || []).length;
 
       return (
         <Cell>
-          <span className="flex flex-row gap-2 w-full items-center">
+          <span className="flex flex-row gap-2 w-full items-center flex-wrap">
             <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
               {agentsCount} agent{agentsCount > 1 ? 's' : ''}
             </Badge>
@@ -97,6 +99,28 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
             <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
               {workflowsCount} workflow{workflowsCount > 1 ? 's' : ''}
             </Badge>
+            {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />} />
+                </TooltipTrigger>
+                <TooltipContent className="flex flex-col gap-1">
+                  <a
+                    href="https://mastra.ai/docs/agents/processors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent1 hover:underline"
+                  >
+                    Processors
+                  </a>
+                  <span className="text-icon3">
+                    {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
+                      .filter(Boolean)
+                      .join(', ')}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </span>
         </Cell>
       );

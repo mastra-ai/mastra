@@ -91,7 +91,7 @@ const isClientConfig = (config: ConvexStoreConfig): config is ConvexStoreConfig 
  * ```
  */
 export class ConvexStore extends MastraStorage {
-  stores: StorageDomains = {} as StorageDomains;
+  declare stores: StorageDomains;
 
   constructor(config: ConvexStoreConfig) {
     super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });

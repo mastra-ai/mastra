@@ -110,12 +110,7 @@ describe('create mastra', () => {
               "defaultStreamOptionsLegacy": {},
               "description": "",
               "id": "weather-agent",
-              "inputProcessors": [
-                {
-                  "id": "weather-agent-input-processor",
-                  "name": "weather-agent-input-processor",
-                },
-              ],
+              "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -133,12 +128,7 @@ describe('create mastra', () => {
               "modelId": "gpt-4o",
               "modelVersion": "v2",
               "name": "Weather Agent",
-              "outputProcessors": [
-                {
-                  "id": "weather-agent-output-processor",
-                  "name": "weather-agent-output-processor",
-                },
-              ],
+              "outputProcessors": [],
               "provider": "openai",
               "tools": {
                 "weatherTool": {

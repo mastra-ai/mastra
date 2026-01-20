@@ -8,8 +8,8 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from '@mastra/core/storage';
@@ -320,24 +320,50 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const allThreads: StorageThreadType[] = [];
-    for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === args.resourceId) {
-        allThreads.push(thread);
-      }
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, filter, orderBy } = args;
+    let allThreads: StorageThreadType[] = Array.from(this.data.mastra_threads.values());
+
+    // Apply resourceId filter if provided
+    if (filter?.resourceId) {
+      allThreads = allThreads.filter(thread => thread.resourceId === filter.resourceId);
     }
-    const start = args.offset * args.limit;
-    const threads = allThreads.slice(start, start + args.limit);
+
+    // Apply metadata filter if provided (AND logic)
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      allThreads = allThreads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+      });
+    }
+
+    // Apply ordering - default to DESC by createdAt
+    const sortField = orderBy?.field || 'createdAt';
+    const sortDirection = orderBy?.direction || 'DESC';
+    const direction = sortDirection === 'ASC' ? 1 : -1;
+
+    allThreads.sort((a: any, b: any) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (aVal instanceof Date && bVal instanceof Date) {
+        return direction * (aVal.getTime() - bVal.getTime());
+      }
+      return direction * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0);
+    });
+
+    // Handle perPage: false (fetch all results)
+    const fetchAll = perPageInput === false;
+    const normalizedPerPage = fetchAll ? allThreads.length : typeof perPageInput === 'number' ? perPageInput : 100;
+    const normalizedPage = fetchAll ? 0 : Math.max(0, page);
+    const offset = normalizedPage * normalizedPerPage;
+    const threads = allThreads.slice(offset, fetchAll ? undefined : offset + normalizedPerPage);
 
     return {
       threads,
       total: allThreads.length,
-      page: args.offset,
-      perPage: args.limit,
-      hasMore: allThreads.length > (args.offset + 1) * args.limit,
+      page: normalizedPage,
+      perPage: fetchAll ? false : normalizedPerPage,
+      hasMore: fetchAll ? false : offset + normalizedPerPage < allThreads.length,
     };
   }
 

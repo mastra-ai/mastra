@@ -103,6 +103,8 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  inputProcessors?: Array<{ id: string; name: string }>;
+  outputProcessors?: Array<{ id: string; name: string }>;
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
@@ -277,7 +279,14 @@ export interface CreateMemoryThreadParams {
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
-  resourceId: string;
+  /**
+   * Optional resourceId to filter threads. When not provided, returns all threads.
+   */
+  resourceId?: string;
+  /**
+   * Optional metadata filter. Threads must match all specified key-value pairs (AND logic).
+   */
+  metadata?: Record<string, unknown>;
   /**
    * Optional agentId. When not provided and storage is configured on the server,
    * threads will be retrieved using storage directly.
@@ -699,4 +708,79 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Processor Types
+// ============================================================================
+
+/**
+ * Processor phase types
+ */
+export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+
+/**
+ * Processor configuration showing how it's attached to an agent
+ */
+export interface ProcessorConfiguration {
+  agentId: string;
+  agentName: string;
+  type: 'input' | 'output';
+}
+
+/**
+ * Processor in list response
+ */
+export interface GetProcessorResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  agentIds: string[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Detailed processor response
+ */
+export interface GetProcessorDetailResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  configurations: ProcessorConfiguration[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Parameters for executing a processor
+ */
+export interface ExecuteProcessorParams {
+  phase: ProcessorPhase;
+  messages: MastraDBMessage[];
+  agentId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Tripwire result from processor execution
+ */
+export interface ProcessorTripwireResult {
+  triggered: boolean;
+  reason?: string;
+  metadata?: unknown;
+}
+
+/**
+ * Response from processor execution
+ */
+export interface ExecuteProcessorResponse {
+  success: boolean;
+  phase: string;
+  messages?: MastraDBMessage[];
+  messageList?: {
+    messages: MastraDBMessage[];
+  };
+  tripwire?: ProcessorTripwireResult;
+  error?: string;
 }

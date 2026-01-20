@@ -93,6 +93,14 @@ async export(spans: ReadOnlySpan[]): Promise<void>
 
 Batch exports spans to Langfuse.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Langfuse without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
