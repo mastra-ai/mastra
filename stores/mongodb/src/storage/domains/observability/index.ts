@@ -99,12 +99,41 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
-    // Check if unique index already exists - if so, skip deduplication
-    // This avoids running expensive dedup queries on every init after migration is complete
+    // Check if unique index already exists - if so, skip migration check
+    // This avoids running expensive queries on every init after migration is complete
     const uniqueIndexExists = await this.spansUniqueIndexExists();
     if (!uniqueIndexExists) {
-      // Deduplicate spans before creating unique index to avoid duplicate key errors
-      await this.deduplicateSpans();
+      // Check for duplicates before attempting to create unique index
+      const duplicateInfo = await this.checkForDuplicateSpans();
+      if (duplicateInfo.hasDuplicates) {
+        // Duplicates exist - log warning and skip auto-migration
+        // User must run manual migration via CLI to deduplicate
+        this.logger?.error?.(
+          `\n` +
+            `===========================================================================\n` +
+            `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} collection\n` +
+            `===========================================================================\n` +
+            `\n` +
+            `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+            `\n` +
+            `The spans collection requires a unique index on (traceId, spanId), but your\n` +
+            `database contains duplicate entries that must be resolved first.\n` +
+            `\n` +
+            `To fix this, run the manual migration command:\n` +
+            `\n` +
+            `  npx mastra migrate\n` +
+            `\n` +
+            `This command will:\n` +
+            `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+            `  2. Add the required unique index\n` +
+            `\n` +
+            `Note: This migration may take some time for large collections.\n` +
+            `===========================================================================\n`,
+        );
+        // Don't throw - allow the application to start, but without the constraint
+        // Skip creating default indexes since they depend on the unique index
+        return;
+      }
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -124,6 +153,127 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // If we can't check indexes (e.g., collection doesn't exist), assume index doesn't exist
       return false;
     }
+  }
+
+  /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans collection.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  private async checkForDuplicateSpans(): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+  }> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Count duplicate (traceId, spanId) combinations
+      const result = await collection
+        .aggregate([
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              count: { $sum: 1 },
+            },
+          },
+          { $match: { count: { $gt: 1 } } },
+          { $count: 'duplicateCount' },
+        ])
+        .toArray();
+
+      const duplicateCount = result[0]?.duplicateCount ?? 0;
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+      };
+    } catch (error) {
+      // If collection doesn't exist or other error, assume no duplicates
+      this.logger?.debug?.(`Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0 };
+    }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique index.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    // Check if already migrated
+    const indexExists = await this.spansUniqueIndexExists();
+    if (indexExists) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. Unique index exists on ${TABLE_SPANS} collection.`,
+      };
+    }
+
+    // Check for duplicates
+    const duplicateInfo = await this.checkForDuplicateSpans();
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
+      );
+
+      // Run deduplication
+      await this.deduplicateSpans();
+    } else {
+      this.logger?.info?.(`No duplicate spans found.`);
+    }
+
+    // Create indexes (including the unique index)
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and added unique index to ${TABLE_SPANS} collection.`
+        : `Migration complete. Added unique index to ${TABLE_SPANS} collection.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans collection.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const indexExists = await this.spansUniqueIndexExists();
+
+    if (indexExists) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: TABLE_SPANS,
+      };
+    }
+
+    const duplicateInfo = await this.checkForDuplicateSpans();
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: TABLE_SPANS,
+    };
   }
 
   /**

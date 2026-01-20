@@ -41,10 +41,45 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
-    // Migrate existing table if it has the old sorting key (createdAt, traceId, spanId)
-    // to the new sorting key (traceId, spanId) for proper uniqueness enforcement.
-    // This migration is idempotent and only runs if the old key is detected.
-    await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Check if migration is needed (table exists with old sorting key)
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (migrationStatus.needsMigration) {
+      // Check for duplicates before attempting migration
+      const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+      if (duplicateInfo.hasDuplicates) {
+        // Duplicates exist - log warning and skip auto-migration
+        // User must run manual migration via CLI to deduplicate
+        this.logger?.error?.(
+          `\n` +
+            `===========================================================================\n` +
+            `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} table\n` +
+            `===========================================================================\n` +
+            `\n` +
+            `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+            `\n` +
+            `The spans table requires migration to a new sorting key (traceId, spanId),\n` +
+            `but your database contains duplicate entries that must be resolved first.\n` +
+            `\n` +
+            `To fix this, run the manual migration command:\n` +
+            `\n` +
+            `  npx mastra migrate\n` +
+            `\n` +
+            `This command will:\n` +
+            `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+            `  2. Update the table sorting key for proper uniqueness\n` +
+            `\n` +
+            `Note: This migration may take some time for large tables.\n` +
+            `===========================================================================\n`,
+        );
+        // Don't throw - allow the application to start, but without the migration
+        // The migration will be completed when the user runs the migration command
+        return;
+      }
+
+      // No duplicates - safe to proceed with migration
+      await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    }
 
     // Create the table (or add missing columns if it already exists)
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
@@ -52,6 +87,87 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and update the sorting key.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    // Check if migration is needed
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. Spans table has correct sorting key.`,
+      };
+    }
+
+    // Check for duplicates (for reporting purposes)
+    const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting migration with deduplication...`,
+      );
+    } else {
+      this.logger?.info?.(`No duplicate spans found. Starting sorting key migration...`);
+    }
+
+    // Run the migration (which includes deduplication)
+    await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and updated sorting key for ${TABLE_SPANS}.`
+        : `Migration complete. Updated sorting key for ${TABLE_SPANS}.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: TABLE_SPANS,
+      };
+    }
+
+    const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: TABLE_SPANS,
+    };
   }
 
   public override get tracingStrategy(): {

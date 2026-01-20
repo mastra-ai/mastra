@@ -12,6 +12,7 @@ import { createProject } from './commands/actions/create-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
+import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
@@ -154,6 +155,13 @@ program
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .action(studio);
+
+program
+  .command('migrate')
+  .description('Run database migrations for the spans table')
+  .option('-h, --host <host>', 'Mastra server host (default: localhost)')
+  .option('-p, --port <port>', 'Mastra server port (default: 4111)')
+  .action(migrate);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 

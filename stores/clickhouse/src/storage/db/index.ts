@@ -124,6 +124,66 @@ export class ClickhouseDB extends MastraBase {
   }
 
   /**
+   * Checks if migration is needed for the spans table.
+   * Returns information about the current state.
+   */
+  async checkSpansMigrationStatus(tableName: string): Promise<{
+    needsMigration: boolean;
+    currentSortingKey: string | null;
+  }> {
+    // Check if table exists
+    const exists = await this.tableExists(tableName);
+    if (!exists) {
+      return { needsMigration: false, currentSortingKey: null };
+    }
+
+    // Check current sorting key
+    const currentSortingKey = await this.getTableSortingKey(tableName);
+    if (!currentSortingKey) {
+      return { needsMigration: false, currentSortingKey: null };
+    }
+
+    // Check if migration is needed - old key starts with createdAt
+    const needsMigration = currentSortingKey.toLowerCase().startsWith('createdat');
+    return { needsMigration, currentSortingKey };
+  }
+
+  /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans table.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  async checkForDuplicateSpans(tableName: string): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+  }> {
+    try {
+      // Count duplicate (traceId, spanId) combinations
+      const result = await this.client.query({
+        query: `
+          SELECT count() as duplicate_count
+          FROM (
+            SELECT traceId, spanId
+            FROM ${tableName}
+            GROUP BY traceId, spanId
+            HAVING count() > 1
+          )
+        `,
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ duplicate_count: string }>;
+      const duplicateCount = parseInt(rows[0]?.duplicate_count ?? '0', 10);
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+      };
+    } catch (error) {
+      // If table doesn't exist or other error, assume no duplicates
+      this.logger?.debug?.(`Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0 };
+    }
+  }
+
+  /**
    * Migrates the spans table from the old sorting key (createdAt, traceId, spanId)
    * to the new sorting key (traceId, spanId) for proper uniqueness enforcement.
    *
