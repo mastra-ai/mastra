@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.0.0-beta.8
+
+### Major Changes
+
+- Mark as stable ([#12096](https://github.com/mastra-ai/mastra/pull/12096))
+
 ## 0.1.0-beta.7
 
 ### Patch Changes
