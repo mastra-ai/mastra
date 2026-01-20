@@ -3,7 +3,7 @@ import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storag
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MssqlDB } from './db';
-import { MssqlStore } from './index';
+import { MSSQLStore, ObservabilityMSSQL } from './index';
 
 const TEST_CONFIG = {
   id: process.env.MSSQL_STORE_ID || 'test-mssql-store',
@@ -503,18 +503,21 @@ describe('MSSQL Duplicate Spans Handling', () => {
         updatedAt: new Date('2024-01-01T00:00:01Z'),
       });
 
-      // Verify duplicates exist before createTable
+      // Verify duplicates exist before migration
       const countBefore = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
       expect(countBefore.recordset[0].count).toBe(2);
 
-      const dbOps = new MssqlDB({
+      // Use ObservabilityMSSQL.migrateSpans() to deduplicate and add PK
+      // (createTable() would throw MIGRATION_REQUIRED when duplicates exist)
+      const observability = new ObservabilityMSSQL({
         pool,
         schemaName: testSchema,
       });
+      const result = await observability.migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBe(1);
 
-      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
-
-      // After createTable, duplicates should be removed (only 1 record remains)
+      // After migration, duplicates should be removed (only 1 record remains)
       const countAfter = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
       expect(countAfter.recordset[0].count).toBe(1);
 
@@ -559,12 +562,12 @@ describe('MSSQL Duplicate Spans Handling', () => {
         updatedAt: new Date('2024-01-01T00:00:05Z'), // Newer
       });
 
-      const dbOps = new MssqlDB({
+      // Use ObservabilityMSSQL.migrateSpans() to deduplicate
+      const observability = new ObservabilityMSSQL({
         pool,
         schemaName: testSchema,
       });
-
-      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+      await observability.migrateSpans();
 
       // Should keep the one with most recent updatedAt
       const remainingSpan = await pool.request().query(`SELECT * FROM [${testSchema}].[${TABLE_SPANS}]`);
@@ -600,12 +603,12 @@ describe('MSSQL Duplicate Spans Handling', () => {
         updatedAt: sameUpdatedAt,
       });
 
-      const dbOps = new MssqlDB({
+      // Use ObservabilityMSSQL.migrateSpans() to deduplicate
+      const observability = new ObservabilityMSSQL({
         pool,
         schemaName: testSchema,
       });
-
-      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+      await observability.migrateSpans();
 
       // Should keep the one with most recent createdAt
       const remainingSpan = await pool.request().query(`SELECT * FROM [${testSchema}].[${TABLE_SPANS}]`);
@@ -781,7 +784,7 @@ describe('MSSQL Migration Required Error', () => {
       expect(Number(count.recordset[0].count)).toBe(2);
 
       // Create store and try to init - should throw MastraError
-      const store = new MssqlStore({
+      const store = new MSSQLStore({
         id: 'throw-test-store',
         server: (TEST_CONFIG as any).server,
         port: (TEST_CONFIG as any).port,
@@ -791,17 +794,18 @@ describe('MSSQL Migration Required Error', () => {
         schemaName: subSchema,
       });
 
-      // init() should throw MastraError
-      await expect(store.init()).rejects.toThrow(MastraError);
-
-      // Verify error has correct ID
+      // init() should throw MastraError - capture it from a single call
+      let caughtError: unknown;
       try {
         await store.init();
-      } catch (error: any) {
-        expect(error).toBeInstanceOf(MastraError);
-        expect(error.id).toContain('MIGRATION_REQUIRED');
-        expect(error.id).toContain('DUPLICATE_SPANS');
+      } catch (error) {
+        caughtError = error;
       }
+
+      // Verify error has correct type and ID
+      expect(caughtError).toBeInstanceOf(MastraError);
+      expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+      expect((caughtError as MastraError).id).toContain('DUPLICATE_SPANS');
 
       await store.close();
     } finally {
@@ -843,7 +847,7 @@ describe('MSSQL Migration Required Error', () => {
       });
 
       // Create store and init - should NOT throw (auto-migration succeeds)
-      const store = new MssqlStore({
+      const store = new MSSQLStore({
         id: 'auto-migrate-test-store',
         server: (TEST_CONFIG as any).server,
         port: (TEST_CONFIG as any).port,
@@ -883,7 +887,7 @@ describe('MSSQL Migration Required Error', () => {
       await pool.request().query(`CREATE SCHEMA ${subSchema}`);
 
       // Create store and init - should create table with constraint (fresh install)
-      const store = new MssqlStore({
+      const store = new MSSQLStore({
         id: 'fresh-install-test-store',
         server: (TEST_CONFIG as any).server,
         port: (TEST_CONFIG as any).port,
