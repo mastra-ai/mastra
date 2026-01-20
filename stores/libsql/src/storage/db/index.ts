@@ -575,6 +575,10 @@ export class LibSQLDB extends MastraBase {
         await this.migrateSpansTable();
       }
     } catch (error) {
+      // Rethrow MastraError (especially for migration required errors) - these must stop init
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_TABLE', 'FAILED'),
@@ -654,7 +658,11 @@ export class LibSQLDB extends MastraBase {
 
       this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {
-      // Log warning but don't fail - migrations should be best-effort
+      // Rethrow MastraError (especially for migration required errors) - these must stop init
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      // Log warning but don't fail for other errors - schema migrations should be best-effort
       this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
     }
   }

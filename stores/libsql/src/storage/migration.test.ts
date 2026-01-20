@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import { MastraError } from '@mastra/core/errors';
+import { MastraError } from '@mastra/core/error';
 import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,

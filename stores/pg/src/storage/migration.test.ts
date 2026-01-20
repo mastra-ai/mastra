@@ -1,4 +1,4 @@
-import { MastraError } from '@mastra/core/errors';
+import { MastraError } from '@mastra/core/error';
 import { SpanType } from '@mastra/core/observability';
 import {
   OLD_SPAN_SCHEMA,

@@ -490,6 +490,10 @@ export class MssqlDB extends MastraBase {
         }
       }
     } catch (error) {
+      // Rethrow MastraError (especially for migration required errors) - these must stop init
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'CREATE_TABLE', 'FAILED'),
