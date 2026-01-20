@@ -1,8 +1,8 @@
-import type { MastraStorage } from './base';
+import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
 
-export function augmentWithInit(storage: MastraStorage): MastraStorage {
+export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
   let hasInitialized: null | Promise<void> = null;
 
   const ensureInit = async () => {

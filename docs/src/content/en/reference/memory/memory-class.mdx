@@ -40,7 +40,7 @@ export const agent = new Agent({
   content={[
     {
       name: "storage",
-      type: "MastraStorage",
+      type: "MastraCompositeStore",
       description:
         'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
       isOptional: true,

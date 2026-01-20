@@ -1,7 +1,7 @@
 import type { ClickHouseClient, ClickHouseClientConfigOptions } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
@@ -162,7 +162,7 @@ const isClientConfig = (config: ClickhouseConfig): config is ClickhouseConfig & 
  * await observability?.createSpan(span);
  * ```
  */
-export class ClickhouseStore extends MastraStorage {
+export class ClickhouseStore extends MastraCompositeStore {
   protected db: ClickHouseClient;
   protected ttl: ClickhouseConfig['ttl'] = {};
 

@@ -1,7 +1,7 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
@@ -71,7 +71,7 @@ export interface LanceStorageClientOptions extends LanceStorageOptions {
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class LanceStorage extends MastraStorage {
+export class LanceStorage extends MastraCompositeStore {
   stores: StorageDomains;
   private lanceClient!: Connection;
   /**
