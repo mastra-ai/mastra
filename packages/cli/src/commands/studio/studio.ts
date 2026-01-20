@@ -27,6 +27,8 @@ export async function studio(
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
+  console.info(JSON.stringify(options, null, 2));
+
   try {
     const distPath = join(__dirname, 'studio');
 
@@ -68,9 +70,12 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
-    .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
-    .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
-    .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http');
+    .replaceAll('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
+    .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
+    .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
+    .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', '')
+    .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '');
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;
