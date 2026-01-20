@@ -121,6 +121,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Trigger mastra-cloud integration tests
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.MASTRA_CLOUD_PAT }}
+          repository: mastra-ai/mastra-cloud
+          event-type: test-mastra-branch
+          client-payload: '{"branch": "main", "release_type": "stable"}'
+
       - name: Check for pre.json file existence
         id: check_files
         uses: andstor/file-existence-action@v3.0.0
