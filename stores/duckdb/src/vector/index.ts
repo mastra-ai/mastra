@@ -1,6 +1,5 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBValue } from '@duckdb/node-api';
-import { resolveFromProjectRoot } from '@mastra/core/utils';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -37,16 +36,11 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
 
   constructor(config: DuckDBVectorConfig) {
     super({ id: config.id });
-
-    // Resolve relative file paths from project root (skip :memory:)
-    const resolvedPath =
-      config.path && config.path !== ':memory:' ? resolveFromProjectRoot(config.path) : (config.path ?? ':memory:');
-
     this.config = {
+      path: ':memory:',
       dimensions: 1536,
       metric: 'cosine',
       ...config,
-      path: resolvedPath,
     };
   }
 

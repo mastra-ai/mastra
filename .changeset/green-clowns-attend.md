@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/duckdb': patch
 '@mastra/libsql': patch
 ---
 
@@ -20,4 +19,4 @@ resolveFromProjectRoot('./data/db.sqlite'); // → /project/data/db.sqlite
 resolveFromProjectRoot('/var/data/db.sqlite'); // → /var/data/db.sqlite
 ```
 
-LibSQLStore and DuckDBVector now automatically resolve relative paths from project root.
+LibSQLStore now automatically resolves relative `file:` URLs from project root.
