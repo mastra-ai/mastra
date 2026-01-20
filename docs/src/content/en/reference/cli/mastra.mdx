@@ -228,29 +228,45 @@ Do not include example code. Useful when using the `--default` flag.
 
 Configure your code editor with Mastra's MCP server. Choose from: `"cursor" | "cursor-global" | "windsurf" | "vscode"`.
 
+## `mastra migrate`
+
+Runs database migrations to update your storage schema. This command is useful when upgrading Mastra versions that include storage schema changes.
+
+The command bundles your project, connects to your configured storage backend, and executes any pending migrations. Currently supports:
+
+- **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
+
+```bash
+mastra migrate
+```
+
+See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
+
+It accepts [common flags][common-flags].
+
 ## Common flags
 
 ### `--dir`
 
-**Available in:** `dev`, `build`, `lint`
+**Available in:** `dev`, `build`, `lint`, `migrate`
 
 The path to your Mastra folder. Defaults to `src/mastra`.
 
 ### `--debug`
 
-**Available in:** `dev`, `build`
+**Available in:** `dev`, `build`, `migrate`
 
 Enable verbose logging for Mastra's internals. Defaults to `false`.
 
 ### `--env`
 
-**Available in:** `dev`, `start`, `studio`
+**Available in:** `dev`, `start`, `studio`, `migrate`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 
 ### `--root`
 
-**Available in:** `dev`, `build`, `lint`
+**Available in:** `dev`, `build`, `lint`, `migrate`
 
 Path to your root folder. Defaults to `process.cwd()`.
 
