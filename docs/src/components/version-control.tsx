@@ -53,7 +53,7 @@ const getVersionFromPath = (pathname: string): Version => {
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
 
-  if (pathChunks.length < 3) {
+  if (pathChunks.length < 2) {
     return pathname;
   }
 
@@ -87,6 +87,7 @@ export default function VersionControl({
   const location = useLocation();
   const pathname = location.pathname;
   const currentVersion = getVersionFromPath(pathname);
+  console.log({ currentVersion });
   const [open, setOpen] = useState(false);
 
   return (
@@ -120,6 +121,7 @@ export default function VersionControl({
         {versions.map((version) => {
           const isActive = version.value === currentVersion;
           const href = getPathForVersion(pathname, version.value as Version);
+          console.log({ href, version, pathname });
           // Get the base path without version prefix for checking FeatureVersioning
           const basePath = pathname.replace(/^(\/docs)\/v0/, "$1");
           // Check if page is exclusive to a specific version
