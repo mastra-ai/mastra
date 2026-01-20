@@ -559,6 +559,9 @@ export class LibSQLDB extends MastraBase {
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         tableConstraints.push('UNIQUE (workflow_name, run_id)');
       }
+      if (tableName === TABLE_SPANS) {
+        tableConstraints.push('UNIQUE (spanId, traceId)');
+      }
 
       const allDefinitions = [...columnDefinitions, ...tableConstraints].join(',\n  ');
 
@@ -586,7 +589,7 @@ export class LibSQLDB extends MastraBase {
 
   /**
    * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
-   * This adds new columns that don't exist in old schema.
+   * This adds new columns that don't exist in old schema and ensures required indexes exist.
    */
   private async migrateSpansTable(): Promise<void> {
     const schema = TABLE_SCHEMAS[TABLE_SPANS];
@@ -604,10 +607,86 @@ export class LibSQLDB extends MastraBase {
         }
       }
 
+      // Deduplicate existing spans before creating unique index
+      await this.deduplicateSpans();
+
+      // Ensure unique index on (spanId, traceId) exists for data integrity
+      // This is required for observability to enforce uniqueness at the span level
+      await this.client.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "mastra_ai_spans_spanid_traceid_idx" ON "${TABLE_SPANS}" ("spanId", "traceId")`,
+      );
+      this.logger.debug(`LibSQLDB: Ensured unique index on (spanId, traceId) for ${TABLE_SPANS}`);
+
       this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {
       // Log warning but don't fail - migrations should be best-effort
       this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
+    }
+  }
+
+  /**
+   * Deduplicates spans table by removing duplicate (spanId, traceId) combinations.
+   * Keeps the "best" record for each duplicate group based on:
+   * 1. Completed spans (endedAt IS NOT NULL) over incomplete ones
+   * 2. Most recently updated (updatedAt DESC)
+   * 3. Most recently created (createdAt DESC) as tiebreaker
+   */
+  private async deduplicateSpans(): Promise<void> {
+    try {
+      // Check if there are any duplicates first
+      const duplicateCheck = await this.client.execute(`
+        SELECT COUNT(*) as duplicate_count FROM (
+          SELECT "spanId", "traceId"
+          FROM "${TABLE_SPANS}"
+          GROUP BY "spanId", "traceId"
+          HAVING COUNT(*) > 1
+        )
+      `);
+
+      const duplicateCount = Number(duplicateCheck.rows?.[0]?.duplicate_count ?? 0);
+      if (duplicateCount === 0) {
+        this.logger.debug(`LibSQLDB: No duplicate spans found, skipping deduplication`);
+        return;
+      }
+
+      this.logger.warn(`LibSQLDB: Found ${duplicateCount} duplicate (spanId, traceId) combinations, deduplicating...`);
+
+      // Delete duplicate spans, keeping the "best" record for each (spanId, traceId) pair.
+      // Priority: completed spans > most recently updated > most recently created
+      // Uses rowid for SQLite's internal row identifier to delete specific rows
+      const deleteResult = await this.client.execute(`
+        DELETE FROM "${TABLE_SPANS}"
+        WHERE rowid NOT IN (
+          SELECT MIN(best_rowid) FROM (
+            SELECT
+              rowid as best_rowid,
+              "spanId",
+              "traceId",
+              ROW_NUMBER() OVER (
+                PARTITION BY "spanId", "traceId"
+                ORDER BY
+                  CASE WHEN "endedAt" IS NOT NULL THEN 0 ELSE 1 END,
+                  "updatedAt" DESC,
+                  "createdAt" DESC
+              ) as rn
+            FROM "${TABLE_SPANS}"
+          ) ranked
+          WHERE rn = 1
+          GROUP BY "spanId", "traceId"
+        )
+        AND ("spanId", "traceId") IN (
+          SELECT "spanId", "traceId"
+          FROM "${TABLE_SPANS}"
+          GROUP BY "spanId", "traceId"
+          HAVING COUNT(*) > 1
+        )
+      `);
+
+      const deletedCount = deleteResult.rowsAffected ?? 0;
+      this.logger.warn(`LibSQLDB: Deleted ${deletedCount} duplicate span records`);
+    } catch (error) {
+      // Log but continue - deduplication should be best-effort
+      this.logger.warn(`LibSQLDB: Failed to deduplicate spans:`, error);
     }
   }
 
