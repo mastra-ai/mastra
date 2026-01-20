@@ -28,16 +28,20 @@ AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_AUDIENCE=your-api-identifier
 ```
 
-> **Note:** You can find your domain in the Auth0 Dashboard under Applications > Settings. The audience is the identifier of your API configured in Auth0 Dashboard > APIs.
+:::note
 
-> For detailed setup instructions, refer to the [Auth0 quickstarts](https://auth0.com/docs/quickstarts) for your specific platform.
+You can find your domain in the Auth0 Dashboard under Applications > Settings. The audience is the identifier of your API configured in Auth0 Dashboard > APIs.
+
+For detailed setup instructions, refer to the [Auth0 quickstarts](https://auth0.com/docs/quickstarts) for your specific platform.
+
+:::
 
 ## Installation
 
 Before you can use the `MastraAuthAuth0` class you have to install the `@mastra/auth-auth0` package.
 
 ```bash
-npm install @mastra/auth-auth0@beta
+npm install @mastra/auth-auth0@latest
 ```
 
 ## Usage examples
@@ -97,7 +101,7 @@ const auth0Provider = new MastraAuthAuth0({
 
 :::info
 
-Visit [MastraAuthAuth0](/reference/v1/auth/auth0) for all available configuration options.
+Visit [MastraAuthAuth0](/reference/auth/auth0) for all available configuration options.
 
 :::
 
@@ -155,7 +159,11 @@ export const useAuth0Token = () => {
 };
 ```
 
-> Refer to the [Auth0 React SDK documentation](https://auth0.com/docs/libraries/auth0-react) for more authentication methods and configuration options.
+:::note
+
+Refer to the [Auth0 React SDK documentation](https://auth0.com/docs/libraries/auth0-react) for more authentication methods and configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -174,11 +182,11 @@ export const createMastraClient = (accessToken: string) => {
 };
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
 
-Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+The access token must be prefixed with `Bearer` in the Authorization header.
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
 :::
 
@@ -188,6 +196,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/mastra-api-test.tsx" copy
     import React, { useState } from 'react';
     import { useAuth0 } from '@auth0/auth0-react';
@@ -208,9 +217,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         });
 
         const weatherAgent = mastra.getAgent("weatherAgent");
-        const response = await weatherAgent.generate({
-          messages: "What's the weather like in New York"
-        });
+        const response = await weatherAgent.generate("What's the weather like in New York");
 
         setResult(response.text);
       };
@@ -234,6 +241,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -242,5 +250,6 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>

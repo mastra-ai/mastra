@@ -56,9 +56,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
       // This will create observability data we can query
       try {
         const agent = client.getAgent(agentName);
-        await agent.generate({
-          messages: [{ role: 'user', content: 'Hello, just testing!' }],
-        });
+        await agent.generate([{ role: 'user', content: 'Hello, just testing!' }]);
 
         // Wait a bit for the trace to be persisted
         await new Promise(resolve => setTimeout(resolve, 1000));

@@ -1,0 +1,187 @@
+---
+title: "Reference: Memory.listThreads() | Memory"
+description: "Documentation for the `Memory.listThreads()` method in Mastra, which retrieves threads with optional filtering by resourceId and/or metadata."
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.listThreads()
+
+The `listThreads()` method retrieves threads with pagination support and optional filtering by `resourceId`, `metadata`, or both.
+
+## Usage Examples
+
+### List all threads with pagination
+
+```typescript
+const result = await memory.listThreads({
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Fetch all threads without pagination
+
+Use `perPage: false` to retrieve all matching threads at once.
+
+:::warning
+
+Generally speaking it's recommended to use pagination, especially for large datasets. Use this option cautiously.
+
+:::
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+### Filter by resourceId
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Filter by metadata
+
+```typescript
+const result = await memory.listThreads({
+  filter: { metadata: { category: "support", priority: "high" } },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Combined filter (resourceId & metadata)
+
+```typescript
+const result = await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { status: "active" },
+  },
+  page: 0,
+  perPage: 10,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "filter",
+      type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
+      description:
+        "Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Page number (0-indexed) to retrieve",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Maximum number of threads to return per page, or false to fetch all",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      description:
+        "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<StorageListThreadsOutput>",
+      description: "A promise that resolves to paginated thread results with metadata",
+    },
+  ]}
+/>
+
+The return object contains:
+
+- `threads`: Array of thread objects
+- `total`: Total number of threads matching the filter
+- `page`: Current page number (same as the input `page` parameter)
+- `perPage`: Items per page (same as the input `perPage` parameter)
+- `hasMore`: Boolean indicating if more results are available
+
+## Extended usage example
+
+```typescript title="src/test-memory.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+let currentPage = 0;
+const perPage = 25;
+let hasMorePages = true;
+
+// Fetch all active threads for a user, sorted by creation date
+while (hasMorePages) {
+  const result = await memory?.listThreads({
+    filter: {
+      resourceId: "user-123",
+      metadata: { status: "active" },
+    },
+    page: currentPage,
+    perPage: perPage,
+    orderBy: { field: "createdAt", direction: "ASC" },
+  });
+
+  if (!result) {
+    console.log("No threads");
+    break;
+  }
+
+  result.threads.forEach((thread) => {
+    console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
+  });
+
+  hasMorePages = result.hasMore;
+  currentPage++; // Move to next page
+}
+```
+
+## Metadata Filtering
+
+The metadata filter uses AND logic - all specified key-value pairs must match for a thread to be included in the results:
+
+```typescript
+// This will only return threads where BOTH conditions are true:
+// - category === 'support'
+// - priority === 'high'
+await memory.listThreads({
+  filter: {
+    metadata: {
+      category: "support",
+      priority: "high",
+    },
+  },
+});
+```
+
+## Related
+
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Getting Started with Memory](/docs/memory/overview)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)

@@ -36,6 +36,16 @@ To migrate, move `messages` to the first argument of the method call:
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-msg-function-args .
+```
+
+:::
+
 ### `threadId` and `resourceId` to `memory` option
 
 The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
@@ -120,7 +130,7 @@ To migrate, update type imports to use the new naming pattern.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-sdk-types .
+npx @mastra/codemod@latest v1/client-sdk-types .
 ```
 
 :::
@@ -146,7 +156,7 @@ To migrate, update pagination parameters in all client SDK method calls. Example
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-offset-limit .
+npx @mastra/codemod@latest v1/client-offset-limit .
 ```
 
 :::
@@ -167,7 +177,7 @@ To migrate, update the method call with the new parameter structure. Check the u
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-get-memory-thread .
+npx @mastra/codemod@latest v1/client-get-memory-thread .
 ```
 
 :::
@@ -236,7 +246,7 @@ To migrate, use `toAISdkStream()` instead.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-to-ai-sdk-format .
+npx @mastra/codemod@latest v1/client-to-ai-sdk-format .
 ```
 
 :::

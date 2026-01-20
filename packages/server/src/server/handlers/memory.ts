@@ -202,17 +202,27 @@ export const LIST_THREADS_ROUTE = createRoute({
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
   summary: 'List memory threads',
-  description: 'Returns a paginated list of conversation threads filtered by resource ID',
+  description:
+    'Returns a paginated list of conversation threads with optional filtering by resource ID and/or metadata',
   tags: ['Memory'],
-  handler: async ({ mastra, agentId, resourceId, requestContext, page, perPage, orderBy }) => {
+  handler: async ({ mastra, agentId, resourceId, metadata, requestContext, page, perPage, orderBy }) => {
     try {
-      validateBody({ resourceId });
+      // Build filter object dynamically based on provided parameters
+      const filter: { resourceId?: string; metadata?: Record<string, unknown> } | undefined =
+        resourceId || metadata ? {} : undefined;
+
+      if (resourceId) {
+        filter!.resourceId = resourceId;
+      }
+      if (metadata) {
+        filter!.metadata = metadata;
+      }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (memory) {
-        const result = await memory.listThreadsByResourceId({
-          resourceId: resourceId!,
+        const result = await memory.listThreads({
+          filter,
           page,
           perPage,
           orderBy,
@@ -226,8 +236,8 @@ export const LIST_THREADS_ROUTE = createRoute({
         if (storage) {
           const memoryStore = await storage.getStore('memory');
           if (memoryStore) {
-            const result = await memoryStore.listThreadsByResourceId({
-              resourceId: resourceId!,
+            const result = await memoryStore.listThreads({
+              filter,
               page,
               perPage,
               orderBy,
@@ -744,8 +754,8 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       // If no threadId provided, get one from the resource
       if (!threadId) {
-        const { threads } = await memory.listThreadsByResourceId({
-          resourceId,
+        const { threads } = await memory.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 1,
           orderBy: { field: 'updatedAt', direction: 'DESC' },

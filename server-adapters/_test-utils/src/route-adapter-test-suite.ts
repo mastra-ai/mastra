@@ -196,6 +196,26 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           });
         }
 
+        // Processor 404 tests
+        if (route.path.includes(':processorId')) {
+          it('should return 404 when processor not found', async () => {
+            const request = buildRouteRequest(route, {
+              pathParams: { processorId: 'non-existent-processor' },
+            });
+
+            const httpRequest: HttpRequest = {
+              method: request.method,
+              path: request.path,
+              query: request.query,
+              body: request.body,
+            };
+
+            const response = await executeHttpRequest(app, httpRequest);
+
+            expect(response.status).toBe(404);
+          });
+        }
+
         // Stream consumption test
         if (route.responseType === 'stream') {
           it('should be consumable via stream reader', async () => {

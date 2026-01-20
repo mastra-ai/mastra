@@ -1,6 +1,10 @@
-import { it, describe, expect } from 'vitest';
+import { it, describe, expect, vi } from 'vitest';
+import { z } from 'zod';
 import type { MessageListInput } from '../../agent/message-list';
-import { getLastMessage } from './index';
+import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
+import { createWorkflow } from '../../workflows';
+import { getLastMessage, getRoutingAgent } from './index';
 
 describe('getLastMessage', () => {
   it('returns string directly', () => {
@@ -75,5 +79,200 @@ describe('getLastMessage', () => {
       { role: 'user', parts: [{ type: 'image', url: 'http://example.com' }] },
     ] as unknown as MessageListInput;
     expect(getLastMessage(messages)).toBe('');
+  });
+});
+
+describe('getRoutingAgent', () => {
+  // Helper to create a mock agent with specific workflows and tools
+  function createMockAgent({
+    workflows = {},
+    tools = {},
+    agents = {},
+  }: {
+    workflows?: Record<string, any>;
+    tools?: Record<string, any>;
+    agents?: Record<string, any>;
+  }) {
+    return {
+      id: 'test-agent',
+      getInstructions: vi.fn().mockResolvedValue('Test instructions'),
+      listAgents: vi.fn().mockResolvedValue(agents),
+      listWorkflows: vi.fn().mockResolvedValue(workflows),
+      listTools: vi.fn().mockResolvedValue(tools),
+      getModel: vi.fn().mockResolvedValue('openai/gpt-4o-mini'),
+      getMemory: vi.fn().mockResolvedValue({
+        listTools: vi.fn().mockResolvedValue({}),
+      }),
+    } as any;
+  }
+
+  it('should handle workflow with undefined inputSchema without throwing', async () => {
+    // Create a workflow without inputSchema (simulating the bug scenario)
+    const workflowWithoutInputSchema = createWorkflow({
+      id: 'test-workflow-no-schema',
+      // Intentionally NOT providing inputSchema
+      outputSchema: z.object({ result: z.string() }),
+    })
+      .then({
+        id: 'step1',
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'done' }),
+      })
+      .commit();
+
+    const mockAgent = createMockAgent({
+      workflows: {
+        'test-workflow': workflowWithoutInputSchema,
+      },
+    });
+
+    const requestContext = new RequestContext();
+
+    // This should NOT throw - currently it throws:
+    // TypeError: Cannot read properties of undefined (reading '_def')
+    await expect(
+      getRoutingAgent({
+        agent: mockAgent,
+        requestContext,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('should handle workflow with explicit inputSchema correctly', async () => {
+    const workflowWithInputSchema = createWorkflow({
+      id: 'test-workflow-with-schema',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+    })
+      .then({
+        id: 'step1',
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'done' }),
+      })
+      .commit();
+
+    const mockAgent = createMockAgent({
+      workflows: {
+        'test-workflow': workflowWithInputSchema,
+      },
+    });
+
+    const requestContext = new RequestContext();
+
+    // This should work fine
+    await expect(
+      getRoutingAgent({
+        agent: mockAgent,
+        requestContext,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('should handle tool with undefined inputSchema without throwing', async () => {
+    // Create a tool without inputSchema (like numberTool in the user's example)
+    const toolWithoutInputSchema = createTool({
+      id: 'number-tool',
+      description: 'Generates a random number',
+      // Intentionally NOT providing inputSchema
+      outputSchema: z.number(),
+      execute: async () => Math.floor(Math.random() * 10),
+    });
+
+    const mockAgent = createMockAgent({
+      tools: {
+        'number-tool': toolWithoutInputSchema,
+      },
+    });
+
+    const requestContext = new RequestContext();
+
+    // This should NOT throw - currently it throws because:
+    // 'inputSchema' in tool returns true (property exists on Tool class)
+    // but tool.inputSchema is undefined
+    await expect(
+      getRoutingAgent({
+        agent: mockAgent,
+        requestContext,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('should handle tool with explicit inputSchema correctly', async () => {
+    const toolWithInputSchema = createTool({
+      id: 'setting-tool',
+      description: 'Generates settings',
+      inputSchema: z.object({
+        theme: z.string(),
+      }),
+      outputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async () => ({ location: 'space' }),
+    });
+
+    const mockAgent = createMockAgent({
+      tools: {
+        'setting-tool': toolWithInputSchema,
+      },
+    });
+
+    const requestContext = new RequestContext();
+
+    // This should work fine
+    await expect(
+      getRoutingAgent({
+        agent: mockAgent,
+        requestContext,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('should handle a mix of tools and workflows with and without inputSchema', async () => {
+    // This simulates the user's actual scenario with astroForge agent
+    const toolWithoutInputSchema = createTool({
+      id: 'number-tool',
+      description: 'Generates a random number',
+      outputSchema: z.number(),
+      execute: async () => 2,
+    });
+
+    const toolWithInputSchema = createTool({
+      id: 'setting-tool',
+      description: 'Generates settings',
+      inputSchema: z.object({ theme: z.string() }),
+      outputSchema: z.object({ location: z.string() }),
+      execute: async () => ({ location: 'space' }),
+    });
+
+    const workflowWithoutInputSchema = createWorkflow({
+      id: 'workflow-no-schema',
+      outputSchema: z.object({ result: z.string() }),
+    })
+      .then({
+        id: 'step1',
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'done' }),
+      })
+      .commit();
+
+    const mockAgent = createMockAgent({
+      tools: {
+        'number-tool': toolWithoutInputSchema,
+        'setting-tool': toolWithInputSchema,
+      },
+      workflows: {
+        'workflow-no-schema': workflowWithoutInputSchema,
+      },
+    });
+
+    const requestContext = new RequestContext();
+
+    // This should NOT throw
+    await expect(
+      getRoutingAgent({
+        agent: mockAgent,
+        requestContext,
+      }),
+    ).resolves.toBeDefined();
   });
 });
