@@ -434,10 +434,14 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
               conditions.push(`(error IS NOT NULL AND error != '')`);
               break;
             case TraceStatus.RUNNING:
-              conditions.push(`(endedAt IS NULL OR endedAt = '') AND (error IS NULL OR error = '')`);
+              // endedAt is DateTime64 - only check for NULL (not empty string)
+              // error is String - check for both NULL and empty string
+              conditions.push(`endedAt IS NULL AND (error IS NULL OR error = '')`);
               break;
             case TraceStatus.SUCCESS:
-              conditions.push(`(endedAt IS NOT NULL AND endedAt != '') AND (error IS NULL OR error = '')`);
+              // endedAt is DateTime64 - only check for NULL (not empty string)
+              // error is String - check for both NULL and empty string
+              conditions.push(`endedAt IS NOT NULL AND (error IS NULL OR error = '')`);
               break;
           }
         }
@@ -468,17 +472,17 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       // For endedAt DESC: NULLs FIRST (running spans on top when viewing newest)
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
-      // Note: ClickHouse stores null endedAt as empty strings, so we check for both
+      // Note: endedAt is DateTime64 - only check for NULL (not empty string like String columns)
       const sortField = orderBy.field;
       const sortDirection = orderBy.direction;
       let orderClause: string;
       if (sortField === 'endedAt') {
-        // Use CASE WHEN to handle NULLs and empty strings for endedAt
+        // Use CASE WHEN to handle NULLs for endedAt (DateTime64 column)
         // DESC: NULLs first (0 sorts before 1)
         // ASC: NULLs last (1 sorts after 0)
         const nullSortValue = sortDirection === 'DESC' ? 0 : 1;
         const nonNullSortValue = sortDirection === 'DESC' ? 1 : 0;
-        orderClause = `ORDER BY CASE WHEN ${sortField} IS NULL OR ${sortField} = '' THEN ${nullSortValue} ELSE ${nonNullSortValue} END, ${sortField} ${sortDirection}`;
+        orderClause = `ORDER BY CASE WHEN ${sortField} IS NULL THEN ${nullSortValue} ELSE ${nonNullSortValue} END, ${sortField} ${sortDirection}`;
       } else {
         orderClause = `ORDER BY ${sortField} ${sortDirection}`;
       }
