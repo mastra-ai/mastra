@@ -21,6 +21,9 @@ import type { OutputWriter } from './workflows/types';
 // Re-export Zod utilities for external use (isZodType is defined locally below)
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
 
+// Re-export project root utilities
+export { getProjectRoot, resolveFromProjectRoot, type ProjectRootOptions } from './utils/project-root';
+
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
