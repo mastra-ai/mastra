@@ -117,6 +117,7 @@ describe('Agent Handlers', () => {
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
           modelList: undefined,
+          source: 'code',
         },
         'test-multi-model-agent': {
           id: 'test-multi-model-agent',
@@ -139,21 +140,25 @@ describe('Agent Handlers', () => {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
             },
           ],
+          source: 'code',
         },
       });
     });
@@ -398,6 +403,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        source: 'code',
       });
     });
 
