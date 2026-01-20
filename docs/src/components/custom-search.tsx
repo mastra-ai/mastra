@@ -249,7 +249,7 @@ export const CustomSearch: FC<SearchProps> = ({
       "/docs/streaming/overview",
       "/docs/tools-mcp/mcp-overview",
       "/docs/memory/overview",
-      "/docs/scorers/overview",
+      "/docs/evals/overview",
       "/docs/rag/overview",
       "/docs/observability/overview",
       "/docs/deployment/overview",
