@@ -28,26 +28,22 @@ export type MigrationInput = z.infer<typeof migrationInputSchema>;
 
 const UPGRADE_MESSAGE = `# Migration Guide Upgrade Required
 
-To access migration guides for upgrading to Mastra v1.0-beta, you need to upgrade your mcp-docs-server to the beta version.
+To access migration guides for upgrading to Mastra v1, you need to upgrade your mcp-docs-server to the latest version.
 
 ## How to Upgrade
 
-The migration tool is only available in the beta version of the mcp-docs-server.
+The migration tool is only available in the latest version of the mcp-docs-server.
 
-1. **Update your MCP server configuration** to use the beta version. Visit the installation guide for detailed instructions:
+1. **Update your MCP server configuration** to use the latest version. Visit the installation guide for detailed instructions:
 
-   https://mastra.ai/docs/v1/getting-started/mcp-docs-server#installation
+   https://mastra.ai/docs/getting-started/mcp-docs-server#installation
 
-2. **Restart your MCP server** after updating to pick up the beta version
+2. **Restart your MCP server** after updating to pick up the latest version
 
 3. **Access migration guides** - Once upgraded, you'll be able to:
    - Browse migration guides with the \`mastraMigration\` tool
    - Get step-by-step migration instructions for each breaking change
    - Use automated codemods to handle many migrations automatically
-
-## Why Beta?
-
-The migration guides are specific to the v1.0-beta release and are actively being updated as the beta evolves. The stable (0.x) documentation server doesn't include these guides as they're not relevant to users on the stable version.
 
 ## Need Help?
 
@@ -58,7 +54,7 @@ If you have questions about upgrading:
 
 ---
 
-**Note:** This message is shown because you're currently using the stable (@latest) version of @mastra/mcp-docs-server. Upgrade to @beta to access migration guides.`;
+**Note:** This message is shown because you're currently using the 0.x version of @mastra/mcp-docs-server. Upgrade to @latest to access migration guides.`;
 
 export const migrationTool = {
   name: 'mastraMigration',
