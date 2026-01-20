@@ -30,6 +30,60 @@ UPDATE mastra_scorers SET "requestContext" = "runtimeContext" WHERE "runtimeCont
 ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
 ```
 
+### Duplicate spans migration
+
+If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint cannot be added if duplicates exist.
+
+:::note[Who needs this migration]
+Only if you have existing spans data from Mastra versions prior to v1 and encounter errors about duplicate key violations or constraint creation failures.
+:::
+
+:::important[What breaks without it]
+The storage initialization may fail when trying to add the unique constraint, or you may see errors like "duplicate key value violates unique constraint".
+:::
+
+**Option 1: Use the CLI (Recommended)**
+
+Run the migration command which automatically deduplicates spans and adds the constraint:
+
+```bash
+npx mastra migrate
+```
+
+The CLI bundles your project, connects to your configured storage, and runs the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
+
+**Option 2: Manual SQL (PostgreSQL)**
+
+If you prefer to run the migration manually:
+
+```sql
+-- Remove duplicates, keeping the most complete record
+DELETE FROM mastra_spans a USING mastra_spans b
+WHERE a.ctid < b.ctid
+  AND a."traceId" = b."traceId"
+  AND a."spanId" = b."spanId";
+
+-- Add the unique constraint
+ALTER TABLE mastra_spans ADD CONSTRAINT mastra_spans_trace_span_unique UNIQUE ("traceId", "spanId");
+```
+
+**Option 3: Manual migration (Other databases)**
+
+For ClickHouse, LibSQL, MongoDB, or MSSQL, use the programmatic API:
+
+```typescript
+const storage = mastra.getStorage();
+const observabilityStore = await storage.getStore('observability');
+
+// Check if migration is needed
+const status = await observabilityStore?.checkSpansMigrationStatus();
+console.log(status);
+
+// Run the migration
+const result = await observabilityStore?.migrateSpans();
+console.log(result);
+```
+
 ### JSON columns (TEXT → JSONB)
 
 **PostgreSQL only.** The `metadata` column in `mastra_threads` and `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB.

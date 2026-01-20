@@ -450,9 +450,13 @@ describe('MongoDB Duplicate Spans Handling', () => {
         dbName: testDbName,
       });
 
-      await store.init();
+      // Don't call init() - it would throw due to duplicates
+      // Run migration directly via stores.observability.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
-      // After init, duplicates should be removed (only 1 record remains)
+      // After migration, duplicates should be removed (only 1 record remains)
       const countAfter = await collection.countDocuments({});
       expect(countAfter).toBe(1);
 
@@ -507,7 +511,11 @@ describe('MongoDB Duplicate Spans Handling', () => {
         dbName: testDbName,
       });
 
-      await store.init();
+      // Don't call init() - it would throw due to duplicates
+      // Run migration directly via stores.observability.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Should keep the one with most recent updatedAt
       const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });
@@ -553,7 +561,11 @@ describe('MongoDB Duplicate Spans Handling', () => {
         dbName: testDbName,
       });
 
-      await store.init();
+      // Don't call init() - it would throw due to duplicates
+      // Run migration directly via stores.observability.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Should keep the one with most recent createdAt
       const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });

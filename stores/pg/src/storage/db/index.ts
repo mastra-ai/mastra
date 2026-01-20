@@ -595,6 +595,10 @@ export class PgDB extends MastraBase {
         }
       }
     } catch (error) {
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_TABLE', 'FAILED'),

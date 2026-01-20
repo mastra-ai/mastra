@@ -5,7 +5,21 @@ description: "Learn how to migrate CLI changes when upgrading to v1."
 
 # CLI
 
-The CLI has been simplified by removing deployment commands, configuration flags, and starter files.
+The CLI has been simplified by removing deployment commands, configuration flags, and starter files. A new migration command has been added to help with database schema upgrades.
+
+## Added
+
+### `mastra migrate` command
+
+A new `mastra migrate` command helps run database migrations when upgrading Mastra versions. This is particularly useful when upgrading from older versions that may have data incompatibilities.
+
+```bash
+npx mastra migrate
+```
+
+The command bundles your project, connects to your configured storage, and runs any necessary migrations. Currently supports migrating duplicate spans entries that may prevent unique constraint creation.
+
+See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when this migration is needed.
 
 ## Removed
 

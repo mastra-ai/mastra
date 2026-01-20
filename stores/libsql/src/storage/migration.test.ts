@@ -412,8 +412,11 @@ describe('LibSQL Spans Table Migration', () => {
     `);
     expect(duplicatesBefore.rows.length).toBe(1); // One duplicate group
 
-    // Step 3: Run migration via createTable
-    await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    // Step 3: Run migration via migrateSpans() - this is what `npx mastra migrate` does
+    // Note: createTable would throw MIGRATION_REQUIRED error when duplicates exist
+    const result = await dbOps.migrateSpans();
+    expect(result.success).toBe(true);
+    expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
     // Step 4: Verify duplicates were removed
     const countAfter = await client.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);

@@ -252,7 +252,14 @@ export class ClickhouseDB extends MastraBase {
       const columns = Object.entries(schema)
         .map(([name, def]) => {
           let sqlType = this.getSqlType(def.type);
-          const isNullable = def.nullable === true;
+          let isNullable = def.nullable === true;
+
+          // Special case: updatedAt must be non-nullable for TABLE_SPANS because
+          // ReplacingMergeTree(updatedAt) requires a non-nullable version column.
+          if (tableName === TABLE_SPANS && name === 'updatedAt') {
+            isNullable = false;
+          }
+
           if (isNullable) {
             sqlType = `Nullable(${sqlType})`;
           }
@@ -293,6 +300,12 @@ export class ClickhouseDB extends MastraBase {
       const columnsToInsert = Object.keys(schema).filter(col => backupColumnNames.has(col));
       const columnList = columnsToInsert.map(c => `"${c}"`).join(', ');
 
+      // Build SELECT expressions, using COALESCE for updatedAt to handle NULL values
+      // (updatedAt must be non-nullable for ReplacingMergeTree version column)
+      const selectExpressions = columnsToInsert
+        .map(c => (c === 'updatedAt' ? `COALESCE("updatedAt", "createdAt") as "updatedAt"` : `"${c}"`))
+        .join(', ');
+
       // Use LIMIT BY for deduplication with priority-based selection:
       // 1. Prefer completed spans (those with endedAt not null/empty)
       // 2. Then prefer the most recently updated (highest updatedAt)
@@ -300,11 +313,11 @@ export class ClickhouseDB extends MastraBase {
       // This matches the PostgreSQL migration behavior from PR #12073
       await this.client.command({
         query: `INSERT INTO ${tableName} (${columnList})
-                SELECT ${columnList}
+                SELECT ${selectExpressions}
                 FROM ${backupTableName}
                 ORDER BY traceId, spanId,
                          (endedAt IS NOT NULL AND endedAt != '') DESC,
-                         updatedAt DESC,
+                         COALESCE(updatedAt, createdAt) DESC,
                          createdAt DESC
                 LIMIT 1 BY traceId, spanId`,
       });
@@ -385,7 +398,15 @@ export class ClickhouseDB extends MastraBase {
         .map(([name, def]) => {
           let sqlType = this.getSqlType(def.type);
           // Only treat as nullable if explicitly set to true (default is NOT nullable)
-          const isNullable = def.nullable === true;
+          let isNullable = def.nullable === true;
+
+          // Special case: updatedAt must be non-nullable for TABLE_SPANS because
+          // ReplacingMergeTree(updatedAt) requires a non-nullable version column.
+          // Application code already sets updatedAt = createdAt on insert.
+          if (tableName === TABLE_SPANS && name === 'updatedAt') {
+            isNullable = false;
+          }
+
           // Wrap nullable columns in Nullable() to properly support NULL values
           if (isNullable) {
             sqlType = `Nullable(${sqlType})`;

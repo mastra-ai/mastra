@@ -584,13 +584,17 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
         updatedAt: new Date('2024-01-01T00:00:01Z'),
       });
 
-      // Run migration with deduplication
+      // Create store (don't call init yet - it would throw due to duplicates)
       const store = new PostgresStore({
         ...TEST_CONFIG,
         id: 'dedup-completed-test',
         schemaName: subSchema,
       });
-      await store.init();
+
+      // Run migration directly via db.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Verify only one span remains
       const countResult = await client.query(
@@ -641,13 +645,17 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
         updatedAt: new Date('2024-01-01T00:00:05Z'), // newer
       });
 
-      // Run migration with deduplication
+      // Create store (don't call init yet - it would throw due to duplicates)
       const store = new PostgresStore({
         ...TEST_CONFIG,
         id: 'dedup-updated-test',
         schemaName: subSchema,
       });
-      await store.init();
+
+      // Run migration directly via db.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Verify only one span remains
       const countResult = await client.query(
@@ -699,13 +707,17 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
         updatedAt: sameUpdatedAt,
       });
 
-      // Run migration with deduplication
+      // Create store (don't call init yet - it would throw due to duplicates)
       const store = new PostgresStore({
         ...TEST_CONFIG,
         id: 'dedup-created-test',
         schemaName: subSchema,
       });
-      await store.init();
+
+      // Run migration directly via db.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Verify only one span remains
       const countResult = await client.query(
@@ -756,6 +768,7 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
       });
 
       // Create store with custom logger to capture log messages
+      // (don't call init yet - it would throw due to duplicates)
       const store = new PostgresStore({
         ...TEST_CONFIG,
         id: 'dedup-logging-test',
@@ -767,7 +780,11 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
           error: (message: string, data?: any) => loggedMessages.push({ level: 'error', message, data }),
         } as any,
       });
-      await store.init();
+
+      // Run migration directly via db.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBeGreaterThan(0);
 
       // Verify deduplication occurred by checking the database
       // (The logger infrastructure doesn't propagate to PgDB in tests, so we verify the outcome instead)
@@ -824,13 +841,17 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
       const beforeCount = await client.query(`SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS}`);
       expect(Number(beforeCount.rows[0].count)).toBe(6);
 
-      // Run migration - should deduplicate and add PK successfully
+      // Create store (don't call init yet - it would throw due to duplicates)
       const store = new PostgresStore({
         ...TEST_CONFIG,
         id: 'pk-after-dedup-test',
         schemaName: subSchema,
       });
-      await store.init();
+
+      // Run migration directly via db.migrateSpans() - this is what `npx mastra migrate` does
+      const result = await (store.stores.observability as any).migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBe(3); // 3 duplicates removed (one per trace)
 
       // Verify we now have 3 rows (one per trace)
       const afterCount = await client.query(`SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS}`);

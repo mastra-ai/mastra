@@ -39,6 +39,11 @@ describe('ClickHouse Spans Table Migration', () => {
   });
 
   afterAll(async () => {
+    // Clean up spans table to ensure other test suites start fresh
+    // (they will create the table with the correct sorting key via init())
+    await client.command({
+      query: `DROP TABLE IF EXISTS ${TABLE_SPANS}`,
+    });
     await client?.close();
   });
 
@@ -622,9 +627,12 @@ describe('ClickHouse Spans Table Migration', () => {
 
       expect(await countSpans()).toBe(2);
 
-      // Create observability storage and call init
+      // Create observability storage and call migrateSpans directly
+      // (init() would throw MIGRATION_REQUIRED error, requiring user to run `npx mastra migrate`)
       const observability = new ObservabilityStorageClickhouse({ client });
-      await observability.init();
+      const result = await observability.migrateSpans();
+      expect(result.success).toBe(true);
+      expect(result.duplicatesRemoved).toBe(1);
 
       // Verify migration happened
       const sortingKey = await getTableSortingKey(TABLE_SPANS);
@@ -656,16 +664,22 @@ describe('ClickHouse Spans Table Migration', () => {
 
       const observability = new ObservabilityStorageClickhouse({ client });
 
-      // First init - should migrate
-      await observability.init();
+      // First migrateSpans - should migrate
+      const result1 = await observability.migrateSpans();
+      expect(result1.success).toBe(true);
+      expect(result1.alreadyMigrated).toBe(false);
       expect(await countSpans()).toBe(1);
 
-      // Second init - should not fail, just skip migration
-      await observability.init();
+      // Second migrateSpans - should be idempotent (already migrated)
+      const result2 = await observability.migrateSpans();
+      expect(result2.success).toBe(true);
+      expect(result2.alreadyMigrated).toBe(true);
       expect(await countSpans()).toBe(1);
 
-      // Third init - still idempotent
-      await observability.init();
+      // Third migrateSpans - still idempotent
+      const result3 = await observability.migrateSpans();
+      expect(result3.success).toBe(true);
+      expect(result3.alreadyMigrated).toBe(true);
       expect(await countSpans()).toBe(1);
 
       // Data should still be intact
@@ -754,6 +768,11 @@ describe('ClickHouse Migration Required Error', () => {
   });
 
   afterAll(async () => {
+    // Clean up spans table to ensure other test suites start fresh
+    // (they will create the table with the correct sorting key via init())
+    await client.command({
+      query: `DROP TABLE IF EXISTS ${TABLE_SPANS}`,
+    });
     await client?.close();
   });
 
