@@ -671,19 +671,26 @@ describe('MSSQL Migration Required Error', () => {
   /**
    * Helper to create the spans table with OLD schema (no PK constraint)
    */
+  // Columns that participate in composite indexes need smaller sizes (MSSQL 900-byte key limit)
+  const COMPOSITE_INDEX_COLUMNS = ['traceId', 'spanId', 'parentSpanId'];
+
   async function createOldSpansTable(schema: string): Promise<void> {
     const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
       .map(([colName, colDef]) => {
-        const sqlType =
-          colDef.type === 'text'
-            ? 'NVARCHAR(MAX)'
-            : colDef.type === 'jsonb'
-              ? 'NVARCHAR(MAX)'
-              : colDef.type === 'timestamp'
-                ? 'DATETIME2'
-                : colDef.type === 'boolean'
-                  ? 'BIT'
-                  : 'NVARCHAR(MAX)';
+        let sqlType: string;
+        if (colDef.type === 'text') {
+          // Use NVARCHAR(100) for columns that participate in composite indexes/PK
+          // MSSQL has a 900-byte index key limit, NVARCHAR(100) = 200 bytes
+          sqlType = COMPOSITE_INDEX_COLUMNS.includes(colName) ? 'NVARCHAR(100)' : 'NVARCHAR(MAX)';
+        } else if (colDef.type === 'jsonb') {
+          sqlType = 'NVARCHAR(MAX)';
+        } else if (colDef.type === 'timestamp') {
+          sqlType = 'DATETIME2';
+        } else if (colDef.type === 'boolean') {
+          sqlType = 'BIT';
+        } else {
+          sqlType = 'NVARCHAR(MAX)';
+        }
         const nullable = colDef.nullable === false ? 'NOT NULL' : 'NULL';
         return `[${colName}] ${sqlType} ${nullable}`;
       })
