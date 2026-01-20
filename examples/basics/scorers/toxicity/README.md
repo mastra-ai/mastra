@@ -4,7 +4,7 @@ This example demonstrates how to use Mastra's Toxicity Scorer to evaluate LLM-ge
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 

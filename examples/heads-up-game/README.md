@@ -4,7 +4,7 @@ A multi-turn human-in-the-loop workflow.
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Openai API key
 

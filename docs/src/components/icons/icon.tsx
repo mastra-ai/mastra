@@ -63,7 +63,7 @@ export function VersionLabel() {
   );
 }
 
-export function StableIcon() {
+export function LabelOutlineIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -78,9 +78,9 @@ export function StableIcon() {
           fill="none"
           stroke="currentColor"
           className="text-black dark:text-white"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1"
         ></path>
         <circle
           cx="6.25"
@@ -95,7 +95,7 @@ export function StableIcon() {
   );
 }
 
-export function BetaIcon() {
+export function LabelFilledIcon() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -108,7 +108,7 @@ export function BetaIcon() {
         <path
           d="M3.25 2.25H8.172C8.702 2.25 9.211 2.461 9.586 2.836L15.336 8.586C16.117 9.367 16.117 10.633 15.336 11.414L11.414 15.336C10.633 16.117 9.367 16.117 8.586 15.336L2.836 9.586C2.461 9.211 2.25 8.702 2.25 8.172V3.25C2.25 2.698 2.698 2.25 3.25 2.25Z"
           fill="currentColor"
-          fill-opacity="0.5"
+          fillOpacity="0.5"
           data-stroke="none"
           stroke="none"
         ></path>{" "}
@@ -116,9 +116,9 @@ export function BetaIcon() {
           d="M3.25 2.25H8.172C8.702 2.25 9.211 2.461 9.586 2.836L15.336 8.586C16.117 9.367 16.117 10.633 15.336 11.414L11.414 15.336C10.633 16.117 9.367 16.117 8.586 15.336L2.836 9.586C2.461 9.211 2.25 8.702 2.25 8.172V3.25C2.25 2.698 2.698 2.25 3.25 2.25Z"
           className="text-black dark:text-white"
           stroke="currentColor"
-          stroke-width="1"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
           fill="none"
         ></path>{" "}
         <path

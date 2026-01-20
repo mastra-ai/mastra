@@ -184,8 +184,16 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     };
   },
   // Element Operators
-  $exists: key => {
+  $exists: (key, paramIndex, value) => {
     const jsonPathKey = parseJsonPathKey(key);
+    // If value is false, check that the key does NOT exist
+    if (value === false) {
+      return {
+        sql: `NOT (metadata ? '${jsonPathKey}')`,
+        needsValue: false,
+      };
+    }
+    // Otherwise (true or truthy), check that the key exists
     return {
       sql: `metadata ? '${jsonPathKey}'`,
       needsValue: false,
@@ -284,12 +292,60 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
     }
 
     // Handle operator conditions
-    const [[operator, operatorValue] = []] = Object.entries(value);
+    const entries = Object.entries(value);
+
+    // If multiple operators on same field (e.g., { $gte: 20, $lte: 80 }), combine with AND
+    if (entries.length > 1) {
+      const conditions = entries.map(([operator, operatorValue]) => {
+        // Special handling for nested $not
+        if (operator === '$not') {
+          const nestedEntries = Object.entries(operatorValue as Record<string, unknown>);
+          const nestedConditions = nestedEntries
+            .map(([nestedOp, nestedValue]) => {
+              if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
+                throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+              }
+              const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
+              const operatorResult = operatorFn(key, values.length + 1, nestedValue);
+              if (operatorResult.needsValue) {
+                const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+                if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+                  values.push(...transformedValue);
+                } else {
+                  values.push(transformedValue);
+                }
+              }
+              return operatorResult.sql;
+            })
+            .join(' AND ');
+          return `NOT (${nestedConditions})`;
+        }
+
+        if (!FILTER_OPERATORS[operator as OperatorType]) {
+          throw new Error(`Invalid operator: ${operator}`);
+        }
+        const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
+        const operatorResult = operatorFn(key, values.length + 1, operatorValue);
+        if (operatorResult.needsValue) {
+          const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
+          if (Array.isArray(transformedValue) && operator === '$elemMatch') {
+            values.push(...transformedValue);
+          } else {
+            values.push(transformedValue);
+          }
+        }
+        return operatorResult.sql;
+      });
+      return conditions.join(' AND ');
+    }
+
+    // Single operator case
+    const [[operator, operatorValue] = []] = entries;
 
     // Special handling for nested $not
     if (operator === '$not') {
-      const entries = Object.entries(operatorValue as Record<string, unknown>);
-      const conditions = entries
+      const nestedEntries = Object.entries(operatorValue as Record<string, unknown>);
+      const conditions = nestedEntries
         .map(([nestedOp, nestedValue]) => {
           if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
             throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
@@ -297,7 +353,12 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
           const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
           const operatorResult = operatorFn(key, values.length + 1, nestedValue);
           if (operatorResult.needsValue) {
-            values.push(nestedValue as number);
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+            if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+              values.push(...transformedValue);
+            } else {
+              values.push(transformedValue);
+            }
           }
           return operatorResult.sql;
         })
@@ -390,12 +451,60 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
     }
 
     // Handle operator conditions
-    const [[operator, operatorValue] = []] = Object.entries(value);
+    const entries = Object.entries(value);
+
+    // If multiple operators on same field (e.g., { $gte: 20, $lte: 80 }), combine with AND
+    if (entries.length > 1) {
+      const conditions = entries.map(([operator, operatorValue]) => {
+        // Special handling for nested $not
+        if (operator === '$not') {
+          const nestedEntries = Object.entries(operatorValue as Record<string, unknown>);
+          const nestedConditions = nestedEntries
+            .map(([nestedOp, nestedValue]) => {
+              if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
+                throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
+              }
+              const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
+              const operatorResult = operatorFn(key, values.length + 1, nestedValue);
+              if (operatorResult.needsValue) {
+                const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+                if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+                  values.push(...transformedValue);
+                } else {
+                  values.push(transformedValue);
+                }
+              }
+              return operatorResult.sql;
+            })
+            .join(' AND ');
+          return `NOT (${nestedConditions})`;
+        }
+
+        if (!FILTER_OPERATORS[operator as OperatorType]) {
+          throw new Error(`Invalid operator: ${operator}`);
+        }
+        const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
+        const operatorResult = operatorFn(key, values.length + 1, operatorValue);
+        if (operatorResult.needsValue) {
+          const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
+          if (Array.isArray(transformedValue) && operator === '$elemMatch') {
+            values.push(...transformedValue);
+          } else {
+            values.push(transformedValue);
+          }
+        }
+        return operatorResult.sql;
+      });
+      return conditions.join(' AND ');
+    }
+
+    // Single operator case
+    const [[operator, operatorValue] = []] = entries;
 
     // Special handling for nested $not
     if (operator === '$not') {
-      const entries = Object.entries(operatorValue as Record<string, unknown>);
-      const conditions = entries
+      const nestedEntries = Object.entries(operatorValue as Record<string, unknown>);
+      const conditions = nestedEntries
         .map(([nestedOp, nestedValue]) => {
           if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
             throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
@@ -403,7 +512,12 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
           const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
           const operatorResult = operatorFn(key, values.length + 1, nestedValue);
           if (operatorResult.needsValue) {
-            values.push(nestedValue as number);
+            const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : nestedValue;
+            if (Array.isArray(transformedValue) && nestedOp === '$elemMatch') {
+              values.push(...transformedValue);
+            } else {
+              values.push(transformedValue);
+            }
           }
           return operatorResult.sql;
         })

@@ -1,6 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,
@@ -98,6 +98,9 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   }
 
   async upsert({ indexName, vectors, metadata, ids, documents }: ChromaUpsertVectorParams): Promise<string[]> {
+    // Validate input parameters and vector values
+    validateUpsert('CHROMA', vectors, metadata, ids, true);
+
     try {
       const collection = await this.getCollection({ indexName });
 
@@ -192,6 +195,9 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     includeVector = false,
     documentFilter,
   }: ChromaQueryVectorParams): Promise<QueryResult[]> {
+    // Validate topK parameter
+    validateTopK('CHROMA', topK);
+
     try {
       const collection = await this.getCollection({ indexName });
 
@@ -206,13 +212,19 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
       });
 
-      return (results.ids[0] || []).map((id: string, index: number) => ({
-        id,
-        score: results.distances?.[0]?.[index] || 0,
-        metadata: results.metadatas?.[0]?.[index] || {},
-        document: results.documents?.[0]?.[index] ?? undefined,
-        ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
-      }));
+      return (results.ids[0] || []).map((id: string, index: number) => {
+        // Chroma returns distances (lower = more similar), convert to similarity scores (higher = more similar)
+        // For cosine: similarity = 1 - distance
+        const distance = results.distances?.[0]?.[index] || 0;
+        const score = 1 - distance;
+        return {
+          id,
+          score,
+          metadata: results.metadatas?.[0]?.[index] || {},
+          document: results.documents?.[0]?.[index] ?? undefined,
+          ...(includeVector && { vector: results.embeddings?.[0]?.[index] || [] }),
+        };
+      });
     } catch (error: any) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

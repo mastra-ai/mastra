@@ -2172,6 +2172,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
+          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2182,6 +2183,7 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
+              // @ts-expect-error - zod types mismatch between v3 and v4
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
