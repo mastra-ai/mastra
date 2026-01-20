@@ -5,7 +5,7 @@
 
 Added getProjectRoot and resolveFromProjectRoot utilities for consistent path resolution.
 
-**Problem:** Relative file paths (like `file:./mastra.db`) resolved from `process.cwd()`, which varies depending on execution context. For example, `mastra dev` sets cwd to `src/mastra/public/`, causing paths to resolve incorrectly.
+**Problem:** Relative file paths (like `file:./mastra.db`) resolved from `process.cwd()`, which varies depending on execution context (`mastra dev`, `mastra start`, `tsx`, `bun`, etc.), causing paths to resolve inconsistently.
 
 **Solution:** New utilities that resolve relative paths from the project root (nearest `package.json`):
 
