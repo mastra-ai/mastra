@@ -19,7 +19,7 @@ npx mastra migrate
 
 The command bundles your project, connects to your configured storage, and runs any necessary migrations. Currently supports migrating duplicate spans entries that may prevent unique constraint creation.
 
-See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when this migration is needed.
+See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when this migration is needed.
 
 ## Removed
 
@@ -27,7 +27,7 @@ See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#du
 
 The `mastra deploy` command has been removed from the CLI. This change simplifies the CLI by removing vendor-specific deployment logic.
 
-To migrate, choose one of the [deployment platforms](/docs/v1/deployment/overview) of your choice.
+To migrate, choose one of the [deployment platforms](/docs/deployment/overview) of your choice.
 
 ### `--env` flag from `mastra build`
 

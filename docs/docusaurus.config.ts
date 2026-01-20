@@ -1,11 +1,10 @@
-import { join } from "path/posix";
 import prismMastraDark from "./src/theme/prism-mastra-dark.js";
 import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
 import type { Config } from "@docusaurus/types";
 
 const config: Config = {
-  title: "Mastra Docs v1 Beta",
+  title: "Mastra Docs",
   tagline: "TypeScript agent framework",
   favicon: "/img/favicon.ico",
 
@@ -21,11 +20,6 @@ const config: Config = {
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
-    },
-    parseFrontMatter: async (params) => {
-      const result = await params.defaultParseFrontMatter(params);
-      result.frontMatter.description = `Mastra v1 Beta: ${result.frontMatter.description}`;
-      return result;
     },
   },
   // Enable v4 features in prod
@@ -87,7 +81,7 @@ const config: Config = {
       {
         id: "models",
         path: "src/content/en/models",
-        routeBasePath: "models/v1",
+        routeBasePath: "models",
         sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -97,7 +91,7 @@ const config: Config = {
       {
         id: "guides",
         path: "src/content/en/guides",
-        routeBasePath: "guides/v1",
+        routeBasePath: "guides",
         sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -107,44 +101,11 @@ const config: Config = {
       {
         id: "reference",
         path: "src/content/en/reference",
-        routeBasePath: "reference/v1",
+        routeBasePath: "reference",
         sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
-    function assetPlugin() {
-      return {
-        name: "asset-plugin",
-        configureWebpack(config, isServer, utils, content) {
-          if (!isServer) {
-            for (const plugin of config.plugins || []) {
-              if (
-                plugin &&
-                plugin.constructor.name === "CssExtractRspackPlugin"
-              ) {
-                (plugin as any).options.filename = join(
-                  "v1",
-                  (plugin as any).options.filename,
-                );
-                (plugin as any).options.chunkFilename = join(
-                  "v1",
-                  (plugin as any).options.chunkFilename,
-                );
-              }
-            }
-            const filename = config.output?.filename as string;
-            const chunkFilename = config.output?.chunkFilename as string;
-            return {
-              plugins: config.plugins,
-              output: {
-                filename: join("v1", filename),
-                chunkFilename: join("v1", chunkFilename),
-              },
-            };
-          }
-        },
-      };
-    },
   ],
 
   presets: [
@@ -153,7 +114,7 @@ const config: Config = {
       {
         docs: {
           path: "src/content/en/docs",
-          routeBasePath: "docs/v1",
+          routeBasePath: "docs",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.

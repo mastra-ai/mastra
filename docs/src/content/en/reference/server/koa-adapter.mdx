@@ -15,7 +15,7 @@ The `@mastra/koa` package provides a server adapter for running Mastra with [Koa
 
 :::info
 
-For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/server/server-adapters).
 
 :::
 
@@ -24,7 +24,7 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 Install the Koa adapter and Koa framework:
 
 ```bash
-npm install @mastra/koa@beta koa koa-bodyparser
+npm install @mastra/koa@latest koa koa-bodyparser
 ```
 
 ## Usage example
@@ -116,7 +116,7 @@ app.listen(3000, () => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -124,6 +124,6 @@ For custom middleware ordering, call each method separately instead of `init()`.
 
 ## Related
 
-- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
-- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+- [Server Adapters](/docs/server/server-adapters) - Shared adapter concepts
+- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes

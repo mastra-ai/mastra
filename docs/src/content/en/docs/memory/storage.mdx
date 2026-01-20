@@ -25,22 +25,22 @@ export const mastra = new Mastra({
   }),
 });
 ```
-On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
+On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
 ## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:
 
-- [libSQL Storage](/reference/v1/storage/libsql)
-- [PostgreSQL Storage](/reference/v1/storage/postgresql)
-- [MongoDB Storage](/reference/v1/storage/mongodb)
-- [Upstash Storage](/reference/v1/storage/upstash)
-- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
-- [Cloudflare Durable Objects](/reference/v1/storage/cloudflare)
-- [Convex](/reference/v1/storage/convex)
-- [DynamoDB](/reference/v1/storage/dynamodb)
-- [LanceDB](/reference/v1/storage/lance)
-- [Microsoft SQL Server](/reference/v1/storage/mssql)
+- [libSQL Storage](/reference/storage/libsql)
+- [PostgreSQL Storage](/reference/storage/postgresql)
+- [MongoDB Storage](/reference/storage/mongodb)
+- [Upstash Storage](/reference/storage/upstash)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/storage/cloudflare)
+- [Convex](/reference/storage/convex)
+- [DynamoDB](/reference/storage/dynamodb)
+- [LanceDB](/reference/storage/lance)
+- [Microsoft SQL Server](/reference/storage/mssql)
 
 :::tip
 libSQL is the easiest way to get started because it doesn’t require running a separate database server
@@ -102,7 +102,7 @@ export const mastra = new Mastra({
 This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
 
 :::info
-See [Storage Domains](/reference/v1/storage/composite#storage-domains) for more information.
+See [Storage Domains](/reference/storage/composite#storage-domains) for more information.
 :::
 
 ### Agent-level storage
@@ -128,7 +128,7 @@ export const agent = new Agent({
 This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
 
 :::warning[Mastra Cloud Store limitation]
-Agent-level storage is not supported when using [Mastra Cloud Store](/docs/v1/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+Agent-level storage is not supported when using [Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
 :::
 
 ## Threads and resources
@@ -150,7 +150,7 @@ const stream = await agent.stream("message for agent", {
 ```
 
 :::note
-[Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
+[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
 
 ### Thread and resource relationship
@@ -242,7 +242,7 @@ export const agent = new Agent({
 });
 ```
 
-We support all popular vector providers including [Pinecone](/reference/v1/vectors/pinecone), [Chroma](/reference/v1/vectors/chroma), [Qdrant](/reference/v1/vectors/qdrant), and many more.
+We support all popular vector providers including [Pinecone](/reference/vectors/pinecone), [Chroma](/reference/vectors/chroma), [Qdrant](/reference/vectors/qdrant), and many more.
 
 For more information on configuring semantic recall, see the [Semantic Recall](./semantic-recall) documentation.
 
