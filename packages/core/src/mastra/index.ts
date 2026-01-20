@@ -1100,7 +1100,7 @@ export class Mastra<
       try {
         const tool = this.getToolById(toolKey as any);
         resolvedTools[toolKey] = tool;
-      } catch (err) {
+      } catch {
         // Tool reference exists but tool is not registered - log warning
         this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }
