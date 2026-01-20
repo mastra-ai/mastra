@@ -26,7 +26,7 @@ export default function DocRootLayoutMain({
     >
       <div className="bg-green-50 dark:bg-green-600/10 py-2 px-4 border-b-[0.5px] border-green-200 dark:border-green-900">
         <div className="text-center lg:text-left lg:max-w-250 lg:mx-auto lg:px-4 text-[--mastra-text-secondary]!">
-          Mastra v1 is available 🎉{" "}
+          Mastra 1.0 is available 🎉{" "}
           <a
             href="#todo"
             target="_blank"
