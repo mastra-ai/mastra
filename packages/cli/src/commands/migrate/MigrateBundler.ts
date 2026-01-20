@@ -59,50 +59,32 @@ export class MigrateBundler extends BuildBundler {
         process.exit(1);
       }
 
+      // Access the observability store directly from storage.stores
+      const observabilityStore = storage.stores?.observability;
+
+      if (!observabilityStore) {
+        console.log(JSON.stringify({
+          success: false,
+          alreadyMigrated: false,
+          duplicatesRemoved: 0,
+          message: 'Observability storage not configured. Migration not required.',
+        }));
+        process.exit(0);
+      }
+
+      // Check if the store has a migrateSpans method
+      if (typeof observabilityStore.migrateSpans !== 'function') {
+        console.log(JSON.stringify({
+          success: false,
+          alreadyMigrated: false,
+          duplicatesRemoved: 0,
+          message: 'Migration not supported for this storage backend.',
+        }));
+        process.exit(1);
+      }
+
       try {
-        // Try to initialize storage - but catch MIGRATION_REQUIRED errors
-        // since that's exactly what we're here to fix
-        let migrationRequired = false;
-        try {
-          await storage.init();
-        } catch (initError) {
-          // Check if this is a MIGRATION_REQUIRED error (which is expected)
-          const errorMessage = initError instanceof Error ? initError.message : String(initError);
-          const errorId = (initError as any)?.id || '';
-          if (errorMessage.includes('MIGRATION_REQUIRED') || errorId.includes('MIGRATION_REQUIRED')) {
-            migrationRequired = true;
-            // This is expected - continue with migration
-          } else {
-            // Re-throw other errors
-            throw initError;
-          }
-        }
-
-        // Get the observability store
-        const observabilityStore = await storage.getStore('observability');
-
-        if (!observabilityStore) {
-          console.log(JSON.stringify({
-            success: false,
-            alreadyMigrated: false,
-            duplicatesRemoved: 0,
-            message: 'Observability storage not configured. Migration not required.',
-          }));
-          process.exit(0);
-        }
-
-        // Check if the store has a migrateSpans method
-        if (typeof observabilityStore.migrateSpans !== 'function') {
-          console.log(JSON.stringify({
-            success: false,
-            alreadyMigrated: false,
-            duplicatesRemoved: 0,
-            message: 'Migration not supported for this storage backend.',
-          }));
-          process.exit(1);
-        }
-
-        // Run the migration
+        // Run the migration - migrateSpans handles everything internally
         const result = await observabilityStore.migrateSpans();
 
         console.log(JSON.stringify({
