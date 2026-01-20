@@ -205,9 +205,9 @@ function generateTableSQL({
                 ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key')
               ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+                SELECT 1 FROM pg_indexes WHERE indexname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
@@ -223,7 +223,7 @@ function generateTableSQL({
               ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_ai_spans_traceid_spanid_pk')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk

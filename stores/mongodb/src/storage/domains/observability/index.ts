@@ -557,7 +557,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         ];
 
         // Get count using aggregation
-        const countResult = await collection.aggregate([...pipeline, { $count: 'total' }]).toArray();
+        // allowDiskUse enables aggregation to write to temporary files if memory limit (100MB) is exceeded
+        const countResult = await collection
+          .aggregate([...pipeline, { $count: 'total' }], { allowDiskUse: true })
+          .toArray();
         const count = countResult[0]?.total || 0;
 
         if (count === 0) {
@@ -598,7 +601,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             { $project: { _errorSpans: 0 } },
           ];
         }
-        const spans = await collection.aggregate(aggregationPipeline).toArray();
+        const spans = await collection.aggregate(aggregationPipeline, { allowDiskUse: true }).toArray();
 
         return {
           pagination: {
@@ -636,18 +639,21 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         // Add a helper field to sort NULLs first for DESC, last for ASC
         const nullSortValue = sortDirection === -1 ? 0 : 1; // DESC: NULLs first (0), ASC: NULLs last (1)
         spans = await collection
-          .aggregate([
-            { $match: mongoFilter },
-            {
-              $addFields: {
-                _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+          .aggregate(
+            [
+              { $match: mongoFilter },
+              {
+                $addFields: {
+                  _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+                },
               },
-            },
-            { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
-            { $skip: page * perPage },
-            { $limit: perPage },
-            { $project: { _endedAtNull: 0 } },
-          ])
+              { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
+              { $skip: page * perPage },
+              { $limit: perPage },
+              { $project: { _endedAtNull: 0 } },
+            ],
+            { allowDiskUse: true },
+          )
           .toArray();
       } else {
         // For startedAt (never null), use simple find()
