@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/mastra-plural-apis .
+npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
 :::
@@ -54,7 +54,7 @@ To migrate, update all imports and parameter names from `RuntimeContext`/`runtim
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/runtime-context .
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::
@@ -79,7 +79,7 @@ To migrate, replace property access with the corresponding getter methods.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-property-access .
+npx @mastra/codemod@latest v1/agent-property-access .
 ```
 
 :::
@@ -104,7 +104,7 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-voice .
+npx @mastra/codemod@latest v1/agent-voice .
 ```
 
 :::
@@ -140,7 +140,7 @@ To migrate, update processor method names.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-processor-methods .
+npx @mastra/codemod@latest v1/agent-processor-methods .
 ```
 
 :::
@@ -182,7 +182,7 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-abort-signal .
+npx @mastra/codemod@latest v1/agent-abort-signal .
 ```
 
 :::
@@ -262,7 +262,7 @@ To migrate, use the standard `generate()` and `stream()` methods.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-generate-stream-v-next .
+npx @mastra/codemod@latest v1/agent-generate-stream-v-next .
 ```
 
 :::
@@ -370,8 +370,7 @@ The `prepareStep` callback now receives messages in `MastraDBMessage` format ins
 If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
 
 ```diff
-  agent.generate({
-    prompt: 'Hello',
+  agent.generate('Hello', {
     prepareStep: async ({ messages, messageList }) => {
 -     // messages was AI SDK v5+ ModelMessage format
 -     console.log(messages[0].content);

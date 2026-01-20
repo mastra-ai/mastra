@@ -7,6 +7,7 @@ import {
   Agent,
   MemoryThread,
   Tool,
+  Processor,
   Workflow,
   Vector,
   BaseResource,
@@ -31,6 +32,7 @@ import type {
   GetLogsParams,
   GetLogsResponse,
   GetToolResponse,
+  GetProcessorResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
@@ -104,23 +106,32 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists memory threads for a resource with pagination support
-   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * Lists memory threads with optional filtering by resourceId and/or metadata
+   * @param params - Parameters containing optional filters, pagination options, and request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
-  public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
-    const queryParams = new URLSearchParams({
-      resourceId: params.resourceId,
-      resourceid: params.resourceId,
-      ...(params.agentId && { agentId: params.agentId }),
-      ...(params.page !== undefined && { page: params.page.toString() }),
-      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
-      ...(params.orderBy && { orderBy: params.orderBy }),
-      ...(params.sortDirection && { sortDirection: params.sortDirection }),
-    });
+  public async listMemoryThreads(params: ListMemoryThreadsParams = {}): Promise<ListMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams();
 
+    // Add resourceId if provided (backwards compatible - also add lowercase version)
+    if (params.resourceId) {
+      queryParams.set('resourceId', params.resourceId);
+    }
+
+    // Add metadata filter as JSON string if provided
+    if (params.metadata) {
+      queryParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    if (params.agentId) queryParams.set('agentId', params.agentId);
+    if (params.page !== undefined) queryParams.set('page', params.page.toString());
+    if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
+    if (params.orderBy) queryParams.set('orderBy', params.orderBy);
+    if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+
+    const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
-      `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
+      `/api/memory/threads${queryString ? `?${queryString}` : ''}${requestContextQueryString(params.requestContext, queryString ? '&' : '?')}`,
     );
 
     const actualResponse: ListMemoryThreadsResponse =
@@ -261,6 +272,35 @@ export class MastraClient extends BaseResource {
    */
   public getTool(toolId: string) {
     return new Tool(this.options, toolId);
+  }
+
+  /**
+   * Retrieves all available processors
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of processor IDs to processor details
+   */
+  public listProcessors(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Record<string, GetProcessorResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/processors${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a processor instance by ID
+   * @param processorId - ID of the processor to retrieve
+   * @returns Processor instance
+   */
+  public getProcessor(processorId: string) {
+    return new Processor(this.options, processorId);
   }
 
   /**

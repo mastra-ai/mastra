@@ -30,6 +30,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('step')) return 'test-step';
   if (field.includes('task')) return 'test-task';
   if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
+  if (field.includes('processor')) return 'test-processor';
   if (field.includes('trace')) return 'test-trace';
   if (field.includes('span')) return 'test-span';
   if (field.includes('vector')) return 'test-vector';
@@ -110,6 +111,15 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodUnion') {
+    // Special case: for content field in messages, use string format (simpler and more reliable)
+    if (fieldName === 'content') {
+      // Check if one of the options is ZodString
+      for (const option of def.options) {
+        if (getZodTypeName(option) === 'ZodString') {
+          return 'test message content';
+        }
+      }
+    }
     return generateValidDataFromSchema(def.options[0], fieldName);
   }
 
@@ -131,6 +141,10 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodAny' || typeName === 'ZodUnknown') {
     if (fieldName === 'content') {
       return [{ type: 'text', text: 'test message content' }];
+    }
+    // Special case: message parts for processor messages
+    if (fieldName === 'parts') {
+      return [{ type: 'text', text: 'test message part' }];
     }
     // Special case: workflow inputData is z.unknown() but needs to be an object
     // to match the workflow's inputSchema (typically z.object({}))
@@ -175,6 +189,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':processorId')) params.processorId = 'test-processor';
 
   // MCP route params - need to get actual server ID from test context
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';

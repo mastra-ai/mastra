@@ -13,29 +13,6 @@ describe('QdrantVector', () => {
   let qdrant: QdrantVector;
   const testCollectionName = 'test-collection-' + Date.now();
 
-  describe('Index Operations', () => {
-    beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
-      await qdrant.createIndex({ indexName: testCollectionName, dimension });
-    });
-
-    afterAll(async () => {
-      await qdrant.deleteIndex({ indexName: testCollectionName });
-    }, 50000);
-
-    it('should list collections including ours', async () => {
-      const indexes = await qdrant.listIndexes();
-      expect(indexes).toContain(testCollectionName);
-    }, 50000);
-
-    it('should describe index with correct properties', async () => {
-      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
-      expect(stats.dimension).toBe(dimension);
-      expect(stats.metric).toBe('cosine');
-      expect(typeof stats.count).toBe('number');
-    }, 50000);
-  });
-
   describe('Vector Operations', () => {
     beforeAll(async () => {
       qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
@@ -52,32 +29,10 @@ describe('QdrantVector', () => {
       [0.0, 0.0, 1.0],
     ];
     const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-    let vectorIds: string[];
-
-    it('should upsert vectors with metadata', async () => {
-      vectorIds = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors, metadata: testMetadata });
-      expect(vectorIds).toHaveLength(3);
-    }, 50000);
-
-    it('should query vectors and return nearest neighbors', async () => {
-      const queryVector = [1.0, 0.1, 0.1];
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 3 });
-
-      expect(results).toHaveLength(3);
-      expect(results?.[0]?.score).toBeGreaterThan(0);
-      expect(results?.[0]?.metadata).toBeDefined();
-    }, 50000);
-
-    it('should query vectors and return vector in results', async () => {
-      const queryVector = [1.0, 0.1, 0.1];
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector, topK: 3, includeVector: true });
-
-      expect(results).toHaveLength(3);
-      expect(results?.[0]?.vector).toBeDefined();
-      expect(results?.[0]?.vector).toHaveLength(dimension);
-    });
 
     it('should query vectors with metadata filter', async () => {
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors, metadata: testMetadata });
+
       const queryVector = [0.0, 1.0, 0.0];
       const filter: QdrantVectorFilter = {
         label: 'y-axis',
@@ -128,7 +83,6 @@ describe('QdrantVector', () => {
         topK: 2,
         includeVector: true,
       });
-      console.log(results);
       expect(results[0]?.id).toBe(idToBeUpdated);
       // not matching the vector in results list because, the stored vector is stored in a normalized form inside qdrant
       // expect(results[0]?.vector).toEqual(newVector);
@@ -246,14 +200,6 @@ describe('QdrantVector', () => {
   });
 
   describe('Filter Queries', () => {
-    const filterTestVectors = Array(10)
-      .fill(null)
-      .map(() =>
-        Array(dimension)
-          .fill(null)
-          .map(() => Math.random()),
-      );
-
     const filterTestMetadata = [
       {
         name: 'item1',
@@ -340,6 +286,12 @@ describe('QdrantVector', () => {
       },
     ];
 
+    const filterTestVectors = filterTestMetadata.map(() =>
+      Array(dimension)
+        .fill(null)
+        .map(() => Math.random()),
+    );
+
     beforeAll(async () => {
       qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
@@ -351,36 +303,6 @@ describe('QdrantVector', () => {
     }, 50000);
 
     describe('Basic Operators', () => {
-      it('should filter by exact value match', async () => {
-        const filter: QdrantVectorFilter = { name: 'item1' };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.name).toBe('item1');
-      });
-
-      it('should filter using comparison operators', async () => {
-        const filter: QdrantVectorFilter = { price: { $gt: 100, $lt: 600 } };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.price).toBe(500);
-      });
-
-      it('should filter using array operators', async () => {
-        const filter: QdrantVectorFilter = { tags: { $in: ['premium', 'bestseller'] } };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        const tags = results.flatMap(r => r.metadata?.tags || []);
-        expect(tags).toContain('bestseller');
-        expect(tags).toContain('premium');
-      });
-
-      it('should handle null values', async () => {
-        const filter: QdrantVectorFilter = { price: null };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.price).toBeNull();
-      });
-
       it('should handle empty arrays', async () => {
         const filter: QdrantVectorFilter = {
           tags: [],
@@ -393,27 +315,6 @@ describe('QdrantVector', () => {
     });
 
     describe('Logical Operators', () => {
-      it('should combine conditions with $and', async () => {
-        const filter: QdrantVectorFilter = {
-          $and: [{ tags: { $in: ['electronics'] } }, { price: { $gt: 700 } }],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.price).toBeGreaterThan(700);
-        expect(results[0]?.metadata?.tags).toContain('electronics');
-      });
-
-      it('should combine conditions with $or', async () => {
-        const filter: QdrantVectorFilter = {
-          $or: [{ price: { $gt: 900 } }, { tags: { $in: ['bestseller'] } }],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        results.forEach(result => {
-          expect(result.metadata?.price > 900 || result.metadata?.tags?.includes('bestseller')).toBe(true);
-        });
-      });
-
       it('should handle $not operator', async () => {
         const filter: QdrantVectorFilter = {
           $not: { tags: { $in: ['electronics'] } },
@@ -423,23 +324,6 @@ describe('QdrantVector', () => {
         expect(resultsWithMetadata).toHaveLength(2);
         resultsWithMetadata.forEach(result => {
           expect(result.metadata?.tags).not.toContain('electronics');
-        });
-      });
-
-      it('should handle nested logical operators', async () => {
-        const filter: QdrantVectorFilter = {
-          $and: [
-            { 'details.weight': { $lt: 2.0 } },
-            {
-              $or: [{ tags: { $in: ['basic'] } }, { tags: { $in: ['bestseller'] } }],
-            },
-          ],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        results.forEach(result => {
-          expect(result.metadata?.details?.weight).toBeLessThan(2.0);
-          expect(result.metadata?.tags?.includes('basic') || result.metadata?.tags?.includes('bestseller')).toBe(true);
         });
       });
 
@@ -604,98 +488,6 @@ describe('QdrantVector', () => {
         });
         expect(results.length).toBe(2);
       });
-      it('should handle nested paths', async () => {
-        const filter: QdrantVectorFilter = {
-          'details.color': 'red',
-          'stock.quantity': { $gt: 0 },
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.details?.color).toBe('red');
-        expect(results[0]?.metadata?.stock?.quantity).toBeGreaterThan(0);
-      });
-
-      it('should handle multiple conditions on same field', async () => {
-        const filter: QdrantVectorFilter = {
-          price: { $gt: 20, $lt: 30 },
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(1);
-        expect(results[0]?.metadata?.price).toBe(25);
-      });
-
-      it('should handle complex combinations', async () => {
-        const filter: QdrantVectorFilter = {
-          $and: [
-            { 'details.weight': { $lt: 3.0 } },
-            {
-              $or: [{ price: { $gt: 500 } }, { 'stock.quantity': { $gt: 50 } }],
-            },
-            { $not: { tags: { $in: ['basic'] } } },
-          ],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        results.forEach(result => {
-          expect(result.metadata?.details?.weight).toBeLessThan(3.0);
-          expect(result.metadata?.price > 500 || result.metadata?.stock?.quantity > 50).toBe(true);
-          expect(result.metadata?.tags).not.toContain('basic');
-        });
-      });
-
-      it('should handle array paths with nested objects', async () => {
-        const filter: QdrantVectorFilter = {
-          'stock.locations[].warehouse': { $in: ['A'] },
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        results.forEach(result => {
-          expect(result.metadata?.stock?.locations?.some((loc: any) => loc.warehouse === 'A')).toBe(true);
-        });
-      });
-
-      it('should handle multiple nested paths with array notation', async () => {
-        const filter: QdrantVectorFilter = {
-          $and: [{ 'stock.locations[].warehouse': { $in: ['A'] } }, { 'stock.locations[].count': { $gt: 20 } }],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results).toHaveLength(2);
-        results.forEach(result => {
-          const locations = result.metadata?.stock?.locations || [];
-          expect(locations.some((loc: any) => loc.warehouse === 'A' && loc.count > 20)).toBe(true);
-        });
-      });
-
-      it('should handle complex date range queries', async () => {
-        const now = new Date();
-        const vector = Array(dimension)
-          .fill(null)
-          .map(() => Math.random());
-        const metadata = {
-          timestamps: {
-            created: now.toISOString(),
-            updated: new Date(now.getTime() + 1000).toISOString(),
-          },
-        };
-        await qdrant.upsert({ indexName: testCollectionName, vectors: [vector], metadata: [metadata] });
-
-        const filter: QdrantVectorFilter = {
-          $and: [
-            {
-              'timestamps.created': {
-                $gt: new Date(now.getTime() - 1000).toISOString(),
-              },
-            },
-            {
-              'timestamps.updated': {
-                $lt: new Date(now.getTime() + 2000).toISOString(),
-              },
-            },
-          ],
-        };
-        const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter });
-        expect(results.length).toBeGreaterThan(0);
-      });
 
       it('should handle complex combinations with custom operators', async () => {
         const filter: QdrantVectorFilter = {
@@ -774,16 +566,6 @@ describe('QdrantVector', () => {
       await qdrant.deleteIndex({ indexName: testIndexName });
     });
 
-    it('should handle non-existent index query gracefully', async () => {
-      const nonExistentIndex = 'non-existent-index';
-      await expect(qdrant.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
-    }, 50000);
-
-    it('should handle incorrect dimension vectors', async () => {
-      const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
-      await expect(qdrant.upsert({ indexName: testCollectionName, vectors: wrongDimVector })).rejects.toThrow();
-    }, 50000);
-
     it('should handle mismatched metadata and vectors length', async () => {
       const vectors = [[1, 2, 3]];
       const metadata = [{}, {}];
@@ -843,135 +625,285 @@ describe('QdrantVector', () => {
       }
     });
   });
+});
 
-  describe('Empty/Undefined Filters', () => {
-    const filterTestVectors = Array(10)
-      .fill(null)
-      .map(() =>
-        Array(dimension)
-          .fill(null)
-          .map(() => Math.random()),
-      );
+describe('Named Vectors Support', () => {
+  /**
+   * Tests for GitHub Issue #4660: Support for named vectors in Qdrant
+   * @see https://github.com/mastra-ai/mastra/issues/4660
+   *
+   * Qdrant supports named vectors, allowing multiple vector fields per collection.
+   * The `using` parameter specifies which named vector to query against.
+   */
 
-    const filterTestMetadata = [
-      {
-        name: 'item1',
-        tags: ['electronics', 'premium'],
-        price: 1000,
-        inStock: true,
-        details: {
-          color: 'red',
-          sizes: ['S', 'M', 'L'],
-          weight: 2.5,
-        },
-        location: {
-          lat: 52.5,
-          lon: 13.4,
-        },
-        stock: {
-          quantity: 50,
-          locations: [
-            { warehouse: 'A', count: 30 },
-            { warehouse: 'B', count: 20 },
-          ],
-        },
-        ratings: [4.5, 4.8, 4.2],
-      },
-    ];
+  let qdrant: QdrantVector;
+  const namedVectorCollectionName = 'test-named-vectors-' + Date.now();
 
+  beforeAll(async () => {
+    qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-named-test' });
+  });
+
+  afterAll(async () => {
+    try {
+      await qdrant.deleteIndex({ indexName: namedVectorCollectionName });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should allow extending QdrantVector with access to protected client', async () => {
+    // This test validates that the client property is protected (not private)
+    // allowing subclasses to access it for custom functionality
+
+    class ExtendedQdrantVector extends QdrantVector {
+      // This compiles because client is protected
+      async customQuery(_indexName: string, _queryVector: number[], _namedVector: string) {
+        // Access to this.client works because it's protected
+        const client = this.client;
+        expect(client).toBeDefined();
+        return [];
+      }
+    }
+
+    const extendedQdrant = new ExtendedQdrantVector({
+      url: 'http://localhost:6333/',
+      id: 'qdrant-extended-test',
+    });
+
+    // Validate that the extended class can be instantiated
+    expect(extendedQdrant).toBeInstanceOf(QdrantVector);
+  });
+
+  describe('Named Vector Collection Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
-      await qdrant.createIndex({ indexName: testCollectionName, dimension });
-      await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
+      // Create collection with multiple named vector spaces
+      await qdrant.createIndex({
+        indexName: namedVectorCollectionName,
+        dimension: dimension, // fallback dimension
+        namedVectors: {
+          text: { size: dimension, distance: 'cosine' },
+          image: { size: dimension, distance: 'euclidean' },
+        },
+      });
     });
 
-    afterAll(async () => {
-      await qdrant.deleteIndex({ indexName: testCollectionName });
-    }, 50000);
-    it('should handle undefined filter', async () => {
-      const results1 = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter: undefined });
-      const results2 = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0] });
-      expect(results1).toEqual(results2);
-      expect(results1.length).toBeGreaterThan(0);
+    it('should upsert vectors into a named vector space', async () => {
+      const textVectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+      ];
+      const textMetadata = [
+        { type: 'text', content: 'doc1' },
+        { type: 'text', content: 'doc2' },
+        { type: 'text', content: 'doc3' },
+      ];
+
+      const ids = await qdrant.upsert({
+        indexName: namedVectorCollectionName,
+        vectors: textVectors,
+        metadata: textMetadata,
+        vectorName: 'text',
+      });
+
+      expect(ids).toHaveLength(3);
     });
 
-    it('should handle empty object filter', async () => {
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter: {} });
-      const results2 = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0] });
-      expect(results).toEqual(results2);
+    it('should upsert vectors into a different named vector space', async () => {
+      const imageVectors = [
+        [0.5, 0.5, 0.0],
+        [0.0, 0.5, 0.5],
+        [0.5, 0.0, 0.5],
+      ];
+      const imageMetadata = [
+        { type: 'image', content: 'img1' },
+        { type: 'image', content: 'img2' },
+        { type: 'image', content: 'img3' },
+      ];
+
+      const ids = await qdrant.upsert({
+        indexName: namedVectorCollectionName,
+        vectors: imageVectors,
+        metadata: imageMetadata,
+        vectorName: 'image',
+      });
+
+      expect(ids).toHaveLength(3);
+    });
+
+    it('should query using a specific named vector', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 3,
+        using: 'text',
+      });
+
+      expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.score).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.type).toBe('text');
     });
 
-    it('should handle null filter', async () => {
-      const results = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter: null });
-      const results2 = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0] });
-      expect(results).toEqual(results2);
+    it('should query a different named vector space', async () => {
+      const queryVector = [0.5, 0.5, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 3,
+        using: 'image',
+      });
+
+      expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.type).toBe('image');
+    });
+
+    it('should return vectors from the correct named space when includeVector is true', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 1,
+        using: 'text',
+        includeVector: true,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+    });
+
+    it('should apply filters when querying named vectors', async () => {
+      const queryVector = [1.0, 0.0, 0.0];
+      const results = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector,
+        topK: 10,
+        using: 'text',
+        filter: { content: 'doc1' },
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata?.content).toBe('doc1');
+    });
+
+    it('should isolate queries between different named vector spaces', async () => {
+      // Query text space
+      const textResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 3,
+        using: 'text',
+      });
+
+      // Query image space
+      const imageResults = await qdrant.query({
+        indexName: namedVectorCollectionName,
+        queryVector: [0.5, 0.5, 0.0],
+        topK: 3,
+        using: 'image',
+      });
+
+      // Verify results are from correct spaces
+      expect(textResults.every(r => r.metadata?.type === 'text')).toBe(true);
+      expect(imageResults.every(r => r.metadata?.type === 'image')).toBe(true);
+    });
+
+    it('should throw error when upserting to non-existent vector name', async () => {
+      await expect(
+        qdrant.upsert({
+          indexName: namedVectorCollectionName,
+          vectors: [[1, 2, 3]],
+          vectorName: 'non_existent_vector',
+        }),
+      ).rejects.toThrow();
     });
   });
 
-  describe('Performance Tests', () => {
+  describe('Backward Compatibility', () => {
+    const singleVectorCollectionName = 'test-single-vector-' + Date.now();
+
     beforeAll(async () => {
-      qdrant = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-test' });
-      await qdrant.createIndex({ indexName: testCollectionName, dimension });
+      // Create a traditional single-vector collection
+      await qdrant.createIndex({
+        indexName: singleVectorCollectionName,
+        dimension,
+        metric: 'cosine',
+      });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex({ indexName: testCollectionName });
-    }, 50000);
+      try {
+        await qdrant.deleteIndex({ indexName: singleVectorCollectionName });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
 
-    it('should handle batch upsert of 1000 vectors', async () => {
-      const batchSize = 1000;
-      const vectors = Array(batchSize)
-        .fill(null)
-        .map(() =>
-          Array(dimension)
-            .fill(null)
-            .map(() => Math.random()),
-        );
-      const metadata = vectors.map((_, i) => ({ id: i }));
+    it('should work without vectorName for single-vector collections', async () => {
+      const vectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+      ];
+      const metadata = [{ label: 'a' }, { label: 'b' }];
 
-      const start = Date.now();
-      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors, metadata });
-      const duration = Date.now() - start;
+      const ids = await qdrant.upsert({
+        indexName: singleVectorCollectionName,
+        vectors,
+        metadata,
+      });
 
-      expect(ids).toHaveLength(batchSize);
-      console.log(`Batch upsert of ${batchSize} vectors took ${duration}ms`);
-    }, 300000);
+      expect(ids).toHaveLength(2);
+    });
 
-    it('should perform multiple concurrent queries', async () => {
-      const queryVector = [1, 0, 0];
-      const numQueries = 10;
+    it('should query without using parameter for single-vector collections', async () => {
+      const results = await qdrant.query({
+        indexName: singleVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 2,
+      });
 
-      const start = Date.now();
-      const promises = Array(numQueries)
-        .fill(null)
-        .map(() => qdrant.query({ indexName: testCollectionName, queryVector }));
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.score).toBeGreaterThan(0);
+    });
 
-      const results = await Promise.all(promises);
-      const duration = Date.now() - start;
+    it('should return vector in results for single-vector collections', async () => {
+      const results = await qdrant.query({
+        indexName: singleVectorCollectionName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 1,
+        includeVector: true,
+      });
 
-      expect(results).toHaveLength(numQueries);
-      console.log(`${numQueries} concurrent queries took ${duration}ms`);
-    }, 50000);
+      expect(results[0]?.vector).toBeDefined();
+      expect(results[0]?.vector).toHaveLength(dimension);
+    });
   });
 });
 
-// Metadata filtering tests for Memory system
-describe('Qdrant Metadata Filtering', () => {
-  const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-metadata-test' });
+// Shared vector store test suite
+const qdrantVector = new QdrantVector({ url: 'http://localhost:6333/', id: 'qdrant-shared-test' });
 
-  createVectorTestSuite({
-    vector: qdrantVector,
-    createIndex: async (indexName: string) => {
-      await qdrantVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await qdrantVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // Qdrant indexes immediately
-      await new Promise(resolve => setTimeout(resolve, 100));
-    },
-  });
+createVectorTestSuite({
+  vector: qdrantVector,
+  createIndex: async (indexName, options) => {
+    await qdrantVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
+  },
+  deleteIndex: async (indexName: string) => {
+    await qdrantVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // Qdrant indexes immediately
+    await new Promise(resolve => setTimeout(resolve, 100));
+  },
+  supportsRegex: false,
+  supportsContains: false,
+  supportsNorOperator: false,
+  supportsElemMatch: false,
+  supportsSize: false,
+  supportsEmptyLogicalOperators: false,
+  // Qdrant doesn't support advanced $not patterns like field-level $not or mixed root operators
+  supportsAdvancedNotSyntax: false,
 });

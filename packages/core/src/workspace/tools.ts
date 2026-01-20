@@ -300,7 +300,9 @@ export function createWorkspaceTools(workspace: Workspace) {
           .number()
           .nullish()
           .default(30000)
-          .describe('Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.'),
+          .describe(
+            'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
+          ),
       }),
       outputSchema: z.object({
         success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
@@ -336,7 +338,9 @@ export function createWorkspaceTools(workspace: Workspace) {
           .number()
           .nullish()
           .default(30000)
-          .describe('Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.'),
+          .describe(
+            'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
+          ),
         cwd: z.string().nullish().describe('Working directory for the command'),
       }),
       outputSchema: z.object({

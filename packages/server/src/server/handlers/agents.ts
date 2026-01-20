@@ -281,8 +281,9 @@ async function formatAgentList({
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
 
+  const logger = mastra.getLogger();
+
   if ('listWorkflows' in agent) {
-    const logger = mastra.getLogger();
     try {
       const workflows = await agent.listWorkflows({ requestContext });
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
@@ -302,11 +303,19 @@ async function formatAgentList({
 
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
 
-  // Get and serialize processors
-  const inputProcessors = await agent.listInputProcessors(requestContext);
-  const outputProcessors = await agent.listOutputProcessors(requestContext);
-  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+  // Get and serialize only user-configured processors (excludes memory-derived processors)
+  // This ensures the UI only shows processors explicitly configured by the user
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
 
   // Extract skills from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
@@ -473,11 +482,19 @@ async function formatAgent({
 
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext: proxyRequestContext });
 
-  // Get and serialize processors
-  const inputProcessors = await agent.listInputProcessors(proxyRequestContext);
-  const outputProcessors = await agent.listOutputProcessors(proxyRequestContext);
-  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+  // Get and serialize only user-configured processors (excludes memory-derived processors)
+  // This ensures the UI only shows processors explicitly configured by the user
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
 
   // Extract skills from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
@@ -873,6 +890,82 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       });
 
       return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
+export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-tool-call-generate',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveToolCallBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Approve tool call (non-streaming)',
+  description: 'Approves a pending tool call and returns the complete response',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const result = await agent.approveToolCallGenerate({
+        ...params,
+        abortSignal,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'error approving tool call');
+    }
+  },
+});
+
+export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-tool-call-generate',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineToolCallBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Decline tool call (non-streaming)',
+  description: 'Declines a pending tool call and returns the complete response',
+  tags: ['Agents', 'Tools'],
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const result = await agent.declineToolCallGenerate({
+        ...params,
+        abortSignal,
+      });
+
+      return result;
     } catch (error) {
       return handleError(error, 'error declining tool call');
     }

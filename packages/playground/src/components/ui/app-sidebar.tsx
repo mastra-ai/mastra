@@ -8,6 +8,7 @@ import {
   CloudUploadIcon,
   MessagesSquareIcon,
   FolderIcon,
+  Cpu,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -43,6 +44,11 @@ const mainNavigation: NavSection[] = [
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Processors',
+        url: '/processors',
+        icon: <Cpu />,
       },
       {
         name: 'MCP Servers',
@@ -194,10 +200,7 @@ export function AppSidebar() {
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const [_, pagePath] = pathname.split('/');
-                  const lowercasedPagePath = link.name.toLowerCase();
-                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
-
+                  const isActive = pathname.startsWith(link.url);
                   return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>

@@ -11,6 +11,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
+import type { ProcessorStepOutput } from './step-schema';
 
 /**
  * Base context shared by all processor methods
@@ -203,6 +204,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
+  readonly description?: string;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -340,7 +342,7 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
  */
-export type ProcessorWorkflow = Workflow<any, any, string, any, any, any>;
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
 
 /**
  * Input processor config: can be a Processor or a Workflow.

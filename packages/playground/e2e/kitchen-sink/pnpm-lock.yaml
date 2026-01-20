@@ -1,0 +1,189 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  mastra: link:../../../../packages/cli
+  '@mastra/core': link:../../../../packages/core
+  '@mastra/loggers': link:../../../../packages/loggers
+  '@mastra/memory': link:../../../../packages/memory
+  '@mastra/libsql': link:../../../../stores/libsql
+  '@mastra/mcp': link:../../../../packages/mcp
+
+importers:
+
+  .:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: ^2.0.44
+        version: 2.0.89(zod@3.25.76)
+      '@mastra/core':
+        specifier: link:../../../core
+        version: link:../../../core
+      '@mastra/libsql':
+        specifier: link:../../../../stores/libsql
+        version: link:../../../../stores/libsql
+      '@mastra/loggers':
+        specifier: link:../../../loggers
+        version: link:../../../loggers
+      '@mastra/mcp':
+        specifier: link:../../../mcp
+        version: link:../../../mcp
+      '@mastra/memory':
+        specifier: link:../../../memory
+        version: link:../../../memory
+      ai:
+        specifier: 5.1.0-beta.13
+        version: 5.1.0-beta.13(zod@3.25.76)
+      mastra:
+        specifier: link:../../../cli
+        version: link:../../../cli
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.17
+        version: 22.13.17
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+packages:
+
+  '@ai-sdk/gateway@1.1.0-beta.8':
+    resolution: {integrity: sha512-Ij9SWVmGFF0619RSQHA5hctXquvYl4zCZcbfXhKPi0SdnMb7IhM6jAQuBH5O+1tWew+gKQk7EChnfftzt/cqTQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai@2.0.89':
+    resolution: {integrity: sha512-4+qWkBCbL9HPKbgrUO/F2uXZ8GqrYxHa8SWEYIzxEJ9zvWw3ISr3t1/27O1i8MGSym+PzEyHBT48EV4LAwWaEw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.20':
+    resolution: {integrity: sha512-iXHVe0apM2zUEzauqJwqmpC37A5rihrStAih5Ks+JE32iTe4LZ58y17UGBjpQQTCRw9YxMeo2UFLxLpBluyvLQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.1.0-beta.4':
+    resolution: {integrity: sha512-RcKouN8ERFdmVm2dapDDcEaGeAi6qMbaPNl6ZLBbCFcdQIAma2kGpSn+Ero7FHFsIAJ0SMZHes8cKz+unHT+qg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider@2.0.1':
+    resolution: {integrity: sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@2.1.0-beta.2':
+    resolution: {integrity: sha512-5+50OlxSOGiwhUBgq1WUXHaN5VUDjUKGXKtde7E9aaOm0AJKIS5UgM/x5yXedBtyGmi4m2IdgaxX0ObcwqJ5QA==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/test-server@1.0.0-beta.0':
+    resolution: {integrity: sha512-p2F6XivJrFysDdQLKwSNBFJ1pnHcFTz4XMr8xHQ4gpR55Vajvi21RUh70vH1vahpyTMNJcZXkwHD9EAanjOjdQ==}
+    engines: {node: '>=18'}
+
+  '@opentelemetry/api@1.9.0':
+    resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
+    engines: {node: '>=8.0.0'}
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@types/node@22.13.17':
+    resolution: {integrity: sha512-nAJuQXoyPj04uLgu+obZcSmsfOenUg6DxPKogeUy6yNCFwWaj5sBF8/G/pNo8EtBJjAfSVgfIlugR/BCOleO+g==}
+
+  ai@5.1.0-beta.13:
+    resolution: {integrity: sha512-Tj1aUBP+/1q5xL9uV7i4TvfNeCQPqC37nXv1tq39ogDX8fh68WFoZOJIXfF3LAuU8noYn5Mea19r6Re2DBAQkQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  eventsource-parser@3.0.6:
+    resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
+    engines: {node: '>=18.0.0'}
+
+  json-schema@0.4.0:
+    resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@6.20.0:
+    resolution: {integrity: sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg==}
+
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+snapshots:
+
+  '@ai-sdk/gateway@1.1.0-beta.8(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.1.0-beta.2
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/openai@2.0.89(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.1
+      '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.20(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.1
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.1.0-beta.2
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
+
+  '@ai-sdk/provider@2.0.1':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@2.1.0-beta.2':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/test-server@1.0.0-beta.0': {}
+
+  '@opentelemetry/api@1.9.0': {}
+
+  '@standard-schema/spec@1.1.0': {}
+
+  '@types/node@22.13.17':
+    dependencies:
+      undici-types: 6.20.0
+
+  ai@5.1.0-beta.13(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/gateway': 1.1.0-beta.8(zod@3.25.76)
+      '@ai-sdk/provider': 2.1.0-beta.2
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
+      '@ai-sdk/test-server': 1.0.0-beta.0
+      '@opentelemetry/api': 1.9.0
+      zod: 3.25.76
+
+  eventsource-parser@3.0.6: {}
+
+  json-schema@0.4.0: {}
+
+  typescript@5.9.3: {}
+
+  undici-types@6.20.0: {}
+
+  zod@3.25.76: {}

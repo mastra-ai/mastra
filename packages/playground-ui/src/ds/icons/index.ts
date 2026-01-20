@@ -42,3 +42,4 @@ export * from './FolderIcon';
 export * from './McpCoinIcon';
 export * from './ToolCoinIcon';
 export * from './AgentNetworkCoinIcon';
+export * from './ProcessorIcon';
