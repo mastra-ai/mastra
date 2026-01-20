@@ -103,8 +103,9 @@ export class LibSQLStore extends MastraCompositeStore {
 
       // Resolve relative file: URLs from project root
       // e.g., file:./mastra.db → file:/Users/me/project/mastra.db
+      // Skip :memory: URLs (e.g., file::memory:?cache=shared)
       let url = config.url;
-      if (url.startsWith('file:') && !url.startsWith('file:/')) {
+      if (url.startsWith('file:') && !url.startsWith('file:/') && !url.includes(':memory:')) {
         const relativePath = url.slice(5); // Remove 'file:' prefix
         url = `file:${resolveFromProjectRoot(relativePath)}`;
       }
