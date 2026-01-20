@@ -27,8 +27,6 @@ export async function studio(
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
-  console.info(JSON.stringify(options, null, 2));
-
   try {
     const distPath = join(__dirname, 'studio');
 
