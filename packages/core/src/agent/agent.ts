@@ -512,18 +512,39 @@ export class Agent<
     processorId: TId,
     requestContext?: RequestContext,
   ): Promise<Processor<TId> | null> {
-    // Search input processors
-    const inputProcessors = await this.listInputProcessors(requestContext);
-    for (const p of inputProcessors) {
-      if (!isProcessorWorkflow(p) && p.id === processorId) {
+    const ctx = requestContext || new RequestContext();
+
+    // Get raw input processors (before combining into workflow)
+    const configuredInputProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: ctx })
+        : this.#inputProcessors
+      : [];
+
+    // Get memory input processors
+    const memory = await this.getMemory({ requestContext: ctx });
+    const memoryInputProcessors = memory ? await memory.getInputProcessors(configuredInputProcessors, ctx) : [];
+
+    // Search all input processors
+    for (const p of [...memoryInputProcessors, ...configuredInputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
         return p as Processor<TId>;
       }
     }
 
-    // Search output processors
-    const outputProcessors = await this.listOutputProcessors(requestContext);
-    for (const p of outputProcessors) {
-      if (!isProcessorWorkflow(p) && p.id === processorId) {
+    // Get raw output processors (before combining into workflow)
+    const configuredOutputProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: ctx })
+        : this.#outputProcessors
+      : [];
+
+    // Get memory output processors
+    const memoryOutputProcessors = memory ? await memory.getOutputProcessors(configuredOutputProcessors, ctx) : [];
+
+    // Search all output processors
+    for (const p of [...memoryOutputProcessors, ...configuredOutputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
         return p as Processor<TId>;
       }
     }
