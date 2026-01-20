@@ -9,7 +9,8 @@
     "start": "npx bun src/example.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
     "mastra:build": "mastra build",
-    "mastra:dev": "mastra dev"
+    "mastra:dev": "mastra dev",
+    "mastra:start": "mastra start"
   },
   "dependencies": {
     "zod": "^3",

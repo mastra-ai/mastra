@@ -46,6 +46,18 @@ describe('getProjectRoot', () => {
     const root = getProjectRoot({ cwd: '/' });
     expect(root).toBe('/');
   });
+
+  it('skips .mastra directory when searching upward', () => {
+    // When running bundled code from project/.mastra/output/index.mjs,
+    // we want to find project/package.json, not any package.json inside .mastra
+    // This test verifies the skip logic by checking that a path containing .mastra
+    // resolves to the parent directory's package.json
+    const projectRoot = getProjectRoot();
+    const mastraPath = path.join(projectRoot, '.mastra', 'output');
+    const root = getProjectRoot({ cwd: mastraPath });
+    // Should skip .mastra and find the project root
+    expect(root).toBe(projectRoot);
+  });
 });
 
 describe('resolveFromProjectRoot', () => {

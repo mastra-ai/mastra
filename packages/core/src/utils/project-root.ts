@@ -37,11 +37,23 @@ export function getProjectRoot(options: ProjectRootOptions = {}): string {
   return findUpPackageJson(startDir) ?? startDir;
 }
 
+// Directories to skip when searching for project root
+// These are build outputs that may contain their own package.json
+const SKIP_DIRECTORIES = new Set(['.mastra']);
+
 function findUpPackageJson(startDir: string): string | null {
   let dir = path.resolve(startDir);
   const root = path.parse(dir).root;
 
   while (dir !== root) {
+    const dirName = path.basename(dir);
+
+    // Skip build output directories
+    if (SKIP_DIRECTORIES.has(dirName)) {
+      dir = path.dirname(dir);
+      continue;
+    }
+
     if (existsSync(path.join(dir, 'package.json'))) {
       return dir;
     }
