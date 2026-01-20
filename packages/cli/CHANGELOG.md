@@ -1,5 +1,29 @@
 # mastra
 
+## 1.0.0-beta.18
+
+### Minor Changes
+
+- Added `mastra migrate` CLI command to manually run storage migrations. This command bundles and executes the migration script against your configured storage backend, deduplicating spans and adding unique constraints. Useful when upgrading from older versions that may have duplicate (traceId, spanId) entries. ([#12073](https://github.com/mastra-ai/mastra/pull/12073))
+
+  **Usage:**
+
+  ```bash
+  npx mastra migrate
+  ```
+
+  **Options:**
+  - `-d, --dir <path>` - Path to your Mastra folder (default: `src/mastra`)
+  - `-r, --root <path>` - Path to your root folder
+  - `-e, --env <env>` - Custom env file to include
+  - `--debug` - Enable debug logs
+
+### Patch Changes
+
+- Updated dependencies [[`026b848`](https://github.com/mastra-ai/mastra/commit/026b8483fbf5b6d977be8f7e6aac8d15c75558ac), [`ffa553a`](https://github.com/mastra-ai/mastra/commit/ffa553a3edc1bd17d73669fba66d6b6f4ac10897)]:
+  - @mastra/core@1.0.0-beta.26
+  - @mastra/deployer@1.0.0-beta.26
+
 ## 1.0.0-beta.17
 
 ### Patch Changes

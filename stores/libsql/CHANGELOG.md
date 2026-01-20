@@ -1,5 +1,63 @@
 # @mastra/libsql
 
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- Fixed duplicate spans migration issue across all storage backends. When upgrading from older versions, existing duplicate (traceId, spanId) combinations in the spans table could prevent the unique constraint from being created. The migration deduplicates spans before adding the constraint. ([#12073](https://github.com/mastra-ai/mastra/pull/12073))
+
+  **Deduplication rules (in priority order):**
+  1. Keep completed spans (those with `endedAt` set) over incomplete spans
+  2. Among spans with the same completion status, keep the one with the newest `updatedAt`
+  3. Use `createdAt` as the final tiebreaker
+
+  **What changed:**
+  - Added `migrateSpans()` method to observability stores for manual migration
+  - Added `checkSpansMigrationStatus()` method to check if migration is needed
+  - All stores use optimized single-query deduplication to avoid memory issues on large tables
+
+  **Usage example:**
+
+  ```typescript
+  const observability = await storage.getStore('observability');
+  const status = await observability.checkSpansMigrationStatus();
+  if (status.needsMigration) {
+    const result = await observability.migrateSpans();
+    console.log(`Migration complete: ${result.duplicatesRemoved} duplicates removed`);
+  }
+  ```
+
+  Fixes #11840
+
+- Renamed MastraStorage to MastraCompositeStore for better clarity. The old MastraStorage name remains available as a deprecated alias for backward compatibility, but will be removed in a future version. ([#12093](https://github.com/mastra-ai/mastra/pull/12093))
+
+  **Migration:**
+
+  Update your imports and usage:
+
+  ```typescript
+  // Before
+  import { MastraStorage } from '@mastra/core/storage';
+
+  const storage = new MastraStorage({
+    id: 'composite',
+    domains: { ... }
+  });
+
+  // After
+  import { MastraCompositeStore } from '@mastra/core/storage';
+
+  const storage = new MastraCompositeStore({
+    id: 'composite',
+    domains: { ... }
+  });
+  ```
+
+  The new name better reflects that this is a composite storage implementation that routes different domains (workflows, traces, messages) to different underlying stores, avoiding confusion with the general "Mastra Storage" concept.
+
+- Updated dependencies [[`026b848`](https://github.com/mastra-ai/mastra/commit/026b8483fbf5b6d977be8f7e6aac8d15c75558ac), [`ffa553a`](https://github.com/mastra-ai/mastra/commit/ffa553a3edc1bd17d73669fba66d6b6f4ac10897)]:
+  - @mastra/core@1.0.0-beta.26
+
 ## 1.0.0-beta.13
 
 ### Patch Changes
