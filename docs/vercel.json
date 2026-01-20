@@ -1864,6 +1864,36 @@
       "source": "/reference/server/express-adapter",
       "destination": "/docs/frameworks/servers/express",
       "permanent": true
+    },
+    {
+      "source": "/docs/server/custom-api-routes",
+      "destination": "/docs/server-db/custom-api-routes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/mastra-client",
+      "destination": "/docs/server-db/mastra-client",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/mastra-server",
+      "destination": "/docs/server-db/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/request-context",
+      "destination": "/docs/server-db/runtime-context",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/upgrade-to-v1/deployment",
+      "destination": "/guides/migrations/upgrade-to-latest-0x",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/upgrade-to-v1/rag",
+      "destination": "/guides/migrations/upgrade-to-latest-0x",
+      "permanent": true
     }
   ]
 }
