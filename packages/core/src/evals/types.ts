@@ -4,6 +4,19 @@ import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
 import type { TracingContext } from '../observability';
 import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
+import type { PaginationInfo } from '../storage/types';
+
+// ============================================================================
+// Type Validation Utilities
+// ============================================================================
+
+/**
+ * Helper function to verify that an explicit interface is bidirectionally
+ * assignable with a Zod-inferred type. This catches structural mismatches
+ * while being more forgiving than strict type equality.
+ */
+function assertTypeCompatibility<T, U>(_t: T extends U ? (U extends T ? true : never) : never): void {}
+type AssertAssignable<T, U> = T extends U ? true : never;
 
 // ============================================================================
 // Sampling Config
@@ -206,7 +219,51 @@ export const scoreRowDataSchema = z.object({
   ...dbTimestamps,
 });
 
-export type ScoreRowData = z.infer<typeof scoreRowDataSchema>;
+/**
+ * Score row data as stored in the database.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries.
+ */
+export interface ScoreRowData {
+  id: string;
+  scorerId: string;
+  entityId: string;
+  runId: string;
+  input?: unknown;
+  output?: unknown;
+  additionalContext?: Record<string, unknown>;
+  requestContext?: Record<string, unknown>;
+  extractStepResult?: Record<string, unknown>;
+  extractPrompt?: string;
+  score: number;
+  analyzeStepResult?: Record<string, unknown>;
+  analyzePrompt?: string;
+  reason?: string;
+  reasonPrompt?: string;
+  scorer: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  source: ScoringSource;
+  entity: Record<string, unknown>;
+  entityType?: ScoringEntityType;
+  structuredOutput?: boolean;
+  traceId?: string;
+  spanId?: string;
+  resourceId?: string;
+  threadId?: string;
+  preprocessStepResult?: Record<string, unknown>;
+  preprocessPrompt?: string;
+  generateScorePrompt?: string;
+  generateReasonPrompt?: string;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+
+// Type validation: ensures ScoreRowData interface is assignable to/from z.infer<typeof scoreRowDataSchema>
+type _InferredScoreRowData = z.infer<typeof scoreRowDataSchema>;
+type _ScoreRowDataToInferred = AssertAssignable<ScoreRowData, _InferredScoreRowData>;
+type _InferredToScoreRowData = AssertAssignable<_InferredScoreRowData, ScoreRowData>;
+const _scoreRowDataTypeCheck: [_ScoreRowDataToInferred, _InferredToScoreRowData] = [true, true];
 
 // ============================================================================
 // Save Score Payload (for creating new scores)
@@ -229,7 +286,22 @@ export const listScoresResponseSchema = z.object({
   scores: z.array(scoreRowDataSchema),
 });
 
-export type ListScoresResponse = z.infer<typeof listScoresResponseSchema>;
+/**
+ * Response containing paginated score records.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries.
+ */
+export interface ListScoresResponse {
+  pagination: PaginationInfo;
+  scores: ScoreRowData[];
+}
+
+// Type validation: ensures ListScoresResponse interface is assignable to/from z.infer<typeof listScoresResponseSchema>
+type _InferredListScoresResponse = z.infer<typeof listScoresResponseSchema>;
+type _ListScoresResponseToInferred = AssertAssignable<ListScoresResponse, _InferredListScoresResponse>;
+type _InferredToListScoresResponse = AssertAssignable<_InferredListScoresResponse, ListScoresResponse>;
+const _listScoresResponseTypeCheck: [_ListScoresResponseToInferred, _InferredToListScoresResponse] = [true, true];
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
 

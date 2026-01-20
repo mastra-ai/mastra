@@ -31,11 +31,10 @@ export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert
 // ============================================================================
 
 /**
- * Utility type to check if two types are mutually assignable.
+ * Helper type for verifying that an explicit interface is assignable to another type.
  * Used to ensure explicit interfaces stay in sync with Zod schema inferences.
- * If the types don't match, TypeScript will produce a compile error.
  */
-type Equals<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;
+type AssertAssignable<T, U> = T extends U ? true : never;
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes
@@ -240,8 +239,9 @@ export interface SpanRecord {
 // Type validation: ensures SpanRecord interface matches z.infer<typeof spanRecordSchema>
 // If the schema changes and the interface doesn't match, this will produce a compile error.
 type _InferredSpanRecord = z.infer<typeof spanRecordSchema>;
-type _SpanRecordCheck = Equals<SpanRecord, _InferredSpanRecord> extends true ? true : never;
-const _spanRecordTypeCheck: _SpanRecordCheck = true;
+type _SpanRecordToInferred = AssertAssignable<SpanRecord, _InferredSpanRecord>;
+type _InferredToSpanRecord = AssertAssignable<_InferredSpanRecord, SpanRecord>;
+const _spanRecordTypeCheck: [_SpanRecordToInferred, _InferredToSpanRecord] = [true, true];
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
@@ -389,8 +389,22 @@ export const getTraceResponseSchema = z.object({
   spans: z.array(spanRecordSchema),
 });
 
-/** Response containing a trace with all its spans */
-export type GetTraceResponse = z.infer<typeof getTraceResponseSchema>;
+/**
+ * Response containing a trace with all its spans.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries.
+ */
+export interface GetTraceResponse {
+  traceId: string;
+  spans: SpanRecord[];
+}
+
+// Type validation: ensures GetTraceResponse interface matches z.infer<typeof getTraceResponseSchema>
+type _InferredGetTraceResponse = z.infer<typeof getTraceResponseSchema>;
+type _GetTraceResponseToInferred = AssertAssignable<GetTraceResponse, _InferredGetTraceResponse>;
+type _InferredToGetTraceResponse = AssertAssignable<_InferredGetTraceResponse, GetTraceResponse>;
+const _getTraceResponseTypeCheck: [_GetTraceResponseToInferred, _InferredToGetTraceResponse] = [true, true];
 
 export type TraceRecord = GetTraceResponse;
 
@@ -467,8 +481,9 @@ export interface ListTracesResponse {
 // Type validation: ensures ListTracesResponse interface matches z.infer<typeof listTracesResponseSchema>
 // If the schema changes and the interface doesn't match, this will produce a compile error.
 type _InferredListTracesResponse = z.infer<typeof listTracesResponseSchema>;
-type _ListTracesResponseCheck = Equals<ListTracesResponse, _InferredListTracesResponse> extends true ? true : never;
-const _listTracesResponseTypeCheck: _ListTracesResponseCheck = true;
+type _ListTracesResponseToInferred = AssertAssignable<ListTracesResponse, _InferredListTracesResponse>;
+type _InferredToListTracesResponse = AssertAssignable<_InferredListTracesResponse, ListTracesResponse>;
+const _listTracesResponseTypeCheck: [_ListTracesResponseToInferred, _InferredToListTracesResponse] = [true, true];
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)
@@ -555,5 +570,20 @@ export const scoreTracesResponseSchema = z.object({
   traceCount: z.number(),
 });
 
-/** Response from scoring traces */
-export type ScoreTracesResponse = z.infer<typeof scoreTracesResponseSchema>;
+/**
+ * Response from scoring traces.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries.
+ */
+export interface ScoreTracesResponse {
+  status: string;
+  message: string;
+  traceCount: number;
+}
+
+// Type validation: ensures ScoreTracesResponse interface matches z.infer<typeof scoreTracesResponseSchema>
+type _InferredScoreTracesResponse = z.infer<typeof scoreTracesResponseSchema>;
+type _ScoreTracesResponseToInferred = AssertAssignable<ScoreTracesResponse, _InferredScoreTracesResponse>;
+type _InferredToScoreTracesResponse = AssertAssignable<_InferredScoreTracesResponse, ScoreTracesResponse>;
+const _scoreTracesResponseTypeCheck: [_ScoreTracesResponseToInferred, _InferredToScoreTracesResponse] = [true, true];
