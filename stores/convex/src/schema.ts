@@ -15,6 +15,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SPANS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -118,6 +119,27 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_created', ['createdAt']);
 
 // ============================================================================
+// Observability Tables - For trace/span persistence (Mastra Studio)
+// ============================================================================
+
+/**
+ * Spans table - stores observability spans for Mastra Studio
+ * Schema: TABLE_SCHEMAS[TABLE_SPANS]
+ *
+ * This table enables trace persistence for Mastra Studio's observability features.
+ * The DefaultExporter writes spans here so they can be viewed in Studio.
+ */
+export const mastraSpansTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[TABLE_SPANS]))
+  .index('by_record_id', ['id'])
+  .index('by_trace_span', ['traceId', 'spanId'])
+  .index('by_trace', ['traceId'])
+  .index('by_parent', ['parentSpanId'])
+  .index('by_name', ['name'])
+  .index('by_span_type', ['spanType'])
+  .index('by_entity', ['entityType', 'entityId'])
+  .index('by_started', ['startedAt']);
+
+// ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
 // ============================================================================
 
@@ -166,7 +188,7 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS, TABLE_SPANS };
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
