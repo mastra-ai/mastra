@@ -175,13 +175,13 @@ When duplicates exist, keep the record based on this priority:
 
 Only 5 stores implement observability/spans storage. The others are either vector-only stores or storage adapters that don't include observability.
 
-| Store               | Unique Constraint?             | Affected? | Status                                                   |
-| ------------------- | ------------------------------ | --------- | -------------------------------------------------------- |
-| **PostgreSQL (pg)** | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication + ON CONFLICT            |
-| **MSSQL**           | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication before PRIMARY KEY       |
-| **MongoDB**         | Unique index {spanId, traceId} | YES       | **FIXED** - Added deduplication before unique index      |
-| **LibSQL**          | None                           | NO        | Missing unique constraint (oversight?)                   |
-| **ClickHouse**      | PRIMARY KEY (ordering only)    | NO        | ClickHouse PRIMARY KEY doesn't enforce uniqueness        |
+| Store               | Unique Constraint?             | Affected? | Status                                              |
+| ------------------- | ------------------------------ | --------- | --------------------------------------------------- |
+| **PostgreSQL (pg)** | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication + ON CONFLICT       |
+| **MSSQL**           | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication before PRIMARY KEY  |
+| **MongoDB**         | Unique index {spanId, traceId} | YES       | **FIXED** - Added deduplication before unique index |
+| **LibSQL**          | None                           | NO        | Missing unique constraint (oversight?)              |
+| **ClickHouse**      | PRIMARY KEY (ordering only)    | NO        | ClickHouse PRIMARY KEY doesn't enforce uniqueness   |
 
 ### Exact Lines Where Constraints Are Added
 
