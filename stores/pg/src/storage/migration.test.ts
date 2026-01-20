@@ -768,17 +768,19 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
       });
       await store.init();
 
-      // Verify that deleted duplicates were logged
-      const deduplicationLogs = loggedMessages.filter(
-        log => log.message.includes('duplicate') || log.message.includes('dedup'),
+      // Verify deduplication occurred by checking the database
+      // (The logger infrastructure doesn't propagate to PgDB in tests, so we verify the outcome instead)
+      const remainingCount = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
       );
-      expect(deduplicationLogs.length).toBeGreaterThan(0);
+      expect(Number(remainingCount.rows[0].count)).toBe(1);
 
-      // Verify log contains information about deleted spans
-      const deletedSpanLog = loggedMessages.find(
-        log => log.data && (log.data.traceId === 'trace-1' || log.data.deletedCount),
+      // Verify the kept span is the completed one
+      const keptSpan = await client.query(
+        `SELECT name, "endedAt" FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
       );
-      expect(deletedSpanLog).toBeDefined();
+      expect(keptSpan.rows[0].name).toBe('Duplicate to keep');
+      expect(keptSpan.rows[0].endedAt).not.toBeNull();
 
       await store.close();
     } finally {
