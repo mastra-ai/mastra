@@ -1,5 +1,6 @@
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
+import { MastraError } from '@mastra/core/errors';
 import { TABLE_SPANS, SPAN_SCHEMA } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -717,5 +718,300 @@ describe('ClickHouse Spans Table Migration', () => {
       expect(rows[0]?.name).toBe('Updated Version');
       expect(rows[0]?.endedAt).not.toBeNull();
     });
+  });
+});
+
+/**
+ * ClickHouse-specific tests that verify init() throws MastraError when
+ * migration is required (sorting key needs to be updated).
+ *
+ * IMPORTANT: Unlike other databases, ClickHouse ALWAYS requires manual migration
+ * when the sorting key needs to change, regardless of whether duplicates exist.
+ * This is because ClickHouse's ReplacingMergeTree requires table recreation to
+ * change the sorting key.
+ */
+describe('ClickHouse Migration Required Error', () => {
+  let client: ClickHouseClient;
+
+  const TEST_CONFIG = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+
+  beforeAll(async () => {
+    client = createClient({
+      url: TEST_CONFIG.url,
+      username: TEST_CONFIG.username,
+      password: TEST_CONFIG.password,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await client?.close();
+  });
+
+  beforeEach(async () => {
+    // Drop the spans table before each test to ensure clean state
+    await client.command({
+      query: `DROP TABLE IF EXISTS ${TABLE_SPANS}`,
+    });
+  });
+
+  /**
+   * Helper to create a table with the OLD sorting key (createdAt, traceId, spanId)
+   */
+  async function createOldSpansTable(): Promise<void> {
+    await client.command({
+      query: `
+        CREATE TABLE ${TABLE_SPANS} (
+          "traceId" String,
+          "spanId" String,
+          "parentSpanId" Nullable(String),
+          "name" String,
+          "spanType" String,
+          "isEvent" Bool,
+          "startedAt" DateTime64(3),
+          "endedAt" Nullable(DateTime64(3)),
+          "createdAt" DateTime64(3),
+          "updatedAt" DateTime64(3),
+          "entityType" Nullable(String),
+          "entityId" Nullable(String),
+          "entityName" Nullable(String),
+          "userId" Nullable(String),
+          "organizationId" Nullable(String),
+          "resourceId" Nullable(String),
+          "runId" Nullable(String),
+          "sessionId" Nullable(String),
+          "threadId" Nullable(String),
+          "requestId" Nullable(String),
+          "environment" Nullable(String),
+          "source" Nullable(String),
+          "serviceName" Nullable(String),
+          "scope" Nullable(String),
+          "metadata" Nullable(String) DEFAULT '{}',
+          "tags" Nullable(String),
+          "attributes" Nullable(String),
+          "links" Nullable(String),
+          "input" Nullable(String),
+          "output" Nullable(String),
+          "error" Nullable(String)
+        )
+        ENGINE = ReplacingMergeTree()
+        PRIMARY KEY (createdAt, traceId, spanId)
+        ORDER BY (createdAt, traceId, spanId)
+        SETTINGS index_granularity = 8192
+      `,
+    });
+  }
+
+  it('should throw MastraError when init() finds old sorting key (even without duplicates)', async () => {
+    // Create table with OLD sorting key
+    await createOldSpansTable();
+
+    // Insert a UNIQUE span (no duplicates)
+    await client.insert({
+      table: TABLE_SPANS,
+      values: [
+        {
+          traceId: 'unique-trace',
+          spanId: 'unique-span',
+          parentSpanId: null,
+          name: 'Unique Span',
+          spanType: 'agent_run',
+          isEvent: false,
+          startedAt: new Date('2024-01-01T00:00:00Z').getTime(),
+          endedAt: new Date('2024-01-01T00:00:01Z').getTime(),
+          createdAt: new Date('2024-01-01T00:00:00Z').getTime(),
+          updatedAt: new Date('2024-01-01T00:00:00Z').getTime(),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          metadata: '{}',
+          tags: null,
+          attributes: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    // Verify table has old sorting key
+    const result = await client.query({
+      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query_params: { tableName: TABLE_SPANS },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ sorting_key: string }>;
+    expect(rows[0]?.sorting_key.toLowerCase()).toMatch(/^createdat/);
+
+    // Create observability store and try to init - should throw MastraError
+    // even though there are NO duplicates
+    const observability = new ObservabilityStorageClickhouse({ client });
+
+    // init() should throw MastraError because sorting key needs update
+    await expect(observability.init()).rejects.toThrow(MastraError);
+
+    // Verify error has correct ID
+    try {
+      await observability.init();
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(MastraError);
+      expect(error.id).toContain('MIGRATION_REQUIRED');
+      expect(error.id).toContain('SORTING_KEY_CHANGE');
+    }
+  });
+
+  it('should throw MastraError when init() finds old sorting key (with duplicates - different error message)', async () => {
+    // Create table with OLD sorting key
+    await createOldSpansTable();
+
+    const baseTime = new Date('2024-01-01T00:00:00Z');
+
+    // Insert DUPLICATE spans (same traceId + spanId)
+    await client.insert({
+      table: TABLE_SPANS,
+      values: [
+        {
+          traceId: 'dup-trace',
+          spanId: 'dup-span',
+          parentSpanId: null,
+          name: 'First duplicate',
+          spanType: 'agent_run',
+          isEvent: false,
+          startedAt: baseTime.getTime(),
+          endedAt: null,
+          createdAt: baseTime.getTime(),
+          updatedAt: baseTime.getTime(),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          metadata: '{}',
+          tags: null,
+          attributes: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+        },
+        {
+          traceId: 'dup-trace',
+          spanId: 'dup-span', // Same spanId - duplicate
+          parentSpanId: null,
+          name: 'Second duplicate',
+          spanType: 'agent_run',
+          isEvent: false,
+          startedAt: baseTime.getTime(),
+          endedAt: new Date(baseTime.getTime() + 1000).getTime(),
+          createdAt: new Date(baseTime.getTime() + 100).getTime(),
+          updatedAt: new Date(baseTime.getTime() + 1000).getTime(),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          metadata: '{}',
+          tags: null,
+          attributes: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    // Create observability store and try to init - should throw MastraError
+    const observability = new ObservabilityStorageClickhouse({ client });
+
+    // init() should throw MastraError because sorting key needs update
+    await expect(observability.init()).rejects.toThrow(MastraError);
+
+    // Verify error has correct ID
+    try {
+      await observability.init();
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(MastraError);
+      expect(error.id).toContain('MIGRATION_REQUIRED');
+      expect(error.id).toContain('SORTING_KEY_CHANGE');
+    }
+  });
+
+  it('should NOT throw when table has correct sorting key (fresh install)', async () => {
+    // Don't create any table - let init create it with correct sorting key
+
+    const observability = new ObservabilityStorageClickhouse({ client });
+
+    // init() should NOT throw - it will create table with correct sorting key
+    await expect(observability.init()).resolves.not.toThrow();
+
+    // Verify table has correct sorting key
+    const result = await client.query({
+      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query_params: { tableName: TABLE_SPANS },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ sorting_key: string }>;
+    expect(rows[0]?.sorting_key.toLowerCase()).toBe('traceid, spanid');
+  });
+
+  it('should NOT throw when table already has correct sorting key (migrated)', async () => {
+    // First, create table with correct sorting key via normal init
+    const db = new ClickhouseDB({ client, ttl: undefined });
+    await db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+
+    // Verify table has correct sorting key
+    const result = await client.query({
+      query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+      query_params: { tableName: TABLE_SPANS },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ sorting_key: string }>;
+    expect(rows[0]?.sorting_key.toLowerCase()).toBe('traceid, spanid');
+
+    // Now call init() again - should NOT throw
+    const observability = new ObservabilityStorageClickhouse({ client });
+    await expect(observability.init()).resolves.not.toThrow();
   });
 });

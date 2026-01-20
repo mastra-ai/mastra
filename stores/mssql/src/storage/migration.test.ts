@@ -1,7 +1,9 @@
+import { MastraError } from '@mastra/core/errors';
 import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MssqlDB } from './db';
+import { MssqlStore } from './index';
 
 const TEST_CONFIG = {
   id: process.env.MSSQL_STORE_ID || 'test-mssql-store',
@@ -611,6 +613,300 @@ describe('MSSQL Duplicate Spans Handling', () => {
       expect(remainingSpan.recordset[0].name).toBe('Newer created');
     } finally {
       await cleanupSchema(testSchema);
+    }
+  });
+});
+
+/**
+ * MSSQL-specific tests that verify init() throws MastraError when
+ * migration is required (duplicates exist without unique constraint).
+ * This ensures users are forced to run manual migration before the app can start.
+ */
+describe('MSSQL Migration Required Error', () => {
+  const testSchema = `mig_err_${Date.now()}`;
+  let pool: sql.ConnectionPool;
+
+  beforeAll(async () => {
+    pool = new sql.ConnectionPool({
+      server: (TEST_CONFIG as any).server,
+      port: (TEST_CONFIG as any).port,
+      database: (TEST_CONFIG as any).database,
+      user: (TEST_CONFIG as any).user,
+      password: (TEST_CONFIG as any).password,
+      options: { encrypt: true, trustServerCertificate: true },
+    });
+    await pool.connect();
+
+    // Create test schema
+    try {
+      await pool.request().query(`DROP SCHEMA IF EXISTS ${testSchema}`);
+    } catch {}
+    await pool.request().query(`CREATE SCHEMA ${testSchema}`);
+  });
+
+  afterAll(async () => {
+    try {
+      // Drop all tables in test schema first
+      const tables = await pool
+        .request()
+        .query(
+          `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${testSchema}' AND TABLE_TYPE = 'BASE TABLE'`,
+        );
+
+      for (const row of tables.recordset) {
+        await pool.request().query(`DROP TABLE IF EXISTS [${testSchema}].[${row.TABLE_NAME}]`);
+      }
+
+      // Drop schema
+      await pool.request().query(`DROP SCHEMA IF EXISTS ${testSchema}`);
+      await pool.close();
+    } catch (error) {
+      console.warn('MSSQL migration error test cleanup failed:', error);
+    }
+  });
+
+  /**
+   * Helper to create the spans table with OLD schema (no PK constraint)
+   */
+  async function createOldSpansTable(schema: string): Promise<void> {
+    const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'NVARCHAR(MAX)'
+            : colDef.type === 'jsonb'
+              ? 'NVARCHAR(MAX)'
+              : colDef.type === 'timestamp'
+                ? 'DATETIME2'
+                : colDef.type === 'boolean'
+                  ? 'BIT'
+                  : 'NVARCHAR(MAX)';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : 'NULL';
+        return `[${colName}] ${sqlType} ${nullable}`;
+      })
+      .join(', ');
+
+    await pool.request().query(`
+      CREATE TABLE [${schema}].[${TABLE_SPANS}] (
+        ${oldColumns}
+      )
+    `);
+  }
+
+  /**
+   * Helper to insert a span
+   */
+  async function insertSpan(
+    schema: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    await pool.request().query(`
+      INSERT INTO [${schema}].[${TABLE_SPANS}]
+      ([traceId], [spanId], [parentSpanId], [name], [spanType], [isEvent], [startedAt], [endedAt], [createdAt], [updatedAt])
+      VALUES (
+        '${span.traceId}',
+        '${span.spanId}',
+        NULL,
+        '${span.name}',
+        'agent_run',
+        0,
+        '2024-01-01T00:00:00.000Z',
+        ${span.endedAt ? `'${span.endedAt.toISOString()}'` : 'NULL'},
+        '${span.createdAt.toISOString()}',
+        '${span.updatedAt.toISOString()}'
+      )
+    `);
+  }
+
+  /**
+   * Helper to clean up test schema
+   */
+  async function cleanupSchema(schema: string): Promise<void> {
+    try {
+      const tables = await pool
+        .request()
+        .query(
+          `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${schema}' AND TABLE_TYPE = 'BASE TABLE'`,
+        );
+
+      for (const row of tables.recordset) {
+        await pool.request().query(`DROP TABLE IF EXISTS [${schema}].[${row.TABLE_NAME}]`);
+      }
+    } catch {}
+  }
+
+  it('should throw MastraError when init() finds duplicate spans without unique constraint', async () => {
+    const subSchema = `${testSchema}_throw`;
+
+    try {
+      // Setup: Create schema and table with old schema (no PK)
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
+      await pool.request().query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(subSchema);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1', // Same spanId - creates a duplicate
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist
+      const count = await pool
+        .request()
+        .query(`SELECT COUNT(*) as count FROM [${subSchema}].[${TABLE_SPANS}] WHERE traceId = 'trace-1' AND spanId = 'span-1'`);
+      expect(Number(count.recordset[0].count)).toBe(2);
+
+      // Create store and try to init - should throw MastraError
+      const store = new MssqlStore({
+        id: 'throw-test-store',
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        schemaName: subSchema,
+      });
+
+      // init() should throw MastraError
+      await expect(store.init()).rejects.toThrow(MastraError);
+
+      // Verify error has correct ID
+      try {
+        await store.init();
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error.id).toContain('MIGRATION_REQUIRED');
+        expect(error.id).toContain('DUPLICATE_SPANS');
+      }
+
+      await store.close();
+    } finally {
+      await cleanupSchema(subSchema);
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
+    }
+  });
+
+  it('should NOT throw when no duplicates exist (auto-migration succeeds)', async () => {
+    const subSchema = `${testSchema}_auto`;
+
+    try {
+      // Setup: Create schema and table with old schema (no PK)
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
+      await pool.request().query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(subSchema);
+
+      // Insert unique spans (no duplicates)
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Unique span 1',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-2', // Different spanId - unique
+        name: 'Unique span 2',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Create store and init - should NOT throw (auto-migration succeeds)
+      const store = new MssqlStore({
+        id: 'auto-migrate-test-store',
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        schemaName: subSchema,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify PK constraint was added
+      const pkExists = await pool.request().query(`
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID('[${subSchema}].[${TABLE_SPANS}]')
+        AND is_primary_key = 1
+      `);
+      expect(pkExists.recordset.length).toBe(1);
+
+      await store.close();
+    } finally {
+      await cleanupSchema(subSchema);
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
+    }
+  });
+
+  it('should NOT throw when constraint already exists (fresh install)', async () => {
+    const subSchema = `${testSchema}_fresh`;
+
+    try {
+      // Setup: Create schema (table will be created by init with constraint)
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
+      await pool.request().query(`CREATE SCHEMA ${subSchema}`);
+
+      // Create store and init - should create table with constraint (fresh install)
+      const store = new MssqlStore({
+        id: 'fresh-install-test-store',
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        schemaName: subSchema,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify PK constraint exists
+      const pkExists = await pool.request().query(`
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID('[${subSchema}].[${TABLE_SPANS}]')
+        AND is_primary_key = 1
+      `);
+      expect(pkExists.recordset.length).toBe(1);
+
+      await store.close();
+    } finally {
+      await cleanupSchema(subSchema);
+      try {
+        await pool.request().query(`DROP SCHEMA IF EXISTS ${subSchema}`);
+      } catch {}
     }
   });
 });

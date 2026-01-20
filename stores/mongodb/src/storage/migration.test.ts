@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/errors';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
@@ -558,6 +559,210 @@ describe('MongoDB Duplicate Spans Handling', () => {
       const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });
       expect(remainingSpan).toBeDefined();
       expect(remainingSpan!.name).toBe('Newer created');
+
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+});
+
+/**
+ * MongoDB-specific tests that verify init() throws MastraError when
+ * migration is required (duplicates exist without unique index).
+ * This ensures users are forced to run manual migration before the app can start.
+ */
+describe('MongoDB Migration Required Error', () => {
+  let client: MongoClient;
+
+  beforeAll(async () => {
+    client = new MongoClient(TEST_CONFIG.url);
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    try {
+      await client.close();
+    } catch (error) {
+      console.warn('MongoDB migration error test cleanup failed:', error);
+    }
+  });
+
+  /**
+   * Helper to create a test database with a clean collection (no indexes)
+   */
+  async function createCleanCollection(dbName: string): Promise<void> {
+    const db = client.db(dbName);
+    try {
+      await db.collection(SPANS_COLLECTION).drop();
+    } catch {}
+    // Create empty collection
+    await db.createCollection(SPANS_COLLECTION);
+  }
+
+  /**
+   * Helper to insert a span document
+   */
+  async function insertSpan(
+    dbName: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    const db = client.db(dbName);
+    await db.collection(SPANS_COLLECTION).insertOne({
+      traceId: span.traceId,
+      spanId: span.spanId,
+      name: span.name,
+      spanType: 'agent_run',
+      isEvent: false,
+      startedAt: new Date('2024-01-01T00:00:00Z'),
+      endedAt: span.endedAt ?? null,
+      createdAt: span.createdAt,
+      updatedAt: span.updatedAt,
+    });
+  }
+
+  /**
+   * Helper to clean up test database
+   */
+  async function cleanupDatabase(dbName: string): Promise<void> {
+    try {
+      await client.db(dbName).dropDatabase();
+    } catch {}
+  }
+
+  it('should throw MastraError when init() finds duplicate spans without unique index', async () => {
+    const testDbName = `mig_err_throw_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1', // Same spanId - creates a duplicate
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist
+      const count = await collection.countDocuments({});
+      expect(count).toBe(2);
+
+      // Create store and try to init - should throw MastraError
+      const store = new MongoDBStore({
+        id: `throw-test-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      // init() should throw MastraError
+      await expect(store.init()).rejects.toThrow(MastraError);
+
+      // Verify error has correct ID
+      try {
+        await store.init();
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error.id).toContain('MIGRATION_REQUIRED');
+        expect(error.id).toContain('DUPLICATE_SPANS');
+      }
+
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+
+  it('should NOT throw when no duplicates exist (auto-migration succeeds)', async () => {
+    const testDbName = `mig_err_auto_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+
+      // Insert unique spans (no duplicates)
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Unique span 1',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-2', // Different spanId - unique
+        name: 'Unique span 2',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Create store and init - should NOT throw (auto-migration succeeds)
+      const store = new MongoDBStore({
+        id: `auto-migrate-test-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index was added
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+      const indexes = await collection.indexes();
+      const uniqueIndex = indexes.find(
+        (idx: any) => idx.key?.spanId === 1 && idx.key?.traceId === 1 && idx.unique === true,
+      );
+      expect(uniqueIndex).toBeDefined();
+
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+
+  it('should NOT throw when unique index already exists (fresh install)', async () => {
+    const testDbName = `mig_err_fresh_${Date.now().toString(36)}`;
+
+    try {
+      // Create store and init - should create collection with unique index (fresh install)
+      const store = new MongoDBStore({
+        id: `fresh-install-test-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index exists
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+      const indexes = await collection.indexes();
+      const uniqueIndex = indexes.find(
+        (idx: any) => idx.key?.spanId === 1 && idx.key?.traceId === 1 && idx.unique === true,
+      );
+      expect(uniqueIndex).toBeDefined();
 
       await store.close();
     } finally {
