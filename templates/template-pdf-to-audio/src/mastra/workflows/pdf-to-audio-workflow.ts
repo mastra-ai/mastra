@@ -37,7 +37,7 @@ const downloadAndSummarizePdfStep = createStep({
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl, speaker, speed } = inputData;
 
-    const result = await summarizePdfTool.execute(
+    const result = await summarizePdfTool.execute!(
       { pdfUrl },
       {
         mastra,
@@ -82,7 +82,7 @@ const generateAudioFromSummaryStep = createStep({
     }
 
     try {
-      const result = await textToSpeechTool.execute(
+      const result = await textToSpeechTool.execute!(
         {
           extractedText: summary, // Use summary as the text input
           speaker,
@@ -122,6 +122,7 @@ export const pdfToAudioWorkflow = createWorkflow({
   inputSchema: pdfInputSchema,
   outputSchema: audioSchema,
 })
+  // @ts-expect-error - TODO: remove once z.enum().optional().default() type error is fixed
   .then(downloadAndSummarizePdfStep)
   .then(generateAudioFromSummaryStep)
   .commit();

@@ -18,17 +18,17 @@
   },
   "dependencies": {
     "@arcadeai/arcadejs": "^1.10.0",
-    "@mastra/core": "beta",
-    "@mastra/fastembed": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "beta",
+    "mastra": "latest",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3"
   }
