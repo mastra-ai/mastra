@@ -67,5 +67,5 @@ Access these in route handlers via `res.locals`:
 
 ## Related Links
 
-- [Server Adapters Documentation](https://mastra.ai/docs/v1/server/server-adapters)
+- [Server Adapters Documentation](https://mastra.ai/docs/server/server-adapters)
 - [Express Documentation](https://expressjs.com)
