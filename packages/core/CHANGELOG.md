@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.0.0-beta.27
+
+### Patch Changes
+
+- Fixed migration CLI failing with MIGRATION_REQUIRED error during Mastra import. Added MASTRA_DISABLE_STORAGE_INIT environment variable to skip auto-initialization of storage, allowing the migration command to import user's Mastra config without triggering the migration check. Also improved the migration prompt display to show warning messages before the confirmation dialog. ([#12100](https://github.com/mastra-ai/mastra/pull/12100))
+
 ## 1.0.0-beta.26
 
 ### Major Changes

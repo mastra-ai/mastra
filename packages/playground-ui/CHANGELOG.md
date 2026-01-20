@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.27
+
+### Patch Changes
+
+- Updated dependencies [[`50fd320`](https://github.com/mastra-ai/mastra/commit/50fd320003d0d93831c230ef531bef41f5ba7b3a)]:
+  - @mastra/core@1.0.0-beta.27
+  - @mastra/client-js@1.0.0-beta.27
+  - @mastra/react@0.1.0-beta.27
+
 ## 7.0.0-beta.26
 
 ### Patch Changes
