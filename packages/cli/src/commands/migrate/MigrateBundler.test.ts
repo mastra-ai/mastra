@@ -22,12 +22,7 @@ vi.mock('../build/BuildBundler.js', () => ({
     loadEnvVars() {
       return Promise.resolve(new Map());
     }
-    protected _bundle(
-      _entry: string,
-      _entryFile: string,
-      _options: unknown,
-      _toolsPaths: unknown,
-    ): Promise<void> {
+    protected _bundle(_entry: string, _entryFile: string, _options: unknown, _toolsPaths: unknown): Promise<void> {
       return Promise.resolve();
     }
   },

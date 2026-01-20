@@ -641,9 +641,7 @@ export class MssqlDB extends MastraBase {
    * Checks if the PRIMARY KEY constraint on (traceId, spanId) already exists on the spans table.
    */
   private async spansPrimaryKeyExists(): Promise<boolean> {
-    const schemaPrefix = this.schemaName
-      ? `${parseSqlIdentifier(this.schemaName, 'schema name')}_`
-      : '';
+    const schemaPrefix = this.schemaName ? `${parseSqlIdentifier(this.schemaName, 'schema name')}_` : '';
     const pkConstraintName = `${schemaPrefix}mastra_ai_spans_traceid_spanid_pk`;
 
     const checkPkRequest = this.pool.request();
@@ -694,9 +692,7 @@ export class MssqlDB extends MastraBase {
     }
 
     // Add PRIMARY KEY constraint
-    const schemaPrefix = this.schemaName
-      ? `${parseSqlIdentifier(this.schemaName, 'schema name')}_`
-      : '';
+    const schemaPrefix = this.schemaName ? `${parseSqlIdentifier(this.schemaName, 'schema name')}_` : '';
     const pkConstraintName = `${schemaPrefix}mastra_ai_spans_traceid_spanid_pk`;
     const addPkSql = `ALTER TABLE ${fullTableName} ADD CONSTRAINT [${pkConstraintName}] PRIMARY KEY ([traceId], [spanId])`;
     await this.pool.request().query(addPkSql);

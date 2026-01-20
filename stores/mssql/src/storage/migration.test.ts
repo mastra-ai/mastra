@@ -775,7 +775,9 @@ describe('MSSQL Migration Required Error', () => {
       // Verify duplicates exist
       const count = await pool
         .request()
-        .query(`SELECT COUNT(*) as count FROM [${subSchema}].[${TABLE_SPANS}] WHERE traceId = 'trace-1' AND spanId = 'span-1'`);
+        .query(
+          `SELECT COUNT(*) as count FROM [${subSchema}].[${TABLE_SPANS}] WHERE traceId = 'trace-1' AND spanId = 'span-1'`,
+        );
       expect(Number(count.recordset[0].count)).toBe(2);
 
       // Create store and try to init - should throw MastraError
