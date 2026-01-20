@@ -7,11 +7,11 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
+import type { ObservabilityPG } from './domains/observability';
 import { TEST_CONFIG, connectionString } from './test-utils';
 import { PostgresStore } from '.';
-import { ObservabilityPG } from './domains/observability';
 
 /**
  * PostgreSQL-specific migration tests that verify the spans table migration
