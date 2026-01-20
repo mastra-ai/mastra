@@ -455,13 +455,22 @@ export class PgDB extends MastraBase {
       if (tableName === TABLE_SPANS) {
         // Build update clause for all columns except the primary key columns
         const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
-        const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
 
-        await this.client.none(
-          `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
-           ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
-          values,
-        );
+        if (updateColumns.length > 0) {
+          const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+          await this.client.none(
+            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
+            values,
+          );
+        } else {
+          // Only PK columns provided - use DO NOTHING to avoid invalid SQL
+          await this.client.none(
+            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO NOTHING`,
+            values,
+          );
+        }
       } else {
         await this.client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
       }
