@@ -1,6 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateVectorValues } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,
@@ -257,6 +257,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('MONGODB', vectors, metadata, ids);
+    validateVectorValues('MONGODB', vectors);
+
     try {
       const collection = await this.getCollection(indexName);
 
@@ -352,8 +356,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: 100,
-        limit: topK,
+        numCandidates: Math.min(10000, Math.max(100, topK)),
+        limit: Math.min(10000, topK),
       };
 
       if (Object.keys(combinedFilter).length > 0) {
