@@ -1,6 +1,6 @@
-# @mastra/react-hooks
+# @mastra/react
 
-## 1.0.0-beta.25
+## 0.1.0-beta.25
 
 ### Minor Changes
 
@@ -57,7 +57,7 @@
 - Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5)]:
   - @mastra/client-js@1.0.0-beta.25
 
-## 1.0.0-beta.24
+## 0.1.0-beta.23
 
 ### Major Changes
 
