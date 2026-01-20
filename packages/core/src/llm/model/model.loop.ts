@@ -167,6 +167,7 @@ export class MastraLLMVNext extends MastraBase {
     includeRawChunks,
     autoResumeSuspendedTools,
     maxProcessorRetries,
+    activeTools,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -238,6 +239,7 @@ export class MastraLLMVNext extends MastraBase {
         includeRawChunks,
         autoResumeSuspendedTools,
         maxProcessorRetries,
+        activeTools,
         options: {
           ...options,
           onStepFinish: async props => {
