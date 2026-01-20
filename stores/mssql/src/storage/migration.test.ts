@@ -697,7 +697,7 @@ describe('MSSQL Migration Required Error', () => {
   }
 
   /**
-   * Helper to insert a span
+   * Helper to insert a span using parameterized queries
    */
   async function insertSpan(
     schema: string,
@@ -710,20 +710,31 @@ describe('MSSQL Migration Required Error', () => {
       updatedAt: Date;
     },
   ): Promise<void> {
-    await pool.request().query(`
+    const request = pool.request();
+    request.input('traceId', sql.NVarChar, span.traceId);
+    request.input('spanId', sql.NVarChar, span.spanId);
+    request.input('name', sql.NVarChar, span.name);
+    request.input('spanType', sql.NVarChar, 'agent_run');
+    request.input('isEvent', sql.Bit, false);
+    request.input('startedAt', sql.DateTime2, new Date('2024-01-01T00:00:00.000Z'));
+    request.input('endedAt', sql.DateTime2, span.endedAt ?? null);
+    request.input('createdAt', sql.DateTime2, span.createdAt);
+    request.input('updatedAt', sql.DateTime2, span.updatedAt);
+
+    await request.query(`
       INSERT INTO [${schema}].[${TABLE_SPANS}]
       ([traceId], [spanId], [parentSpanId], [name], [spanType], [isEvent], [startedAt], [endedAt], [createdAt], [updatedAt])
       VALUES (
-        '${span.traceId}',
-        '${span.spanId}',
+        @traceId,
+        @spanId,
         NULL,
-        '${span.name}',
-        'agent_run',
-        0,
-        '2024-01-01T00:00:00.000Z',
-        ${span.endedAt ? `'${span.endedAt.toISOString()}'` : 'NULL'},
-        '${span.createdAt.toISOString()}',
-        '${span.updatedAt.toISOString()}'
+        @name,
+        @spanType,
+        @isEvent,
+        @startedAt,
+        @endedAt,
+        @createdAt,
+        @updatedAt
       )
     `);
   }

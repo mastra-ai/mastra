@@ -175,7 +175,13 @@ describe('ClickHouse Spans Table Migration', () => {
       format: 'JSONEachRow',
     });
     const rows = (await result.json()) as Array<{ sorting_key: string }>;
-    return rows[0]?.sorting_key ?? null;
+    const sortingKey = rows[0]?.sorting_key ?? null;
+    // Normalize: strip leading/trailing parentheses and whitespace for consistent comparisons
+    // ClickHouse may return "(traceid, spanid)" or "traceid, spanid" depending on version
+    if (sortingKey) {
+      return sortingKey.replace(/^\(|\)$/g, '').trim();
+    }
+    return sortingKey;
   }
 
   /**
@@ -888,17 +894,18 @@ describe('ClickHouse Migration Required Error', () => {
     // even though there are NO duplicates
     const observability = new ObservabilityStorageClickhouse({ client });
 
-    // init() should throw MastraError because sorting key needs update
-    await expect(observability.init()).rejects.toThrow(MastraError);
-
-    // Verify error has correct ID
+    // init() should throw MastraError - capture it from a single call
+    let caughtError: unknown;
     try {
       await observability.init();
-    } catch (error: any) {
-      expect(error).toBeInstanceOf(MastraError);
-      expect(error.id).toContain('MIGRATION_REQUIRED');
-      expect(error.id).toContain('SORTING_KEY_CHANGE');
+    } catch (error) {
+      caughtError = error;
     }
+
+    // Verify error has correct type and ID
+    expect(caughtError).toBeInstanceOf(MastraError);
+    expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+    expect((caughtError as MastraError).id).toContain('SORTING_KEY_CHANGE');
   });
 
   it('should throw MastraError when init() finds old sorting key (with duplicates - different error message)', async () => {
@@ -984,17 +991,18 @@ describe('ClickHouse Migration Required Error', () => {
     // Create observability store and try to init - should throw MastraError
     const observability = new ObservabilityStorageClickhouse({ client });
 
-    // init() should throw MastraError because sorting key needs update
-    await expect(observability.init()).rejects.toThrow(MastraError);
-
-    // Verify error has correct ID
+    // init() should throw MastraError - capture it from a single call
+    let caughtError: unknown;
     try {
       await observability.init();
-    } catch (error: any) {
-      expect(error).toBeInstanceOf(MastraError);
-      expect(error.id).toContain('MIGRATION_REQUIRED');
-      expect(error.id).toContain('SORTING_KEY_CHANGE');
+    } catch (error) {
+      caughtError = error;
     }
+
+    // Verify error has correct type and ID
+    expect(caughtError).toBeInstanceOf(MastraError);
+    expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+    expect((caughtError as MastraError).id).toContain('SORTING_KEY_CHANGE');
   });
 
   it('should NOT throw when table has correct sorting key (fresh install)', async () => {
