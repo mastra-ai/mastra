@@ -10,6 +10,7 @@ tags: classname, arbitrary, tailwind, styling, consistency
 Never use arbitrary Tailwind values (e.g., `[#hex]`, `[13px]`) except for `height` and `width` properties where precise sizing is required.
 
 **Why this matters:**
+
 - Arbitrary values bypass the design system
 - Makes global style updates impossible
 - Creates visual inconsistency
@@ -58,6 +59,7 @@ Never use arbitrary Tailwind values (e.g., `[#hex]`, `[13px]`) except for `heigh
 ```
 
 **Allowed arbitrary value patterns:**
+
 - `h-[value]` - height
 - `w-[value]` - width
 - `min-h-[value]` - min-height

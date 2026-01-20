@@ -10,6 +10,7 @@ tags: tokens, design-tokens, tailwind, colors, spacing, consistency
 Only use color, spacing, and other values that are defined in the `tailwind.config.ts` file from `@playground-ui`. All tokens are sourced from `packages/playground-ui/src/ds/tokens/`.
 
 **Token categories available:**
+
 - **Colors**: `surface1-5`, `accent1-6`, `neutral1-6`, `border1-2`, `error`, `overlay`
 - **Spacings**: `0`, `px`, `0.5`, `1`, `1.5`, `2`, `2.5`, `3`, `4`, `5`, `6`, `8`, `10`, `12`, etc.
 - **Font sizes**: `ui-xs`, `ui-sm`, `ui-md`, `ui-lg`, `ui-xl`
@@ -43,6 +44,7 @@ Only use color, spacing, and other values that are defined in the `tailwind.conf
 ```
 
 **Token reference locations:**
+
 - Colors: `packages/playground-ui/src/ds/tokens/colors.ts`
 - Spacings: `packages/playground-ui/src/ds/tokens/spacings.ts`
 - Font sizes: `packages/playground-ui/src/ds/tokens/fonts.ts`

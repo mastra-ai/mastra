@@ -10,6 +10,7 @@ tags: components, ds, design-system, playground-ui, reuse
 Always check for existing components in `@playground-ui/ds/components/` before creating new ones. Never create new components in the `ds/` folder.
 
 **Why this matters:**
+
 - Prevents component proliferation and duplication
 - Ensures accessibility patterns are reused
 - Maintains visual consistency across the application
@@ -20,11 +21,7 @@ Always check for existing components in `@playground-ui/ds/components/` before c
 ```tsx
 // DON'T: Creating a custom button in your feature
 function MyFeature() {
-  return (
-    <button className="bg-surface2 hover:bg-surface4 text-neutral3 px-2 py-1 rounded-md">
-      Click me
-    </button>
-  );
+  return <button className="bg-surface2 hover:bg-surface4 text-neutral3 px-2 py-1 rounded-md">Click me</button>;
 }
 
 // DON'T: Creating a new component in ds folder
@@ -45,6 +42,7 @@ function MyFeature() {
 ```
 
 **Available DS components include:**
+
 - `Button`, `Badge`, `Avatar`, `Alert`, `AlertDialog`
 - `Card`, `Checkbox`, `Collapsible`, `Combobox`
 - `Dialog`, `Dropdown`, `Input`, `Popover`

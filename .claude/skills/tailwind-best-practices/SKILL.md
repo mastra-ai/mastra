@@ -27,11 +27,11 @@ Reference these guidelines when:
 
 Rules are prioritized by impact:
 
-| Priority | Category         | Impact   |
-| -------- | ---------------- | -------- |
-| 1        | Component Usage  | CRITICAL |
-| 2        | Design Tokens    | CRITICAL |
-| 3        | ClassName Usage  | HIGH     |
+| Priority | Category        | Impact   |
+| -------- | --------------- | -------- |
+| 1        | Component Usage | CRITICAL |
+| 2        | Design Tokens   | CRITICAL |
+| 3        | ClassName Usage | HIGH     |
 
 ## Quick Reference
 

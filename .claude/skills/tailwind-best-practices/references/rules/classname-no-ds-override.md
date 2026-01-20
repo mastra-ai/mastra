@@ -10,6 +10,7 @@ tags: classname, ds-components, override, styling, forbidden
 Never pass `className` props to DS components to override their styles, except for `height` and `width` on `DialogContent` and `Popover` components.
 
 **Why this matters:**
+
 - DS components have intentional, tested styles
 - Overriding breaks visual consistency
 - Makes component updates risky
@@ -65,10 +66,12 @@ Never pass `className` props to DS components to override their styles, except f
 ```
 
 **Allowed exceptions:**
+
 - `DialogContent` - `h-[value]`, `w-[value]` allowed
 - `PopoverContent` - `h-[value]`, `w-[value]` allowed
 
 **If you need different styles:**
+
 1. Check if a variant exists for your use case
 2. Consider if the component props support your need
 3. If not, discuss adding a new variant with the design team

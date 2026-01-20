@@ -42,6 +42,7 @@ The design system components in `@playground-ui` are the foundation of visual co
 Always check for existing components in `@playground-ui/ds/components/` before creating new ones. Never create new components in the `ds/` folder.
 
 **Why this matters:**
+
 - Prevents component proliferation and duplication
 - Ensures accessibility patterns are reused
 - Maintains visual consistency across the application
@@ -52,11 +53,7 @@ Always check for existing components in `@playground-ui/ds/components/` before c
 ```tsx
 // DON'T: Creating a custom button in your feature
 function MyFeature() {
-  return (
-    <button className="bg-surface2 hover:bg-surface4 text-neutral3 px-2 py-1 rounded-md">
-      Click me
-    </button>
-  );
+  return <button className="bg-surface2 hover:bg-surface4 text-neutral3 px-2 py-1 rounded-md">Click me</button>;
 }
 
 // DON'T: Creating a new component in ds folder
@@ -77,6 +74,7 @@ function MyFeature() {
 ```
 
 **Available DS components include:**
+
 - `Button`, `Badge`, `Avatar`, `Alert`, `AlertDialog`
 - `Card`, `Checkbox`, `Collapsible`, `Combobox`
 - `Dialog`, `Dropdown`, `Input`, `Popover`
@@ -96,6 +94,7 @@ Design tokens define the visual language of the application. Using only approved
 Only use color, spacing, and other values that are defined in the `tailwind.config.ts` file from `@playground-ui`. All tokens are sourced from `packages/playground-ui/src/ds/tokens/`.
 
 **Token categories available:**
+
 - **Colors**: `surface1-5`, `accent1-6`, `neutral1-6`, `border1-2`, `error`, `overlay`
 - **Spacings**: `0`, `px`, `0.5`, `1`, `1.5`, `2`, `2.5`, `3`, `4`, `5`, `6`, `8`, `10`, `12`, etc.
 - **Font sizes**: `ui-xs`, `ui-sm`, `ui-md`, `ui-lg`, `ui-xl`
@@ -133,6 +132,7 @@ Only use color, spacing, and other values that are defined in the `tailwind.conf
 Never modify the design tokens in `packages/playground-ui/src/ds/tokens/` or the `tailwind.config.ts` file without explicit approval.
 
 **Why this matters:**
+
 - Token changes affect the entire application
 - Unauthorized changes break visual consistency
 - Token modifications require design review
@@ -170,6 +170,7 @@ Proper className usage ensures styles remain consistent and maintainable.
 Never use arbitrary Tailwind values (e.g., `[#hex]`, `[13px]`) except for `height` and `width` properties where precise sizing is required.
 
 **Why this matters:**
+
 - Arbitrary values bypass the design system
 - Makes global style updates impossible
 - Creates visual inconsistency
@@ -215,6 +216,7 @@ Never use arbitrary Tailwind values (e.g., `[#hex]`, `[13px]`) except for `heigh
 Never pass `className` props to DS components to override their styles, except for `height` and `width` on `DialogContent` and `Popover` components.
 
 **Why this matters:**
+
 - DS components have intentional, tested styles
 - Overriding breaks visual consistency
 - Makes component updates risky
