@@ -19,7 +19,9 @@
   },
   "dependencies": {
     "@mastra/core": "type-check-test",
+    "@mastra/client-js": "type-check-test",
     "zod": "^3.25.76",
+    "zod-v4": "npm:zod@^4.0.0",
     "openai-v4": "npm:@ai-sdk/openai@^1.0.0",
     "openai-v5": "npm:@ai-sdk/openai@^2.0.0"
   },
