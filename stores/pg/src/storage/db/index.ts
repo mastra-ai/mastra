@@ -167,10 +167,13 @@ function generateTableSQL({
   tableName,
   schema,
   schemaName,
+  includeAllConstraints = false,
 }: {
   tableName: TABLE_NAMES;
   schema: Record<string, StorageColumn>;
   schemaName?: string;
+  /** When true, includes all constraints in the SQL (for exports). When false, some constraints are added at runtime after data migration. */
+  includeAllConstraints?: boolean;
 }): string {
   const timeZColumns = Object.entries(schema)
     .filter(([_, def]) => def.type === 'timestamp')
@@ -202,9 +205,9 @@ function generateTableSQL({
                 ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key')
               ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+                SELECT 1 FROM pg_indexes WHERE indexname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
@@ -215,11 +218,12 @@ function generateTableSQL({
                 : ''
             }
           ${
-            tableName === TABLE_SPANS
+            // For spans table: Include PRIMARY KEY in exports, but not in runtime (handled after deduplication)
+            tableName === TABLE_SPANS && includeAllConstraints
               ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_ai_spans_traceid_spanid_pk')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
@@ -230,6 +234,8 @@ function generateTableSQL({
               : ''
           }
           `;
+  // Note: At runtime, PRIMARY KEY for spans table is added separately after deduplication
+  // See PgDB.addSpansPrimaryKey()
 
   return sql;
 }
@@ -256,6 +262,7 @@ export function exportSchemas(schemaName?: string): string {
       tableName: tableName as TABLE_NAMES,
       schema,
       schemaName,
+      includeAllConstraints: true, // Include all constraints for exports/documentation
     });
     statements.push(sql.trim());
     statements.push('');
@@ -441,11 +448,32 @@ export class PgDB extends MastraBase {
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = this.prepareValuesForInsert(record, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const fullTableName = getTableName({ indexName: tableName, schemaName });
+      const columnList = columns.map(c => `"${c}"`).join(', ');
 
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: tableName, schemaName })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-        values,
-      );
+      // For spans table, use ON CONFLICT to handle duplicate (traceId, spanId) gracefully
+      if (tableName === TABLE_SPANS) {
+        // Build update clause for all columns except the primary key columns
+        const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
+
+        if (updateColumns.length > 0) {
+          const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+          await this.client.none(
+            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
+            values,
+          );
+        } else {
+          // Only PK columns provided - use DO NOTHING to avoid invalid SQL
+          await this.client.none(
+            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO NOTHING`,
+            values,
+          );
+        }
+      } else {
+        await this.client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -523,8 +551,54 @@ export class PgDB extends MastraBase {
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
         await this.migrateSpansTable();
+
+        // Check if PRIMARY KEY constraint already exists - if so, skip migration
+        // This avoids running expensive queries on every init after migration is complete
+        const pkExists = await this.spansPrimaryKeyExists();
+        if (!pkExists) {
+          // Check for duplicates before attempting to add PRIMARY KEY
+          const duplicateInfo = await this.checkForDuplicateSpans();
+          if (duplicateInfo.hasDuplicates) {
+            // Duplicates exist - throw error requiring manual migration
+            const errorMessage =
+              `\n` +
+              `===========================================================================\n` +
+              `MIGRATION REQUIRED: Duplicate spans detected in ${duplicateInfo.tableName}\n` +
+              `===========================================================================\n` +
+              `\n` +
+              `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+              `\n` +
+              `The spans table requires a unique constraint on (traceId, spanId), but your\n` +
+              `database contains duplicate entries that must be resolved first.\n` +
+              `\n` +
+              `To fix this, run the manual migration command:\n` +
+              `\n` +
+              `  npx mastra migrate\n` +
+              `\n` +
+              `This command will:\n` +
+              `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+              `  2. Add the required unique constraint\n` +
+              `\n` +
+              `Note: This migration may take some time for large tables.\n` +
+              `===========================================================================\n`;
+
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: errorMessage,
+            });
+          } else {
+            // No duplicates - safe to add PRIMARY KEY directly
+            await this.addSpansPrimaryKey();
+          }
+        }
       }
     } catch (error) {
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_TABLE', 'FAILED'),
@@ -634,6 +708,282 @@ export class PgDB extends MastraBase {
       // Log warning but don't fail - migrations should be best-effort
       this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
     }
+  }
+
+  /**
+   * Deduplicates spans in the mastra_ai_spans table before adding the PRIMARY KEY constraint.
+   * Keeps spans based on priority: completed (endedAt NOT NULL) > most recent updatedAt > most recent createdAt.
+   *
+   * Note: This prioritizes migration completion over perfect data preservation.
+   * Old trace data may be lost, which is acceptable for this use case.
+   */
+  private async deduplicateSpans(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      // Quick check: are there any duplicates at all? Use LIMIT 1 for speed on large tables.
+      const duplicateCheck = await this.client.oneOrNone<{ has_duplicates: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM ${fullTableName}
+          GROUP BY "traceId", "spanId"
+          HAVING COUNT(*) > 1
+          LIMIT 1
+        ) as has_duplicates
+      `);
+
+      if (!duplicateCheck?.has_duplicates) {
+        this.logger?.debug?.(`No duplicate spans found in ${fullTableName}`);
+        return;
+      }
+
+      this.logger?.info?.(`Duplicate spans detected in ${fullTableName}, starting deduplication...`);
+
+      // Delete duplicates directly without fetching details into memory.
+      // This avoids OOM issues on large tables with many duplicates.
+      // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
+      // Uses ctid (physical row id) as final tiebreaker for deterministic results.
+      const result = await this.client.query(`
+        DELETE FROM ${fullTableName} t1
+        USING ${fullTableName} t2
+        WHERE t1."traceId" = t2."traceId"
+          AND t1."spanId" = t2."spanId"
+          AND (
+            -- Keep completed spans over incomplete
+            (t1."endedAt" IS NULL AND t2."endedAt" IS NOT NULL)
+            OR
+            -- If both have same completion status, keep more recent updatedAt
+            (
+              (t1."endedAt" IS NULL) = (t2."endedAt" IS NULL)
+              AND (
+                (t1."updatedAt" < t2."updatedAt")
+                OR (t1."updatedAt" IS NULL AND t2."updatedAt" IS NOT NULL)
+                OR
+                -- If updatedAt is the same, keep more recent createdAt
+                (
+                  (t1."updatedAt" = t2."updatedAt" OR (t1."updatedAt" IS NULL AND t2."updatedAt" IS NULL))
+                  AND (
+                    (t1."createdAt" < t2."createdAt")
+                    OR (t1."createdAt" IS NULL AND t2."createdAt" IS NOT NULL)
+                    OR
+                    -- If all else equal, use ctid as tiebreaker
+                    (
+                      (t1."createdAt" = t2."createdAt" OR (t1."createdAt" IS NULL AND t2."createdAt" IS NULL))
+                      AND t1.ctid < t2.ctid
+                    )
+                  )
+                )
+              )
+            )
+          )
+      `);
+
+      this.logger?.info?.(
+        `Deduplication complete: removed ${result.rowCount ?? 0} duplicate spans from ${fullTableName}`,
+      );
+    } catch (error) {
+      // Re-throw deduplication errors so PRIMARY KEY addition will fail with a clear error
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DEDUPLICATE_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: TABLE_SPANS,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans table.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  private async checkForDuplicateSpans(): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    tableName: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      // Count duplicate (traceId, spanId) combinations
+      const result = await this.client.oneOrNone<{ duplicate_count: string }>(`
+        SELECT COUNT(*) as duplicate_count
+        FROM (
+          SELECT "traceId", "spanId"
+          FROM ${fullTableName}
+          GROUP BY "traceId", "spanId"
+          HAVING COUNT(*) > 1
+        ) duplicates
+      `);
+
+      const duplicateCount = parseInt(result?.duplicate_count ?? '0', 10);
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+        tableName: fullTableName,
+      };
+    } catch (error) {
+      // If table doesn't exist or other error, assume no duplicates
+      this.logger?.debug?.(`Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0, tableName: fullTableName };
+    }
+  }
+
+  /**
+   * Checks if the PRIMARY KEY constraint on (traceId, spanId) already exists on the spans table.
+   * Used to skip deduplication when the constraint already exists (migration already complete).
+   */
+  private async spansPrimaryKeyExists(): Promise<boolean> {
+    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+    const constraintName = `${constraintPrefix}mastra_ai_spans_traceid_spanid_pk`;
+
+    const result = await this.client.oneOrNone<{ exists: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1) as exists`,
+      [constraintName],
+    );
+
+    return result?.exists ?? false;
+  }
+
+  /**
+   * Adds the PRIMARY KEY constraint on (traceId, spanId) to the spans table.
+   * Should be called AFTER deduplication to ensure no duplicate key violations.
+   */
+  private async addSpansPrimaryKey(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+    const constraintName = `${constraintPrefix}mastra_ai_spans_traceid_spanid_pk`;
+
+    try {
+      // Check if the constraint already exists
+      const constraintExists = await this.client.oneOrNone<{ exists: boolean }>(
+        `
+        SELECT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = $1
+        ) as exists
+      `,
+        [constraintName],
+      );
+
+      if (constraintExists?.exists) {
+        this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} already exists on ${fullTableName}`);
+        return;
+      }
+
+      // Add the PRIMARY KEY constraint
+      await this.client.none(`
+        ALTER TABLE ${fullTableName}
+        ADD CONSTRAINT ${constraintName}
+        PRIMARY KEY ("traceId", "spanId")
+      `);
+
+      this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'ADD_SPANS_PRIMARY_KEY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: TABLE_SPANS,
+            constraintName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    // Check if already migrated
+    const pkExists = await this.spansPrimaryKeyExists();
+    if (pkExists) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. PRIMARY KEY constraint exists on ${fullTableName}.`,
+      };
+    }
+
+    // Check for duplicates
+    const duplicateInfo = await this.checkForDuplicateSpans();
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
+      );
+
+      // Run deduplication
+      await this.deduplicateSpans();
+    } else {
+      this.logger?.info?.(`No duplicate spans found.`);
+    }
+
+    // Add PRIMARY KEY constraint
+    await this.addSpansPrimaryKey();
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and added PRIMARY KEY constraint to ${fullTableName}.`
+        : `Migration complete. Added PRIMARY KEY constraint to ${fullTableName}.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const pkExists = await this.spansPrimaryKeyExists();
+
+    if (pkExists) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: fullTableName,
+      };
+    }
+
+    const duplicateInfo = await this.checkForDuplicateSpans();
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: fullTableName,
+    };
   }
 
   /**

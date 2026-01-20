@@ -147,6 +147,10 @@ export class PostgresStore extends MastraStorage {
       await super.init();
     } catch (error) {
       this.isInitialized = false;
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INIT', 'FAILED'),

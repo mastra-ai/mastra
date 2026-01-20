@@ -226,6 +226,10 @@ export class MSSQLStore extends MastraStorage {
       await super.init();
     } catch (error) {
       this.isConnected = null;
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'INIT', 'FAILED'),
