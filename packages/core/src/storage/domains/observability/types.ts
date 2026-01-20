@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { scoreRowDataSchema } from '../../../evals/types';
-import { SpanType } from '../../../observability/types';
+import { EntityType, SpanType } from '../../../observability/types';
+import type { PaginationInfo } from '../../types';
 import {
   dateRangeSchema,
   dbTimestamps,
@@ -167,8 +168,63 @@ export const spanRecordSchema = z
   })
   .describe('Span record data');
 
-/** Complete span record as stored in the database */
-export type SpanRecord = z.infer<typeof spanRecordSchema>;
+/**
+ * Complete span record as stored in the database.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries, avoiding TypeScript inference
+ * limitations with deeply nested `z.infer` types.
+ */
+export interface SpanRecord {
+  // Required identifiers
+  traceId: string;
+  spanId: string;
+  name: string;
+  spanType: SpanType;
+  isEvent: boolean;
+  startedAt: Date;
+
+  // Optional parent span reference
+  parentSpanId?: string | null;
+
+  // Entity identification
+  entityType?: EntityType | null;
+  entityId?: string | null;
+  entityName?: string | null;
+
+  // Identity & tenancy
+  userId?: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
+
+  // Correlation IDs
+  runId?: string | null;
+  sessionId?: string | null;
+  threadId?: string | null;
+  requestId?: string | null;
+
+  // Deployment context
+  environment?: string | null;
+  source?: string | null;
+  serviceName?: string | null;
+  scope?: Record<string, unknown> | null;
+
+  // Filterable data
+  metadata?: Record<string, unknown> | null;
+  tags?: string[] | null;
+
+  // Span-specific data
+  attributes?: Record<string, unknown> | null;
+  links?: unknown[] | null;
+  input?: unknown;
+  output?: unknown;
+  error?: unknown;
+  endedAt?: Date | null;
+
+  // Database timestamps
+  createdAt: Date;
+  updatedAt: Date | null;
+}
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
@@ -379,8 +435,17 @@ export const listTracesResponseSchema = z.object({
   spans: z.array(traceSpanSchema),
 });
 
-/** Response containing paginated root spans with computed status */
-export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
+/**
+ * Response containing paginated root spans for trace listing.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries, avoiding TypeScript inference
+ * limitations with deeply nested `z.infer` types.
+ */
+export interface ListTracesResponse {
+  pagination: PaginationInfo;
+  spans: TraceSpan[];
+}
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)
