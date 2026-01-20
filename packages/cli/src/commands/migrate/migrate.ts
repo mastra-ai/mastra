@@ -31,7 +31,7 @@ export async function migrate({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  logger.info(pc.cyan('Mastra Spans Migration'));
+  logger.info(pc.cyan('Mastra Storage Migration'));
   logger.info('');
 
   try {

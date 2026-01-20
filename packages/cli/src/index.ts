@@ -158,7 +158,7 @@ program
 
 program
   .command('migrate')
-  .description('Run database migrations for the spans table')
+  .description('Run database migrations to update storage schema')
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-e, --env <env>', 'Custom env file to include')
