@@ -60,26 +60,9 @@ export class MigrateBundler extends BuildBundler {
       }
 
       try {
-        // Try to initialize storage - but catch MIGRATION_REQUIRED errors
-        // since that's exactly what we're here to fix
-        let migrationRequired = false;
-        try {
-          await storage.init();
-        } catch (initError) {
-          // Check if this is a MIGRATION_REQUIRED error (which is expected)
-          const errorMessage = initError instanceof Error ? initError.message : String(initError);
-          const errorId = (initError as any)?.id || '';
-          if (errorMessage.includes('MIGRATION_REQUIRED') || errorId.includes('MIGRATION_REQUIRED')) {
-            migrationRequired = true;
-            // This is expected - continue with migration
-          } else {
-            // Re-throw other errors
-            throw initError;
-          }
-        }
-
-        // Get the observability store
-        const observabilityStore = await storage.getStore('observability');
+        // Access the observability store directly from storage.stores
+        // This bypasses the init proxy that would re-throw MIGRATION_REQUIRED errors
+        const observabilityStore = storage.stores?.observability;
 
         if (!observabilityStore) {
           console.log(JSON.stringify({
@@ -100,6 +83,28 @@ export class MigrateBundler extends BuildBundler {
             message: 'Migration not supported for this storage backend.',
           }));
           process.exit(1);
+        }
+
+        // Try to initialize the observability store - catch MIGRATION_REQUIRED errors
+        // since that's exactly what we're here to fix
+        try {
+          await observabilityStore.init();
+        } catch (initError) {
+          // Check if this is a MIGRATION_REQUIRED error (which is expected)
+          const errorMessage = initError instanceof Error ? initError.message : String(initError);
+          const errorId = initError?.id || '';
+
+          // Check for various forms of the migration required indicator
+          const isMigrationRequired =
+            errorId.includes('MIGRATION_REQUIRED') ||
+            errorMessage.includes('MIGRATION_REQUIRED') ||
+            errorMessage.includes('MIGRATION REQUIRED');
+
+          if (!isMigrationRequired) {
+            // Re-throw non-migration errors
+            throw initError;
+          }
+          // MIGRATION_REQUIRED is expected - continue with migration
         }
 
         // Run the migration

@@ -11,6 +11,11 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
       return;
     }
 
+    // Environment variable equivalent of disableInit - used by migration CLI
+    if (process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
     if (!hasInitialized) {
       hasInitialized = storage.init();
     }

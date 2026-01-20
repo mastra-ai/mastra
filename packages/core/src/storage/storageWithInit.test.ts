@@ -109,4 +109,55 @@ describe('augmentWithInit', () => {
     // init should only be called once
     expect(mockStorage.init).toHaveBeenCalledTimes(1);
   });
+
+  it('should NOT call init when MASTRA_DISABLE_STORAGE_INIT is true', async () => {
+    const originalEnv = process.env.MASTRA_DISABLE_STORAGE_INIT;
+    process.env.MASTRA_DISABLE_STORAGE_INIT = 'true';
+
+    try {
+      const mockStorage = {
+        init: vi.fn().mockResolvedValue(true),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
+        disableInit: false,
+      } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+      await augmentedStorage.listMessages({ threadId: '1' });
+
+      expect(mockStorage.init).not.toHaveBeenCalled();
+      expect(mockStorage.listMessages).toHaveBeenCalled();
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.MASTRA_DISABLE_STORAGE_INIT;
+      } else {
+        process.env.MASTRA_DISABLE_STORAGE_INIT = originalEnv;
+      }
+    }
+  });
+
+  it('should still allow explicit init() call when MASTRA_DISABLE_STORAGE_INIT is true', async () => {
+    const originalEnv = process.env.MASTRA_DISABLE_STORAGE_INIT;
+    process.env.MASTRA_DISABLE_STORAGE_INIT = 'true';
+
+    try {
+      const mockStorage = {
+        init: vi.fn().mockResolvedValue(true),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
+        disableInit: false,
+      } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      // Explicit init should work even when env var is set
+      await augmentedStorage.init();
+
+      expect(mockStorage.init).toHaveBeenCalled();
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.MASTRA_DISABLE_STORAGE_INIT;
+      } else {
+        process.env.MASTRA_DISABLE_STORAGE_INIT = originalEnv;
+      }
+    }
+  });
 });
