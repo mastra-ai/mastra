@@ -1,5 +1,13 @@
 # @mastra/deployer-cloud
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/deployer@1.0.4
+  - @mastra/core@1.0.4
+
 ## 1.0.4-alpha.0
 
 ### Patch Changes

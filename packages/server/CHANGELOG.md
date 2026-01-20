@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.0.4
+
+### Patch Changes
+
+- Release stable ([#12102](https://github.com/mastra-ai/mastra/pull/12102))
+
+- Updated dependencies:
+  - @mastra/core@1.0.4
+
 ## 1.0.4-alpha.0
 
 ### Patch Changes
