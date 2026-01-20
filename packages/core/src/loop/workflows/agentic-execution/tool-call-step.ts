@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
+import { toStandardSchema } from '../../../schema/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -236,7 +236,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       if (!tool.execute) {
-        return inputData;
+        return { ...inputData, result: undefined };
       }
 
       try {
@@ -285,7 +285,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: inputData.toolName,
                 args: inputData.args,
                 resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
+                  toStandardSchema(
                     z.object({
                       approved: z
                         .boolean()
@@ -293,7 +293,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           'Controls if the tool call is approved or not, should be true when approved and false when declined',
                         ),
                     }),
-                  ),
+                  )['~standard'].jsonSchema.output({ target: 'draft-07' }),
                 ),
               },
             });
@@ -305,7 +305,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               args: inputData.args,
               type: 'approval',
               resumeSchema: JSON.stringify(
-                zodToJsonSchema(
+                toStandardSchema(
                   z.object({
                     approved: z
                       .boolean()
@@ -313,7 +313,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         'Controls if the tool call is approved or not, should be true when approved and false when declined',
                       ),
                   }),
-                ),
+                )['~standard'].jsonSchema.output({ target: 'draft-07' }),
               ),
             });
 
@@ -422,6 +422,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         return { result, ...inputData };
       } catch (error) {
         return {
+          result: undefined,
           error: error as Error,
           ...inputData,
         };

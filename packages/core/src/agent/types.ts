@@ -24,7 +24,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
@@ -254,7 +254,7 @@ export interface AgentConfig<
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
-  options?: MemoryConfig;
+  options?: MemoryConfigInternal;
 };
 
 /**
@@ -357,7 +357,7 @@ export type AgentStreamOptions<
   /**
    * @deprecated Use the `memory` property instead for all memory-related options.
    */
-  memoryOptions?: MemoryConfig;
+  memoryOptions?: MemoryConfigInternal;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -428,7 +428,7 @@ export type AgentExecuteOnFinishOptions = {
   resourceId?: string;
   requestContext: RequestContext;
   agentSpan?: Span<SpanType.AGENT_RUN>;
-  memoryConfig: MemoryConfig | undefined;
+  memoryConfig: MemoryConfigInternal | undefined;
   outputText: string;
   messageList: MessageList;
   threadExists: boolean;

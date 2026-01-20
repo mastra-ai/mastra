@@ -61,7 +61,7 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
-export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
+export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
   let inputSchema: ZodType = z.object({
@@ -180,7 +180,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   });
 };
 
-export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig) => {
+export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfigInternal) => {
   return createTool({
     id: 'update-working-memory',
     description: 'Update the working memory with new information.',

@@ -8,7 +8,7 @@ import type {
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
-import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
+import type { MemoryConfigInternal, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
 import type {
   InputProcessor,
@@ -33,7 +33,7 @@ export interface ProcessorMemoryContext {
   /** Resource ID (user/session identifier) */
   resourceId?: string;
   /** Memory configuration options */
-  config?: MemoryConfig;
+  config?: MemoryConfigInternal;
 }
 
 /**
@@ -74,7 +74,7 @@ export interface WithMastraMemoryOptions {
   /** Semantic recall configuration (RAG-based memory retrieval) */
   semanticRecall?: WithMastraSemanticRecallOptions;
   /** Working memory configuration (persistent user data) */
-  workingMemory?: MemoryConfig['workingMemory'];
+  workingMemory?: MemoryConfigInternal['workingMemory'];
   /** Read-only mode - prevents saving new messages */
   readOnly?: boolean;
 }

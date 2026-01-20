@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
-import * as z3 from 'zod-v3';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -584,14 +584,15 @@ class MastraScorer<
           tracingContext,
         });
       } else {
+        const schema = z.object({
+          score: z.number(),
+        })
         result = await judge.generateLegacy(prompt, {
-          output: z3.object({
-            score: z3.number(),
-          }),
+          output: z.toJSONSchema(schema) as JSONSchema7,
           tracingContext,
         });
       }
-      return { result: result.object!.score, prompt };
+      return { result: (result.object as { score: number}).score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
@@ -614,7 +615,7 @@ class MastraScorer<
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: promptStep.outputSchema as unknown as z3.ZodSchema,
+          output: promptStep.outputSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           tracingContext,
         });
       }

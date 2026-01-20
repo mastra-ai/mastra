@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
@@ -42,7 +42,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
 }
 

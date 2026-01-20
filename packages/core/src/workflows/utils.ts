@@ -13,9 +13,9 @@ import type {
   WorkflowRunState,
 } from './types';
 
-export function getZodErrors(error: z.ZodError) {
+export function getZodErrors(error: any): { path?: (string | number)[]; message: string }[] {
   // zod v4 returns issues instead of errors
-  const errors = error.issues;
+  const errors = error.issues as { path?: (string | number)[]; message: string }[];
   return errors;
 }
 
@@ -39,7 +39,7 @@ export async function validateStepInput({
 
     if (!validatedInput.success) {
       const errors = getZodErrors(validatedInput.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
@@ -72,7 +72,7 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
@@ -111,7 +111,7 @@ export async function validateStepSuspendData({
     const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
     if (!validatedSuspendData.success) {
       const errors = getZodErrors(validatedSuspendData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
@@ -150,7 +150,7 @@ export async function validateStepStateData({
     const validatedStateData = await stateSchema.safeParseAsync(stateData);
     if (!validatedStateData.success) {
       const errors = getZodErrors(validatedStateData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new Error('Step state data validation failed: \n' + errorMessages);
     } else {
       stateData = validatedStateData.data;

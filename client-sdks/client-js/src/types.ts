@@ -17,7 +17,7 @@ import type {
   AiMessageType,
   MastraMessageV1,
   MastraDBMessage,
-  MemoryConfig,
+  MemoryConfigInternal,
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
@@ -310,7 +310,7 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = { config: MemoryConfigInternal };
 
 export interface UpdateMemoryThreadParams {
   title: string;

@@ -182,7 +182,7 @@ export class CoreToolBuilder extends MastraBase {
           processedParameters = parameters;
         } else {
           // Convert Zod schema to AI SDK Schema
-          processedParameters = convertZodSchemaToAISDKSchema(parameters as z.ZodType);
+          processedParameters = convertZodSchemaToAISDKSchema(parameters as any);
         }
       }
 
@@ -194,7 +194,7 @@ export class CoreToolBuilder extends MastraBase {
           processedOutputSchema = outputSchema;
         } else {
           // Convert Zod schema to AI SDK Schema
-          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as z.ZodType);
+          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as any);
         }
       }
 
@@ -563,7 +563,7 @@ export class CoreToolBuilder extends MastraBase {
 
     // Apply schema compatibility to get both the transformed Zod schema (for validation)
     // and the AI SDK Schema (for the LLM)
-    let processedZodSchema: z.ZodTypeAny | undefined;
+    let processedZodSchema: any;
     let processedSchema;
 
     const originalSchema = this.getParameters();

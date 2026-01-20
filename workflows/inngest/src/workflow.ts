@@ -26,7 +26,15 @@ import type {
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    TEngineType
+  >[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,

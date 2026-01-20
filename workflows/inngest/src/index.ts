@@ -6,9 +6,14 @@ import type { MastraScorers } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput } from '@mastra/core/processors';
-import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
-import type { ChunkType, OutputSchema } from '@mastra/core/stream';
+import type { Processor, ProcessorStepOutput,
+  ProcessorRunner,
+  ProcessorStepOutputSchema,
+  ProcessorStepSchema,
+  ProcessorStepInputSchema } from '@mastra/core/processors';
+import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
+import { toStandardSchema } from '@mastra/core/schema';
+import type { ChunkType } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
@@ -92,20 +97,20 @@ function isProcessor(obj: unknown): obj is Processor {
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   InngestEngineType
 >;
 
@@ -115,7 +120,7 @@ export function createStep<
 export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: OutputSchema<TStepOutput> };
+    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
@@ -130,16 +135,22 @@ export function createStep<
   TStepOutput extends { text: string },
   TResume,
   TSuspend,
->(agent: Agent<TStepId, any>): Step<TStepId, unknown, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
+>(
+  agent: Agent<TStepId, any>,
+  agentOptions?: AgentStepOptions<TStepOutput> & {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<TStepId, unknown, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
 
 /**
  * Creates a step from a tool
  */
 export function createStep<
   TSchemaIn,
+  TSchemaOut,
   TSuspend,
   TResume,
-  TSchemaOut,
   TContext extends ToolExecutionContext<TSuspend, TResume>,
   TId extends string,
 >(
@@ -162,8 +173,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  typeof ProcessorStepSchema,
-  typeof ProcessorStepOutputSchema,
+  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   InngestEngineType
@@ -176,20 +187,20 @@ export function createStep<TProcessorId extends string>(
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   InngestEngineType
 >;
 
@@ -234,30 +245,33 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 
 function createStepFromParams<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   InngestEngineType
 > {
+  // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
+  // but we need it to match the inferred generic types. The public overloads ensure
+  // type safety for consumers.
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
-    stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
+    inputSchema: toStandardSchema(params.inputSchema),
+    stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
+    outputSchema: toStandardSchema(params.outputSchema),
+    resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
+    suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -280,10 +294,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   return {
     id: params.name as TStepId,
     description: params.getDescription(),
-    inputSchema: z.object({
-      prompt: z.string(),
-    }),
-    outputSchema,
+    inputSchema: toStandardSchema(
+      z.object({
+        prompt: z.string(),
+      }),
+    ),
+    outputSchema: toStandardSchema(outputSchema),
     retries,
     scorers,
     execute: async ({

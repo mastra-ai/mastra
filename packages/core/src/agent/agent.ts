@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TextPart, UIMessage, StreamObjectResult as AiSdkStreamObjectResult } from '@internal/ai-sdk-v4';
+import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
@@ -36,7 +36,7 @@ import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfigInternal } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
@@ -1529,7 +1529,7 @@ export class Agent<
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -1703,7 +1703,7 @@ export class Agent<
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
@@ -2391,7 +2391,7 @@ export class Agent<
     tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
@@ -3895,7 +3895,10 @@ export class Agent<
     | StreamTextResult<any, OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
-    return this.getLegacyHandler().streamLegacy(messages, streamOptions);
+    return this.getLegacyHandler().streamLegacy(messages, streamOptions) as Promise<
+      | StreamTextResult<any, OUTPUT>
+      | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
+    >;
   }
 
   /**

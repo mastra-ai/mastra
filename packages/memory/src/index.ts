@@ -6,7 +6,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import type {
-  MemoryConfig,
+  MemoryConfigInternal,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
@@ -53,7 +53,7 @@ const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instance
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: SharedMemoryConfig = {}) {
+  constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -79,7 +79,7 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfigInternal) {
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
@@ -102,7 +102,7 @@ export class Memory extends MastraMemory {
 
   async recall(
     args: StorageListMessagesInput & {
-      threadConfig?: MemoryConfig;
+      threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
       threadId: string;
     },
@@ -251,7 +251,7 @@ export class Memory extends MastraMemory {
   }: {
     workingMemory: string;
     resourceId: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -275,7 +275,7 @@ export class Memory extends MastraMemory {
     memoryConfig,
   }: {
     thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
     const savedThread = await memoryStore.saveThread({ thread });
@@ -301,7 +301,7 @@ export class Memory extends MastraMemory {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
     const updatedThread = await memoryStore.updateThread({
@@ -336,7 +336,7 @@ export class Memory extends MastraMemory {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -394,7 +394,7 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     workingMemory: string;
     searchString?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -600,7 +600,7 @@ ${workingMemory}`;
     memoryConfig,
   }: {
     messages: MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
+    memoryConfig?: MemoryConfigInternal | undefined;
   }): Promise<{ messages: MastraDBMessage[] }> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
@@ -753,7 +753,7 @@ ${workingMemory}`;
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
     if (!config.workingMemory?.enabled) {
@@ -799,7 +799,7 @@ ${workingMemory}`;
   public async getWorkingMemoryTemplate({
     memoryConfig,
   }: {
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -838,7 +838,7 @@ ${workingMemory}`;
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
     if (!config.workingMemory?.enabled) {
@@ -971,7 +971,7 @@ ${
 `;
   }
 
-  private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
+  private isVNextWorkingMemoryConfig(config?: MemoryConfigInternal): boolean {
     if (!config?.workingMemory) return false;
 
     const isMDWorkingMemory =
@@ -982,7 +982,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {
@@ -1009,7 +1009,7 @@ ${
     memoryConfig,
   }: {
     messages: (Partial<MastraDBMessage> & { id: string })[];
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
@@ -1252,7 +1252,7 @@ ${
    */
   public async cloneThread(
     args: StorageCloneThreadInput,
-    memoryConfig?: MemoryConfig,
+    memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
     const result = await memoryStore.cloneThread(args);
@@ -1270,7 +1270,7 @@ ${
    * Embed cloned messages for semantic recall.
    * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
    */
-  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfig): Promise<void> {
+  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
     if (!this.vector || !this.embedder) {
       return;
     }
