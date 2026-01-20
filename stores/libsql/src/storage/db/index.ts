@@ -575,6 +575,10 @@ export class LibSQLDB extends MastraBase {
         await this.migrateSpansTable();
       }
     } catch (error) {
+      // Rethrow MastraError (especially for migration required errors) - these must stop init
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_TABLE', 'FAILED'),
@@ -607,24 +611,58 @@ export class LibSQLDB extends MastraBase {
         }
       }
 
-      // Check if unique index already exists - if so, skip deduplication
-      // This avoids running expensive dedup queries on every init after migration is complete
+      // Check if unique index already exists - if so, skip migration
+      // This avoids running expensive queries on every init after migration is complete
       const indexExists = await this.spansUniqueIndexExists();
       if (!indexExists) {
-        // Deduplicate existing spans before creating unique index
-        await this.deduplicateSpans();
-      }
+        // Check for duplicates before attempting to create unique index
+        const duplicateInfo = await this.checkForDuplicateSpans();
+        if (duplicateInfo.hasDuplicates) {
+          // Duplicates exist - throw error requiring manual migration
+          const errorMessage =
+            `\n` +
+            `===========================================================================\n` +
+            `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS}\n` +
+            `===========================================================================\n` +
+            `\n` +
+            `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+            `\n` +
+            `The spans table requires a unique constraint on (traceId, spanId), but your\n` +
+            `database contains duplicate entries that must be resolved first.\n` +
+            `\n` +
+            `To fix this, run the manual migration command:\n` +
+            `\n` +
+            `  npx mastra migrate\n` +
+            `\n` +
+            `This command will:\n` +
+            `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+            `  2. Add the required unique constraint\n` +
+            `\n` +
+            `Note: This migration may take some time for large tables.\n` +
+            `===========================================================================\n`;
 
-      // Ensure unique index on (spanId, traceId) exists for data integrity
-      // This is required for observability to enforce uniqueness at the span level
-      await this.client.execute(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "mastra_ai_spans_spanid_traceid_idx" ON "${TABLE_SPANS}" ("spanId", "traceId")`,
-      );
-      this.logger.debug(`LibSQLDB: Ensured unique index on (spanId, traceId) for ${TABLE_SPANS}`);
+          throw new MastraError({
+            id: createStorageErrorId('LIBSQL', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: errorMessage,
+          });
+        } else {
+          // No duplicates - safe to create unique index directly
+          await this.client.execute(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "mastra_ai_spans_spanid_traceid_idx" ON "${TABLE_SPANS}" ("spanId", "traceId")`,
+          );
+          this.logger.debug(`LibSQLDB: Created unique index on (spanId, traceId) for ${TABLE_SPANS}`);
+        }
+      }
 
       this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {
-      // Log warning but don't fail - migrations should be best-effort
+      // Rethrow MastraError (especially for migration required errors) - these must stop init
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      // Log warning but don't fail for other errors - schema migrations should be best-effort
       this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
     }
   }
@@ -643,6 +681,121 @@ export class LibSQLDB extends MastraBase {
       // If we can't check indexes (e.g., table doesn't exist), assume index doesn't exist
       return false;
     }
+  }
+
+  /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans table.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  private async checkForDuplicateSpans(): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+  }> {
+    try {
+      const result = await this.client.execute(`
+        SELECT COUNT(*) as duplicate_count FROM (
+          SELECT "spanId", "traceId"
+          FROM "${TABLE_SPANS}"
+          GROUP BY "spanId", "traceId"
+          HAVING COUNT(*) > 1
+        )
+      `);
+
+      const duplicateCount = Number(result.rows?.[0]?.duplicate_count ?? 0);
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+      };
+    } catch (error) {
+      // If table doesn't exist or other error, assume no duplicates
+      this.logger.debug(`LibSQLDB: Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0 };
+    }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    // Check if already migrated
+    const indexExists = await this.spansUniqueIndexExists();
+    if (indexExists) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. Unique index exists on ${TABLE_SPANS}.`,
+      };
+    }
+
+    // Check for duplicates
+    const duplicateInfo = await this.checkForDuplicateSpans();
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger.info(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
+      );
+
+      // Run deduplication
+      await this.deduplicateSpans();
+    } else {
+      this.logger.info(`No duplicate spans found.`);
+    }
+
+    // Add unique index
+    await this.client.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "mastra_ai_spans_spanid_traceid_idx" ON "${TABLE_SPANS}" ("spanId", "traceId")`,
+    );
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and added unique index to ${TABLE_SPANS}.`
+        : `Migration complete. Added unique index to ${TABLE_SPANS}.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const indexExists = await this.spansUniqueIndexExists();
+
+    if (indexExists) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: TABLE_SPANS,
+      };
+    }
+
+    const duplicateInfo = await this.checkForDuplicateSpans();
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: TABLE_SPANS,
+    };
   }
 
   /**

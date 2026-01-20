@@ -552,14 +552,46 @@ export class PgDB extends MastraBase {
         await this.setupTimestampTriggers(tableName);
         await this.migrateSpansTable();
 
-        // Check if PRIMARY KEY constraint already exists - if so, skip deduplication
-        // This avoids running expensive dedup queries on every init after migration is complete
+        // Check if PRIMARY KEY constraint already exists - if so, skip migration
+        // This avoids running expensive queries on every init after migration is complete
         const pkExists = await this.spansPrimaryKeyExists();
         if (!pkExists) {
-          // Deduplicate spans before adding PRIMARY KEY to handle existing duplicate data
-          await this.deduplicateSpans();
-          // Add PRIMARY KEY after deduplication to avoid constraint violations
-          await this.addSpansPrimaryKey();
+          // Check for duplicates before attempting to add PRIMARY KEY
+          const duplicateInfo = await this.checkForDuplicateSpans();
+          if (duplicateInfo.hasDuplicates) {
+            // Duplicates exist - throw error requiring manual migration
+            const errorMessage =
+              `\n` +
+              `===========================================================================\n` +
+              `MIGRATION REQUIRED: Duplicate spans detected in ${duplicateInfo.tableName}\n` +
+              `===========================================================================\n` +
+              `\n` +
+              `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+              `\n` +
+              `The spans table requires a unique constraint on (traceId, spanId), but your\n` +
+              `database contains duplicate entries that must be resolved first.\n` +
+              `\n` +
+              `To fix this, run the manual migration command:\n` +
+              `\n` +
+              `  npx mastra migrate\n` +
+              `\n` +
+              `This command will:\n` +
+              `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+              `  2. Add the required unique constraint\n` +
+              `\n` +
+              `Note: This migration may take some time for large tables.\n` +
+              `===========================================================================\n`;
+
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: errorMessage,
+            });
+          } else {
+            // No duplicates - safe to add PRIMARY KEY directly
+            await this.addSpansPrimaryKey();
+          }
         }
       }
     } catch (error) {
@@ -762,6 +794,42 @@ export class PgDB extends MastraBase {
   }
 
   /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans table.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  private async checkForDuplicateSpans(): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    tableName: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      // Count duplicate (traceId, spanId) combinations
+      const result = await this.client.oneOrNone<{ duplicate_count: string }>(`
+        SELECT COUNT(*) as duplicate_count
+        FROM (
+          SELECT "traceId", "spanId"
+          FROM ${fullTableName}
+          GROUP BY "traceId", "spanId"
+          HAVING COUNT(*) > 1
+        ) duplicates
+      `);
+
+      const duplicateCount = parseInt(result?.duplicate_count ?? '0', 10);
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+        tableName: fullTableName,
+      };
+    } catch (error) {
+      // If table doesn't exist or other error, assume no duplicates
+      this.logger?.debug?.(`Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0, tableName: fullTableName };
+    }
+  }
+
+  /**
    * Checks if the PRIMARY KEY constraint on (traceId, spanId) already exists on the spans table.
    * Used to skip deduplication when the constraint already exists (migration already complete).
    */
@@ -826,6 +894,92 @@ export class PgDB extends MastraBase {
         error,
       );
     }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    // Check if already migrated
+    const pkExists = await this.spansPrimaryKeyExists();
+    if (pkExists) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. PRIMARY KEY constraint exists on ${fullTableName}.`,
+      };
+    }
+
+    // Check for duplicates
+    const duplicateInfo = await this.checkForDuplicateSpans();
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
+      );
+
+      // Run deduplication
+      await this.deduplicateSpans();
+    } else {
+      this.logger?.info?.(`No duplicate spans found.`);
+    }
+
+    // Add PRIMARY KEY constraint
+    await this.addSpansPrimaryKey();
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and added PRIMARY KEY constraint to ${fullTableName}.`
+        : `Migration complete. Added PRIMARY KEY constraint to ${fullTableName}.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const pkExists = await this.spansPrimaryKeyExists();
+
+    if (pkExists) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: fullTableName,
+      };
+    }
+
+    const duplicateInfo = await this.checkForDuplicateSpans();
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: fullTableName,
+    };
   }
 
   /**

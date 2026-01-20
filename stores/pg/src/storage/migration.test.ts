@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/error';
 import { SpanType } from '@mastra/core/observability';
 import {
   OLD_SPAN_SCHEMA,
@@ -836,6 +837,253 @@ describe('PostgreSQL Duplicate Spans Migration', () => {
       expect(Number(afterCount.rows[0].count)).toBe(3);
 
       // Verify the PRIMARY KEY constraint exists
+      const pkExists = await client.query(`
+        SELECT 1 FROM pg_constraint
+        WHERE conname LIKE '${subSchema}%mastra_ai_spans%pk'
+      `);
+      expect(pkExists.rows.length).toBe(1);
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+});
+
+/**
+ * PostgreSQL-specific tests that verify init() throws MastraError when
+ * migration is required (duplicates exist without unique constraint).
+ * This ensures users are forced to run manual migration before the app can start.
+ */
+describe('PostgreSQL Migration Required Error', () => {
+  const testSchema = `mig_err_${Date.now().toString(36)}`;
+  let adminPool: Pool;
+
+  beforeAll(async () => {
+    adminPool = new Pool({ connectionString });
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${testSchema}`);
+    } finally {
+      client.release();
+    }
+  }, 30000);
+
+  afterAll(async () => {
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+    } finally {
+      client.release();
+      await adminPool.end();
+    }
+  }, 30000);
+
+  /**
+   * Helper to create the spans table with OLD schema (no PK constraint)
+   */
+  async function createOldSpansTable(schema: string): Promise<void> {
+    const client = await adminPool.connect();
+    try {
+      const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+        .map(([colName, colDef]) => {
+          const sqlType =
+            colDef.type === 'text'
+              ? 'TEXT'
+              : colDef.type === 'jsonb'
+                ? 'JSONB'
+                : colDef.type === 'timestamp'
+                  ? 'TIMESTAMP'
+                  : colDef.type === 'boolean'
+                    ? 'BOOLEAN'
+                    : 'TEXT';
+          const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+          return `"${colName}" ${sqlType} ${nullable}`.trim();
+        })
+        .join(', ');
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ${schema}.${TABLE_SPANS} (
+          ${oldColumns}
+        )
+      `);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Helper to insert a span
+   */
+  async function insertSpan(
+    schema: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    const client = await adminPool.connect();
+    try {
+      await client.query(
+        `INSERT INTO ${schema}.${TABLE_SPANS}
+         ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          span.traceId,
+          span.spanId,
+          null,
+          span.name,
+          'agent_run',
+          false,
+          new Date('2024-01-01T00:00:00Z'),
+          span.endedAt ?? null,
+          span.createdAt,
+          span.updatedAt,
+        ],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  it('should throw MastraError when init() finds duplicate spans without unique constraint', async () => {
+    const subSchema = `${testSchema}_throw`;
+    const client = await adminPool.connect();
+
+    try {
+      // Setup: Create schema and table with old schema (no PK)
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(subSchema);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1', // Same spanId - creates a duplicate
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist
+      const count = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(Number(count.rows[0].count)).toBe(2);
+
+      // Create store and try to init - should throw MastraError
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'throw-test-store',
+        schemaName: subSchema,
+      });
+
+      // init() should throw MastraError
+      await expect(store.init()).rejects.toThrow(MastraError);
+
+      // Verify error has correct ID
+      try {
+        await store.init();
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error.id).toContain('MIGRATION_REQUIRED');
+        expect(error.id).toContain('DUPLICATE_SPANS');
+      }
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should NOT throw when no duplicates exist (auto-migration succeeds)', async () => {
+    const subSchema = `${testSchema}_auto`;
+    const client = await adminPool.connect();
+
+    try {
+      // Setup: Create schema and table with old schema (no PK)
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(subSchema);
+
+      // Insert unique spans (no duplicates)
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Unique span 1',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-2', // Different spanId - unique
+        name: 'Unique span 2',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Create store and init - should NOT throw (auto-migration succeeds)
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'auto-migrate-test-store',
+        schemaName: subSchema,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify constraint was added
+      const pkExists = await client.query(`
+        SELECT 1 FROM pg_constraint
+        WHERE conname LIKE '${subSchema}%mastra_ai_spans%pk'
+      `);
+      expect(pkExists.rows.length).toBe(1);
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should NOT throw when constraint already exists (fresh install)', async () => {
+    const subSchema = `${testSchema}_fresh`;
+    const client = await adminPool.connect();
+
+    try {
+      // Setup: Create schema (table will be created by init with constraint)
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+
+      // Create store and init - should create table with constraint (fresh install)
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'fresh-install-test-store',
+        schemaName: subSchema,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify constraint exists
       const pkExists = await client.query(`
         SELECT 1 FROM pg_constraint
         WHERE conname LIKE '${subSchema}%mastra_ai_spans%pk'
