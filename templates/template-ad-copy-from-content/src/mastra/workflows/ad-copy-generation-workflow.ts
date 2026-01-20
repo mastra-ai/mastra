@@ -61,7 +61,7 @@ const extractContentStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, requestContext, mastra }) => {
+  execute: async ({ inputData, requestContext, mastra, getInitData }) => {
     const { contentInput, inputType } = inputData;
 
     console.log(`📝 Processing ${inputType} content...`);
@@ -135,7 +135,7 @@ const extractContentStep = createStep({
 
       try {
         // Use the PDF content extractor tool
-        const extractionResult = await pdfContentExtractorTool.execute(
+        const extractionResult = await pdfContentExtractorTool.execute!(
           {
             pdfUrl: contentInput,
             focusAreas: ['benefits', 'features', 'value-proposition'],
@@ -219,7 +219,7 @@ const generateAdCopyStep = createStep({
     const finalTargetAudience = targetAudience || extractedData?.targetAudience || 'General audience';
 
     try {
-      const adCopyResults = await adCopyGeneratorTool.execute(
+      const adCopyResults = await adCopyGeneratorTool.execute!(
         {
           content: processedContent,
           platform: platform as 'facebook' | 'google' | 'instagram' | 'linkedin' | 'twitter' | 'tiktok' | 'generic',
@@ -298,7 +298,7 @@ const generateImageStep = createStep({
     try {
       const imagePrompt = `Professional promotional image for advertisement: ${headline}. ${body.substring(0, 100)}...`;
 
-      const imageResult = await imageGeneratorTool.execute(
+      const imageResult = await imageGeneratorTool.execute!(
         {
           prompt: imagePrompt,
           style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
@@ -333,6 +333,7 @@ export const adCopyGenerationWorkflow = createWorkflow({
   inputSchema,
   outputSchema,
 })
+  // @ts-expect-error - TODO: remove once z.enum().optional().default() type error is fixed
   .then(extractContentStep)
   .map({
     processedContent: {
@@ -348,35 +349,35 @@ export const adCopyGenerationWorkflow = createWorkflow({
     platform: {
       schema: z.string(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.platform;
       },
     },
     campaignType: {
       schema: z.string(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.campaignType;
       },
     },
     targetAudience: {
       schema: z.string().optional(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.targetAudience;
       },
     },
     tone: {
       schema: z.string(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.tone;
       },
     },
     productType: {
       schema: z.string().optional(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.productType;
       },
     },
@@ -386,21 +387,21 @@ export const adCopyGenerationWorkflow = createWorkflow({
     generateImages: {
       schema: z.boolean(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.generateImages;
       },
     },
     imageStyle: {
       schema: z.string().optional(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.imageStyle;
       },
     },
     platform: {
       schema: z.string(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.platform;
       },
     },
@@ -421,6 +422,7 @@ export const adCopyGenerationWorkflow = createWorkflow({
       step: generateAdCopyStep,
       path: '.',
     }),
+    // @ts-expect-error - TODO: remove once mapVariable type error is fixed
     imageUrl: mapVariable({
       step: generateImageStep,
       path: 'imageUrl',

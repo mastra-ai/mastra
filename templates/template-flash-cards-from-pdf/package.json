@@ -23,7 +23,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
-    "ai": "^4.3.19",
+    "ai": "^5.0.121",
     "@ai-sdk/openai": "^2.0.65",
     "pdf2json": "^3.1.3",
     "zod": "^3.25.76"
