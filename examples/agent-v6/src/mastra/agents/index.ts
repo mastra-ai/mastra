@@ -3,8 +3,11 @@ import { Agent } from '@mastra/core/agent';
 import { stepCountIs, ToolLoopAgent } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { weatherInfo, weatherTool } from '../tools';
+import { storage } from '../storage/libsql';
 
-const memory = new Memory();
+const memory = new Memory({
+  storage,
+});
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',

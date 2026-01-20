@@ -41,9 +41,24 @@ export function getProjectRoot(options: ProjectRootOptions = {}): string {
 // These are build outputs that may contain their own package.json
 const SKIP_DIRECTORIES = new Set(['.mastra']);
 
+/**
+ * Check if a path is inside a skipped directory (e.g., inside .mastra/).
+ * This handles cases like .mastra/output which has its own package.json.
+ */
+function isInsideSkippedDirectory(dir: string): boolean {
+  const parts = dir.split(path.sep);
+  return parts.some(part => SKIP_DIRECTORIES.has(part));
+}
+
 function findUpPackageJson(startDir: string): string | null {
   let dir = path.resolve(startDir);
   const root = path.parse(dir).root;
+
+  // If starting inside a skipped directory (e.g., .mastra/output),
+  // skip up past the skipped directory first
+  while (dir !== root && isInsideSkippedDirectory(dir)) {
+    dir = path.dirname(dir);
+  }
 
   while (dir !== root) {
     const dirName = path.basename(dir);

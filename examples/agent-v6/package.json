@@ -7,7 +7,7 @@
   "version": "0.0.1",
   "scripts": {
     "start": "npx bun src/example.ts",
-    "processor-demo": "npx bun src/processor-demo.ts",
+    "structured-output-example": "npx bun src/structured-output-example.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev",
     "mastra:start": "mastra start"
@@ -18,19 +18,19 @@
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
     "ai": "^6.0.1",
-    "@mastra/client-js": "beta",
-    "@mastra/core": "beta",
-    "@mastra/evals": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/mcp": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
-    "@mastra/voice-openai": "beta",
-    "@mastra/ai-sdk": "beta"
+    "@mastra/client-js": "latest",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/voice-openai": "latest",
+    "@mastra/ai-sdk": "latest"
   },
   "devDependencies": {
-    "mastra": "beta",
+    "mastra": "latest",
     "msw": "^2.12.2"
   },
   "pnpm": {
