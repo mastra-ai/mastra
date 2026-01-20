@@ -367,6 +367,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         retryCount: 0,
         messages: messageList.get.all.db(),
         messageList,
+        state: {},
       };
 
       try {
