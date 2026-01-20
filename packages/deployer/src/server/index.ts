@@ -81,7 +81,7 @@ export async function createHonoServer(
     for (const [key, tool] of Object.entries(options.tools)) {
       try {
         mastra.addTool(tool as any, key);
-      } catch (err) {
+      } catch {
         // Tool may already be registered (e.g., if defined in Mastra config), ignore
       }
     }

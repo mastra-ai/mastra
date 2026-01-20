@@ -305,8 +305,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
       model: { ...agent.model },
       tools: agent.tools ? [...agent.tools] : agent.tools,
+      defaultOptions: agent.defaultOptions ? { ...agent.defaultOptions } : agent.defaultOptions,
       workflows: agent.workflows ? [...agent.workflows] : agent.workflows,
       agents: agent.agents ? [...agent.agents] : agent.agents,
+      integrationTools: agent.integrationTools ? [...agent.integrationTools] : agent.integrationTools,
+      inputProcessors: agent.inputProcessors ? agent.inputProcessors.map(p => ({ ...p })) : agent.inputProcessors,
+      outputProcessors: agent.outputProcessors ? agent.outputProcessors.map(p => ({ ...p })) : agent.outputProcessors,
       scorers: agent.scorers ? { ...agent.scorers } : agent.scorers,
     };
   }

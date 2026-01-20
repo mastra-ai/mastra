@@ -7,7 +7,6 @@ import { toast } from '@/lib/toast';
 import { AgentForm } from './agent-form';
 import type { AgentFormValues } from './form-validation';
 import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { Spinner } from '@/ds/components/Spinner';
 
 export interface EditAgentDialogProps {
@@ -21,7 +20,6 @@ export interface EditAgentDialogProps {
 export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDelete }: EditAgentDialogProps) {
   const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
   const { updateStoredAgent, deleteStoredAgent } = useStoredAgentMutations(agentId);
-  const { data: toolsData } = useTools();
 
   const handleSubmit = async (values: AgentFormValues) => {
     try {
