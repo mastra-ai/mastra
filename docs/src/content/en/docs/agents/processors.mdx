@@ -233,8 +233,7 @@ The method can return any combination of:
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
 ```typescript
-await agent.generate({
-  prompt: "Complex task",
+await agent.generate("Complex task", {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
       return { model: "openai/gpt-4o-mini" };

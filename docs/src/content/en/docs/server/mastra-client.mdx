@@ -86,7 +86,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server
 
 ## Generating responses
 
-Call `.generate()` with an array of message objects that include `role` and `content`:
+Call `.generate()` with a string prompt:
 
 ```typescript
 import { mastraClient } from "lib/mastra-client";
@@ -95,14 +95,7 @@ const testAgent = async () => {
   try {
     const agent = mastraClient.getAgent("testAgent");
 
-    const response = await agent.generate({
-      messages: [
-        {
-          role: "user",
-          content: "Hello",
-        },
-      ],
-    });
+    const response = await agent.generate("Hello");
 
     console.log(response.text);
   } catch (error) {
@@ -113,13 +106,13 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.generate()](/reference/client-js/agents#generate) for more information.
+You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/client-js/agents#generate) for more information.
 
 :::
 
 ## Streaming responses
 
-Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`:
+Use `.stream()` for real-time responses with a string prompt:
 
 ```typescript
 import { mastraClient } from "lib/mastra-client";
@@ -128,14 +121,7 @@ const testAgent = async () => {
   try {
     const agent = mastraClient.getAgent("testAgent");
 
-    const stream = await agent.stream({
-      messages: [
-        {
-          role: "user",
-          content: "Hello",
-        },
-      ],
-    });
+    const stream = await agent.stream("Hello");
 
     stream.processDataStream({
       onTextPart: (text) => {
@@ -150,7 +136,7 @@ const testAgent = async () => {
 
 :::info
 
-Visit [.stream()](/reference/client-js/agents#stream) for more information.
+You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/client-js/agents#stream) for more information.
 
 :::
 
@@ -237,8 +223,7 @@ const handleClientTool = async () => {
       },
     });
 
-    const response = await agent.generate({
-      messages: "Change the background to blue",
+    const response = await agent.generate("Change the background to blue", {
       clientTools: { colorChangeTool },
     });
 
@@ -274,9 +259,7 @@ You can also use `MastraClient` in server-side environments such as API routes, 
 export async function action() {
   const agent = mastraClient.getAgent("testAgent");
 
-  const stream = await agent.stream({
-    messages: [{ role: "user", content: "Hello" }],
-  });
+  const stream = await agent.stream("Hello");
 
   return new Response(stream.body);
 }

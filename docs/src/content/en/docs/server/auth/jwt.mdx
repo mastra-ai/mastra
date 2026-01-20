@@ -70,6 +70,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```tsx title="src/components/test-agent.tsx" copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -77,9 +78,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
       async function handleClick() {
         const agent = mastraClient.getAgent("weatherAgent");
 
-        const response = await agent.generate({
-          messages: "Weather in London"
-        });
+        const response = await agent.generate("Weather in London");
 
         console.log(response);
       }
@@ -90,6 +89,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -98,6 +98,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>
 

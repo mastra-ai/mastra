@@ -28,9 +28,13 @@ WORKOS_API_KEY=sk_live_...
 WORKOS_CLIENT_ID=client_...
 ```
 
-> **Note:** You can find your API key and Client ID in the WorkOS Dashboard under API Keys and Applications respectively.
+:::note
 
-> For detailed setup instructions, refer to the [WorkOS documentation](https://workos.com/docs) for your specific platform.
+You can find your API key and Client ID in the WorkOS Dashboard under API Keys and Applications respectively.
+
+For detailed setup instructions, refer to the [WorkOS documentation](https://workos.com/docs) for your specific platform.
+
+:::
 
 ## Installation
 
@@ -137,7 +141,11 @@ export const authenticateWithWorkos = async (
 };
 ```
 
-> Refer to the [WorkOS User Management documentation](https://workos.com/docs/authkit/vanilla/nodejs) for more authentication methods and configuration options.
+:::note
+
+Refer to the [WorkOS User Management documentation](https://workos.com/docs/authkit/vanilla/nodejs) for more authentication methods and configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -156,9 +164,9 @@ export const createMastraClient = (accessToken: string) => {
 };
 ```
 
-> **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-
 :::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
 
 Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
@@ -170,6 +178,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="react" label="React">
+
     ```typescript title="src/api/agents.ts" copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -192,9 +201,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
       });
 
       const weatherAgent = mastra.getAgent("weatherAgent");
-      const response = await weatherAgent.generate({
-        messages: "What's the weather like in Nairobi",
-      });
+      const response = await weatherAgent.generate("What's the weather like in Nairobi");
 
       return response.text;
     };
@@ -202,6 +209,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
   </TabItem>
   <TabItem value="curl" label="cURL">
+
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -210,5 +218,6 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
         "messages": "Weather in London"
       }'
     ```
+
   </TabItem>
 </Tabs>

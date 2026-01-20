@@ -179,8 +179,8 @@ export function AgentNetworkToAISDKTransformer() {
 
 export function AgentStreamToAISDKTransformer<OUTPUT>({
   lastMessageId,
-  sendStart,
-  sendFinish,
+  sendStart = true,
+  sendFinish = true,
   sendReasoning,
   sendSources,
   messageMetadata,

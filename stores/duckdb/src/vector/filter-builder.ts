@@ -130,11 +130,19 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
   for (const [op, value] of Object.entries(operators)) {
     switch (op) {
       case '$eq':
-        conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
+        if (value === null) {
+          conditions.push(`${fieldPath} IS NULL`);
+        } else {
+          conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
+        }
         break;
 
       case '$ne':
-        conditions.push(`${fieldPath} != ${toSqlLiteral(value)}`);
+        if (value === null) {
+          conditions.push(`${fieldPath} IS NOT NULL`);
+        } else {
+          conditions.push(`${fieldPath} != ${toSqlLiteral(value)}`);
+        }
         break;
 
       case '$gt':
@@ -155,8 +163,19 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
 
       case '$in':
         if (Array.isArray(value) && value.length > 0) {
+          // Try to handle both scalar and array fields
+          // For array fields: check if any value in the array is in the specified list
+          // For scalar fields: check if the field value is in the specified list
+          const jsonPath = `json_extract(metadata, '$.${escapeString(field)}')`;
           const literals = value.map(v => toSqlLiteral(v)).join(', ');
-          conditions.push(`${fieldPath} IN (${literals})`);
+          // For list_has_any, need to ensure types match - cast all to VARCHAR
+          const stringLiterals = value.map(v => toSqlLiteral(String(v))).join(', ');
+
+          // Use list_has_any to check if array field contains any of the values
+          // TRY_CAST returns NULL if not an array, so we also check scalar field with IN
+          conditions.push(
+            `(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}]) OR ${fieldPath} IN (${literals}))`,
+          );
         } else {
           // Empty array - no matches
           conditions.push('1=0');
@@ -194,6 +213,17 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
         } else {
           // Fallback to equality
           conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
+        }
+        break;
+
+      case '$all':
+        // Check if array field contains all specified elements
+        if (Array.isArray(value) && value.length > 0) {
+          const jsonPath = `json_extract(metadata, '$.${escapeString(field)}')`;
+          const arrayConditions = value.map(v => {
+            return `list_contains(TRY_CAST(${jsonPath} AS VARCHAR[]), ${toSqlLiteral(v)})`;
+          });
+          conditions.push(`(${arrayConditions.join(' AND ')})`);
         }
         break;
 

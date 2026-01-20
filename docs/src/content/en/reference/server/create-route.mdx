@@ -225,7 +225,7 @@ const streamAgent = createRoute({
   }),
   handler: async ({ agentId, messages, mastra, abortSignal }) => {
     const agent = mastra.getAgent(agentId);
-    return agent.stream({ messages, abortSignal });
+    return agent.stream(messages, { abortSignal });
   },
 });
 ```

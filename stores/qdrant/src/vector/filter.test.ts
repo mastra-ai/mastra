@@ -40,7 +40,9 @@ describe('QdrantFilterTranslator', () => {
       };
 
       expect(translator.translate(filters.eq)).toEqual({ must: [{ key: 'field', match: { value: 'value' } }] });
-      expect(translator.translate(filters.ne)).toEqual({ must: [{ key: 'field', match: { except: ['value'] } }] });
+      expect(translator.translate(filters.ne)).toEqual({
+        must: [{ must_not: [{ key: 'field', match: { value: 'value' } }] }],
+      });
       expect(translator.translate(filters.gt)).toEqual({ must: [{ key: 'field', range: { gt: 100 } }] });
       expect(translator.translate(filters.gte)).toEqual({ must: [{ key: 'field', range: { gte: 100 } }] });
       expect(translator.translate(filters.lt)).toEqual({ must: [{ key: 'field', range: { lt: 100 } }] });
@@ -54,7 +56,9 @@ describe('QdrantFilterTranslator', () => {
       };
 
       expect(translator.translate(filters.in)).toEqual({ must: [{ key: 'field', match: { any: [1, 2, 3] } }] });
-      expect(translator.translate(filters.nin)).toEqual({ must: [{ key: 'field', match: { except: [1, 2, 3] } }] });
+      expect(translator.translate(filters.nin)).toEqual({
+        must: [{ must_not: [{ key: 'field', match: { any: [1, 2, 3] } }] }],
+      });
     });
 
     it('should handle empty arrays', () => {
@@ -756,12 +760,11 @@ describe('QdrantFilterTranslator', () => {
       const expected = {
         must: [
           {
-            key: 'field',
-            range: { gt: 10, lt: 20 },
+            must_not: [{ key: 'field', match: { value: 15 } }],
           },
           {
             key: 'field',
-            match: { except: [15] },
+            range: { gt: 10, lt: 20 },
           },
         ],
       };

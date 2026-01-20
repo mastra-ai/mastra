@@ -18,7 +18,7 @@ const { agents, total, hasMore } = await mastra.listStoredAgents();
 for (const agent of agents) {
   console.log(agent.id, agent.name);
   // Each agent is ready to use
-  // const response = await agent.generate({ messages: "Hello!" });
+  // const response = await agent.generate("Hello");
 }
 ```
 

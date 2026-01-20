@@ -34,7 +34,18 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
       }
 
       const value = target[prop as keyof typeof target];
-      if (typeof value === 'function' && prop !== 'init') {
+      if (typeof value === 'function') {
+        // Special handling for init to track that it was called
+        if (prop === 'init') {
+          return async (...args: unknown[]) => {
+            if (!hasInitialized) {
+              hasInitialized = Reflect.apply(value, target, args) as Promise<void>;
+            }
+            return hasInitialized;
+          };
+        }
+
+        // All other functions wait for init
         return async (...args: unknown[]) => {
           await ensureInit();
 
