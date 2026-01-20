@@ -9,7 +9,7 @@ Codemods are transformations that run on your codebase programmatically, allowin
 ### Run Version-Specific Codemods
 
 ```sh
-npx @mastra/codemod@beta v1
+npx @mastra/codemod v1
 ```
 
 ### Run Individual Codemods
@@ -17,20 +17,20 @@ npx @mastra/codemod@beta v1
 To run a specific codemod:
 
 ```sh
-npx @mastra/codemod@beta <codemod-name> <path>
+npx @mastra/codemod <codemod-name> <path>
 ```
 
 Examples:
 
 ```sh
 # Transform a specific file
-npx @mastra/codemod@beta v1/mastra-core-imports src/mastra.ts
+npx @mastra/codemod v1/mastra-core-imports src/mastra.ts
 
 # Transform a directory
-npx @mastra/codemod@beta v1/mastra-core-imports src/lib/
+npx @mastra/codemod v1/mastra-core-imports src/lib/
 
 # Transform entire project
-npx @mastra/codemod@beta v1/mastra-core-imports .
+npx @mastra/codemod v1/mastra-core-imports .
 ```
 
 ## Available Codemods
@@ -79,7 +79,7 @@ npx @mastra/codemod@beta v1/mastra-core-imports .
 ### Commands
 
 ```sh
-npx @mastra/codemod@beta <command> [options]
+npx @mastra/codemod <command> [options]
 ```
 
 **Available Commands:**
@@ -96,10 +96,10 @@ npx @mastra/codemod@beta <command> [options]
 
 ```sh
 # Show verbose output for specific codemod
-npx @mastra/codemod@beta --verbose v1/mastra-core-imports src/
+npx @mastra/codemod --verbose v1/mastra-core-imports src/
 
 # Print transformed code for specific codemod
-npx @mastra/codemod@beta --print v1/mastra-core-imports src/mastra.ts
+npx @mastra/codemod --print v1/mastra-core-imports src/mastra.ts
 ```
 
 ## Contributing

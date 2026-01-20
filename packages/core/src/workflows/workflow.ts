@@ -172,33 +172,28 @@ export function createStep<
 >;
 
 /**
+ * Creates a step from an agent (defaults to { text: string } output)
+ */
+export function createStep<TStepId extends string>(
+  agent: Agent<TStepId, any>,
+  agentOptions?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
+    structuredOutput?: never;
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<TStepId, unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>;
+
+/**
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
-  agentOptions: AgentStepOptions<TStepOutput> & {
+  agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
     structuredOutput: { schema: OutputSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
-
-/**
- * Creates a step from an agent (defaults to { text: string } output)
- */
-export function createStep<
-  TStepId extends string,
-  TStepInput extends { prompt: string },
-  TStepOutput extends { text: string },
-  TResume,
-  TSuspend,
->(
-  agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions<TStepOutput> & {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<TStepId, unknown, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool

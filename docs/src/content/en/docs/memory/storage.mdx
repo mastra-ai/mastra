@@ -74,17 +74,17 @@ This is useful when all primitives share the same storage backend and have simil
 
 #### Composite storage
 
-Add storage to your Mastra instance using `MastraStorage` and configure individual storage domains to use different storage providers.
+Add storage to your Mastra instance using `MastraCompositeStore` and configure individual storage domains to use different storage providers.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { WorkflowsPG } from "@mastra/pg";
 import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
 
 export const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     domains: {
       memory: new MemoryLibSQL({ url: "file:./memory.db" }),

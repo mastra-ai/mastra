@@ -104,19 +104,19 @@ USING snapshot::jsonb;
 
 ## Added
 
-### Storage composition in MastraStorage
+### Storage composition in MastraCompositeStore
 
-`MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+`MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
 // Compose domains from different stores
 const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     domains: {
       memory: new MemoryLibSQL({ url: "file:./local.db" }),
@@ -130,6 +130,36 @@ const mastra = new Mastra({
 See the [Storage Composition reference](/reference/storage/composite) for more details.
 
 ## Changed
+
+### `MastraStorage` renamed to `MastraCompositeStore`
+
+The `MastraStorage` class has been renamed to `MastraCompositeStore` to better reflect its role as a composite storage implementation that routes different domains to different underlying stores. This avoids confusion with the general "Mastra Storage" concept (the `storage` property on the Mastra instance).
+
+The old `MastraStorage` name remains available as a deprecated alias for backward compatibility, but will be removed in a future version.
+
+To migrate, update your imports and instantiation:
+
+```diff
+- import { MastraStorage } from "@mastra/core/storage";
++ import { MastraCompositeStore } from "@mastra/core/storage";
+  import { MemoryLibSQL } from "@mastra/libsql";
+  import { WorkflowsPG } from "@mastra/pg";
+
+  export const mastra = new Mastra({
+-   storage: new MastraStorage({
++   storage: new MastraCompositeStore({
+      id: "composite",
+      domains: {
+        memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+        workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      },
+    }),
+  });
+```
+
+:::note
+If you're using a single store implementation (like `PostgresStore` or `LibSQLStore`) directly, no changes are needed. This only affects code that explicitly uses `MastraStorage` for composite storage.
+:::
 
 ### Required `id` property for storage instances
 

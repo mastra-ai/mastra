@@ -34,17 +34,14 @@ export async function migrate({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  logger.info(pc.cyan('Mastra Storage Migration'));
-  logger.info('');
+  p.intro(pc.cyan('Mastra Storage Migration'));
 
   // Show backup warning and ask for confirmation (unless --yes flag is used)
   if (!yes) {
-    logger.info(pc.yellow('⚠️  Warning: This migration will modify your database.'));
-    logger.info('');
-    logger.info('   Before proceeding, please ensure you have:');
-    logger.info('   • Created a backup of your database');
-    logger.info('   • Tested this migration in a non-production environment');
-    logger.info('');
+    p.log.warn(pc.yellow('Warning: This migration will modify your database.'));
+    p.log.message('Before proceeding, please ensure you have:');
+    p.log.message('  • Created a backup of your database');
+    p.log.message('  • Tested this migration in a non-production environment');
 
     const confirmed = await p.confirm({
       message: 'Have you backed up your database and are ready to proceed?',
@@ -52,13 +49,10 @@ export async function migrate({
     });
 
     if (p.isCancel(confirmed) || !confirmed) {
-      logger.info('');
-      logger.info('Migration cancelled. Please back up your database before running this command.');
-      logger.info(pc.dim('Tip: Use --yes or -y to skip this prompt in CI/automation.'));
+      p.log.info('Migration cancelled. Please back up your database before running this command.');
+      p.log.message(pc.dim('Tip: Use --yes or -y to skip this prompt in CI/automation.'));
       process.exit(0);
     }
-
-    logger.info('');
   }
 
   try {
@@ -92,6 +86,7 @@ export async function migrate({
       cwd: rootDir,
       env: {
         NODE_ENV: 'production',
+        MASTRA_DISABLE_STORAGE_INIT: 'true', // Prevent MIGRATION_REQUIRED error during import
         ...Object.fromEntries(loadedEnv),
       },
       stdio: ['inherit', 'pipe', 'pipe'],

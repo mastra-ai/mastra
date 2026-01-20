@@ -17,7 +17,7 @@ OPENAI_API_KEY=<your-api-key>
 And install the following package:
 
 ```bash
-npm install @mastra/libsql@beta
+npm install @mastra/libsql
 ```
 
 ## Adding memory to an agent

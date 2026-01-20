@@ -4,12 +4,13 @@ import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import type { ZodType } from 'zod';
+import type { z as zv4 } from 'zod/v4';
 
 /**
  * Check if a schema looks like a processor step schema.
  * Processor step schemas are discriminated unions on 'phase' with specific values.
  */
-function looksLikeProcessorStepSchema(schema: ZodType | undefined): boolean {
+function looksLikeProcessorStepSchema(schema: ZodType | zv4.ZodType<any, any> | undefined): boolean {
   if (!schema) return false;
 
   try {

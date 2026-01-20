@@ -38,7 +38,7 @@ See the [Observability Configuration](#observability-configuration) section for 
 ## Setup
 
 ```sh
-npm install @mastra/inngest@beta inngest @mastra/core@beta @mastra/deployer@beta @hono/node-server
+npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \

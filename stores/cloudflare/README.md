@@ -11,7 +11,7 @@ npm install @mastra/cloudflare
 ## Prerequisites
 
 - Cloudflare account with KV namespaces set up
-- Node.js 16 or higher
+- Node.js 22.13.0 or later
 - (Optional) Cloudflare Worker for Workers API mode
 
 ## Usage

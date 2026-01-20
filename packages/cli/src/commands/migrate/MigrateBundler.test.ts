@@ -71,18 +71,17 @@ describe('MigrateBundler', () => {
       expect(entry).toContain('mastra.getStorage()');
     });
 
-    it('should generate entry script that calls storage.init()', () => {
+    it('should generate entry script that accesses observabilityStore directly from storage.stores', () => {
       const bundler = new MigrateBundler();
       const entry = (bundler as any).getEntry();
 
-      expect(entry).toContain('await storage.init()');
+      expect(entry).toContain('storage.stores?.observability');
     });
 
     it('should generate entry script that calls observabilityStore.migrateSpans()', () => {
       const bundler = new MigrateBundler();
       const entry = (bundler as any).getEntry();
 
-      expect(entry).toContain("storage.getStore('observability')");
       expect(entry).toContain('observabilityStore.migrateSpans()');
     });
 
@@ -126,17 +125,6 @@ describe('MigrateBundler', () => {
 
       expect(entry).toContain('catch (error)');
       expect(entry).toContain('error instanceof Error ? error.message');
-    });
-
-    it('should generate entry script that handles MIGRATION_REQUIRED errors from init()', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      // The script should catch MIGRATION_REQUIRED errors and continue with migration
-      expect(entry).toContain('MIGRATION_REQUIRED');
-      expect(entry).toContain('migrationRequired');
-      // Should have nested try-catch for init()
-      expect(entry).toMatch(/try\s*\{[\s\S]*await storage\.init\(\)[\s\S]*\}\s*catch\s*\(initError\)/);
     });
   });
 

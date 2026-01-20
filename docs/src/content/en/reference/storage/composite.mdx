@@ -10,11 +10,11 @@ packages:
 
 # Composite Storage
 
-`MastraStorage` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
+`MastraCompositeStore` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
 ## Installation
 
-`MastraStorage` is included in `@mastra/core`:
+`MastraCompositeStore` is included in `@mastra/core`:
 
 ```bash
 npm install @mastra/core@latest
@@ -45,13 +45,13 @@ Mastra organizes storage into five specialized domains, each handling a specific
 Import domain classes directly from each store package and compose them:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     domains: {
       memory: new MemoryLibSQL({ url: "file:./local.db" }),
@@ -67,7 +67,7 @@ export const mastra = new Mastra({
 Use `default` to specify a fallback storage, then override specific domains:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { PostgresStore } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
@@ -78,7 +78,7 @@ const pgStore = new PostgresStore({
 });
 
 export const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     default: pgStore,
     domains: {
@@ -100,7 +100,7 @@ export const mastra = new Mastra({
     },
     {
       name: "default",
-      type: "MastraStorage",
+      type: "MastraCompositeStore",
       description:
         "Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
       isOptional: true,
@@ -154,14 +154,14 @@ export const mastra = new Mastra({
 
 ## Initialization
 
-`MastraStorage` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+`MastraCompositeStore` initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
 ```typescript title="src/mastra/index.ts"
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { Mastra } from "@mastra/core";
 
-const storage = new MastraStorage({
+const storage = new MastraCompositeStore({
   id: "composite",
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
@@ -178,10 +178,10 @@ export const mastra = new Mastra({
 If using storage directly, call `init()` explicitly:
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG } from "@mastra/pg";
 
-const storage = new MastraStorage({
+const storage = new MastraCompositeStore({
   id: "composite",
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
@@ -202,11 +202,11 @@ const thread = await memoryStore?.getThreadById({ threadId: "..." });
 Use a local database for development while keeping production data in a managed service:
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 
-const storage = new MastraStorage({
+const storage = new MastraCompositeStore({
   id: "composite",
   domains: {
     // Use local SQLite for development, PostgreSQL for production
@@ -225,11 +225,11 @@ const storage = new MastraStorage({
 Use a time-series database for traces while keeping other data in PostgreSQL:
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
 
-const storage = new MastraStorage({
+const storage = new MastraCompositeStore({
   id: "composite",
   domains: {
     memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
