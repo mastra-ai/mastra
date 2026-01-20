@@ -1,5 +1,141 @@
 # @mastra/clickhouse
 
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Added new `listThreads` method for flexible thread filtering across all storage adapters. ([#11832](https://github.com/mastra-ai/mastra/pull/11832))
+
+  **New Features**
+  - Filter threads by `resourceId`, `metadata`, or both (with AND logic for metadata key-value pairs)
+  - All filter parameters are optional, allowing you to list all threads or filter as needed
+  - Full pagination and sorting support
+
+  **Example Usage**
+
+  ```typescript
+  // List all threads
+  const allThreads = await memory.listThreads({});
+
+  // Filter by resourceId only
+  const userThreads = await memory.listThreads({
+    filter: { resourceId: 'user-123' },
+  });
+
+  // Filter by metadata only
+  const supportThreads = await memory.listThreads({
+    filter: { metadata: { category: 'support' } },
+  });
+
+  // Filter by both with pagination
+  const filteredThreads = await memory.listThreads({
+    filter: {
+      resourceId: 'user-123',
+      metadata: { priority: 'high', status: 'open' },
+    },
+    orderBy: { field: 'updatedAt', direction: 'DESC' },
+    page: 0,
+    perPage: 20,
+  });
+  ```
+
+  **Security Improvements**
+  - Added validation to prevent SQL injection via malicious metadata keys
+  - Added pagination parameter validation to prevent integer overflow attacks
+
+- Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`6833c69`](https://github.com/mastra-ai/mastra/commit/6833c69607418d257750bbcdd84638993d343539), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`3a76a80`](https://github.com/mastra-ai/mastra/commit/3a76a80284cb71a0faa975abb3d4b2a9631e60cd), [`8538a0d`](https://github.com/mastra-ai/mastra/commit/8538a0d232619bf55dad7ddc2a8b0ca77c679a87), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5)]:
+  - @mastra/core@1.0.0-beta.25
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Aligned vector store configuration with underlying library APIs, giving you access to all library options directly. ([#11742](https://github.com/mastra-ai/mastra/pull/11742))
+
+  **Why this change?**
+
+  Previously, each vector store defined its own configuration types that only exposed a subset of the underlying library's options. This meant users couldn't access advanced features like authentication, SSL, compression, or custom headers without creating their own client instances. Now, the configuration types extend the library types directly, so all options are available.
+
+  **@mastra/libsql** (Breaking)
+
+  Renamed `connectionUrl` to `url` to match the `@libsql/client` API and align with LibSQLStorage.
+
+  ```typescript
+  // Before
+  new LibSQLVector({ id: 'my-vector', connectionUrl: 'file:./db.sqlite' });
+
+  // After
+  new LibSQLVector({ id: 'my-vector', url: 'file:./db.sqlite' });
+  ```
+
+  **@mastra/opensearch** (Breaking)
+
+  Renamed `url` to `node` and added support for all OpenSearch `ClientOptions` including authentication, SSL, and compression.
+
+  ```typescript
+  // Before
+  new OpenSearchVector({ id: 'my-vector', url: 'http://localhost:9200' });
+
+  // After
+  new OpenSearchVector({ id: 'my-vector', node: 'http://localhost:9200' });
+
+  // With authentication (now possible)
+  new OpenSearchVector({
+    id: 'my-vector',
+    node: 'https://localhost:9200',
+    auth: { username: 'admin', password: 'admin' },
+    ssl: { rejectUnauthorized: false },
+  });
+  ```
+
+  **@mastra/pinecone** (Breaking)
+
+  Removed `environment` parameter. Use `controllerHostUrl` instead (the actual Pinecone SDK field name). Added support for all `PineconeConfiguration` options.
+
+  ```typescript
+  // Before
+  new PineconeVector({ id: 'my-vector', apiKey: '...', environment: '...' });
+
+  // After
+  new PineconeVector({ id: 'my-vector', apiKey: '...' });
+
+  // With custom controller host (if needed)
+  new PineconeVector({ id: 'my-vector', apiKey: '...', controllerHostUrl: '...' });
+  ```
+
+  **@mastra/clickhouse**
+
+  Added support for all `ClickHouseClientConfigOptions` like `request_timeout`, `compression`, `keep_alive`, and `database`. Existing configurations continue to work unchanged.
+
+  **@mastra/cloudflare, @mastra/cloudflare-d1, @mastra/lance, @mastra/libsql, @mastra/mongodb, @mastra/pg, @mastra/upstash**
+
+  Improved logging by replacing `console.warn` with structured logger in workflow storage domains.
+
+  **@mastra/deployer-cloud**
+
+  Updated internal LibSQLVector configuration for compatibility with the new API.
+
+- Fixed ClickHouse metadata handling to prevent empty string crashes when storing undefined metadata. ([#11898](https://github.com/mastra-ai/mastra/pull/11898))
+
+  **What changed:**
+  - Applied DEFAULT '{}' constraint to metadata columns for both 'text' and 'jsonb' types (previously only 'text')
+  - Extended `serializeMetadata()` and `parseMetadata()` helpers to resources (previously only threads)
+  - ClickHouse-specific issue: undefined values become empty strings in String columns, causing JSON.parse() crashes
+
+  **Why ClickHouse needs this:**
+  - ClickHouse has no native JSON type - both 'text' and 'jsonb' map to String columns
+  - When undefined is stored in String columns, it becomes `''` (empty string)
+  - On retrieval, `JSON.parse('')` crashes with "Unexpected end of JSON input"
+
+  **Impact:**
+  - Defense-in-depth: database-level DEFAULT '{}' + application-level safe parsing
+  - Prevents crashes across all ClickHouse storage domains (threads, resources, scorers, spans, agents)
+
+  Related to #11882
+
+- Updated dependencies [[`ebae12a`](https://github.com/mastra-ai/mastra/commit/ebae12a2dd0212e75478981053b148a2c246962d), [`c61a0a5`](https://github.com/mastra-ai/mastra/commit/c61a0a5de4904c88fd8b3718bc26d1be1c2ec6e7), [`69136e7`](https://github.com/mastra-ai/mastra/commit/69136e748e32f57297728a4e0f9a75988462f1a7), [`449aed2`](https://github.com/mastra-ai/mastra/commit/449aed2ba9d507b75bf93d427646ea94f734dfd1), [`eb648a2`](https://github.com/mastra-ai/mastra/commit/eb648a2cc1728f7678768dd70cd77619b448dab9), [`0131105`](https://github.com/mastra-ai/mastra/commit/0131105532e83bdcbb73352fc7d0879eebf140dc), [`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`b00ccd3`](https://github.com/mastra-ai/mastra/commit/b00ccd325ebd5d9e37e34dd0a105caae67eb568f), [`3bdfa75`](https://github.com/mastra-ai/mastra/commit/3bdfa7507a91db66f176ba8221aa28dd546e464a), [`e770de9`](https://github.com/mastra-ai/mastra/commit/e770de941a287a49b1964d44db5a5763d19890a6), [`52e2716`](https://github.com/mastra-ai/mastra/commit/52e2716b42df6eff443de72360ae83e86ec23993), [`27b4040`](https://github.com/mastra-ai/mastra/commit/27b4040bfa1a95d92546f420a02a626b1419a1d6), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151), [`8dc7f55`](https://github.com/mastra-ai/mastra/commit/8dc7f55900395771da851dc7d78d53ae84fe34ec), [`8379099`](https://github.com/mastra-ai/mastra/commit/8379099fc467af6bef54dd7f80c9bd75bf8bbddf), [`8c0ec25`](https://github.com/mastra-ai/mastra/commit/8c0ec25646c8a7df253ed1e5ff4863a0d3f1316c), [`ff4d9a6`](https://github.com/mastra-ai/mastra/commit/ff4d9a6704fc87b31a380a76ed22736fdedbba5a), [`69821ef`](https://github.com/mastra-ai/mastra/commit/69821ef806482e2c44e2197ac0b050c3fe3a5285), [`1ed5716`](https://github.com/mastra-ai/mastra/commit/1ed5716830867b3774c4a1b43cc0d82935f32b96), [`4186bdd`](https://github.com/mastra-ai/mastra/commit/4186bdd00731305726fa06adba0b076a1d50b49f), [`7aaf973`](https://github.com/mastra-ai/mastra/commit/7aaf973f83fbbe9521f1f9e7a4fd99b8de464617)]:
+  - @mastra/core@1.0.0-beta.22
+
 ## 1.0.0-beta.9
 
 ### Patch Changes

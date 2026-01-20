@@ -1,5 +1,157 @@
 # @mastra/react-hooks
 
+## 1.0.0-beta.25
+
+### Minor Changes
+
+- Added human-in-the-loop (HITL) tool approval support for `generate()` method. ([#12056](https://github.com/mastra-ai/mastra/pull/12056))
+
+  **Why:** This provides parity between `stream()` and `generate()` for tool approval flows, allowing non-streaming use cases to leverage `requireToolApproval` without needing to switch to streaming.
+
+  Previously, tool approval with `requireToolApproval` only worked with `stream()`. Now you can use the same approval flow with `generate()` for non-streaming use cases.
+
+  **Using tool approval with generate()**
+
+  ```typescript
+  const output = await agent.generate('Find user John', {
+    requireToolApproval: true,
+  });
+
+  // Check if a tool is waiting for approval
+  if (output.finishReason === 'suspended') {
+    console.log('Tool requires approval:', output.suspendPayload.toolName);
+
+    // Approve the tool call
+    const result = await agent.approveToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+
+    console.log(result.text);
+  }
+  ```
+
+  **Declining a tool call**
+
+  ```typescript
+  if (output.finishReason === 'suspended') {
+    const result = await agent.declineToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+  }
+  ```
+
+  **New methods added:**
+  - `agent.approveToolCallGenerate({ runId, toolCallId })` - Approves a pending tool call and returns the complete result
+  - `agent.declineToolCallGenerate({ runId, toolCallId })` - Declines a pending tool call and returns the complete result
+
+  **Server routes added:**
+  - `POST /api/agents/:agentId/approve-tool-call-generate`
+  - `POST /api/agents/:agentId/decline-tool-call-generate`
+
+  The playground UI now also supports tool approval when using generate mode.
+
+### Patch Changes
+
+- Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5)]:
+  - @mastra/client-js@1.0.0-beta.25
+
+## 1.0.0-beta.24
+
+### Major Changes
+
+- **Fixed:** Align `Agent.network` with core and update `@mastra/react` network usage. ([#12015](https://github.com/mastra-ai/mastra/pull/12015))
+
+### Patch Changes
+
+- Fixed compatibility with updated `@mastra/client-js` generate and stream API signatures ([#12011](https://github.com/mastra-ai/mastra/pull/12011))
+
+- Updated dependencies [[`461e448`](https://github.com/mastra-ai/mastra/commit/461e448852fe999506a6046d50b1efc27d8aa378)]:
+  - @mastra/client-js@1.0.0-beta.24
+
+## 0.1.0-beta.23
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.23
+
+## 0.1.0-beta.22
+
+### Patch Changes
+
+- Removes the deprecated `threadId` and `resourceId` options from `AgentExecutionOptions`. These have been deprecated for months in favour of the `memory` option. ([#11897](https://github.com/mastra-ai/mastra/pull/11897))
+
+  ### Breaking Changes
+
+  #### `@mastra/core`
+
+  The `threadId` and `resourceId` options have been removed from `agent.generate()` and `agent.stream()`. Use the `memory` option instead:
+
+  ```ts
+  // Before
+  await agent.stream('Hello', {
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.stream('Hello', {
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+  #### `@mastra/server`
+
+  The `threadId`, `resourceId`, and `resourceid` fields have been removed from the main agent execution body schema. The server now expects the `memory` option format in request bodies. Legacy routes (`/api/agents/:agentId/generate-legacy` and `/api/agents/:agentId/stream-legacy`) continue to support the deprecated fields.
+
+  #### `@mastra/react`
+
+  The `useChat` hook now internally converts `threadId` to the `memory` option format when making API calls. No changes needed in component code - the hook handles the conversion automatically.
+
+  #### `@mastra/client-js`
+
+  When using the client SDK agent methods, use the `memory` option instead of `threadId`/`resourceId`:
+
+  ```ts
+  const agent = client.getAgent('my-agent');
+
+  // Before
+  await agent.generate({
+    messages: [...],
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.generate({
+    messages: [...],
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fix text parts incorrectly merging across tool calls ([#11783](https://github.com/mastra-ai/mastra/pull/11783))
+
+  Previously, when an agent produced text before and after a tool call (e.g., "Let me search for that" → tool call → "Here's what I found"), the text parts would be merged into a single part, losing the separation. This fix introduces a `textId` property to track separate text streams, ensuring each text stream maintains its own text part in the UI message.
+
+  Fixes #11577
+
+- Updated dependencies [[`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151)]:
+  - @mastra/client-js@1.0.0-beta.22
+
 ## 0.1.0-beta.21
 
 ### Patch Changes

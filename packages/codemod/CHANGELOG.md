@@ -1,5 +1,56 @@
 # @mastra/codemod
 
+## 0.1.0-beta.7
+
+### Patch Changes
+
+- Add new `v1/client-msg-function-args` codemod. It transforms MastraClient agent method calls to use messages as the first argument. ([#12061](https://github.com/mastra-ai/mastra/pull/12061))
+
+- Added new `listThreads` method for flexible thread filtering across all storage adapters. ([#11832](https://github.com/mastra-ai/mastra/pull/11832))
+
+  **New Features**
+  - Filter threads by `resourceId`, `metadata`, or both (with AND logic for metadata key-value pairs)
+  - All filter parameters are optional, allowing you to list all threads or filter as needed
+  - Full pagination and sorting support
+
+  **Example Usage**
+
+  ```typescript
+  // List all threads
+  const allThreads = await memory.listThreads({});
+
+  // Filter by resourceId only
+  const userThreads = await memory.listThreads({
+    filter: { resourceId: 'user-123' },
+  });
+
+  // Filter by metadata only
+  const supportThreads = await memory.listThreads({
+    filter: { metadata: { category: 'support' } },
+  });
+
+  // Filter by both with pagination
+  const filteredThreads = await memory.listThreads({
+    filter: {
+      resourceId: 'user-123',
+      metadata: { priority: 'high', status: 'open' },
+    },
+    orderBy: { field: 'updatedAt', direction: 'DESC' },
+    page: 0,
+    perPage: 20,
+  });
+  ```
+
+  **Security Improvements**
+  - Added validation to prevent SQL injection via malicious metadata keys
+  - Added pagination parameter validation to prevent integer overflow attacks
+
+## 0.1.0-beta.6
+
+### Patch Changes
+
+- Remove incorrect codemod ([#11826](https://github.com/mastra-ai/mastra/pull/11826))
+
 ## 0.1.0-beta.5
 
 ### Patch Changes

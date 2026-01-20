@@ -68,7 +68,8 @@ function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage
   });
 }
 
-async function getRoutingAgent({
+/** @internal Exported for testing purposes */
+export async function getRoutingAgent({
   requestContext,
   agent,
   routingConfig,
@@ -96,7 +97,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema),
+        zodToJsonSchema(workflow.inputSchema ?? z.object({})),
       )}`;
     })
     .join('\n');
@@ -104,9 +105,9 @@ async function getRoutingAgent({
   const memoryTools = await memoryToUse?.listTools?.();
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
-      )}`;
+      // Use 'in' check for type narrowing, then nullish coalescing for undefined values
+      const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -493,6 +494,19 @@ export async function createNetworkLoop({
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
       const object = await result.object;
+
+      if (!object) {
+        throw new MastraError({
+          id: 'AGENT_NETWORK_ROUTING_AGENT_INVALID_OUTPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.SYSTEM,
+          text: `Routing agent returned undefined for 'object'. This may indicate an issue with the model's response or structured output parsing.`,
+          details: {
+            finishReason: result.finishReason ?? null,
+            usage: JSON.stringify(result.usage) ?? null,
+          },
+        });
+      }
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 

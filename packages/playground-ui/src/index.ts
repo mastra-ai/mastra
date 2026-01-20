@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
@@ -90,3 +91,4 @@ export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './lib/mastra-platform';

@@ -130,6 +130,7 @@ export const AgentBadge = ({
         toolApprovalMetadata={toolApprovalMetadata}
         toolName={toolName}
         isNetwork={isNetwork}
+        isGenerateMode={metadata?.mode === 'generate'}
       />
     </BadgeWrapper>
   );
