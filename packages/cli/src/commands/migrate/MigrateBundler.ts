@@ -1,19 +1,17 @@
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
 
+import { BuildBundler } from '../build/BuildBundler.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
-export class MigrateBundler extends Bundler {
+export class MigrateBundler extends BuildBundler {
   private customEnvFile?: string;
 
   constructor(customEnvFile?: string) {
-    super('Migrate');
+    super({ studio: false });
     this.customEnvFile = customEnvFile;
-    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
-    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
-  getEnvFiles(): Promise<string[]> {
+  override getEnvFiles(): Promise<string[]> {
     // Skip loading .env files if MASTRA_SKIP_DOTENV is set
     if (shouldSkipDotenvLoading()) {
       return Promise.resolve([]);
@@ -44,7 +42,7 @@ export class MigrateBundler extends Bundler {
     return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
   }
 
-  protected getEntry(): string {
+  protected override getEntry(): string {
     return `
     import { mastra } from '#mastra';
 

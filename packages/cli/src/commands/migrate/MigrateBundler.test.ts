@@ -7,10 +7,11 @@ vi.mock('@mastra/deployer/build', () => ({
   })),
 }));
 
-vi.mock('@mastra/deployer/bundler', () => ({
-  Bundler: class MockBundler {
+// Mock the BuildBundler parent class
+vi.mock('../build/BuildBundler.js', () => ({
+  BuildBundler: class MockBuildBundler {
     protected platform = 'node';
-    constructor(_name: string) {}
+    constructor(_options?: { studio?: boolean }) {}
     __setLogger(_logger: unknown) {}
     getAllToolPaths(_dir: string, _extra: unknown[]) {
       return [];
