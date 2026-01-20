@@ -27,6 +27,17 @@ import {
 export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
 
 // ============================================================================
+// Type Validation Utilities
+// ============================================================================
+
+/**
+ * Utility type to check if two types are mutually assignable.
+ * Used to ensure explicit interfaces stay in sync with Zod schema inferences.
+ * If the types don't match, TypeScript will produce a compile error.
+ */
+type Equals<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;
+
+// ============================================================================
 // Helper utilities for creating omit key objects from schema shapes
 // ============================================================================
 
@@ -226,6 +237,12 @@ export interface SpanRecord {
   updatedAt: Date | null;
 }
 
+// Type validation: ensures SpanRecord interface matches z.infer<typeof spanRecordSchema>
+// If the schema changes and the interface doesn't match, this will produce a compile error.
+type _InferredSpanRecord = z.infer<typeof spanRecordSchema>;
+type _SpanRecordCheck = Equals<SpanRecord, _InferredSpanRecord> extends true ? true : never;
+const _spanRecordTypeCheck: _SpanRecordCheck = true;
+
 // ============================================================================
 // Storage Operation Schemas
 // ============================================================================
@@ -401,6 +418,12 @@ export interface ListTracesResponse {
   pagination: PaginationInfo;
   spans: SpanRecord[];
 }
+
+// Type validation: ensures ListTracesResponse interface matches z.infer<typeof listTracesResponseSchema>
+// If the schema changes and the interface doesn't match, this will produce a compile error.
+type _InferredListTracesResponse = z.infer<typeof listTracesResponseSchema>;
+type _ListTracesResponseCheck = Equals<ListTracesResponse, _InferredListTracesResponse> extends true ? true : never;
+const _listTracesResponseTypeCheck: _ListTracesResponseCheck = true;
 
 /**
  * Schema for updating a span (without db timestamps and span IDs)
