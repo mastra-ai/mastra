@@ -296,7 +296,11 @@ export function createWorkspaceTools(workspace: Workspace) {
           .nullish()
           .default('node')
           .describe('The runtime to use for execution'),
-        timeout: z.number().nullish().describe('Maximum execution time in milliseconds'),
+        timeout: z
+          .number()
+          .nullish()
+          .default(30000)
+          .describe('Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.'),
       }),
       outputSchema: z.object({
         success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
@@ -308,7 +312,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       execute: async ({ code, runtime, timeout }) => {
         const result = await workspace.executeCode(code, {
           runtime: runtime ?? undefined,
-          timeout: timeout ?? undefined,
+          timeout: timeout ?? 30000,
         });
         return {
           success: result.success,
@@ -328,7 +332,11 @@ export function createWorkspaceTools(workspace: Workspace) {
       inputSchema: z.object({
         command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
         args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
-        timeout: z.number().nullish().describe('Maximum execution time in milliseconds'),
+        timeout: z
+          .number()
+          .nullish()
+          .default(30000)
+          .describe('Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.'),
         cwd: z.string().nullish().describe('Working directory for the command'),
       }),
       outputSchema: z.object({
@@ -340,7 +348,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       }),
       execute: async ({ command, args, timeout, cwd }) => {
         const result = await workspace.executeCommand(command, args ?? [], {
-          timeout: timeout ?? undefined,
+          timeout: timeout ?? 30000,
           cwd: cwd ?? undefined,
         });
         return {
