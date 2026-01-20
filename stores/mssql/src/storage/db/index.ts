@@ -430,9 +430,12 @@ export class MssqlDB extends MastraBase {
         }
       }
 
-      // Run migrations and add composite primary key for Spans table
+      // Run migrations, deduplicate, and add composite primary key for Spans table
       if (tableName === TABLE_SPANS) {
         await this.migrateSpansTable();
+
+        // Deduplicate spans before adding PRIMARY KEY to avoid duplicate key errors
+        await this.deduplicateSpans();
 
         // Add composite primary key for spans table (traceId, spanId)
         const pkConstraintName = `${schemaPrefix}mastra_ai_spans_traceid_spanid_pk`;
@@ -499,6 +502,102 @@ export class MssqlDB extends MastraBase {
     } catch (error) {
       // Log warning but don't fail - migrations should be best-effort
       this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Deduplicates spans with the same (traceId, spanId) combination.
+   * This is needed for databases that existed before the unique constraint was added.
+   *
+   * Priority for keeping spans:
+   * 1. Completed spans (endedAt IS NOT NULL) over incomplete spans
+   * 2. Most recent updatedAt
+   * 3. Most recent createdAt (as tiebreaker)
+   */
+  private async deduplicateSpans(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      // Find duplicate (traceId, spanId) combinations
+      const duplicatesQuery = `
+        SELECT [traceId], [spanId], COUNT(*) as cnt
+        FROM ${fullTableName}
+        GROUP BY [traceId], [spanId]
+        HAVING COUNT(*) > 1
+      `;
+      const duplicatesResult = await this.pool.request().query(duplicatesQuery);
+
+      if (!duplicatesResult.recordset || duplicatesResult.recordset.length === 0) {
+        return;
+      }
+
+      this.logger?.info?.(
+        `Found ${duplicatesResult.recordset.length} duplicate (traceId, spanId) combinations to deduplicate`,
+      );
+
+      for (const dup of duplicatesResult.recordset) {
+        const { traceId, spanId } = dup;
+
+        // Get all rows for this (traceId, spanId), ordered by our priority:
+        // 1. Completed (endedAt NOT NULL) first
+        // 2. Most recent updatedAt
+        // 3. Most recent createdAt
+        const selectRequest = this.pool.request();
+        selectRequest.input('traceId', traceId);
+        selectRequest.input('spanId', spanId);
+
+        const rowsResult = await selectRequest.query(`
+          SELECT *, ROW_NUMBER() OVER (
+            ORDER BY
+              CASE WHEN [endedAt] IS NOT NULL THEN 0 ELSE 1 END,
+              [updatedAt] DESC,
+              [createdAt] DESC
+          ) as rn
+          FROM ${fullTableName}
+          WHERE [traceId] = @traceId AND [spanId] = @spanId
+        `);
+
+        const rows = rowsResult.recordset;
+        if (rows.length <= 1) continue;
+
+        // Keep the first row (rn=1), delete the rest
+        const toDelete = rows.filter((r: any) => r.rn > 1);
+
+        // Log the duplicates being deleted
+        for (const row of toDelete) {
+          this.logger?.debug?.(
+            `Deleting duplicate span: traceId=${row.traceId}, spanId=${row.spanId}, name=${row.name}, ` +
+              `endedAt=${row.endedAt}, updatedAt=${row.updatedAt}, createdAt=${row.createdAt}`,
+          );
+        }
+
+        // Delete duplicates - we need to use a CTE or subquery since MSSQL doesn't have ctid
+        // Use ROW_NUMBER to identify and delete duplicates
+        const deleteRequest = this.pool.request();
+        deleteRequest.input('traceId', traceId);
+        deleteRequest.input('spanId', spanId);
+
+        await deleteRequest.query(`
+          WITH RankedSpans AS (
+            SELECT *, ROW_NUMBER() OVER (
+              ORDER BY
+                CASE WHEN [endedAt] IS NOT NULL THEN 0 ELSE 1 END,
+                [updatedAt] DESC,
+                [createdAt] DESC
+            ) as rn
+            FROM ${fullTableName}
+            WHERE [traceId] = @traceId AND [spanId] = @spanId
+          )
+          DELETE FROM RankedSpans WHERE rn > 1
+        `);
+
+        this.logger?.info?.(
+          `Deduplicated spans for traceId=${traceId}, spanId=${spanId}: kept 1, deleted ${toDelete.length}`,
+        );
+      }
+    } catch (error) {
+      this.logger?.warn?.('Failed to deduplicate spans:', error);
+      // Don't throw - deduplication is best-effort to allow migration to continue
     }
   }
 

@@ -414,53 +414,150 @@ describe('MongoDB Duplicate Spans Handling', () => {
     }
   });
 
-  it('should successfully initialize store with duplicates (logs warning but does not fail)', async () => {
-    const testDbName = `dup_init_${Date.now().toString(36)}`;
+  it('should deduplicate spans and create unique index after init()', async () => {
+    const testDbName = `dup_dedup_${Date.now().toString(36)}`;
 
     try {
       await createCleanCollection(testDbName);
       const db = client.db(testDbName);
       const collection = db.collection(SPANS_COLLECTION);
 
-      // Insert duplicates
+      // Insert duplicates - one incomplete, one complete (should keep complete)
       await insertSpan(testDbName, {
         traceId: 'trace-1',
         spanId: 'span-1',
-        name: 'Duplicate 1',
-        endedAt: null,
+        name: 'Incomplete span',
+        endedAt: null, // Not completed
         createdAt: new Date('2024-01-01T00:00:00Z'),
         updatedAt: new Date('2024-01-01T00:00:00Z'),
       });
       await insertSpan(testDbName, {
         traceId: 'trace-1',
         spanId: 'span-1',
-        name: 'Duplicate 2',
-        endedAt: new Date('2024-01-01T00:00:01Z'),
+        name: 'Complete span',
+        endedAt: new Date('2024-01-01T00:00:01Z'), // Completed
         createdAt: new Date('2024-01-01T00:00:01Z'),
         updatedAt: new Date('2024-01-01T00:00:01Z'),
       });
 
+      // Verify duplicates exist before init
+      expect(await collection.countDocuments({})).toBe(2);
+
       const store = new MongoDBStore({
-        id: `dup-test-store-${Date.now()}`,
+        id: `dup-dedup-store-${Date.now()}`,
         url: TEST_CONFIG.url,
         dbName: testDbName,
       });
 
-      // init() should NOT throw (it catches the index error and logs a warning)
-      await expect(store.init()).resolves.not.toThrow();
+      await store.init();
 
-      // But unique index should NOT exist due to duplicates
+      // After init, duplicates should be removed (only 1 record remains)
+      const countAfter = await collection.countDocuments({});
+      expect(countAfter).toBe(1);
+
+      // The remaining span should be the completed one
+      const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });
+      expect(remainingSpan).toBeDefined();
+      expect(remainingSpan!.name).toBe('Complete span');
+      expect(remainingSpan!.endedAt).not.toBeNull();
+
+      // Unique index should now exist
       const indexes = await collection.indexes();
       const uniqueIndex = indexes.find(
         (idx: any) => idx.key?.spanId === 1 && idx.key?.traceId === 1 && idx.unique === true,
       );
+      expect(uniqueIndex).toBeDefined();
 
-      // Index should NOT exist because of duplicates
-      expect(uniqueIndex).toBeUndefined();
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
 
-      // Duplicates should still exist
-      const count = await collection.countDocuments({});
-      expect(count).toBe(2);
+  it('should keep span with most recent updatedAt when both are completed', async () => {
+    const testDbName = `dup_updated_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert duplicates - both completed, different updatedAt
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'), // Older
+      });
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer span',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:05Z'), // Newer
+      });
+
+      const store = new MongoDBStore({
+        id: `dup-updated-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      await store.init();
+
+      // Should keep the one with most recent updatedAt
+      const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });
+      expect(remainingSpan).toBeDefined();
+      expect(remainingSpan!.name).toBe('Newer span');
+
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+
+  it('should keep span with most recent createdAt as final tiebreaker', async () => {
+    const testDbName = `dup_created_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert duplicates - both completed, same updatedAt, different createdAt
+      const sameUpdatedAt = new Date('2024-01-01T00:00:05Z');
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older created',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'), // Older
+        updatedAt: sameUpdatedAt,
+      });
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer created',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:02Z'), // Newer
+        updatedAt: sameUpdatedAt,
+      });
+
+      const store = new MongoDBStore({
+        id: `dup-created-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      await store.init();
+
+      // Should keep the one with most recent createdAt
+      const remainingSpan = await collection.findOne({ traceId: 'trace-1', spanId: 'span-1' });
+      expect(remainingSpan).toBeDefined();
+      expect(remainingSpan!.name).toBe('Newer created');
 
       await store.close();
     } finally {

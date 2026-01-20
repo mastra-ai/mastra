@@ -477,28 +477,84 @@ describe('MSSQL Duplicate Spans Handling', () => {
     }
   });
 
-  it('should successfully run createTable with duplicates (logs warning but does not fail)', async () => {
-    const testSchema = `dup_create_${Date.now().toString(36)}`;
+  it('should deduplicate spans and create PRIMARY KEY after createTable()', async () => {
+    const testSchema = `dup_dedup_${Date.now().toString(36)}`;
 
     try {
       await createOldSchemaTable(testSchema);
 
-      // Insert duplicates
+      // Insert duplicates - one incomplete, one complete (should keep complete)
       await insertSpan(testSchema, {
         traceId: 'trace-1',
         spanId: 'span-1',
-        name: 'Duplicate 1',
-        endedAt: null,
+        name: 'Incomplete span',
+        endedAt: null, // Not completed
         createdAt: new Date('2024-01-01T00:00:00Z'),
         updatedAt: new Date('2024-01-01T00:00:00Z'),
       });
       await insertSpan(testSchema, {
         traceId: 'trace-1',
         spanId: 'span-1',
-        name: 'Duplicate 2',
-        endedAt: new Date('2024-01-01T00:00:01Z'),
+        name: 'Complete span',
+        endedAt: new Date('2024-01-01T00:00:01Z'), // Completed
         createdAt: new Date('2024-01-01T00:00:01Z'),
         updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist before createTable
+      const countBefore = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(countBefore.recordset[0].count).toBe(2);
+
+      const dbOps = new MssqlDB({
+        pool,
+        schemaName: testSchema,
+      });
+
+      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+
+      // After createTable, duplicates should be removed (only 1 record remains)
+      const countAfter = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(countAfter.recordset[0].count).toBe(1);
+
+      // The remaining span should be the completed one
+      const remainingSpan = await pool.request().query(`SELECT * FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(remainingSpan.recordset[0].name).toBe('Complete span');
+      expect(remainingSpan.recordset[0].endedAt).not.toBeNull();
+
+      // PRIMARY KEY should now exist
+      const pkConstraintName = `${testSchema}_mastra_ai_spans_traceid_spanid_pk`;
+      const constraintResult = await pool
+        .request()
+        .input('constraintName', pkConstraintName)
+        .query(`SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`);
+      expect(constraintResult.recordset.length).toBe(1);
+    } finally {
+      await cleanupSchema(testSchema);
+    }
+  });
+
+  it('should keep span with most recent updatedAt when both are completed', async () => {
+    const testSchema = `dup_updated_${Date.now().toString(36)}`;
+
+    try {
+      await createOldSchemaTable(testSchema);
+
+      // Insert duplicates - both completed, different updatedAt
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'), // Older
+      });
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer span',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:05Z'), // Newer
       });
 
       const dbOps = new MssqlDB({
@@ -506,24 +562,53 @@ describe('MSSQL Duplicate Spans Handling', () => {
         schemaName: testSchema,
       });
 
-      // createTable should NOT throw (it catches the PK error and logs a warning)
-      await expect(
-        dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] }),
-      ).resolves.not.toThrow();
+      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
-      // But PRIMARY KEY should NOT exist due to duplicates
-      const pkConstraintName = `${testSchema}_mastra_ai_spans_traceid_spanid_pk`;
-      const constraintResult = await pool
-        .request()
-        .input('constraintName', pkConstraintName)
-        .query(`SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`);
+      // Should keep the one with most recent updatedAt
+      const remainingSpan = await pool.request().query(`SELECT * FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(remainingSpan.recordset.length).toBe(1);
+      expect(remainingSpan.recordset[0].name).toBe('Newer span');
+    } finally {
+      await cleanupSchema(testSchema);
+    }
+  });
 
-      // Constraint should NOT exist because of duplicates
-      expect(constraintResult.recordset.length).toBe(0);
+  it('should keep span with most recent createdAt as final tiebreaker', async () => {
+    const testSchema = `dup_created_${Date.now().toString(36)}`;
 
-      // Duplicates should still exist
-      const countResult = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
-      expect(countResult.recordset[0].count).toBe(2);
+    try {
+      await createOldSchemaTable(testSchema);
+
+      // Insert duplicates - both completed, same updatedAt, different createdAt
+      const sameUpdatedAt = new Date('2024-01-01T00:00:05Z');
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older created',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'), // Older
+        updatedAt: sameUpdatedAt,
+      });
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer created',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:02Z'), // Newer
+        updatedAt: sameUpdatedAt,
+      });
+
+      const dbOps = new MssqlDB({
+        pool,
+        schemaName: testSchema,
+      });
+
+      await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+
+      // Should keep the one with most recent createdAt
+      const remainingSpan = await pool.request().query(`SELECT * FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(remainingSpan.recordset.length).toBe(1);
+      expect(remainingSpan.recordset[0].name).toBe('Newer created');
     } finally {
       await cleanupSchema(testSchema);
     }

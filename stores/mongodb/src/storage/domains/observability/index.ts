@@ -99,8 +99,98 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
+    // Deduplicate spans before creating unique index to avoid duplicate key errors
+    await this.deduplicateSpans();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Deduplicates spans with the same (traceId, spanId) combination.
+   * This is needed for databases that existed before the unique constraint was added.
+   *
+   * Priority for keeping spans:
+   * 1. Completed spans (endedAt IS NOT NULL) over incomplete spans
+   * 2. Most recent updatedAt
+   * 3. Most recent createdAt (as tiebreaker)
+   */
+  private async deduplicateSpans(): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Find all duplicate (traceId, spanId) combinations
+      const duplicates = await collection
+        .aggregate([
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              count: { $sum: 1 },
+              docs: { $push: '$$ROOT' },
+            },
+          },
+          { $match: { count: { $gt: 1 } } },
+        ])
+        .toArray();
+
+      if (duplicates.length === 0) {
+        return;
+      }
+
+      this.logger?.info?.(`Found ${duplicates.length} duplicate (traceId, spanId) combinations to deduplicate`);
+
+      for (const dup of duplicates) {
+        const docs = dup.docs as any[];
+
+        // Sort to find the best document to keep:
+        // 1. Completed spans first (endedAt NOT NULL)
+        // 2. Most recent updatedAt
+        // 3. Most recent createdAt
+        docs.sort((a, b) => {
+          // Priority 1: Completed spans first
+          const aCompleted = a.endedAt != null ? 1 : 0;
+          const bCompleted = b.endedAt != null ? 1 : 0;
+          if (aCompleted !== bCompleted) {
+            return bCompleted - aCompleted; // Completed first
+          }
+
+          // Priority 2: Most recent updatedAt
+          const aUpdated = new Date(a.updatedAt || 0).getTime();
+          const bUpdated = new Date(b.updatedAt || 0).getTime();
+          if (aUpdated !== bUpdated) {
+            return bUpdated - aUpdated; // Most recent first
+          }
+
+          // Priority 3: Most recent createdAt
+          const aCreated = new Date(a.createdAt || 0).getTime();
+          const bCreated = new Date(b.createdAt || 0).getTime();
+          return bCreated - aCreated; // Most recent first
+        });
+
+        // Keep the first (best) document, delete the rest
+        const toKeep = docs[0];
+        const toDelete = docs.slice(1);
+
+        // Log the duplicates being deleted
+        for (const doc of toDelete) {
+          this.logger?.debug?.(
+            `Deleting duplicate span: traceId=${doc.traceId}, spanId=${doc.spanId}, name=${doc.name}, ` +
+              `endedAt=${doc.endedAt}, updatedAt=${doc.updatedAt}, createdAt=${doc.createdAt}`,
+          );
+        }
+
+        // Delete duplicates by _id
+        const idsToDelete = toDelete.map((doc: any) => doc._id);
+        await collection.deleteMany({ _id: { $in: idsToDelete } });
+
+        this.logger?.info?.(
+          `Deduplicated spans for traceId=${toKeep.traceId}, spanId=${toKeep.spanId}: ` +
+            `kept 1, deleted ${toDelete.length}`,
+        );
+      }
+    } catch (error) {
+      this.logger?.warn?.('Failed to deduplicate spans:', error);
+      // Don't throw - deduplication is best-effort to allow migration to continue
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
