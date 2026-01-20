@@ -551,10 +551,16 @@ export class PgDB extends MastraBase {
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
         await this.migrateSpansTable();
-        // Deduplicate spans before adding PRIMARY KEY to handle existing duplicate data
-        await this.deduplicateSpans();
-        // Add PRIMARY KEY after deduplication to avoid constraint violations
-        await this.addSpansPrimaryKey();
+
+        // Check if PRIMARY KEY constraint already exists - if so, skip deduplication
+        // This avoids running expensive dedup queries on every init after migration is complete
+        const pkExists = await this.spansPrimaryKeyExists();
+        if (!pkExists) {
+          // Deduplicate spans before adding PRIMARY KEY to handle existing duplicate data
+          await this.deduplicateSpans();
+          // Add PRIMARY KEY after deduplication to avoid constraint violations
+          await this.addSpansPrimaryKey();
+        }
       }
     } catch (error) {
       throw new MastraError(
@@ -701,7 +707,7 @@ export class PgDB extends MastraBase {
       // This avoids OOM issues on large tables with many duplicates.
       // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
       // Uses ctid (physical row id) as final tiebreaker for deterministic results.
-      const result = await this.client.result(`
+      const result = await this.client.query(`
         DELETE FROM ${fullTableName} t1
         USING ${fullTableName} t2
         WHERE t1."traceId" = t2."traceId"
@@ -736,7 +742,9 @@ export class PgDB extends MastraBase {
           )
       `);
 
-      this.logger?.info?.(`Deduplication complete: removed ${result.rowCount} duplicate spans from ${fullTableName}`);
+      this.logger?.info?.(
+        `Deduplication complete: removed ${result.rowCount ?? 0} duplicate spans from ${fullTableName}`,
+      );
     } catch (error) {
       // Re-throw deduplication errors so PRIMARY KEY addition will fail with a clear error
       throw new MastraError(
@@ -751,6 +759,23 @@ export class PgDB extends MastraBase {
         error,
       );
     }
+  }
+
+  /**
+   * Checks if the PRIMARY KEY constraint on (traceId, spanId) already exists on the spans table.
+   * Used to skip deduplication when the constraint already exists (migration already complete).
+   */
+  private async spansPrimaryKeyExists(): Promise<boolean> {
+    const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
+    const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+    const constraintName = `${constraintPrefix}mastra_ai_spans_traceid_spanid_pk`;
+
+    const result = await this.client.oneOrNone<{ exists: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1) as exists`,
+      [constraintName],
+    );
+
+    return result?.exists ?? false;
   }
 
   /**

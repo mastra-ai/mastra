@@ -99,10 +99,31 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
-    // Deduplicate spans before creating unique index to avoid duplicate key errors
-    await this.deduplicateSpans();
+    // Check if unique index already exists - if so, skip deduplication
+    // This avoids running expensive dedup queries on every init after migration is complete
+    const uniqueIndexExists = await this.spansUniqueIndexExists();
+    if (!uniqueIndexExists) {
+      // Deduplicate spans before creating unique index to avoid duplicate key errors
+      await this.deduplicateSpans();
+    }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Checks if the unique index on (spanId, traceId) already exists on the spans collection.
+   * Used to skip deduplication when the index already exists (migration already complete).
+   */
+  private async spansUniqueIndexExists(): Promise<boolean> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+      const indexes = await collection.indexes();
+      // Look for unique index on spanId_1_traceId_1
+      return indexes.some(idx => idx.unique === true && idx.key?.spanId === 1 && idx.key?.traceId === 1);
+    } catch {
+      // If we can't check indexes (e.g., collection doesn't exist), assume index doesn't exist
+      return false;
+    }
   }
 
   /**
@@ -113,80 +134,89 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
    * 1. Completed spans (endedAt IS NOT NULL) over incomplete spans
    * 2. Most recent updatedAt
    * 3. Most recent createdAt (as tiebreaker)
+   *
+   * Note: This prioritizes migration completion over perfect data preservation.
+   * Old trace data may be lost, which is acceptable for this use case.
    */
   private async deduplicateSpans(): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_SPANS);
 
-      // Find all duplicate (traceId, spanId) combinations
-      const duplicates = await collection
+      // Quick check: are there any duplicates at all? Use limit 1 for speed on large collections.
+      const duplicateCheck = await collection
         .aggregate([
           {
             $group: {
               _id: { traceId: '$traceId', spanId: '$spanId' },
               count: { $sum: 1 },
-              docs: { $push: '$$ROOT' },
             },
           },
           { $match: { count: { $gt: 1 } } },
+          { $limit: 1 },
         ])
         .toArray();
 
-      if (duplicates.length === 0) {
+      if (duplicateCheck.length === 0) {
+        this.logger?.debug?.('No duplicate spans found');
         return;
       }
 
-      this.logger?.info?.(`Found ${duplicates.length} duplicate (traceId, spanId) combinations to deduplicate`);
+      this.logger?.info?.('Duplicate spans detected, starting deduplication...');
 
-      for (const dup of duplicates) {
-        const docs = dup.docs as any[];
+      // Find IDs to delete using aggregation - only collects ObjectIds, not full documents.
+      // This avoids OOM issues on large collections with many duplicates.
+      // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
+      const idsToDelete = await collection
+        .aggregate([
+          // Sort by priority (affects which document $first picks within each group)
+          {
+            $sort: {
+              // Completed spans first (endedAt exists and is not null)
+              endedAt: -1,
+              updatedAt: -1,
+              createdAt: -1,
+            },
+          },
+          // Group by (traceId, spanId), keeping the first (best) _id and all _ids
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              keepId: { $first: '$_id' }, // The best one to keep (after sort)
+              allIds: { $push: '$_id' }, // All ObjectIds (just 12 bytes each, not full docs)
+              count: { $sum: 1 },
+            },
+          },
+          // Only consider groups with duplicates
+          { $match: { count: { $gt: 1 } } },
+          // Get IDs to delete (allIds minus keepId)
+          {
+            $project: {
+              idsToDelete: {
+                $filter: {
+                  input: '$allIds',
+                  cond: { $ne: ['$$this', '$keepId'] },
+                },
+              },
+            },
+          },
+          // Unwind to get flat list of IDs
+          { $unwind: '$idsToDelete' },
+          // Just output the ID
+          { $project: { _id: '$idsToDelete' } },
+        ])
+        .toArray();
 
-        // Sort to find the best document to keep:
-        // 1. Completed spans first (endedAt NOT NULL)
-        // 2. Most recent updatedAt
-        // 3. Most recent createdAt
-        docs.sort((a, b) => {
-          // Priority 1: Completed spans first
-          const aCompleted = a.endedAt != null ? 1 : 0;
-          const bCompleted = b.endedAt != null ? 1 : 0;
-          if (aCompleted !== bCompleted) {
-            return bCompleted - aCompleted; // Completed first
-          }
-
-          // Priority 2: Most recent updatedAt
-          const aUpdated = new Date(a.updatedAt || 0).getTime();
-          const bUpdated = new Date(b.updatedAt || 0).getTime();
-          if (aUpdated !== bUpdated) {
-            return bUpdated - aUpdated; // Most recent first
-          }
-
-          // Priority 3: Most recent createdAt
-          const aCreated = new Date(a.createdAt || 0).getTime();
-          const bCreated = new Date(b.createdAt || 0).getTime();
-          return bCreated - aCreated; // Most recent first
-        });
-
-        // Keep the first (best) document, delete the rest
-        const toKeep = docs[0];
-        const toDelete = docs.slice(1);
-
-        // Log the duplicates being deleted
-        for (const doc of toDelete) {
-          this.logger?.debug?.(
-            `Deleting duplicate span: traceId=${doc.traceId}, spanId=${doc.spanId}, name=${doc.name}, ` +
-              `endedAt=${doc.endedAt}, updatedAt=${doc.updatedAt}, createdAt=${doc.createdAt}`,
-          );
-        }
-
-        // Delete duplicates by _id
-        const idsToDelete = toDelete.map((doc: any) => doc._id);
-        await collection.deleteMany({ _id: { $in: idsToDelete } });
-
-        this.logger?.info?.(
-          `Deduplicated spans for traceId=${toKeep.traceId}, spanId=${toKeep.spanId}: ` +
-            `kept 1, deleted ${toDelete.length}`,
-        );
+      if (idsToDelete.length === 0) {
+        this.logger?.debug?.('No duplicates to delete after aggregation');
+        return;
       }
+
+      // Delete all duplicates in one operation
+      const deleteResult = await collection.deleteMany({
+        _id: { $in: idsToDelete.map(d => d._id) },
+      });
+
+      this.logger?.info?.(`Deduplication complete: removed ${deleteResult.deletedCount} duplicate spans`);
     } catch (error) {
       this.logger?.warn?.('Failed to deduplicate spans:', error);
       // Don't throw - deduplication is best-effort to allow migration to continue

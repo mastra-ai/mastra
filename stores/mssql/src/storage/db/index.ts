@@ -434,10 +434,8 @@ export class MssqlDB extends MastraBase {
       if (tableName === TABLE_SPANS) {
         await this.migrateSpansTable();
 
-        // Deduplicate spans before adding PRIMARY KEY to avoid duplicate key errors
-        await this.deduplicateSpans();
-
-        // Add composite primary key for spans table (traceId, spanId)
+        // Check if PRIMARY KEY constraint already exists - if so, skip deduplication
+        // This avoids running expensive dedup queries on every init after migration is complete
         const pkConstraintName = `${schemaPrefix}mastra_ai_spans_traceid_spanid_pk`;
         const checkPkRequest = this.pool.request();
         checkPkRequest.input('constraintName', pkConstraintName);
@@ -445,7 +443,12 @@ export class MssqlDB extends MastraBase {
           `SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`,
         );
         const pkExists = Array.isArray(pkResult.recordset) && pkResult.recordset.length > 0;
+
         if (!pkExists) {
+          // Deduplicate spans before adding PRIMARY KEY to avoid duplicate key errors
+          await this.deduplicateSpans();
+
+          // Add composite primary key for spans table (traceId, spanId)
           try {
             const addPkSql = `ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} ADD CONSTRAINT [${pkConstraintName}] PRIMARY KEY ([traceId], [spanId])`;
             await this.pool.request().query(addPkSql);
@@ -513,88 +516,50 @@ export class MssqlDB extends MastraBase {
    * 1. Completed spans (endedAt IS NOT NULL) over incomplete spans
    * 2. Most recent updatedAt
    * 3. Most recent createdAt (as tiebreaker)
+   *
+   * Note: This prioritizes migration completion over perfect data preservation.
+   * Old trace data may be lost, which is acceptable for this use case.
    */
   private async deduplicateSpans(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
 
     try {
-      // Find duplicate (traceId, spanId) combinations
-      const duplicatesQuery = `
-        SELECT [traceId], [spanId], COUNT(*) as cnt
+      // Quick check: are there any duplicates at all? Use TOP 1 for speed on large tables.
+      const duplicateCheck = await this.pool.request().query(`
+        SELECT TOP 1 1 as has_duplicates
         FROM ${fullTableName}
         GROUP BY [traceId], [spanId]
         HAVING COUNT(*) > 1
-      `;
-      const duplicatesResult = await this.pool.request().query(duplicatesQuery);
+      `);
 
-      if (!duplicatesResult.recordset || duplicatesResult.recordset.length === 0) {
+      if (!duplicateCheck.recordset || duplicateCheck.recordset.length === 0) {
+        this.logger?.debug?.(`No duplicate spans found in ${fullTableName}`);
         return;
       }
 
-      this.logger?.info?.(
-        `Found ${duplicatesResult.recordset.length} duplicate (traceId, spanId) combinations to deduplicate`,
-      );
+      this.logger?.info?.(`Duplicate spans detected in ${fullTableName}, starting deduplication...`);
 
-      for (const dup of duplicatesResult.recordset) {
-        const { traceId, spanId } = dup;
-
-        // Get all rows for this (traceId, spanId), ordered by our priority:
-        // 1. Completed (endedAt NOT NULL) first
-        // 2. Most recent updatedAt
-        // 3. Most recent createdAt
-        const selectRequest = this.pool.request();
-        selectRequest.input('traceId', traceId);
-        selectRequest.input('spanId', spanId);
-
-        const rowsResult = await selectRequest.query(`
+      // Delete duplicates directly without fetching details into memory.
+      // This avoids OOM issues on large tables with many duplicates.
+      // Uses ROW_NUMBER partitioned by (traceId, spanId) to identify duplicates across ALL rows.
+      // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
+      const result = await this.pool.request().query(`
+        WITH RankedSpans AS (
           SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY [traceId], [spanId]
             ORDER BY
               CASE WHEN [endedAt] IS NOT NULL THEN 0 ELSE 1 END,
               [updatedAt] DESC,
               [createdAt] DESC
           ) as rn
           FROM ${fullTableName}
-          WHERE [traceId] = @traceId AND [spanId] = @spanId
-        `);
+        )
+        DELETE FROM RankedSpans WHERE rn > 1
+      `);
 
-        const rows = rowsResult.recordset;
-        if (rows.length <= 1) continue;
-
-        // Keep the first row (rn=1), delete the rest
-        const toDelete = rows.filter((r: any) => r.rn > 1);
-
-        // Log the duplicates being deleted
-        for (const row of toDelete) {
-          this.logger?.debug?.(
-            `Deleting duplicate span: traceId=${row.traceId}, spanId=${row.spanId}, name=${row.name}, ` +
-              `endedAt=${row.endedAt}, updatedAt=${row.updatedAt}, createdAt=${row.createdAt}`,
-          );
-        }
-
-        // Delete duplicates - we need to use a CTE or subquery since MSSQL doesn't have ctid
-        // Use ROW_NUMBER to identify and delete duplicates
-        const deleteRequest = this.pool.request();
-        deleteRequest.input('traceId', traceId);
-        deleteRequest.input('spanId', spanId);
-
-        await deleteRequest.query(`
-          WITH RankedSpans AS (
-            SELECT *, ROW_NUMBER() OVER (
-              ORDER BY
-                CASE WHEN [endedAt] IS NOT NULL THEN 0 ELSE 1 END,
-                [updatedAt] DESC,
-                [createdAt] DESC
-            ) as rn
-            FROM ${fullTableName}
-            WHERE [traceId] = @traceId AND [spanId] = @spanId
-          )
-          DELETE FROM RankedSpans WHERE rn > 1
-        `);
-
-        this.logger?.info?.(
-          `Deduplicated spans for traceId=${traceId}, spanId=${spanId}: kept 1, deleted ${toDelete.length}`,
-        );
-      }
+      this.logger?.info?.(
+        `Deduplication complete: removed ${result.rowsAffected?.[0] ?? 0} duplicate spans from ${fullTableName}`,
+      );
     } catch (error) {
       this.logger?.warn?.('Failed to deduplicate spans:', error);
       // Don't throw - deduplication is best-effort to allow migration to continue

@@ -607,8 +607,13 @@ export class LibSQLDB extends MastraBase {
         }
       }
 
-      // Deduplicate existing spans before creating unique index
-      await this.deduplicateSpans();
+      // Check if unique index already exists - if so, skip deduplication
+      // This avoids running expensive dedup queries on every init after migration is complete
+      const indexExists = await this.spansUniqueIndexExists();
+      if (!indexExists) {
+        // Deduplicate existing spans before creating unique index
+        await this.deduplicateSpans();
+      }
 
       // Ensure unique index on (spanId, traceId) exists for data integrity
       // This is required for observability to enforce uniqueness at the span level
@@ -621,6 +626,22 @@ export class LibSQLDB extends MastraBase {
     } catch (error) {
       // Log warning but don't fail - migrations should be best-effort
       this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
+    }
+  }
+
+  /**
+   * Checks if the unique index on (spanId, traceId) already exists on the spans table.
+   * Used to skip deduplication when the index already exists (migration already complete).
+   */
+  private async spansUniqueIndexExists(): Promise<boolean> {
+    try {
+      const result = await this.client.execute(
+        `SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'mastra_ai_spans_spanid_traceid_idx'`,
+      );
+      return (result.rows?.length ?? 0) > 0;
+    } catch {
+      // If we can't check indexes (e.g., table doesn't exist), assume index doesn't exist
+      return false;
     }
   }
 
