@@ -1,6 +1,26 @@
 {
   "redirects": [
     {
+      "source": "/docs/v1/:path*",
+      "destination": "/docs/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/models/v1/:path*",
+      "destination": "/models/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/:path*",
+      "destination": "/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/:path*",
+      "destination": "/reference/:path*",
+      "permanent": true
+    },
+    {
       "source": "/examples/memory/memory-with-mongodb",
       "destination": "/reference/storage/mongodb",
       "permanent": true
