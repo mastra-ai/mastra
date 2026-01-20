@@ -61,7 +61,7 @@ const extractContentStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, requestContext, mastra, getInitData }) => {
+  execute: async ({ inputData, requestContext, mastra }) => {
     const { contentInput, inputType } = inputData;
 
     console.log(`📝 Processing ${inputType} content...`);
