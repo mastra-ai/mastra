@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Comprehensive performance optimization guide for React applications, containing {XYZ} rules across {ZYX} categories. Rules are prioritized by impact to guide automated refactoring and code generation.
+Comprehensive performance optimization guide for React applications, containing 12 rules across 6 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
 
 ## When to Apply
 
@@ -37,59 +37,56 @@ Rules are prioritized by impact:
 
 **Eliminate Waterfalls:**
 
-- Use `Promise.all()` for independent async operations
-- Start promises early, await late
+- Use `Promise.all()` for independent async operations (`async-parallel`)
 
 **Reduce Bundle Size:**
 
-- Avoid barrel file imports (import directly from source)
-- Use `React.lazy` for heavy components
-- Defer non-critical third-party libraries
+- Avoid barrel file imports, import directly from source (`bundle-barrel-imports`)
+- Defer non-critical third-party libraries (`bundle-defer-third-party`)
 
-### Medium-Impact Client Patterns
+### Medium-Impact Patterns
 
-- Use Tanstack query for automatic request deduplication
-- Use lazy state initialization for expensive values
-- Apply `startTransition` for non-urgent updates
-- Prefer derived values over `useState` + `useEffect`
-- Minimize `useEffect` usage at most
-- `useLayoutEvent` instead of `useMemo` and `useCallback`
-- Use `useMemo` and `useCallback` only when performances requires it (1000+ items)
-- Isolate `useEffect` calls into dedicated and reusable hooks
+**Client-Side Data Fetching:**
+
+- Use Tanstack Query for automatic request deduplication (`client-request-dedupe`)
+
+**Re-render Optimization:**
+
+- Use lazy state initialization for expensive values (`rerender-lazy-state-init`)
+- Apply `startTransition` for non-urgent updates (`rerender-transitions`)
+- Minimize `useEffect` function calls (`rerender-useeffect-function-calls`)
 
 ### Rendering Patterns
 
-- Animate SVG wrappers, not SVG elements directly
-- Use `content-visibility: auto` for long lists
-- Use explicit conditional rendering (`? :` not `&&`)
+- Animate SVG wrappers, not SVG elements directly (`rendering-animate-svg-wrapper`)
+- Use `content-visibility: auto` for long lists (`rendering-content-visibility`)
 
 ### JavaScript Patterns
 
-- Build index maps for repeated lookups
-- Use `toSorted()` instead of `sort()` for immutability
-- Early length check for array comparisons
+- Use Set/Map for repeated lookups (`js-set-map-lookups`)
+- Use `toSorted()` instead of `sort()` for immutability (`js-tosorted-immutable`)
+- Early length check for array comparisons (`js-length-check-first`)
 
 ## References
 
 Full documentation with code examples is available in:
 
-- `references/react-performance-guidelines.md` - Complete guide with all patterns
+- `references/react-best-practices-reference.md` - Complete guide with all patterns
 - `references/rules/` - Individual rule files organized by category
 
 To look up a specific pattern, grep the rules directory:
 
 ```
-grep -l "suspense" references/rules/
+grep -l "Promise.all" references/rules/
 grep -l "barrel" references/rules/
-grep -l "swr" references/rules/
+grep -l "Tanstack" references/rules/
 ```
 
 ## Rule Categories in `references/rules/`
 
-- `async-*` - Waterfall elimination patterns
-- `bundle-*` - Bundle size optimization
-- `client-*` - Client-side data fetching
-- `rerender-*` - Re-render optimization
-- `rendering-*` - DOM rendering performance
-- `js-*` - JavaScript micro-optimizations
-- `advanced-*` - Advanced patterns
+- `async-*` - Waterfall elimination (1 rule)
+- `bundle-*` - Bundle size optimization (2 rules)
+- `client-*` - Client-side data fetching (1 rule)
+- `rerender-*` - Re-render optimization (3 rules)
+- `rendering-*` - DOM rendering performance (2 rules)
+- `js-*` - JavaScript micro-optimizations (3 rules)
