@@ -611,7 +611,11 @@ export class ClickhouseDB extends MastraBase {
       ...Object.fromEntries(
         Object.entries(record).map(([key, value]) => [
           key,
-          TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp' ? new Date(value).toISOString() : value,
+          // Only convert to Date if it's a timestamp column AND value is not null/undefined
+          // new Date(null) returns epoch date, not null, so we must check first
+          TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp' && value != null
+            ? new Date(value).toISOString()
+            : value,
         ]),
       ),
     }));

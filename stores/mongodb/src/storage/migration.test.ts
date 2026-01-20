@@ -687,17 +687,18 @@ describe('MongoDB Migration Required Error', () => {
         dbName: testDbName,
       });
 
-      // init() should throw MastraError
-      await expect(store.init()).rejects.toThrow(MastraError);
-
-      // Verify error has correct ID
+      // init() should throw MastraError - capture it from a single call
+      let caughtError: unknown;
       try {
         await store.init();
-      } catch (error: any) {
-        expect(error).toBeInstanceOf(MastraError);
-        expect(error.id).toContain('MIGRATION_REQUIRED');
-        expect(error.id).toContain('DUPLICATE_SPANS');
+      } catch (error) {
+        caughtError = error;
       }
+
+      // Verify error has correct type and ID
+      expect(caughtError).toBeInstanceOf(MastraError);
+      expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+      expect((caughtError as MastraError).id).toContain('DUPLICATE_SPANS');
 
       await store.close();
     } finally {

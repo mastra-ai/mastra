@@ -593,8 +593,8 @@ describe('ClickHouse Spans Table Migration', () => {
     });
   });
 
-  describe('ObservabilityStorageClickhouse.init() with migration', () => {
-    it('should automatically migrate table on init when old sorting key detected', async () => {
+  describe('ObservabilityStorageClickhouse.migrateSpans()', () => {
+    it('should migrate table with old sorting key and deduplicate spans', async () => {
       // Create old table structure
       await createOldSpansTable();
 
@@ -627,8 +627,8 @@ describe('ClickHouse Spans Table Migration', () => {
 
       expect(await countSpans()).toBe(2);
 
-      // Create observability storage and call migrateSpans directly
-      // (init() would throw MIGRATION_REQUIRED error, requiring user to run `npx mastra migrate`)
+      // Call migrateSpans directly to perform the migration
+      // Note: init() would throw MIGRATION_REQUIRED error, requiring user to run `npx mastra migrate`
       const observability = new ObservabilityStorageClickhouse({ client });
       const result = await observability.migrateSpans();
       expect(result.success).toBe(true);
