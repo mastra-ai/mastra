@@ -12,7 +12,8 @@ const client = new MastraClient({ baseUrl: 'http://localhost:3000' });
 describe('Workflow start', () => {
   it('should accept input data', async () => {
     const workflow = client.getWorkflow('my-workflow');
-    const result = workflow.start({
+    const run = await workflow.createRun();
+    const result = run.start({
       inputData: { name: 'John', age: 30 },
     });
 
@@ -21,47 +22,54 @@ describe('Workflow start', () => {
 
   it('should accept resourceId and runId', async () => {
     const workflow = client.getWorkflow('my-workflow');
-    const result = workflow.start({
-      inputData: { name: 'John' },
+    const run = await workflow.createRun({
       resourceId: 'user-123',
       runId: 'run-456',
     });
+    const result = await run.startAsync({
+      inputData: { name: 'John' },
+    });
 
-    expectTypeOf(result).toExtend<Promise<WorkflowRunResult>>();
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
   });
 
   it('should accept requestContext', async () => {
     const workflow = client.getWorkflow('my-workflow');
-    const result = workflow.start({
+    const run = await workflow.createRun();
+    const result = await run.startAsync({
       inputData: { name: 'John' },
       requestContext: { userId: 'user-123' },
     });
 
-    expectTypeOf(result).toExtend<Promise<WorkflowRunResult>>();
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
   });
 });
 
 describe('Workflow resume', () => {
   it('should accept runId and resumeData', async () => {
     const workflow = client.getWorkflow('my-workflow');
-    const result = workflow.resume({
+    const run = await workflow.createRun({
       runId: 'run-123',
+    });
+    const result = await run.resumeAsync({
       step: 'approval-step',
       resumeData: { approved: true },
     });
 
-    expectTypeOf(result).toExtend<Promise<WorkflowRunResult>>();
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
   });
 
   it('should accept requestContext', async () => {
     const workflow = client.getWorkflow('my-workflow');
-    const result = workflow.resume({
+    const run = await workflow.createRun({
       runId: 'run-123',
+    });
+    const result = await run.resumeAsync({
       step: 'approval-step',
       resumeData: { approved: true },
       requestContext: { userId: 'user-123' },
     });
 
-    expectTypeOf(result).toExtend<Promise<WorkflowRunResult>>();
+    expectTypeOf(result).toEqualTypeOf<WorkflowRunResult>();
   });
 });
