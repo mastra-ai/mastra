@@ -45,40 +45,48 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
 
     if (migrationStatus.needsMigration) {
-      // Check for duplicates before attempting migration
-      const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
-      if (duplicateInfo.hasDuplicates) {
-        // Duplicates exist - log warning and skip auto-migration
-        // User must run manual migration via CLI to deduplicate
-        this.logger?.error?.(
-          `\n` +
-            `===========================================================================\n` +
-            `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} table\n` +
-            `===========================================================================\n` +
-            `\n` +
-            `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
-            `\n` +
-            `The spans table requires migration to a new sorting key (traceId, spanId),\n` +
-            `but your database contains duplicate entries that must be resolved first.\n` +
-            `\n` +
-            `To fix this, run the manual migration command:\n` +
-            `\n` +
-            `  npx mastra migrate\n` +
-            `\n` +
-            `This command will:\n` +
-            `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
-            `  2. Update the table sorting key for proper uniqueness\n` +
-            `\n` +
-            `Note: This migration may take some time for large tables.\n` +
-            `===========================================================================\n`,
-        );
-        // Don't throw - allow the application to start, but without the migration
-        // The migration will be completed when the user runs the migration command
-        return;
-      }
+      // ClickHouse requires table recreation to change sorting key - always require manual migration
+      // Unlike other databases where we can just add a unique constraint, ClickHouse's
+      // ReplacingMergeTree engine requires the sorting key to be set at table creation time.
+      // This means we need to: 1) Create a new table with correct sorting key, 2) Copy data,
+      // 3) Drop old table, 4) Rename new table. This is a destructive operation that should
+      // only be done explicitly by the user.
 
-      // No duplicates - safe to proceed with migration
-      await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+      // Check for duplicates to provide more helpful error message
+      const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+      const duplicateMessage = duplicateInfo.hasDuplicates
+        ? `\nFound ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations that will be removed.\n`
+        : '';
+
+      const errorMessage =
+        `\n` +
+        `===========================================================================\n` +
+        `MIGRATION REQUIRED: ClickHouse spans table needs sorting key update\n` +
+        `===========================================================================\n` +
+        `\n` +
+        `The spans table structure has changed. ClickHouse requires a table recreation\n` +
+        `to update the sorting key from (traceId) to (traceId, spanId).\n` +
+        duplicateMessage +
+        `\n` +
+        `To fix this, run the manual migration command:\n` +
+        `\n` +
+        `  npx mastra migrate\n` +
+        `\n` +
+        `This command will:\n` +
+        `  1. Create a new table with the correct sorting key\n` +
+        `  2. Copy data from the old table (deduplicating if needed)\n` +
+        `  3. Replace the old table with the new one\n` +
+        `\n` +
+        `WARNING: This migration involves table recreation and may take significant\n` +
+        `time for large tables. Please ensure you have a backup before proceeding.\n` +
+        `===========================================================================\n`;
+
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATION_REQUIRED', 'SORTING_KEY_CHANGE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: errorMessage,
+      });
     }
 
     // Create the table (or add missing columns if it already exists)

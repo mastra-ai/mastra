@@ -559,32 +559,35 @@ export class PgDB extends MastraBase {
           // Check for duplicates before attempting to add PRIMARY KEY
           const duplicateInfo = await this.checkForDuplicateSpans();
           if (duplicateInfo.hasDuplicates) {
-            // Duplicates exist - log warning and skip auto-migration
-            // User must run manual migration via CLI to deduplicate
-            this.logger?.error?.(
+            // Duplicates exist - throw error requiring manual migration
+            const errorMessage =
               `\n` +
-                `===========================================================================\n` +
-                `MIGRATION REQUIRED: Duplicate spans detected in ${duplicateInfo.tableName}\n` +
-                `===========================================================================\n` +
-                `\n` +
-                `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
-                `\n` +
-                `The spans table requires a unique constraint on (traceId, spanId), but your\n` +
-                `database contains duplicate entries that must be resolved first.\n` +
-                `\n` +
-                `To fix this, run the manual migration command:\n` +
-                `\n` +
-                `  npx mastra migrate\n` +
-                `\n` +
-                `This command will:\n` +
-                `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
-                `  2. Add the required unique constraint\n` +
-                `\n` +
-                `Note: This migration may take some time for large tables.\n` +
-                `===========================================================================\n`,
-            );
-            // Don't throw - allow the application to start, but without the constraint
-            // The constraint will be added when the user runs the migration command
+              `===========================================================================\n` +
+              `MIGRATION REQUIRED: Duplicate spans detected in ${duplicateInfo.tableName}\n` +
+              `===========================================================================\n` +
+              `\n` +
+              `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+              `\n` +
+              `The spans table requires a unique constraint on (traceId, spanId), but your\n` +
+              `database contains duplicate entries that must be resolved first.\n` +
+              `\n` +
+              `To fix this, run the manual migration command:\n` +
+              `\n` +
+              `  npx mastra migrate\n` +
+              `\n` +
+              `This command will:\n` +
+              `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+              `  2. Add the required unique constraint\n` +
+              `\n` +
+              `Note: This migration may take some time for large tables.\n` +
+              `===========================================================================\n`;
+
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: errorMessage,
+            });
           } else {
             // No duplicates - safe to add PRIMARY KEY directly
             await this.addSpansPrimaryKey();

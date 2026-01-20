@@ -106,33 +106,35 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // Check for duplicates before attempting to create unique index
       const duplicateInfo = await this.checkForDuplicateSpans();
       if (duplicateInfo.hasDuplicates) {
-        // Duplicates exist - log warning and skip auto-migration
-        // User must run manual migration via CLI to deduplicate
-        this.logger?.error?.(
+        // Duplicates exist - throw error requiring manual migration
+        const errorMessage =
           `\n` +
-            `===========================================================================\n` +
-            `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} collection\n` +
-            `===========================================================================\n` +
-            `\n` +
-            `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
-            `\n` +
-            `The spans collection requires a unique index on (traceId, spanId), but your\n` +
-            `database contains duplicate entries that must be resolved first.\n` +
-            `\n` +
-            `To fix this, run the manual migration command:\n` +
-            `\n` +
-            `  npx mastra migrate\n` +
-            `\n` +
-            `This command will:\n` +
-            `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
-            `  2. Add the required unique index\n` +
-            `\n` +
-            `Note: This migration may take some time for large collections.\n` +
-            `===========================================================================\n`,
-        );
-        // Don't throw - allow the application to start, but without the constraint
-        // Skip creating default indexes since they depend on the unique index
-        return;
+          `===========================================================================\n` +
+          `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} collection\n` +
+          `===========================================================================\n` +
+          `\n` +
+          `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+          `\n` +
+          `The spans collection requires a unique index on (traceId, spanId), but your\n` +
+          `database contains duplicate entries that must be resolved first.\n` +
+          `\n` +
+          `To fix this, run the manual migration command:\n` +
+          `\n` +
+          `  npx mastra migrate\n` +
+          `\n` +
+          `This command will:\n` +
+          `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+          `  2. Add the required unique index\n` +
+          `\n` +
+          `Note: This migration may take some time for large collections.\n` +
+          `===========================================================================\n`;
+
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: errorMessage,
+        });
       }
     }
     await this.createDefaultIndexes();

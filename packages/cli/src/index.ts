@@ -159,8 +159,10 @@ program
 program
   .command('migrate')
   .description('Run database migrations for the spans table')
-  .option('-h, --host <host>', 'Mastra server host (default: localhost)')
-  .option('-p, --port <port>', 'Mastra server port (default: 4111)')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-e, --env <env>', 'Custom env file to include')
+  .option('--debug', 'Enable debug logs', false)
   .action(migrate);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
