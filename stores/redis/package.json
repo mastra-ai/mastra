@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0",
   "description": "Redis storage provider for Mastra - provides storage capabilities for direct Redis connections",
   "type": "module",
   "main": "dist/index.js",
