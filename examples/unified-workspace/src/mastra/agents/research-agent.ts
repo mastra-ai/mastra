@@ -1,12 +1,26 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 import { readonlyWorkspace } from '../workspaces';
+
+/**
+ * Memory for the research agent - persists conversation history and findings.
+ */
+const researchMemory = new Memory({
+  id: 'research-agent-memory',
+  storage: new LibSQLStore({
+    id: 'research-agent-memory-storage',
+    url: 'file:./research-agent.db',
+  }),
+});
 
 /**
  * Research agent - analyzes code and gathers information.
  *
  * Workspace: readonlyWorkspace
  * Safety: readOnly: true (write tools excluded)
+ * Memory: Enabled - remembers previous research sessions
  */
 export const researchAgent = new Agent({
   id: 'research-agent',
@@ -26,4 +40,5 @@ Use workspace search to find relevant code and documentation.`,
 
   model: openai('gpt-4o-mini'),
   workspace: readonlyWorkspace,
+  memory: researchMemory,
 });
