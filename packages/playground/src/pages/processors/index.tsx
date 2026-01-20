@@ -30,7 +30,7 @@ export function Processors() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/processors" target="_blank" rel="noopener noreferrer">
+          <Button as={Link} to="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer">
             <Icon>
               <DocsIcon />
             </Icon>

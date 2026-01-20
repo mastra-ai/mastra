@@ -9,7 +9,7 @@ An Express.js server that has an API that can get a random image from [Unsplash]
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Anthropic API Key
 - Unsplash Access Key

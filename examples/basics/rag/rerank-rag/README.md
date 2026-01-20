@@ -4,7 +4,7 @@ A practical example demonstrating how to use Mastra's vector query tool to re-ra
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 - Postgres connection string

@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/mastra-plural-apis .
+npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
 :::
@@ -52,7 +52,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/runtime-context .
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::
@@ -73,7 +73,7 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-create-run-async .
+npx @mastra/codemod@latest v1/workflow-create-run-async .
 ```
 
 :::
@@ -98,7 +98,7 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-run-count .
+npx @mastra/codemod@latest v1/workflow-run-count .
 ```
 
 :::
@@ -119,14 +119,14 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-list-runs .
+npx @mastra/codemod@latest v1/workflow-list-runs .
 ```
 
 :::
 
 ### Inputs are validated by default
 
-Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
 
 ```diff
 createWorkflow({
@@ -240,14 +240,14 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
-See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+See [`Run.stream()`](/reference/streaming/workflows/stream), [`Run.resumeStream()`](/reference/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/streaming/workflows/observeStream) for details.
 
 :::tip[Codemod]
 
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflow-stream-vnext .
+npx @mastra/codemod@latest v1/workflow-stream-vnext .
 ```
 
 :::
