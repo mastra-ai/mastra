@@ -10,11 +10,13 @@ export async function build({
   dir,
   tools,
   root,
+  studio,
   debug,
 }: {
   dir?: string;
   tools?: string[];
   root?: string;
+  studio?: boolean;
   debug: boolean;
 }) {
   const rootDir = root || process.cwd();
@@ -29,7 +31,7 @@ export async function build({
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
 
     if (!platformDeployer) {
-      const deployer = new BuildBundler();
+      const deployer = new BuildBundler({ studio });
       deployer.__setLogger(logger);
 
       // Use the bundler's getAllToolPaths method to prepare tools paths
@@ -41,7 +43,13 @@ export async function build({
         projectRoot: rootDir,
       });
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
-      logger.info(`To start the server, run: node .mastra/output/index.mjs`);
+      if (studio) {
+        logger.info(
+          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs`,
+        );
+      } else {
+        logger.info(`To start the server, run: node .mastra/output/index.mjs`);
+      }
       return;
     }
 

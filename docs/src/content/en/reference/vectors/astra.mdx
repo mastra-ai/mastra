@@ -1,6 +1,8 @@
 ---
 title: "Reference: Astra Vector Store | Vectors"
 description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
+packages:
+  - "@mastra/astra"
 ---
 
 # Astra Vector Store
@@ -142,7 +144,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -219,7 +221,7 @@ interface IndexStats {
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -232,7 +234,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

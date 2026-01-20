@@ -1,6 +1,8 @@
 ---
 title: "Reference: runEvals | Evals"
 description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
+packages:
+  - "@mastra/core"
 ---
 
 # runEvals
@@ -160,7 +162,7 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 import { createScorer, runEvals } from "@mastra/core/evals";
 
 const myScorer = createScorer({
-  name: "My Scorer",
+  id: "my-scorer",
   description: "Check if Agent's response contains ground truth",
   type: "agent",
 }).generateScore(({ run }) => {

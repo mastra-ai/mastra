@@ -5,6 +5,7 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -12,18 +13,76 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
+import { PgDB, resolvePgConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
 export class AgentsPG extends AgentsStorage {
-  private client: IDatabase<{}>;
-  private schema: string;
+  #db: PgDB;
+  #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({ client, schema }: { client: IDatabase<{}>; schema: string }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_AGENTS] as const;
+
+  constructor(config: PgDomainConfig) {
     super();
-    this.client = client;
-    this.schema = schema;
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the agents domain tables.
+   * Currently no default indexes are defined for agents.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for agents.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for agents domain
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
 
   private parseJson(value: any, fieldName?: string): any {
@@ -76,9 +135,9 @@ export class AgentsPG extends AgentsStorage {
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-      const result = await this.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -100,11 +159,11 @@ export class AgentsPG extends AgentsStorage {
 
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
 
-      await this.client.none(
+      await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, name, description, instructions, model, tools, 
           "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, 
@@ -152,7 +211,7 @@ export class AgentsPG extends AgentsStorage {
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // First, get the existing agent
       const existingAgent = await this.getAgentById({ id });
@@ -249,7 +308,10 @@ export class AgentsPG extends AgentsStorage {
 
       if (setClauses.length > 2) {
         // More than just updatedAt and updatedAtZ
-        await this.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
+        await this.#db.client.none(
+          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
+          values,
+        );
       }
 
       // Return the updated agent
@@ -283,9 +345,9 @@ export class AgentsPG extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-      await this.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
       throw new MastraError(
         {
@@ -319,10 +381,10 @@ export class AgentsPG extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // Get total count
-      const countResult = await this.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -337,7 +399,7 @@ export class AgentsPG extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.client.manyOrNone(
+      const dataResult = await this.#db.client.manyOrNone(
         `SELECT * FROM ${tableName} ORDER BY "${field}" ${direction} LIMIT $1 OFFSET $2`,
         [limitValue, offset],
       );

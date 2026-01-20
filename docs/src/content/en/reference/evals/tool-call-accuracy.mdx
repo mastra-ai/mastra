@@ -1,6 +1,8 @@
 ---
 title: "Reference: Tool Call Accuracy Scorers | Evals"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
+packages:
+  - "@mastra/evals"
 ---
 
 # Tool Call Accuracy Scorers
@@ -89,7 +91,7 @@ When `expectedToolOrder` is provided, the scorer validates tool calling sequence
 
 ### Code-Based Scorer Options
 
-```typescript showLineNumbers copy
+```typescript
 // Standard mode - passes if expected tool is called
 const lenientScorer = createCodeScorer({
   expectedTool: "search-tool",
@@ -135,14 +137,14 @@ The code-based scorer provides deterministic, binary scoring (0 or 1) based on e
 
 ### Correct tool selection
 
-```typescript title="src/example-correct-tool.ts" showLineNumbers copy
+```typescript title="src/example-correct-tool.ts"
 const scorer = createToolCallAccuracyScorerCode({
   expectedTool: "weather-tool",
 });
 
 // Simulate LLM input and output with tool call
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather like in New York today?",
     role: "user",
     id: "input-1",
@@ -150,7 +152,7 @@ const inputMessages = [
 ];
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me check the weather for you.",
     role: "assistant",
     id: "output-1",
@@ -177,7 +179,7 @@ console.log(result.preprocessStepResult?.correctToolCalled); // true
 
 Only passes if exactly one tool is called:
 
-```typescript title="src/example-strict-mode.ts" showLineNumbers copy
+```typescript title="src/example-strict-mode.ts"
 const strictScorer = createToolCallAccuracyScorerCode({
   expectedTool: "weather-tool",
   strictMode: true,
@@ -185,7 +187,7 @@ const strictScorer = createToolCallAccuracyScorerCode({
 
 // Multiple tools called - fails in strict mode
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me help you with that.",
     role: "assistant",
     id: "output-1",
@@ -216,7 +218,7 @@ console.log(result.score); // 0 - fails because multiple tools were called
 
 Validates that tools are called in a specific sequence:
 
-```typescript title="src/example-order-validation.ts" showLineNumbers copy
+```typescript title="src/example-order-validation.ts"
 const orderScorer = createToolCallAccuracyScorerCode({
   expectedTool: "auth-tool", // ignored when order is specified
   expectedToolOrder: ["auth-tool", "fetch-tool"],
@@ -224,7 +226,7 @@ const orderScorer = createToolCallAccuracyScorerCode({
 });
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "I will authenticate and fetch the data.",
     role: "assistant",
     id: "output-1",
@@ -255,7 +257,7 @@ console.log(result.score); // 1 - correct order
 
 Allows extra tools as long as expected tools maintain relative order:
 
-```typescript title="src/example-flexible-order.ts" showLineNumbers copy
+```typescript title="src/example-flexible-order.ts"
 const flexibleOrderScorer = createToolCallAccuracyScorerCode({
   expectedTool: "auth-tool",
   expectedToolOrder: ["auth-tool", "fetch-tool"],
@@ -263,7 +265,7 @@ const flexibleOrderScorer = createToolCallAccuracyScorerCode({
 });
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Performing comprehensive operation.",
     role: "assistant",
     id: "output-1",
@@ -346,7 +348,7 @@ The LLM-based scorer provides:
 
 ### LLM-Based Scorer Options
 
-```typescript showLineNumbers copy
+```typescript
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
   model: 'openai/gpt-5.1',
@@ -387,7 +389,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ### Basic LLM evaluation
 
-```typescript title="src/example-llm-basic.ts" showLineNumbers copy
+```typescript title="src/example-llm-basic.ts"
 const llmScorer = createToolCallAccuracyScorerLLM({
   model: "openai/gpt-5.1",
   availableTools: [
@@ -407,7 +409,7 @@ const llmScorer = createToolCallAccuracyScorerLLM({
 });
 
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather like in San Francisco today?",
     role: "user",
     id: "input-1",
@@ -415,7 +417,7 @@ const inputMessages = [
 ];
 
 const output = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me check the current weather for you.",
     role: "assistant",
     id: "output-1",
@@ -440,9 +442,9 @@ console.log(result.reason); // "The agent correctly used the weather-tool to add
 
 ### Handling inappropriate tool usage
 
-```typescript title="src/example-llm-inappropriate.ts" showLineNumbers copy
+```typescript title="src/example-llm-inappropriate.ts"
 const inputMessages = [
-  createUIMessage({
+  createTestMessage({
     content: "What is the weather in Tokyo?",
     role: "user",
     id: "input-1",
@@ -450,7 +452,7 @@ const inputMessages = [
 ];
 
 const inappropriateOutput = [
-  createUIMessage({
+  createTestMessage({
     content: "Let me search for that information.",
     role: "assistant",
     id: "output-1",
@@ -477,9 +479,9 @@ console.log(result.reason); // "The agent used search-tool when weather-tool wou
 
 The LLM scorer recognizes when agents appropriately ask for clarification:
 
-```typescript title="src/example-llm-clarification.ts" showLineNumbers copy
+```typescript title="src/example-llm-clarification.ts"
 const vagueInput = [
-  createUIMessage({
+  createTestMessage({
     content: 'I need help with something',
     role: 'user',
     id: 'input-1'
@@ -487,7 +489,7 @@ const vagueInput = [
 ];
 
 const clarificationOutput = [
-  createUIMessage({
+  createTestMessage({
     content: 'I'd be happy to help! Could you please provide more details about what you need assistance with?',
     role: 'assistant',
     id: 'output-1',
@@ -509,7 +511,7 @@ console.log(result.reason); // "The agent appropriately asked for clarification 
 
 Here's an example using both scorers on the same data:
 
-```typescript title="src/example-comparison.ts" showLineNumbers copy
+```typescript title="src/example-comparison.ts"
 import {
   createToolCallAccuracyScorerCode as createCodeScorer,
   createToolCallAccuracyScorerLLM as createLLMScorer
@@ -532,14 +534,14 @@ const llmScorer = createLLMScorer({
 // Test data
 const run = createAgentTestRun({
   inputMessages: [
-    createUIMessage({
+    createTestMessage({
       content: "What is the weather?",
       role: "user",
       id: "input-1",
     }),
   ],
   output: [
-    createUIMessage({
+    createTestMessage({
       content: "Let me find that information.",
       role: "assistant",
       id: "output-1",

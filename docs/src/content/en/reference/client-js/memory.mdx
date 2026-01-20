@@ -1,6 +1,8 @@
 ---
 title: "Reference: Memory API | Client SDK"
 description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Memory API
@@ -14,9 +16,11 @@ Retrieve all memory threads for a specific resource:
 ```typescript
 const threads = await mastraClient.getMemoryThreads({
   resourceId: "resource-1",
-  agentId: "agent-1",
+  agentId: "agent-1", // Optional - can be omitted if storage is configured
 });
 ```
+
+When `agentId` is omitted and storage is configured on the server, threads will be retrieved using storage directly. This is useful when multiple agents share the same threads (e.g., in workflows with multiple agent steps).
 
 ### Create a New Thread
 
@@ -68,6 +72,44 @@ Delete a thread and its messages:
 ```typescript
 await thread.delete();
 ```
+
+### Clone Thread
+
+Create a copy of a thread with all its messages:
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone();
+```
+
+Clone with options:
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone({
+  newThreadId: "custom-clone-id",
+  title: "Cloned Conversation",
+  metadata: { branch: "experiment-1" },
+  options: {
+    messageLimit: 10, // Only clone last 10 messages
+  },
+});
+```
+
+Clone with message filtering:
+
+```typescript
+const { thread: clonedThread } = await thread.clone({
+  options: {
+    messageFilter: {
+      startDate: new Date("2024-01-01"),
+      endDate: new Date("2024-01-31"),
+    },
+  },
+});
+```
+
+The clone response includes:
+- `thread`: The newly created cloned thread with clone metadata
+- `clonedMessages`: Array of the cloned messages with new IDs
 
 ## Message Operations
 

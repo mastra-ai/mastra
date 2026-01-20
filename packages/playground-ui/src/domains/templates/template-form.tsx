@@ -1,11 +1,11 @@
-import { InputField, SelectField } from '@/components/ui/elements';
+import { InputField, SelectField } from '@/ds/components/FormFields';
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { Container } from './shared';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];
@@ -18,6 +18,7 @@ type TemplateFormProps = {
   handleInstallTemplate: () => void;
   handleVariableChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isLoadingEnvVars?: boolean;
+  isInstalling?: boolean;
   defaultModelProvider?: string;
   defaultModelId?: string;
   onModelUpdate?: (params: { provider: string; modelId: string }) => Promise<{ message: string }>;
@@ -32,17 +33,18 @@ export function TemplateForm({
   handleInstallTemplate,
   handleVariableChange,
   isLoadingEnvVars,
+  isInstalling,
   defaultModelProvider,
   defaultModelId,
   onModelUpdate,
 }: TemplateFormProps) {
   return (
     <Container>
-      <div className="max-w-[40rem] my-[1rem] p-[1rem] lg:p-[2rem] mx-auto gap-[2rem] grid">
+      <div className="max-w-[40rem] my-4 p-4 lg:p-8 mx-auto gap-8 grid">
         <h2
           className={cn(
-            'text-icon4 text-[1.125rem] font-semibold flex items-center gap-[0.5rem]',
-            '[&>svg]:w-[1.2em] [&_svg]:h-[1.2em] [&_svg]:opacity-70 ',
+            'text-neutral4 text-header-sm font-semibold flex items-center gap-2',
+            '[&>svg]:w-[1.2em] [&_svg]:h-[1.2em] [&_svg]:opacity-70',
           )}
         >
           Install Template <PackageOpenIcon />
@@ -57,12 +59,12 @@ export function TemplateForm({
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
-            <h3 className="text-icon3 text-[0.875rem]">Set required Environmental Variables</h3>
-            <div className="grid grid-cols-[1fr_1fr] gap-[1rem] items-start">
+            <h3 className="text-neutral3 text-ui-md">Set required Environmental Variables</h3>
+            <div className="grid grid-cols-[1fr_1fr] gap-4 items-start">
               {isLoadingEnvVars ? (
                 <div
                   className={cn(
-                    'flex items-center justify-center col-span-2 text-icon3 text-[0.75rem] gap-[1rem]',
+                    'flex items-center justify-center col-span-2 text-neutral3 text-ui-sm gap-4',
                     '[&_svg]:opacity-50 [&_svg]:w-[1.1em] [&_svg]:h-[1.1em]',
                     'animate-in fade-in duration-300',
                   )}
@@ -94,13 +96,13 @@ export function TemplateForm({
                 ))
               )}
             </div>
-            <div className="border-t border-border1 pt-[3rem] mt-[0.875rem] relative">
-              <div className="absolute w-[2rem] h-[2rem] rounded-full bg-surface2 top-0 left-[50%] translate-x-[-50%] translate-y-[-1rem] text-[0.75rem] text-icon3 flex items-center justify-center">
+            <div className="border-t border-border1 pt-12 mt-3.5 relative">
+              <div className="absolute w-8 h-8 rounded-full bg-surface2 top-0 left-1/2 -translate-x-1/2 -translate-y-4 text-ui-sm text-neutral3 flex items-center justify-center">
                 And
               </div>
 
-              <h3 className="text-icon4 text-[1rem]">Set AI Model for Template Installation</h3>
-              <p className="text-icon3 text-[0.875rem] mt-[.5rem] mb-[2rem]">
+              <h3 className="text-neutral4 text-ui-lg">Set AI Model for Template Installation</h3>
+              <p className="text-neutral3 text-ui-md mt-2 mb-8">
                 This model will be used by the workflow to process and install the template
               </p>
 
@@ -119,13 +121,23 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'flex items-center gap-[0.5rem] mt-[1rem] justify-center text-[0.875rem] w-full bg-surface5 min-h-[2.5rem] rounded-lg text-icon5 hover:bg-surface6 transition-colors',
-              '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
+              'flex items-center gap-2 mt-4 justify-center text-ui-md w-full bg-surface5 min-h-10 rounded-lg text-neutral5 hover:bg-surface6 transition-colors',
+              '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-neutral5',
             )}
             onClick={handleInstallTemplate}
-            disabled={!selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0}
+            disabled={
+              !selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0 || isInstalling
+            }
           >
-            Install <ArrowRightIcon />
+            {isInstalling ? (
+              <>
+                <Spinner className="w-4 h-4" /> Installing...
+              </>
+            ) : (
+              <>
+                Install <ArrowRightIcon />
+              </>
+            )}
           </Button>
         )}
       </div>

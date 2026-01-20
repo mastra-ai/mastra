@@ -1,0 +1,328 @@
+import type { InValue } from '@libsql/client';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+
+/**
+ * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
+ * to convert binary JSONB to TEXT.
+ *
+ * The json() function handles both:
+ * - Binary JSONB data (converts to TEXT)
+ * - Legacy TEXT JSON data (returns as-is)
+ *
+ * Note: json_valid() was considered for guarding against malformed legacy TEXT,
+ * but it doesn't work correctly with binary JSONB data (returns false for valid JSONB blobs).
+ *
+ * @param tableName - The table name to get the schema for
+ * @returns A comma-separated column list with json() wrappers for JSONB columns
+ */
+export function buildSelectColumns(tableName: TABLE_NAMES): string {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.keys(schema)
+    .map(col => {
+      const colDef = schema[col];
+      const parsedCol = parseSqlIdentifier(col, 'column name');
+      return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+    })
+    .join(', ');
+}
+
+/**
+ * Checks if an error is a SQLite lock/busy error that should be retried
+ */
+export function isLockError(error: any): boolean {
+  return (
+    error.code === 'SQLITE_BUSY' ||
+    error.code === 'SQLITE_LOCKED' ||
+    error.message?.toLowerCase().includes('database is locked') ||
+    error.message?.toLowerCase().includes('database table is locked') ||
+    error.message?.toLowerCase().includes('table is locked') ||
+    (error.constructor.name === 'SqliteError' && error.message?.toLowerCase().includes('locked'))
+  );
+}
+
+export function createExecuteWriteOperationWithRetry({
+  logger,
+  maxRetries,
+  initialBackoffMs,
+}: {
+  logger: IMastraLogger;
+  maxRetries: number;
+  initialBackoffMs: number;
+}) {
+  return async function executeWriteOperationWithRetry<T>(
+    operationFn: () => Promise<T>,
+    operationDescription: string,
+  ): Promise<T> {
+    let attempts = 0;
+    let backoff = initialBackoffMs;
+
+    while (attempts < maxRetries) {
+      try {
+        return await operationFn();
+      } catch (error: any) {
+        logger.debug(`LibSQLStore: Error caught in retry loop for ${operationDescription}`, {
+          errorType: error.constructor.name,
+          errorCode: error.code,
+          errorMessage: error.message,
+          attempts,
+          maxRetries,
+        });
+
+        if (isLockError(error)) {
+          attempts++;
+          if (attempts >= maxRetries) {
+            logger.error(
+              `LibSQLStore: Operation failed after ${maxRetries} attempts due to database lock: ${error.message}`,
+              { error, attempts, maxRetries },
+            );
+            throw error;
+          }
+          logger.warn(
+            `LibSQLStore: Attempt ${attempts} failed due to database lock during ${operationDescription}. Retrying in ${backoff}ms...`,
+            { errorMessage: error.message, attempts, backoff, maxRetries },
+          );
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          backoff *= 2;
+        } else {
+          logger.error(`LibSQLStore: Non-lock error during ${operationDescription}, not retrying`, { error });
+          throw error;
+        }
+      }
+    }
+    // TypeScript requires a return/throw here for type safety, but this is unreachable
+    // because the loop always exits via return (success) or throw (error)
+    throw new Error(`LibSQLStore: Unexpected exit from retry loop for ${operationDescription}`);
+  };
+}
+
+export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+  sql: string;
+  args: InValue[];
+} {
+  const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+  const schema = TABLE_SCHEMAS[tableName];
+  const columnNames = Object.keys(record);
+  const columns = columnNames.map(col => parseSqlIdentifier(col, 'column name'));
+  const values = columnNames.map(col => {
+    const v = record[col];
+    if (typeof v === `undefined` || v === null) {
+      // returning an undefined value will cause libsql to throw
+      return null;
+    }
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+    const colDef = schema[col];
+    if (colDef?.type === 'jsonb') {
+      return JSON.stringify(v);
+    }
+    if (v instanceof Date) {
+      return v.toISOString();
+    }
+    return typeof v === 'object' ? JSON.stringify(v) : v;
+  });
+  const placeholders = columnNames
+    .map(col => {
+      const colDef = schema[col];
+      return colDef?.type === 'jsonb' ? 'jsonb(?)' : '?';
+    })
+    .join(', ');
+
+  return {
+    sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+    args: values,
+  };
+}
+
+export function prepareUpdateStatement({
+  tableName,
+  updates,
+  keys,
+}: {
+  tableName: TABLE_NAMES;
+  updates: Record<string, any>;
+  keys: Record<string, any>;
+}): {
+  sql: string;
+  args: InValue[];
+} {
+  const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+  const schema = TABLE_SCHEMAS[tableName];
+
+  // Prepare SET clause
+  const updateColumnNames = Object.keys(updates);
+  const updateColumns = updateColumnNames.map(col => parseSqlIdentifier(col, 'column name'));
+  const updateValues = updateColumnNames.map(col => {
+    const colDef = schema[col];
+    const v = updates[col];
+    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+    if (colDef?.type === 'jsonb') {
+      return transformToSqlValue(v, true);
+    }
+    return transformToSqlValue(v, false);
+  });
+  const setClause = updateColumns
+    .map((col, i) => {
+      const colDef = schema[updateColumnNames[i]!];
+      return colDef?.type === 'jsonb' ? `${col} = jsonb(?)` : `${col} = ?`;
+    })
+    .join(', ');
+
+  const whereClause = prepareWhereClause(keys, schema);
+
+  return {
+    sql: `UPDATE ${parsedTableName} SET ${setClause}${whereClause.sql}`,
+    args: [...updateValues, ...whereClause.args],
+  };
+}
+
+export function transformToSqlValue(value: any, forceJsonStringify: boolean = false): InValue {
+  if (typeof value === 'undefined' || value === null) {
+    return null;
+  }
+  // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
+  // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+  if (forceJsonStringify) {
+    return JSON.stringify(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : value;
+}
+
+export function prepareDeleteStatement({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): {
+  sql: string;
+  args: InValue[];
+} {
+  const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+  const whereClause = prepareWhereClause(keys, TABLE_SCHEMAS[tableName]);
+
+  return {
+    sql: `DELETE FROM ${parsedTableName}${whereClause.sql}`,
+    args: whereClause.args,
+  };
+}
+
+type WhereValue = InValue | { startAt?: InValue; endAt?: InValue };
+
+export function prepareWhereClause(
+  filters: Record<string, WhereValue>,
+  schema: Record<string, StorageColumn>,
+): {
+  sql: string;
+  args: InValue[];
+} {
+  const conditions: string[] = [];
+  const args: InValue[] = [];
+
+  for (const [columnName, filterValue] of Object.entries(filters)) {
+    const column = schema[columnName];
+    if (!column) {
+      throw new Error(`Unknown column: ${columnName}`);
+    }
+
+    const parsedColumn = parseSqlIdentifier(columnName, 'column name');
+    const result = buildCondition(parsedColumn, filterValue);
+
+    conditions.push(result.condition);
+    args.push(...result.args);
+  }
+
+  return {
+    sql: conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '',
+    args,
+  };
+}
+
+function buildCondition(columnName: string, filterValue: WhereValue): { condition: string; args: InValue[] } {
+  // Handle null values - IS NULL
+  if (filterValue === null) {
+    return { condition: `${columnName} IS NULL`, args: [] };
+  }
+
+  // Handle date range objects
+  if (typeof filterValue === 'object' && filterValue !== null && ('startAt' in filterValue || 'endAt' in filterValue)) {
+    return buildDateRangeCondition(columnName, filterValue);
+  }
+
+  // Handle exact match
+  return {
+    condition: `${columnName} = ?`,
+    args: [transformToSqlValue(filterValue)],
+  };
+}
+
+function buildDateRangeCondition(
+  columnName: string,
+  range: { startAt?: InValue; endAt?: InValue },
+): { condition: string; args: InValue[] } {
+  const conditions: string[] = [];
+  const args: InValue[] = [];
+
+  if (range.startAt !== undefined) {
+    conditions.push(`${columnName} >= ?`);
+    args.push(transformToSqlValue(range.startAt));
+  }
+
+  if (range.endAt !== undefined) {
+    conditions.push(`${columnName} <= ?`);
+    args.push(transformToSqlValue(range.endAt));
+  }
+
+  if (conditions.length === 0) {
+    throw new Error('Date range must specify at least startAt or endAt');
+  }
+
+  return {
+    condition: conditions.join(' AND '),
+    args,
+  };
+}
+
+/**
+ * Transforms SQL row data back to a typed object format
+ * Reverses the transformations done in prepareStatement
+ */
+export function transformFromSqlRow<T>({
+  tableName,
+  sqlRow,
+}: {
+  tableName: TABLE_NAMES;
+  sqlRow: Record<string, any>;
+}): T {
+  const result: Record<string, any> = {};
+  const jsonColumns = new Set(
+    Object.keys(TABLE_SCHEMAS[tableName])
+      .filter(key => TABLE_SCHEMAS[tableName][key]!.type === 'jsonb')
+      .map(key => key),
+  );
+  const dateColumns = new Set(
+    Object.keys(TABLE_SCHEMAS[tableName])
+      .filter(key => TABLE_SCHEMAS[tableName][key]!.type === 'timestamp')
+      .map(key => key),
+  );
+
+  for (const [key, value] of Object.entries(sqlRow)) {
+    if (value === null || value === undefined) {
+      result[key] = value;
+      continue;
+    }
+
+    if (dateColumns.has(key) && typeof value === 'string') {
+      result[key] = new Date(value);
+      continue;
+    }
+
+    if (jsonColumns.has(key) && typeof value === 'string') {
+      result[key] = safelyParseJSON(value);
+      continue;
+    }
+
+    result[key] = value;
+  }
+
+  return result as T;
+}

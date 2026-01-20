@@ -1,0 +1,761 @@
+---
+title: "Reference: Configuration"
+description: "Reference documentation on Mastra's configuration options"
+packages:
+  - "@mastra/core"
+---
+
+# Configuration
+
+The following reference covers all supported options in Mastra. You initialize and configure Mastra by instantiating the [`Mastra` class](/reference/v1/core/mastra-class).
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // Your options...
+});
+```
+
+## Top-level options
+
+### agents
+
+**Type:** `Record<string, Agent>`
+
+A record of agent instances keyed by their names. Agents are autonomous systems that can make decisions and take actions using AI models, tools, and memory.
+
+Visit the [Agents documentation](/docs/v1/agents/overview) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+
+export const mastra = new Mastra({
+  agents: {
+    weatherAgent: new Agent({
+      id: "weather-agent",
+      name: "Weather Agent",
+      instructions: "You help with weather information",
+      model: "openai/gpt-4o",
+    }),
+  },
+});
+```
+
+### deployer
+
+**Type:** `MastraDeployer`
+
+Deployment provider for publishing applications to cloud platforms.
+
+Visit the [Deployment documentation](/docs/v1/deployment/overview) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: "your-team",
+    siteId: "your-site-id",
+  }),
+});
+```
+
+### events
+
+**Type:** `Record<string, EventHandler | EventHandler[]>`
+
+Event handlers for the internal pub/sub system. Maps event topics to handler functions that are called when events are published to those topics.
+
+:::warning
+This is used internally by Mastra's workflow engine. Most users will not need to configure this option.
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  events: {
+    "my-topic": async (event) => {
+      console.log("Event received:", event);
+    },
+  },
+});
+```
+
+### gateways
+
+**Type:** `Record<string, MastraModelGateway>`
+
+Custom model router gateways for accessing LLM providers. Gateways handle provider-specific authentication, URL construction, and model resolution. Use this to add support for custom or self-hosted LLM providers.
+
+Visit the [Custom Gateways documentation](/models/v1/gateways/custom-gateways) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MyPrivateGateway } from "./gateways";
+
+export const mastra = new Mastra({
+  gateways: {
+    private: new MyPrivateGateway(),
+  },
+});
+```
+
+### idGenerator
+
+**Type:** `() => string`  
+**Default:** `crypto.randomUUID()`
+
+Custom ID generator function for creating unique identifiers.
+
+:::warning
+
+This is used internally by Mastra for creating IDs for workflow runs, agent conversations, and other resources. Most users will not need to configure this option.
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { nanoid } from "nanoid";
+
+export const mastra = new Mastra({
+  idGenerator: () => nanoid(),
+});
+```
+
+### logger
+
+**Type:** `IMastraLogger | false`  
+**Default:** `ConsoleLogger` with `INFO` level in development, `WARN` in production
+
+Logger implementation for application logging and debugging. Set to `false` to disable logging entirely.
+
+Visit the [Logging documentation](/docs/v1/observability/logging) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: "MyApp", level: "debug" }),
+});
+```
+
+### mcpServers
+
+**Type:** `Record<string, MCPServerBase>`
+
+MCP (Model Context Protocol) servers that expose Mastra tools, agents, workflows, and resources to MCP-compatible clients. Use this to author your own MCP servers that can be consumed by any system that supports the protocol.
+
+Visit the [MCP Overview](/docs/v1/tools-mcp/mcp-overview) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MCPServer } from "@mastra/mcp";
+
+const mcpServer = new MCPServer({
+  id: "my-mcp-server",
+  name: "My MCP Server",
+  version: "1.0.0",
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    myServer: mcpServer,
+  },
+});
+```
+
+### memory
+
+**Type:** `Record<string, MastraMemory>`
+
+A registry of memory instances that can be referenced by agents. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports three types of memory: message history for recent messages, working memory for persistent user-specific details, and semantic recall for retrieving older messages based on relevance.
+
+Visit the [Memory documentation](/docs/v1/memory/overview) to learn more.
+
+:::note
+
+Most users configure memory directly on agents. This top-level configuration is for defining reusable memory instances that can be shared across multiple agents.
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:",
+  }),
+  memory: {
+    chatMemory: new Memory({
+      options: {
+        lastMessages: 20,
+      },
+    }),
+  },
+});
+```
+
+### observability
+
+**Type:** `ObservabilityEntrypoint`
+
+Mastra provides observability features for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with tools that understand AI-specific patterns. Tracing captures model interactions, agent execution paths, tool calls, and workflow steps.
+
+Visit the [Observability documentation](/docs/v1/observability/overview) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+import { Observability, DefaultExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: "file:./mastra.db",
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-app",
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### processors
+
+**Type:** `Record<string, Processor>`
+
+Input/output processors for transforming agent inputs and outputs. Processors run at specific points in the agent's execution pipeline, allowing you to modify inputs before they reach the language model or outputs before they're returned. Use processors to add guardrails, detect prompt injection, moderate content, or apply custom business logic.
+
+Visit the [Processors documentation](/docs/v1/agents/processors) to learn more.
+
+:::note
+
+Most users configure processors directly on agents. This top-level configuration is for defining reusable processor instances that can be shared across multiple agents.
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const mastra = new Mastra({
+  processors: {
+    moderation: new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      categories: ["hate", "harassment", "violence"],
+    }),
+  },
+});
+```
+
+### pubsub
+
+**Type:** `PubSub`  
+**Default:** `EventEmitterPubSub`
+
+Pub/sub system for event-driven communication between components. Used internally by Mastra for workflow event processing and component communication.
+
+:::warning
+This is used internally by Mastra. Most users will not need to configure this option.
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { CustomPubSub } from "./pubsub";
+
+export const mastra = new Mastra({
+  pubsub: new CustomPubSub(),
+});
+```
+
+### scorers
+
+**Type:** `Record<string, Scorer>`
+
+Scorers assess the quality of agent responses and workflow outputs. They provide quantifiable metrics for measuring agent quality using model-graded, rule-based, and statistical methods. Use scorers to track performance, compare approaches, and identify areas for improvement.
+
+Visit the [Scorers documentation](/docs/v1/evals/overview) to learn more.
+
+:::note
+
+Most users configure scorers directly on agents. This top-level configuration is for defining reusable scorer instances that can be shared across multiple agents.
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
+
+export const mastra = new Mastra({
+  scorers: {
+    toxicity: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
+  },
+});
+```
+
+### storage
+
+**Type:** `MastraStorage`
+
+Storage provider for persisting application data. Used by memory, workflows, traces, and other components that require persistence. Mastra supports multiple database backends including PostgreSQL, MongoDB, libSQL, and more.
+
+Visit the [Storage documentation](/docs/v1/memory/storage) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+### tools
+
+**Type:** `Record<string, Tool>`
+
+Tools are reusable functions that agents can use to interact with external systems. Each tool defines inputs, outputs, and execution logic.
+
+Visit the [Tools documentation](/docs/v1/tools-mcp/overview) to learn more.
+
+:::note
+Most users configure tools directly on agents. This top-level configuration is for defining reusable tools that can be shared across multiple agents.
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const weatherTool = createTool({
+  id: "get-weather",
+  description: "Fetches weather for a city",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  execute: async () => {
+    return { temperature: 20, conditions: "Sunny" };
+  },
+});
+
+export const mastra = new Mastra({
+  tools: {
+    weather: weatherTool,
+  },
+});
+```
+
+### tts
+
+**Type:** `Record<string, MastraVoice>`
+
+Text-to-speech providers for voice synthesis capabilities. Register voice providers to enable agents to convert text responses into spoken audio.
+
+Visit the [Voice documentation](/docs/v1/voice/overview) to learn more.
+
+:::note
+Most users configure voice directly on agents. This top-level configuration is for defining reusable voice providers that can be shared across multiple agents.
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+export const mastra = new Mastra({
+  tts: {
+    openai: new OpenAIVoice(),
+  },
+});
+```
+
+### vectors
+
+**Type:** `Record<string, MastraVector>`
+
+Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, MongoDB, and more.
+
+Visit the [RAG documentation](/docs/v1/rag/overview) to learn more.
+
+:::note
+Most users create vector stores directly when building RAG pipelines. This top-level configuration is for defining reusable vector store instances that can be shared across your application.
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PineconeVector } from "@mastra/pinecone";
+
+export const mastra = new Mastra({
+  vectors: {
+    pinecone: new PineconeVector({
+      id: 'pinecone-vector',
+      apiKey: process.env.PINECONE_API_KEY,
+    }),
+  },
+});
+```
+
+### workflows
+
+**Type:** `Record<string, Workflow>`
+
+Workflows define step-based execution pipelines with type-safe inputs and outputs. Use workflows for tasks that involve multiple steps with a specific execution order, giving you control over how data flows between steps.
+
+Visit the [Workflows documentation](/docs/v1/workflows/overview) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { testWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  workflows: {
+    testWorkflow,
+  },
+});
+```
+
+## Bundler options
+
+### bundler.externals
+
+**Type:** `boolean | string[]`  
+**Default:** `true`
+
+When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
+
+By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/v1/mastra-cloud/overview), it also sets this option to `true`.
+
+Here's an overview of what the different values mean:
+
+- `true`: All dependencies listed in your project's `package.json` are marked as external
+- `false`: No dependencies are marked as external; everything is bundled together
+- `string[]`: An array of package names to mark as external, the rest will be bundled together
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["some-package", "another-package"],
+  },
+});
+```
+
+### bundler.sourcemap
+
+**Type:** `boolean`  
+**Default:** `false`
+
+Enables source map generation for the bundled output.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    sourcemap: true,
+  },
+});
+```
+
+### bundler.transpilePackages
+
+**Type:** `string[]`  
+**Default:** `[]`
+
+List of packages whose source code should be transpiled through esbuild during the build process. Use this for dependencies that contain TypeScript or other code that needs compilation before bundling.
+
+You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
+
+Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    transpilePackages: ["@my-org/shared-utils"],
+  },
+});
+```
+
+## Server options
+
+### server.apiRoutes
+
+**Type:** `ApiRoute[]`
+
+Mastra automatically exposes registered agents and workflows via its server. For additional behavior you can define your own HTTP routes.
+
+Visit the [Custom API routes](/docs/v1/server/custom-api-routes) documentation to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        handler: async (c) => {
+          return c.json({ message: "Custom route" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### server.auth
+
+**Type:** `MastraAuthConfig | MastraAuthProvider`
+
+Authentication configuration for the server. Mastra supports multiple authentication providers including JWT, Clerk, Supabase, Firebase, WorkOS, and Auth0.
+
+Visit the [Authentication documentation](/docs/v1/server/auth) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+  },
+});
+```
+
+### server.bodySizeLimit
+
+**Type:** `number`  
+**Default:** `4_718_592` (4.5 MB)
+
+Maximum request body size in bytes. Increase this limit if your application needs to handle larger payloads.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    bodySizeLimit: 10 * 1024 * 1024, // 10mb
+  },
+});
+```
+
+### server.build
+
+Build-time configuration for server features. These options control development tools like Swagger UI and request logging, which are enabled during local development but disabled in production by default.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `swaggerUI` | `boolean` | `false` | Enable Swagger UI at `/swagger-ui` for interactive API exploration (requires `openAPIDocs` to be `true`) |
+| `apiReqLogs` | `boolean` | `false` | Enable API request logging to the console |
+| `openAPIDocs` | `boolean` | `false` | Enable OpenAPI specification at `/openapi.json` |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    build: {
+      swaggerUI: true,
+      apiReqLogs: true,
+      openAPIDocs: true,
+    },
+  },
+});
+```
+
+### server.cors
+
+**Type:** `CorsOptions | false`  
+
+CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `origin` | `string \| string[]` | `'*'` | Origins for CORS requests |
+| `allowMethods` | `string[]` | `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']` | HTTP methods |
+| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type']` | Request headers |
+| `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | Browser headers |
+| `credentials` | `boolean` | `false` | Credentials (cookies, authorization headers) |
+| `maxAge` | `number` | `3600` | Preflight request cache duration in seconds |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    cors: {
+      origin: ["https://example.com"],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    },
+  },
+});
+```
+
+### server.host
+
+**Type:** `string`  
+**Default:** `localhost`
+
+Host address the Mastra development server binds to.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    host: "0.0.0.0",
+  },
+});
+```
+
+### server.https
+
+**Type:** `{ key: Buffer; cert: Buffer }`
+
+HTTPS configuration for running the development server with TLS. Mastra supports local HTTPS development through the `mastra dev --https` flag, which automatically creates and manages certificates. For custom certificate management, provide your own key and certificate files:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import fs from "node:fs";
+
+export const mastra = new Mastra({
+  server: {
+    https: {
+      key: fs.readFileSync("path/to/key.pem"),
+      cert: fs.readFileSync("path/to/cert.pem"),
+    },
+  },
+});
+```
+
+### server.middleware
+
+**Type:** `Middleware | Middleware[]`
+
+Custom middleware functions to intercept requests before or after route handlers. Middleware can be used for authentication, logging, injecting request-specific context, or adding headers. Each middleware receives the Hono `Context` and a `next` function. Return a `Response` to short-circuit the request, or call `next()` to continue processing.
+
+Visit the [Middleware documentation](/docs/v1/server/middleware) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          const authHeader = c.req.header("Authorization");
+          if (!authHeader) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          await next();
+        },
+        path: "/api/*",
+      },
+    ],
+  },
+});
+```
+
+### server.onError
+
+**Type:** `(err: Error, c: Context) => Response | Promise<Response>`
+
+Custom error handler called when an unhandled error occurs. Use this to customize error responses, log errors to external services like Sentry, or implement custom error formatting.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import * as Sentry from "@sentry/node";
+
+export const mastra = new Mastra({
+  server: {
+    onError: (err, c) => {
+      Sentry.captureException(err);
+
+      return c.json({
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      }, 500);
+    },
+  },
+});
+```
+
+### server.port
+
+**Type:** `number`  
+**Default:** `4111` (or `PORT` environment variable if set)
+
+Port the Mastra development server binds to. If the `PORT` environment variable is set, it takes precedence over the default.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    port: 8080,
+  },
+});
+```
+
+### server.studioBase
+
+**Type:** `string`  
+**Default:** `/`
+
+Base path for hosting Mastra Studio. Use this to host the Studio on a sub-path of your existing application instead of the root.
+
+This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+**Example URLs:**
+- Default: `http://localhost:4111/` (studio at root)
+- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
+
+### server.timeout
+
+**Type:** `number`  
+**Default:** `180000` (3 minutes)
+
+Request timeout in milliseconds. Requests that exceed this duration will be terminated.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    timeout: 30000, // 30 seconds
+  },
+});
+```

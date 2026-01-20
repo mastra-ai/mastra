@@ -1,6 +1,6 @@
 import {
   AgentChat,
-  MainContentContent,
+  AgentLayout,
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
@@ -10,6 +10,7 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -40,25 +41,41 @@ function Agent() {
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
-  const defaultSettings = useMemo(() => {
-    if (agent) {
-      let providerOptions = undefined;
-      if (typeof agent.instructions === 'object' && 'providerOptions' in agent.instructions) {
-        providerOptions = agent.instructions.providerOptions;
-      }
-      return {
-        modelSettings: {
-          providerOptions,
-        },
-      };
+  const defaultSettings = useMemo((): AgentSettingsType => {
+    if (!agent) {
+      return { modelSettings: {} };
     }
+
+    const agentDefaultOptions = agent.defaultOptions as
+      | {
+          maxSteps?: number;
+          modelSettings?: Record<string, unknown>;
+          providerOptions?: AgentSettingsType['modelSettings']['providerOptions'];
+        }
+      | undefined;
+
+    // Map AI SDK v5 names back to UI names (maxOutputTokens -> maxTokens)
+    const { maxOutputTokens, ...restModelSettings } = (agentDefaultOptions?.modelSettings ?? {}) as {
+      maxOutputTokens?: number;
+      [key: string]: unknown;
+    };
+
+    return {
+      modelSettings: {
+        ...(restModelSettings as AgentSettingsType['modelSettings']),
+        // Only include properties if they have actual values (to not override fallback defaults)
+        ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
+        ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),
+        ...(agentDefaultOptions?.providerOptions !== undefined && {
+          providerOptions: agentDefaultOptions.providerOptions,
+        }),
+      },
+    };
   }, [agent]);
 
   if (isAgentLoading) {
     return null;
   }
-
-  const withSidebar = Boolean(memory?.result);
 
   const handleRefreshThreadList = () => {
     searchParams.delete('new');
@@ -72,33 +89,33 @@ function Agent() {
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
             <ThreadInputProvider>
-              <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-                {withSidebar && (
-                  <AgentSidebar
-                    agentId={agentId!}
-                    threadId={threadId!}
-                    threads={threads || []}
-                    isLoading={isThreadsLoading}
-                  />
-                )}
-
-                <div className="grid overflow-y-auto relative bg-surface1 py-4">
-                  <AgentChat
-                    key={threadId}
-                    agentId={agentId!}
-                    agentName={agent?.name}
-                    modelVersion={agent?.modelVersion}
-                    threadId={threadId}
-                    memory={memory?.result}
-                    refreshThreadList={handleRefreshThreadList}
-                    modelList={agent?.modelList}
-                    messageId={messageId}
-                    isNewThread={isNewThread}
-                  />
-                </div>
-
-                <AgentInformation agentId={agentId!} threadId={threadId!} />
-              </MainContentContent>
+              <AgentLayout
+                agentId={agentId!}
+                leftSlot={
+                  Boolean(memory?.result) && (
+                    <AgentSidebar
+                      agentId={agentId!}
+                      threadId={threadId!}
+                      threads={threads || []}
+                      isLoading={isThreadsLoading}
+                    />
+                  )
+                }
+                rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+              >
+                <AgentChat
+                  key={threadId}
+                  agentId={agentId!}
+                  agentName={agent?.name}
+                  modelVersion={agent?.modelVersion}
+                  threadId={threadId}
+                  memory={memory?.result}
+                  refreshThreadList={handleRefreshThreadList}
+                  modelList={agent?.modelList}
+                  messageId={messageId}
+                  isNewThread={isNewThread}
+                />
+              </AgentLayout>
             </ThreadInputProvider>
           </WorkingMemoryProvider>
         </AgentSettingsProvider>

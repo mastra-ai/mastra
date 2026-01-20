@@ -1,8 +1,10 @@
-import { SideDialog, type KeyValueListItemData, TextAndIcon, getShortId } from '@/components/ui/elements';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { type KeyValueListItemData } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanRecord } from '@mastra/core/storage';
-
-import { ListScoresResponse, type GetScorerResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 
@@ -62,7 +64,7 @@ export function SpanDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-        <button className="ml-auto mr-[2rem]" onClick={onViewToggle}>
+        <button className="ml-auto mr-8" onClick={onViewToggle}>
           <PanelTopIcon />
           <VisuallyHidden>Switch to dialog view</VisuallyHidden>
         </button>

@@ -1,6 +1,8 @@
 ---
-title: "Processors | Agents | Mastra Docs"
+title: "Processors | Agents"
 description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+packages:
+  - "@mastra/core"
 ---
 
 # Processors
@@ -11,6 +13,8 @@ Processors are configured as:
 
 - **`inputProcessors`**: Run before messages reach the language model.
 - **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
+
+You can use individual `Processor` objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
@@ -33,18 +37,17 @@ Mastra includes several processors for common use cases. You can also create cus
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
-```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -75,7 +78,7 @@ When memory is enabled on an agent, memory processors are automatically added to
 ```
 [Memory Processors] → [Your inputProcessors]
 ```
-Memory loads conversation history first, then your processors run.
+Memory loads message history first, then your processors run.
 
 **Output processors:**
 ```
@@ -91,7 +94,7 @@ Custom processors implement the `Processor` interface:
 
 ### Custom input processor
 
-```typescript title="src/mastra/processors/custom-input.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/custom-input.ts"
 import type {
   Processor,
   MastraDBMessage,
@@ -139,7 +142,7 @@ The framework handles both return formats, so modifying system messages is optio
 
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
-```typescript title="src/mastra/processors/system-trimmer.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/system-trimmer.ts"
 import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
 
 export class SystemTrimmer implements Processor {
@@ -172,7 +175,7 @@ This is useful for:
 
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
-```typescript title="src/mastra/processors/step-processor.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/step-processor.ts"
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
 
 export class DynamicModelProcessor implements Processor {
@@ -230,8 +233,7 @@ The method can return any combination of:
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
 ```typescript
-await agent.generate({
-  prompt: "Complex task",
+await agent.generate("Complex task", {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
       return { model: "openai/gpt-4o-mini" };
@@ -245,7 +247,7 @@ await agent.generate({
 
 ### Custom output processor
 
-```typescript title="src/mastra/processors/custom-output.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/custom-output.ts"
 import type {
   Processor,
   MastraDBMessage,
@@ -279,6 +281,70 @@ export class CustomOutputProcessor implements Processor {
 }
 ```
 
+#### Adding metadata in output processors
+
+You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
+
+```typescript title="src/mastra/processors/metadata-processor.ts"
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class MetadataProcessor implements Processor {
+  id = "metadata-processor";
+
+  async processOutputResult({
+    messages,
+  }: {
+    messages: MastraDBMessage[];
+  }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => {
+      if (msg.role === "assistant") {
+        return {
+          ...msg,
+          content: {
+            ...msg.content,
+            metadata: {
+              ...msg.content.metadata,
+              processedAt: new Date().toISOString(),
+              customData: "your data here",
+            },
+          },
+        };
+      }
+      return msg;
+    });
+  }
+}
+```
+
+Access the metadata with `generate()`:
+
+```typescript
+const result = await agent.generate("Hello");
+
+// The response includes uiMessages with processor-added metadata
+const assistantMessage = result.response?.uiMessages?.find((m) => m.role === "assistant");
+console.log(assistantMessage?.metadata?.customData);
+```
+
+Access the metadata when streaming:
+
+```typescript
+const stream = await agent.stream("Hello");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "finish") {
+    // Access response with processor-added metadata from the finish chunk
+    const uiMessages = chunk.payload.response?.uiMessages;
+    const assistantMessage = uiMessages?.find((m) => m.role === "assistant");
+    console.log(assistantMessage?.metadata?.customData);
+  }
+}
+
+// Or via the response promise after consuming the stream
+const response = await stream.response;
+console.log(response.uiMessages);
+```
+
 ## Built-in Utility Processors
 
 Mastra provides utility processors for common tasks:
@@ -290,14 +356,13 @@ Mastra provides utility processors for common tasks:
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
-```typescript copy showLineNumbers {9-12}
+```typescript {7-10}
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Ensure the total tokens don't exceed ~127k
     new TokenLimiter(127000),
@@ -307,7 +372,7 @@ const agent = new Agent({
 
 The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
 
-```typescript copy showLineNumbers {6-9}
+```typescript {6-9}
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
 const agent = new Agent({
@@ -325,14 +390,13 @@ const agent = new Agent({
 
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
-```typescript copy showLineNumbers {5-14}
+```typescript {7-16}
 import { Agent } from "@mastra/core/agent";
 import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Example 1: Remove all tool calls/results
     new ToolCallFilter(),
@@ -346,9 +410,87 @@ const agent = new Agent({
 });
 ```
 
-> **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+:::note
+
+The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+
+:::
+
+## Using workflows as processors
+
+You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
+
+```typescript title="src/mastra/processors/moderation-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { ProcessorStepSchema } from "@mastra/core/processors";
+import { Agent } from "@mastra/core/agent";
+
+// Create a workflow that runs multiple checks in parallel
+const moderationWorkflow = createWorkflow({
+  id: "moderation-pipeline",
+  inputSchema: ProcessorStepSchema,
+  outputSchema: ProcessorStepSchema,
+})
+  .then(createStep(new LengthValidator({ maxLength: 10000 })))
+  .parallel([
+    createStep(new PIIDetector({ strategy: "redact" })),
+    createStep(new ToxicityChecker({ threshold: 0.8 })),
+  ])
+  .commit();
+
+// Use the workflow as an input processor
+const agent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [moderationWorkflow],
+});
+```
+
+When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/v1/getting-started/studio).
+
+## Retry mechanism
+
+Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
+
+```typescript title="src/mastra/processors/quality-checker.ts"
+import type { Processor } from "@mastra/core";
+
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const qualityScore = await evaluateQuality(text);
+
+    if (qualityScore < 0.7 && retryCount < 3) {
+      // Request a retry with feedback for the LLM
+      abort("Response quality score too low. Please provide a more detailed answer.", {
+        retry: true,
+        metadata: { score: qualityScore },
+      });
+    }
+
+    return [];
+  }
+}
+
+const agent = new Agent({
+  id: "quality-agent",
+  name: "Quality Agent",
+  model: "openai/gpt-4o",
+  outputProcessors: [new QualityChecker()],
+  maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
+});
+```
+
+The retry mechanism:
+- Only works in `processOutputStep` and `processInputStep` methods
+- Replays the step with the abort reason added as context for the LLM
+- Tracks retry count via the `retryCount` parameter
+- Respects `maxProcessorRetries` limit on the agent
 
 ## Related documentation
 
 - [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
 - [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
+- [Processor Interface](/reference/v1/processors/processor-interface) - Full API reference for processors

@@ -3,7 +3,8 @@ import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/obse
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
-import { getExternalParentId, deepClean } from './base';
+import { getExternalParentId } from './base';
+import { deepClean, DEFAULT_DEEP_CLEAN_OPTIONS } from './serialization';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
@@ -195,6 +196,68 @@ describe('Span', () => {
       const foundStep = llmSpan.findParent(SpanType.WORKFLOW_STEP);
       expect(foundStep).toBeDefined();
       expect(foundStep?.name).toBe('step-2');
+
+      agentSpan.end();
+    });
+  });
+
+  describe('entity inheritance', () => {
+    it('should inherit entityId and entityName from parent span when not explicitly provided', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'agent-123',
+        entityName: 'MyAgent',
+        attributes: {},
+      });
+
+      const llmSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: { model: 'gpt-4' },
+      });
+
+      // MODEL_GENERATION should inherit entityId and entityName from AGENT_RUN
+      expect(llmSpan.entityId).toBe('agent-123');
+      expect(llmSpan.entityName).toBe('MyAgent');
+
+      agentSpan.end();
+    });
+
+    it('should allow child span to override inherited entityId and entityName', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'agent-123',
+        entityName: 'MyAgent',
+        attributes: {},
+      });
+
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        entityId: 'tool-456',
+        entityName: 'MyTool',
+        attributes: {},
+      });
+
+      // TOOL_CALL should use its own entityId and entityName
+      expect(toolSpan.entityId).toBe('tool-456');
+      expect(toolSpan.entityName).toBe('MyTool');
 
       agentSpan.end();
     });
@@ -522,7 +585,7 @@ describe('Span', () => {
         current = current.nested;
       }
 
-      const result = deepClean(deepObj, { maxDepth: 3 });
+      const result = deepClean(deepObj, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxDepth: 3 });
 
       expect(result.level).toBe(0);
       expect(result.nested.level).toBe(1);
@@ -532,6 +595,75 @@ describe('Span', () => {
         level: '[MaxDepth]',
         nested: '[MaxDepth]',
       });
+    });
+  });
+
+  describe('serializationOptions', () => {
+    it('should use custom maxStringLength from config', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test',
+        exporters: [testExporter],
+        serializationOptions: {
+          maxStringLength: 10,
+        },
+      });
+
+      const longString = 'a'.repeat(100);
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'test',
+        input: { data: longString },
+      });
+
+      // String should be truncated to 10 chars + truncation marker
+      expect(span.input.data.length).toBeLessThanOrEqual(25);
+      expect(span.input.data).toContain('[truncated]');
+      span.end();
+    });
+
+    it('should use default options when serializationOptions is not provided', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const longString = 'a'.repeat(2000);
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'test',
+        input: { data: longString },
+      });
+
+      // Default maxStringLength is 1024
+      expect(span.input.data.length).toBeLessThanOrEqual(1024 + 15);
+      expect(span.input.data).toContain('[truncated]');
+      span.end();
+    });
+
+    it('should respect custom maxDepth from config', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test',
+        exporters: [testExporter],
+        serializationOptions: {
+          maxDepth: 2,
+        },
+      });
+
+      const deepObj: any = { level: 0, nested: { level: 1, nested: { level: 2, nested: { level: 3 } } } };
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'test',
+        input: deepObj,
+      });
+
+      // At maxDepth 2, level 2 values should be [MaxDepth]
+      expect(span.input.level).toBe(0);
+      expect(span.input.nested.level).toBe(1);
+      expect(span.input.nested.nested.level).toBe('[MaxDepth]');
+      span.end();
     });
   });
 });

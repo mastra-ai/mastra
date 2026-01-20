@@ -1,6 +1,8 @@
 ---
 title: "Reference: Step Class | Workflows"
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
+packages:
+  - "@mastra/core"
 ---
 
 # Step Class
@@ -10,7 +12,7 @@ It can take either a tool or an agent as a parameter to automatically create a s
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -38,7 +40,7 @@ You can create a step directly from an agent. The step will use the agent's name
 
 ### Basic agent step
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from "../agents/test-agent";
 
 const agentStep = createStep(testAgent);
@@ -50,7 +52,7 @@ const agentStep = createStep(testAgent);
 
 Pass `structuredOutput` to have the agent return typed structured data:
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -206,10 +208,10 @@ const agentStep = createStep(testAgent, {
         "Request Context for dependency injection and contextual information.",
     },
     {
-      name: "runCount",
+      name: "retryCount",
       type: "number",
       description:
-        "The run count for this specific step, it automatically increases each time the step runs",
+        "The retry count for this specific step, it automatically increases each time the step is retried",
       isOptional: true,
     },
   ]}

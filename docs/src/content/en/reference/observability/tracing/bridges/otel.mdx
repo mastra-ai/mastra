@@ -1,6 +1,11 @@
 ---
 title: "Reference: OtelBridge | Observability"
 description: OpenTelemetry bridge for Tracing
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -150,8 +155,7 @@ The OtelBridge supports trace tagging for categorization and filtering. Tags are
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },

@@ -1,9 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
-import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
@@ -25,10 +24,7 @@ export function isControllerOpen(controller: ReadableStreamDefaultController<any
   return controller.desiredSize !== 0 && controller.desiredSize !== null;
 }
 
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
   models,
@@ -42,6 +38,7 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -62,6 +59,8 @@ export function workflowLoopStream<
               parts: [dataPart],
             },
             createdAt: new Date(),
+            threadId: _internal?.threadId,
+            resourceId: _internal?.resourceId,
           };
           messageList.add(message, 'response');
         }
@@ -82,6 +81,8 @@ export function workflowLoopStream<
         startTimestamp,
         streamState,
         agentId,
+        requireToolApproval,
+        toolCallConcurrency,
         ...rest,
       });
 
@@ -116,6 +117,7 @@ export function workflowLoopStream<
           from: ChunkFrom.AGENT,
           payload: {
             id: agentId,
+            messageId,
           },
         });
       }
@@ -144,22 +146,7 @@ export function workflowLoopStream<
 
       if (executionResult.status !== 'success') {
         if (executionResult.status === 'failed') {
-          // Temporary fix for cleaning of workflow result error message.
-          // executionResult.error is typed as Error but is actually a string and has "Error: Error: " prepended to the message.
-          // TODO: This string handling can be removed when the workflow execution result error type is fixed (issue #9348) -- https://github.com/mastra-ai/mastra/issues/9348
-          let executionResultError: string | Error = executionResult.error;
-          if (typeof executionResult.error === 'string') {
-            const prependedErrorString = 'Error: ';
-            if ((executionResult.error as string).startsWith(`${prependedErrorString}${prependedErrorString}`)) {
-              executionResultError = (executionResult.error as string).substring(
-                `${prependedErrorString}${prependedErrorString}`.length,
-              );
-            } else if ((executionResult.error as string).startsWith(prependedErrorString)) {
-              executionResultError = (executionResult.error as string).substring(prependedErrorString.length);
-            }
-          }
-
-          const error = getErrorFromUnknown(executionResultError, {
+          const error = getErrorFromUnknown(executionResult.error, {
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
@@ -175,15 +162,19 @@ export function workflowLoopStream<
           }
         }
 
+        if (executionResult.status !== 'suspended') {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        }
+
         controller.close();
         return;
       }
 
-      if (executionResult.result.stepResult?.reason === 'abort') {
-        controller.close();
-        return;
-      }
+      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
 
+      // Always emit finish chunk, even for abort (tripwire) cases
+      // This ensures the stream properly completes and all promises are resolved
+      // The tripwire/abort status is communicated through the stepResult.reason
       controller.enqueue({
         type: 'finish',
         runId,
@@ -192,7 +183,7 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'abort' for tripwires so the type is not compatible
+            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
             reason: executionResult.result.stepResult.reason,
           },
         },

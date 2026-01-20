@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.streamLegacy() (Legacy) | Streaming"
 description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.streamLegacy() (Legacy)
@@ -15,7 +17,7 @@ The `.streamLegacy()` method is the legacy version of the agent streaming API, u
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.streamLegacy("message for agent");
 ```
 
@@ -534,7 +536,7 @@ await agent.streamLegacy("message for agent");
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 await agent.streamLegacy("message for agent", {
   temperature: 0.7,
   maxSteps: 3,
@@ -550,7 +552,7 @@ await agent.streamLegacy("message for agent", {
 
 :::info
 
-The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.stream()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 

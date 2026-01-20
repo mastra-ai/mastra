@@ -1,6 +1,8 @@
 ---
 title: "Reference: ExtractParams | RAG"
 description: Documentation for metadata extraction configuration in Mastra.
+packages:
+  - "@mastra/rag"
 ---
 
 # ExtractParams
@@ -9,7 +11,7 @@ ExtractParams configures metadata extraction from document chunks using LLM anal
 
 ## Example
 
-```typescript showLineNumbers copy
+```typescript
 import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);
@@ -62,6 +64,13 @@ The `extract` parameter accepts the following fields:
       isOptional: true,
       description:
         "Enable keyword extraction. Set to true for default settings, or provide custom configuration.",
+    },
+    {
+      name: "schema",
+      type: "SchemaExtractArgs",
+      isOptional: true,
+      description:
+        "Enable structured metadata extraction using a Zod schema.",
     },
   ]}
 />
@@ -186,9 +195,40 @@ The `extract` parameter accepts the following fields:
   ]}
 />
 
+### SchemaExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "schema",
+      type: "ZodType",
+      isOptional: false,
+      description: "Zod schema defining the structure of the data to extract.",
+    },
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "AI SDK language model to use for extraction.",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "Instructions for the LLM on what to extract.",
+    },
+    {
+      name: "metadataKey",
+      type: "string",
+      isOptional: true,
+      description: "Key to nest extraction results under. If omitted, results are spread into the metadata object.",
+    },
+  ]}
+/>
+
 ## Advanced Example
 
-```typescript showLineNumbers copy
+```typescript
 import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);
@@ -219,6 +259,16 @@ const chunks = await doc.chunk({
       keywords: 5, // Extract 5 keywords
       promptTemplate: "Extract {maxKeywords} key terms from: {context}",
     },
+
+    // Schema extraction with Zod
+    schema: {
+        schema: z.object({
+            productName: z.string(),
+            category: z.enum(["electronics", "clothing"]),
+        }),
+        instructions: "Extract product information.",
+        metadataKey: "product",
+    },
   },
 });
 
@@ -227,7 +277,11 @@ const chunks = await doc.chunk({
 //   documentTitle: "AI in Modern Computing",
 //   sectionSummary: "Overview of AI concepts and their applications in computing",
 //   questionsThisExcerptCanAnswer: "1. What is machine learning?\n2. How do neural networks work?",
-//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
+//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data",
+//   product: {
+//     productName: "Neural Net 2000",
+//     category: "electronics"
+//   }
 // }
 ```
 

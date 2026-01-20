@@ -251,7 +251,7 @@ const longMessage =
 const result = await agent.generate(longMessage);
 
 if (result.tripwire) {
-  console.log('Request blocked:', result.tripwireReason);
+  console.log('Request blocked:', result.tripwire.reason);
 } else {
   console.log(result.text);
 }
@@ -278,7 +278,7 @@ When using `MessageLengthLimiter`, the processor:
 ### Blocked processing
 
 - **Exceeded limits**: Messages over the limit set `result.tripwire = true`
-- **Error details**: `result.tripwireReason` includes actual length and configured maximum
+- **Error details**: `result.tripwire.reason` includes actual length and configured maximum
 - **Immediate blocking**: Processing stops before reaching the language model
 - **No exceptions**: Check `result.tripwire` instead of using try/catch blocks
 

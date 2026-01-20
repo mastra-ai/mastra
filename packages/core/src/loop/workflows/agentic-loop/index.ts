@@ -1,6 +1,5 @@
-import type { StepResult, ToolSet } from 'ai-v5';
+import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
@@ -11,13 +10,12 @@ import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
-  extends LoopRun<Tools, OUTPUT> {
+interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 }
 
-export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
+export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
   const {
@@ -82,7 +80,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const currentStep: StepResult<Tools> = {
         content: currentContent,
         usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        // we need to cast this because we add 'abort' for tripwires
+        // we need to cast this because we add 'tripwire' and 'retry' for processor scenarios
         finishReason: (typedInputData.stepResult?.reason || 'unknown') as StepResult<Tools>['finishReason'],
         warnings: typedInputData.stepResult?.warnings || [],
         request: typedInputData.metadata?.request || {},
@@ -109,11 +107,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       // Only call stopWhen if we're continuing (not on the final step)
       if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
+        // Cast steps to any for v5/v6 StopCondition compatibility
+        // v5 and v6 StepResult types have minor differences (e.g., rawFinishReason, finishReason format)
+        // but are compatible at runtime for stop condition evaluation
+        const steps = accumulatedSteps as any;
         const conditions = await Promise.all(
           (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
-            return condition({
-              steps: accumulatedSteps,
-            });
+            return condition({ steps });
           }),
         );
 
@@ -125,7 +125,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         typedInputData.stepResult.isContinued = hasFinishedSteps ? false : typedInputData.stepResult.isContinued;
       }
 
-      if (typedInputData.stepResult?.reason !== 'abort') {
+      // Emit step-finish for all cases except tripwire without any steps
+      // When tripwire happens but we have steps (e.g., max retries exceeded), we still
+      // need to emit step-finish so the stream properly finishes with all step data
+      const hasSteps = (typedInputData.output?.steps?.length ?? 0) > 0;
+      const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
+
+      if (shouldEmitStepFinish) {
         // Only enqueue if controller is still open
         if (isControllerOpen(controller)) {
           controller.enqueue({

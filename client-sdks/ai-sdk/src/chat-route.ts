@@ -3,24 +3,25 @@ import type { AgentExecutionOptions } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type ChatStreamHandlerParams<
   UI_MESSAGE extends UIMessage,
-  OUTPUT extends OutputSchema = undefined,
-> = AgentExecutionOptions<OUTPUT, 'mastra'> & {
+  OUTPUT = undefined,
+> = AgentExecutionOptions<OUTPUT> & {
   messages: UI_MESSAGE[];
   resumeData?: Record<string, any>;
+  /** The trigger for the request - sent by AI SDK's useChat hook */
+  trigger?: 'submit-message' | 'regenerate-message';
 };
 
-export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined> = {
+export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
@@ -49,7 +50,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extend
  * }
  * ```
  */
-export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
   mastra,
   agentId,
   params,
@@ -59,7 +60,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
   sendReasoning = false,
   sendSources = false,
 }: ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
-  const { messages, resumeData, runId, requestContext, ...rest } = params;
+  const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
 
   if (resumeData && !runId) {
     throw new Error('runId is required when resumeData is provided');
@@ -74,6 +75,23 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
     throw new Error('Messages must be an array of UIMessage objects');
   }
 
+  // Capture the last assistant message ID for the stream response.
+  // This helps the frontend identify which message the response corresponds to.
+  let lastMessageId: string | undefined;
+  let messagesToSend = messages;
+
+  if (messages.length > 0) {
+    const lastMessage = messages[messages.length - 1]!;
+    if (lastMessage?.role === 'assistant') {
+      lastMessageId = lastMessage.id;
+
+      // For regeneration, remove the last assistant message so the LLM generates fresh text
+      if (trigger === 'regenerate-message') {
+        messagesToSend = messages.slice(0, -1);
+      }
+    }
+  }
+
   const mergedOptions = {
     ...defaultOptions,
     ...rest,
@@ -83,15 +101,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
 
   const result = resumeData
     ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
-    : await agentObj.stream<OUTPUT>(messages, mergedOptions);
-
-  let lastMessageId: string | undefined;
-  if (messages.length) {
-    const lastMessage = messages[messages.length - 1]!;
-    if (lastMessage?.role === 'assistant') {
-      lastMessageId = lastMessage.id;
-    }
-  }
+    : await agentObj.stream<OUTPUT>(messagesToSend, mergedOptions);
 
   return createUIMessageStream<UI_MESSAGE>({
     originalMessages: messages,
@@ -110,8 +120,8 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
   });
 }
 
-export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+export type chatRouteOptions<OUTPUT = undefined> = {
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -171,7 +181,7 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
  */
-export function chatRoute<OUTPUT extends OutputSchema = undefined>({
+export function chatRoute<OUTPUT = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
@@ -304,10 +314,17 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (contextRequestContext && defaultOptions?.requestContext) {
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
       }
 
       if (!agentToUse) {
@@ -319,8 +336,8 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         agentId: agentToUse,
         params: {
           ...params,
-          requestContext: contextRequestContext || params.requestContext,
-        },
+          requestContext: effectiveRequestContext,
+        } as any,
         defaultOptions,
         sendStart,
         sendFinish,

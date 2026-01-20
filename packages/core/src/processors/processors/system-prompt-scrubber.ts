@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
@@ -276,7 +276,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             })
           : baseSchema;
 
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         result = await this.detectionAgent.generate(text, {
           structuredOutput: {
             schema,

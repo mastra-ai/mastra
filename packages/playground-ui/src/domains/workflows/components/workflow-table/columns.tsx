@@ -12,11 +12,12 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
     header: 'Name',
     cell: ({ row }) => {
       const { Link, paths } = useLinkComponent();
+      const workflow = row.original;
 
       return (
         <EntryCell
           name={<Link href={paths.workflowLink(row.original.id)}>{row.original.name}</Link>}
-          description={undefined}
+          description={workflow.description}
           meta={undefined}
         />
       );
@@ -35,7 +36,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
       return (
         <Cell>
           <div className="flex justify-end items-center gap-2">
-            <Badge icon={<Footprints />} className="!h-button-md">
+            <Badge icon={<Footprints />} className="!h-form-sm">
               {stepsCount} step{stepsCount > 1 ? 's' : ''}
             </Badge>
           </div>

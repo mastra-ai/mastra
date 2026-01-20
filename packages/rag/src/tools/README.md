@@ -73,12 +73,12 @@ const chromaTool = createVectorQueryTool({
 You can also override database configurations at runtime using the runtime context:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/runtime-context';
 
-const runtimeContext = new RuntimeContext();
+const requestContext = new RequestContext();
 
 // Override Pinecone namespace at runtime
-runtimeContext.set('databaseConfig', {
+requestContext.set('databaseConfig', {
   pinecone: {
     namespace: 'runtime-namespace',
   },
@@ -87,7 +87,7 @@ runtimeContext.set('databaseConfig', {
 await vectorTool.execute({
   context: { queryText: 'search query' },
   mastra,
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -133,6 +133,50 @@ const config: DatabaseConfig = {
     probes: 5,
   },
 };
+```
+
+## Dynamic Vector Store for Multi-Tenant Applications
+
+For multi-tenant applications where each tenant has isolated data (e.g., separate PostgreSQL schemas), you can pass a resolver function instead of a static vector store:
+
+```typescript
+import { createVectorQueryTool, VectorStoreResolver } from '@mastra/rag/tools';
+import { PgVector } from '@mastra/pg';
+
+// Resolver function receives requestContext and mastra instance
+const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+  const tenantId = requestContext?.get('tenantId');
+
+  return new PgVector({
+    id: `pg-vector-${tenantId}`,
+    connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+    schemaName: `tenant_${tenantId}`, // Each tenant has their own schema
+  });
+};
+
+const vectorQueryTool = createVectorQueryTool({
+  indexName: 'embeddings',
+  model: embedModel,
+  vectorStore: vectorStoreResolver, // Dynamic resolution!
+});
+
+// Usage with tenant context
+const requestContext = new RequestContext();
+requestContext.set('tenantId', 'acme-corp');
+
+const result = await vectorQueryTool.execute({ queryText: 'search query', topK: 5 }, { requestContext });
+```
+
+The same pattern works with `createGraphRAGTool`:
+
+```typescript
+import { createGraphRAGTool } from '@mastra/rag/tools';
+
+const graphTool = createGraphRAGTool({
+  indexName: 'embeddings',
+  model: embedModel,
+  vectorStore: vectorStoreResolver,
+});
 ```
 
 ## Migration Guide

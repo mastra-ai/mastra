@@ -1,6 +1,9 @@
 ---
 title: "Snapshots | Workflows"
 description: "Learn how to save and resume workflow execution state with snapshots in Mastra"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
 ---
 
 # Snapshots
@@ -84,11 +87,11 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ## How snapshots are saved and retrieved
 
-Snapshots are saved to the configured storage system. By default, they use LibSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow’s `runId`.
+Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
 
 Read more about:
 
-- [LibSQL Storage](/reference/v1/storage/libsql)
+- [libSQL Storage](/reference/v1/storage/libsql)
 - [Upstash Storage](/reference/v1/storage/upstash)
 - [PostgreSQL Storage](/reference/v1/storage/postgresql)
 
@@ -114,8 +117,9 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 
 ```typescript
 const storage = mastra.getStorage();
+const workflowStore = await storage?.getStore('workflows');
 
-const snapshot = await storage!.loadWorkflowSnapshot({
+const snapshot = await workflowStore?.loadWorkflowSnapshot({
   runId: "<run-id>",
   workflowName: "<workflow-id>",
 });
@@ -127,57 +131,27 @@ console.log(snapshot);
 
 Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
 
-### LibSQL `@mastra/libsql`
-
-This example demonstrates how to use snapshots with LibSQL.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
+import { approvalWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
   }),
+  workflows: { approvalWorkflow },
 });
 ```
 
-### Upstash `@mastra/upstash`
-
-This example demonstrates how to use snapshots with Upstash.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { UpstashStore } from "@mastra/upstash";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new UpstashStore({
-  id: 'upstash-storage',
-    url: "<upstash-redis-rest-url>",
-    token: "<upstash-redis-rest-token>",
-  }),
-});
-```
-
-### Postgres `@mastra/pg`
-
-This example demonstrates how to use snapshots with PostgreSQL.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: "<database-url>",
-  }),
-});
-```
+- [libSQL Storage](/reference/v1/storage/libsql)
+- [PostgreSQL Storage](/reference/v1/storage/postgresql)
+- [MongoDB Storage](/reference/v1/storage/mongodb)
+- [Upstash Storage](/reference/v1/storage/upstash)
+- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
+- [DynamoDB](/reference/v1/storage/dynamodb)
+- [More storage providers](/docs/v1/memory/storage)
 
 ## Best practices
 
@@ -191,7 +165,7 @@ export const mastra = new Mastra({
 
 You can attach custom metadata when suspending a workflow by defining a `suspendSchema`. This metadata is stored in the snapshot and made available when the workflow is resumed.
 
-```typescript {30-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {30-34} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -240,7 +214,7 @@ const approvalStep = createStep({
 
 Use `resumeData` to pass structured input when resuming a suspended step. It must match the step’s `resumeSchema`.
 
-```typescript {14-20} showLineNumbers copy
+```typescript {14-20}
 const workflow = mastra.getWorkflow("approvalWorkflow");
 
 const run = await workflow.createRun();

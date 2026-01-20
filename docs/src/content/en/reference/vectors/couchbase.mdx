@@ -1,6 +1,8 @@
 ---
 title: "Reference: Couchbase Vector Store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+packages:
+  - "@mastra/couchbase"
 ---
 
 # Couchbase Vector Store
@@ -14,13 +16,13 @@ The `CouchbaseVector` class provides vector search using [Couchbase Vector Searc
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/couchbase@beta
 ```
 
 ## Usage Example
 
-```typescript copy
+```typescript
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
@@ -209,7 +211,7 @@ Returns information about the index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -307,7 +309,7 @@ Closes the Couchbase client connection. Should be called when done using the sto
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -320,7 +322,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my_index",

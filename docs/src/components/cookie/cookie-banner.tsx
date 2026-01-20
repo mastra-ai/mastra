@@ -16,55 +16,31 @@ export function CookieBanner({
 }: {
   onConsentChange: (consent: boolean) => void;
 }) {
-  const [showBanner, setShowBanner] = useState(false);
+  const [showBanner, setShowBanner] = useState(null);
   const isBrowser = useIsBrowser();
 
   // Try to use feature flag, but default to true if undefined
   // This ensures the banner works even if PostHog isn't properly initialized
   const featureFlag = useFeatureFlagEnabled("cookie-banner");
-  const banner = featureFlag !== undefined ? featureFlag : true;
+  const isInEU = featureFlag !== undefined ? featureFlag : false;
 
   useEffect(() => {
     if (!isBrowser) return;
 
-    const storedConsent = localStorage.getItem("cookie-consent");
-
-    // If feature flag is enabled and no consent stored, show banner
-    if (banner && !storedConsent) {
-      setShowBanner(true);
-      // Default to denied until user makes a choice
+    if (!isInEU) {
+      setShowBanner(false);
+      onConsentChange(true);
       window.gtag?.("consent", "update", {
-        analytics_storage: "denied",
-        ad_storage: "denied",
-        ad_user_data: "denied",
-        ad_personalization: "denied",
+        analytics_storage: "granted",
+        ad_storage: "granted",
+        ad_user_data: "granted",
+        ad_personalization: "granted",
       });
       return;
+    } else {
+      setShowBanner(true);
     }
-
-    // If we have stored consent, apply it
-    if (storedConsent) {
-      const isConsented = storedConsent === "true";
-      onConsentChange(isConsented);
-
-      if (isConsented) {
-        window.gtag?.("consent", "update", {
-          analytics_storage: "granted",
-          ad_storage: "granted",
-          ad_user_data: "granted",
-          ad_personalization: "granted",
-        });
-      } else {
-        window.gtag?.("consent", "update", {
-          analytics_storage: "denied",
-          ad_storage: "denied",
-          ad_user_data: "denied",
-          ad_personalization: "denied",
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [banner, isBrowser]);
+  }, [isInEU, isBrowser]);
 
   const handleAccept = () => {
     localStorage.setItem("cookie-consent", "true");
@@ -90,8 +66,8 @@ export function CookieBanner({
     setShowBanner(false);
   };
 
-  // Only show banner if both the feature flag is enabled and we should show it
-  if (!showBanner || !banner) return null;
+  if (showBanner === null) return null;
+  if (showBanner === false) return null;
 
   return (
     <div className="fixed shadow-[0_4px_24px_rgba(0,0,0,.1)] bottom-8 right-20 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 dark:border bg-white dark:bg-black p-4">

@@ -1,6 +1,9 @@
 ---
 title: "Reference: Answer Relevancy Scorer | Evals"
 description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Answer Relevancy Scorer
@@ -116,7 +119,7 @@ A relevancy score between 0 and 1:
 
 Evaluate agent responses for relevancy across different scenarios:
 
-```typescript title="src/example-answer-relevancy.ts" showLineNumbers copy
+```typescript title="src/example-answer-relevancy.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

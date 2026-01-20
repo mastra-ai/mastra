@@ -21,6 +21,7 @@ import {
   useWorkflows,
   useScorers,
 } from '@mastra/playground-ui';
+import { EntityType } from '@mastra/core/observability';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
@@ -60,20 +61,22 @@ export default function Observability() {
     error: TracesError,
     isError: isTracesError,
   } = useTraces({
-    filters:
-      selectedEntityOption?.type === 'all'
-        ? undefined
-        : {
-            entityId: selectedEntityOption?.value,
-            entityType: selectedEntityOption?.type,
-          },
-    dateRange:
-      selectedDateFrom && selectedDateTo
-        ? {
-            end: selectedDateTo,
-            start: selectedDateFrom,
-          }
-        : undefined,
+    filters: {
+      ...(selectedEntityOption?.type !== 'all' && {
+        entityId: selectedEntityOption?.value,
+        entityType: selectedEntityOption?.type,
+      }),
+      ...(selectedDateFrom && {
+        startedAt: {
+          start: selectedDateFrom,
+        },
+      }),
+      ...(selectedDateTo && {
+        endedAt: {
+          end: selectedDateTo,
+        },
+      }),
+    },
   });
 
   useEffect(() => {
@@ -86,13 +89,13 @@ export default function Observability() {
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
     value: value.id,
     label: value.name,
-    type: 'agent' as const,
+    type: EntityType.AGENT,
   }));
 
   const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
-    type: 'workflow' as const,
+    type: EntityType.WORKFLOW_RUN,
   }));
 
   const entityOptions: EntityOptions[] = [
@@ -176,7 +179,7 @@ export default function Observability() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title="Observability"
               description="Explore observability traces for your entities"

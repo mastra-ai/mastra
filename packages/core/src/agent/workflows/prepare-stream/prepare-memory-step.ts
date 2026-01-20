@@ -6,7 +6,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
@@ -33,12 +32,9 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
-interface PrepareMemoryStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
@@ -50,10 +46,7 @@ interface PrepareMemoryStepOptions<
   memory?: MastraMemory;
 }
 
-export function createPrepareMemoryStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareMemoryStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -63,7 +56,7 @@ export function createPrepareMemoryStep<
   instructions,
   memoryConfig,
   memory,
-}: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
+}: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),
@@ -88,7 +81,7 @@ export function createPrepareMemoryStep<
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
+        const { tripwire } = await capabilities.runInputProcessors({
           requestContext,
           tracingContext,
           messageList,
@@ -98,10 +91,7 @@ export function createPrepareMemoryStep<
           threadExists: false,
           thread: undefined,
           messageList,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          tripwire,
         };
       }
 
@@ -173,7 +163,7 @@ export function createPrepareMemoryStep<
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
+      const { tripwire } = await capabilities.runInputProcessors({
         requestContext,
         tracingContext,
         messageList,
@@ -183,10 +173,7 @@ export function createPrepareMemoryStep<
       return {
         thread: threadObject,
         messageList: messageList,
-        ...(tripwireTriggered && {
-          tripwire: true,
-          tripwireReason,
-        }),
+        tripwire,
         threadExists: !!existingThread,
       };
     },

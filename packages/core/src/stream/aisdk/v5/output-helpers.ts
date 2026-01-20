@@ -1,4 +1,15 @@
-import type { StepResult, ToolSet, StaticToolCall, StaticToolResult, DynamicToolCall, DynamicToolResult } from 'ai-v5';
+import type {
+  StepResult,
+  ToolSet,
+  StaticToolCall,
+  StaticToolResult,
+  DynamicToolCall,
+  DynamicToolResult,
+} from '@internal/ai-sdk-v5';
+import type { StepTripwireData } from '../../types';
+
+// ContentPart is not exported from ai, so we derive it from StepResult
+type ContentPart<TOOLS extends ToolSet> = StepResult<TOOLS>['content'][number];
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
   readonly content: StepResult<TOOLS>['content'];
   readonly finishReason: StepResult<TOOLS>['finishReason'];
@@ -7,6 +18,8 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   readonly request: StepResult<TOOLS>['request'];
   readonly response: StepResult<TOOLS>['response'];
   readonly providerMetadata: StepResult<TOOLS>['providerMetadata'];
+  /** Tripwire data if this step was rejected by a processor */
+  readonly tripwire?: StepTripwireData;
 
   constructor({
     content,
@@ -16,6 +29,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     request,
     response,
     providerMetadata,
+    tripwire,
   }: {
     content: StepResult<TOOLS>['content'];
     finishReason: StepResult<TOOLS>['finishReason'];
@@ -24,6 +38,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     request: StepResult<TOOLS>['request'];
     response: StepResult<TOOLS>['response'];
     providerMetadata: StepResult<TOOLS>['providerMetadata'];
+    tripwire?: StepTripwireData;
   }) {
     this.content = content;
     this.finishReason = finishReason;
@@ -32,9 +47,14 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     this.request = request;
     this.response = response;
     this.providerMetadata = providerMetadata;
+    this.tripwire = tripwire;
   }
 
   get text() {
+    // Return empty string if this step was rejected by a tripwire
+    if (this.tripwire) {
+      return '';
+    }
     return this.content
       .filter(part => part.type === 'text')
       .map(part => part.text)
@@ -53,7 +73,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     return this.content.filter(part => part.type === 'file').map(part => part.file);
   }
 
-  get sources() {
+  get sources(): Extract<ContentPart<TOOLS>, { type: 'source' }>[] {
     return this.content.filter(part => part.type === 'source');
   }
 

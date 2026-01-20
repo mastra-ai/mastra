@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
   QueryResult,
@@ -111,8 +111,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       } else if (isCloudSqlConfig(config)) {
         poolConfig = {
           ...config,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          max: config.pgPoolOptions?.max ?? 20,
+          idleTimeoutMillis: config.pgPoolOptions?.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         } as pg.PoolConfig;
@@ -307,9 +307,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     probes,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
     try {
-      if (!Number.isInteger(topK) || topK <= 0) {
-        throw new Error('topK must be a positive integer');
-      }
+      // Validate topK parameter
+      validateTopK('PG', topK);
       if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
         throw new Error('queryVector must be an array of finite numbers');
       }
@@ -407,6 +406,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     ids,
     deleteFilter,
   }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('PG', vectors, metadata, ids);
+
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction

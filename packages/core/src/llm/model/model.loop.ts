@@ -1,3 +1,5 @@
+import { stepCountIs } from '@internal/ai-sdk-v5';
+import type { Schema, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -7,8 +9,6 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { stepCountIs } from 'ai-v5';
-import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
@@ -138,7 +138,7 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+  stream<Tools extends ToolSet, OUTPUT = undefined>({
     resumeContext,
     runId,
     stopWhen = stepCountIs(5),
@@ -157,6 +157,7 @@ export class MastraLLMVNext extends MastraBase {
     tracingContext,
     messageList,
     requireToolApproval,
+    toolCallConcurrency,
     _internal,
     agentId,
     agentName,
@@ -164,6 +165,8 @@ export class MastraLLMVNext extends MastraBase {
     requestContext,
     methodType,
     includeRawChunks,
+    autoResumeSuspendedTools,
+    maxProcessorRetries,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -191,8 +194,6 @@ export class MastraLLMVNext extends MastraBase {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
       attributes: {
-        agentId,
-        agentName,
         model: firstModel.modelId,
         provider: firstModel.provider,
         streaming: true,
@@ -229,11 +230,14 @@ export class MastraLLMVNext extends MastraBase {
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
+        toolCallConcurrency,
         agentId,
         agentName,
         requestContext,
         methodType,
         includeRawChunks,
+        autoResumeSuspendedTools,
+        maxProcessorRetries,
         options: {
           ...options,
           onStepFinish: async props => {

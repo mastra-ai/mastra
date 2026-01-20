@@ -4,90 +4,183 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
+  ensureDate,
 } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
-import { ensureDate, getKey } from '../utils';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
+import { getKey } from '../utils';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
+export class WorkflowsUpstash extends WorkflowsStorage {
+  private client: Redis;
+  #db: UpstashDB;
+
+  constructor(config: UpstashDomainConfig) {
+    super();
+    const client = resolveUpstashConfig(config);
+    this.client = client;
+    this.#db = new UpstashDB({ client });
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      // Load existing snapshot
+      const existingSnapshot = await this.loadWorkflowSnapshot({
+        namespace: 'workflows',
+        workflowName,
+        runId,
+      });
+
+      let snapshot: WorkflowRunState;
+      if (!existingSnapshot) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      } else {
+        snapshot = existingSnapshot;
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Update the snapshot
+      await this.persistWorkflowSnapshot({
+        namespace: 'workflows',
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      return snapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId, stepId },
+        },
+        error,
+      );
     }
   }
 
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
-export class WorkflowsUpstash extends WorkflowsStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      // Load existing snapshot
+      const existingSnapshot = await this.loadWorkflowSnapshot({
+        namespace: 'workflows',
+        workflowName,
+        runId,
+      });
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
-    super();
-    this.client = client;
-    this.operations = operations;
-  }
+      if (!existingSnapshot || !existingSnapshot.context) {
+        return undefined;
+      }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
-  }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...existingSnapshot, ...opts };
+
+      // Update the snapshot
+      await this.persistWorkflowSnapshot({
+        namespace: 'workflows',
+        workflowName,
+        runId,
+        snapshot: updatedSnapshot,
+      });
+
+      return updatedSnapshot;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot(params: {
-    namespace: string;
+    namespace?: string;
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
           namespace,
@@ -95,8 +188,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: createdAt ?? new Date(),
+          updatedAt: updatedAt ?? new Date(),
         },
       });
     } catch (error) {
@@ -163,7 +256,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     try {
       const key =
         getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.operations.scanKeys(key);
+      const keys = await this.#db.scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
           const data = await this.client.get<{
@@ -179,7 +272,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       );
       const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
       if (!data) return null;
-      return parseWorkflowRun(data);
+      return this.parseWorkflowRun(data);
     } catch (error) {
       throw new MastraError(
         {
@@ -226,7 +319,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     page,
     resourceId,
     status,
-  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
         throw new MastraError(
@@ -259,7 +352,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           resourceId,
         });
       }
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.#db.scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
       if (keys.length === 0) {
@@ -280,7 +373,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
-        .map(w => parseWorkflowRun(w!))
+        .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
@@ -290,7 +383,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
               try {
                 snapshot = JSON.parse(snapshot) as WorkflowRunState;
               } catch (e) {
-                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                this.logger.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
                 return false;
               }
             }

@@ -1,20 +1,22 @@
 import { Icon } from '@/ds/icons';
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
 import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
 import { Txt, TxtProps } from '../Txt';
+import { transitions } from '@/ds/primitives/transitions';
 
 type AlertVariant = 'warning' | 'destructive' | 'info';
 
 export interface AlertProps {
   children: React.ReactNode;
   variant: AlertVariant;
+  className?: string;
 }
 
 const variantClasses: Record<AlertVariant, string> = {
-  warning: 'bg-yellow-900/20 border-sm border-yellow-200 text-yellow-200',
-  destructive: 'bg-red-900/20 border-sm border-red-200 text-red-200',
-  info: 'bg-blue-900/20 border-sm border-blue-200 text-blue-200',
+  warning: 'bg-accent6Darker border-accent6/30 text-accent6',
+  destructive: 'bg-accent2Darker border-accent2/30 text-accent2',
+  info: 'bg-accent5Darker border-accent5/30 text-accent5',
 };
 
 const variantIcons: Record<AlertVariant, React.FC<React.SVGProps<SVGSVGElement>>> = {
@@ -23,21 +25,29 @@ const variantIcons: Record<AlertVariant, React.FC<React.SVGProps<SVGSVGElement>>
   info: InfoIcon,
 };
 
-export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {
+export const Alert = ({ children, variant = 'destructive', className }: AlertProps) => {
   const Ico = variantIcons[variant];
   return (
-    <div className={clsx(variantClasses[variant], 'p-2 rounded-md')}>
+    <div
+      className={cn(
+        variantClasses[variant],
+        'p-3 rounded-md border shadow-sm',
+        transitions.all,
+        'animate-in fade-in-0 slide-in-from-top-2 duration-200',
+        className,
+      )}
+    >
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5">
+        <Icon className="mt-0.5 flex-shrink-0">
           <Ico />
         </Icon>
-        <div>{children}</div>
+        <div className="text-neutral4">{children}</div>
       </div>
     </div>
   );
 };
 
-export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as: TxtProps['as'] }) => {
+export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as?: TxtProps['as'] }) => {
   return (
     <Txt as={As} variant="ui-md" className="font-semibold">
       {children}

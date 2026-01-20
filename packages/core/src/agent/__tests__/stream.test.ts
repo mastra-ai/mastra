@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -22,13 +24,15 @@ import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } f
 
 config();
 
-function runStreamTest(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
 
   if (version === 'v1') {
     openaiModel = openai('gpt-4o-mini');
-  } else {
+  } else if (version === 'v2') {
     openaiModel = openai_v5('gpt-4o-mini');
+  } else {
+    openaiModel = openai_v6('gpt-4o-mini');
   }
 
   const dummyResponseModel = getDummyResponseModel(version);
@@ -112,8 +116,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         stream = await agent.stream(
           'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
           {
-            threadId: 'thread-partial-rescue',
-            resourceId: 'resource-partial-rescue',
+            memory: {
+              thread: 'thread-partial-rescue',
+              resource: 'resource-partial-rescue',
+            },
             savePerStep: true,
             onStepFinish: (result: any) => {
               if (result.toolCalls && result.toolCalls.length > 1) {
@@ -204,8 +210,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         });
       } else {
         stream = await agent.stream('Echo: Please echo this long message and explain why.', {
-          threadId: 'thread-echo',
-          resourceId: 'resource-echo',
+          memory: {
+            thread: 'thread-echo',
+            resource: 'resource-echo',
+          },
           savePerStep: true,
         });
       }
@@ -284,8 +292,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         stream = await agent.stream(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
-            threadId: 'thread-multi',
-            resourceId: 'resource-multi',
+            memory: {
+              thread: 'thread-multi',
+              resource: 'resource-multi',
+            },
             savePerStep: true,
           },
         );
@@ -330,8 +340,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         });
       } else {
         stream = await agent.stream('repeat tool calls', {
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
+          memory: {
+            thread: 'thread-1',
+            resource: 'resource-1',
+          },
         });
       }
 
@@ -347,7 +359,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       ).toBe(true);
     });
 
-    it.skipIf(version === 'v2')(
+    it.skipIf(version === 'v2' || version === 'v3')(
       'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
       async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
@@ -442,8 +454,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         });
       } else {
         stream = await agent.stream('no progress', {
-          threadId: 'thread-2',
-          resourceId: 'resource-2',
+          memory: {
+            thread: 'thread-2',
+            resource: 'resource-2',
+          },
         });
       }
 
@@ -486,8 +500,10 @@ function runStreamTest(version: 'v1' | 'v2') {
         });
       } else {
         stream = await agent.stream('interrupt before step', {
-          threadId: 'thread-3',
-          resourceId: 'resource-3',
+          memory: {
+            thread: 'thread-3',
+            resource: 'resource-3',
+          },
         });
       }
 
@@ -834,7 +850,8 @@ function runStreamTest(version: 'v1' | 'v2') {
         id: 'mock-message-history',
         processInput: async ({ messages }) => {
           // Fetch historical messages from the storage
-          const historicalMessagesResult = await mockMemory.storage.listMessages({
+          const memoryStore = await mockMemory.storage.getStore('memory');
+          const historicalMessagesResult = await memoryStore!.listMessages({
             threadId,
             resourceId,
             perPage: 10,
@@ -905,13 +922,15 @@ function runStreamTest(version: 'v1' | 'v2') {
           }),
           expect.objectContaining({
             role: 'assistant',
-            content: expect.any(String),
+            content: [expect.objectContaining({ type: 'text' })],
           }),
         ]);
       } else {
         firstResponse = await agent.generate('What is the weather in London?', {
-          threadId,
-          resourceId,
+          memory: {
+            thread: threadId,
+            resource: resourceId,
+          },
           onStepFinish: args => {
             args;
           },
@@ -972,88 +991,16 @@ function runStreamTest(version: 'v1' | 'v2') {
             type: 'function_call_output',
             output: expect.stringContaining(`It is currently 70 degrees and feels like 65 degrees.`),
           }),
-          expect.objectContaining({ role: 'assistant' }),
+          expect.objectContaining({ type: 'item_reference' }),
           expect.objectContaining({ role: 'user' }),
         ]);
       }
 
       expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
     }, 30_000);
-
-    it.skip('should include assistant messages in onFinish callback with aisdk format', async () => {
-      // NOTE: This test is skipped because format: 'aisdk' has been removed
-      const mockModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
-            { type: 'text-delta', id: 'text-2', delta: 'Nice to meet you!' },
-            {
-              type: 'finish',
-              id: '3',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          warnings: [],
-        }),
-      });
-
-      const agent = new Agent({
-        id: 'test-aisdk-onfinish',
-        name: 'Test AISDK onFinish',
-        model: mockModel,
-        instructions: 'You are a helpful assistant.',
-      });
-
-      let messagesInOnFinish: any[] | undefined;
-      let hasUserMessage = false;
-      let hasAssistantMessage = false;
-
-      const result = await agent.stream('Hello, please respond with a greeting.', {
-        format: 'aisdk',
-        onFinish: props => {
-          // Store the messages from onFinish
-          messagesInOnFinish = props.messages;
-
-          if (props.messages) {
-            props.messages.forEach((msg: any) => {
-              if (msg.role === 'user') hasUserMessage = true;
-              if (msg.role === 'assistant') hasAssistantMessage = true;
-            });
-          }
-        },
-      });
-
-      // Consume the stream
-      await result.consumeStream();
-
-      // Verify that messages were provided in onFinish
-      expect(messagesInOnFinish).toBeDefined();
-      expect(messagesInOnFinish).toBeInstanceOf(Array);
-
-      // response messages should not be user messages
-      expect(hasUserMessage).toBe(false);
-      // Verify that we have assistant messages
-      expect(hasAssistantMessage).toBe(true);
-
-      // Verify the assistant message content
-      const assistantMessage = messagesInOnFinish?.find((m: any) => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage?.content).toBeDefined();
-
-      // For the v2 model, the assistant message should contain the streamed text
-      if (typeof assistantMessage?.content === 'string') {
-        expect(assistantMessage.content).toContain('Hello!');
-      } else if (Array.isArray(assistantMessage?.content)) {
-        const textContent = assistantMessage.content.find((c: any) => c.type === 'text');
-        expect(textContent?.text).toContain('Hello!');
-      }
-    });
   });
 }
 
 runStreamTest('v1');
 runStreamTest('v2');
+runStreamTest('v3');

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Bash(npx prettier:*)",
+      "Bash(npm run docusaurus build:*)",
+      "Bash(rm ./src/content/**)",
+      "Bash(rm -rf ./src/content/**)",
+      "Fetch(**)"
+    ]
+  }
+}

@@ -71,6 +71,7 @@ async function writeMergedConfig(configPath: string, editor: Editor, versionTag?
 }
 
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+export const antigravityGlobalMCPConfigPath = path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json');
 export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
 export const vscodeMCPConfigPath = path.join(process.cwd(), '.vscode', 'mcp.json');
 export const vscodeGlobalMCPConfigPath = path.join(
@@ -82,10 +83,10 @@ export const vscodeGlobalMCPConfigPath = path.join(
       : path.join('.config', 'Code', 'User', 'settings.json'),
 );
 
-export const EDITOR = ['cursor', 'cursor-global', 'windsurf', 'vscode'] as const;
+export const EDITOR = ['cursor', 'cursor-global', 'windsurf', 'vscode', 'antigravity'] as const;
 export type Editor = (typeof EDITOR)[number];
 
-export const MCP_SERVER = ['cursor', 'cursor-global', 'windsurf'] as const;
+export const MCP_SERVER = ['cursor', 'cursor-global', 'windsurf', 'antigravity'] as const;
 export type MCPServer = (typeof MCP_SERVER)[number];
 
 /**
@@ -132,6 +133,14 @@ export async function installMastraDocsMCPServer({
     }
     await writeMergedConfig(windsurfGlobalMCPConfigPath, editor, versionTag);
   }
+
+  if (editor === `antigravity`) {
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor, versionTag);
+    if (alreadyInstalled) {
+      return;
+    }
+    await writeMergedConfig(antigravityGlobalMCPConfigPath, editor, versionTag);
+  }
 }
 
 export async function globalMCPIsAlreadyInstalled(editor: Editor, versionTag?: string) {
@@ -139,6 +148,8 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor, versionTag?: s
 
   if (editor === 'windsurf') {
     configPath = windsurfGlobalMCPConfigPath;
+  } else if (editor === 'antigravity') {
+    configPath = antigravityGlobalMCPConfigPath;
   } else if (editor === 'cursor-global') {
     configPath = cursorGlobalMCPConfigPath;
   } else if (editor === 'vscode') {

@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/abacus",
+          label: "Abacus",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -170,6 +175,16 @@ const sidebars = {
           type: "doc",
           id: "providers/fireworks-ai",
           label: "Fireworks AI",
+        },
+        {
+          type: "doc",
+          id: "providers/firmware",
+          label: "Firmware",
+        },
+        {
+          type: "doc",
+          id: "providers/friendli",
+          label: "Friendli",
         },
         {
           type: "doc",
@@ -263,8 +278,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/nano-gpt",
+          label: "NanoGPT",
+        },
+        {
+          type: "doc",
           id: "providers/nebius",
           label: "Nebius Token Factory",
+        },
+        {
+          type: "doc",
+          id: "providers/novita-ai",
+          label: "NovitaAI",
         },
         {
           type: "doc",
@@ -275,6 +300,11 @@ const sidebars = {
           type: "doc",
           id: "providers/ollama",
           label: "Ollama",
+        },
+        {
+          type: "doc",
+          id: "providers/ollama-cloud",
+          label: "Ollama Cloud",
         },
         {
           type: "doc",
@@ -298,6 +328,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/privatemode-ai",
+          label: "Privatemode AI",
+        },
+        {
+          type: "doc",
           id: "providers/requesty",
           label: "Requesty",
         },
@@ -310,6 +345,11 @@ const sidebars = {
           type: "doc",
           id: "providers/siliconflow",
           label: "SiliconFlow",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow-cn",
+          label: "SiliconFlow (China)",
         },
         {
           type: "doc",
@@ -338,6 +378,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/vivgrid",
+          label: "Vivgrid",
+        },
+        {
+          type: "doc",
           id: "providers/vultr",
           label: "Vultr",
         },
@@ -345,6 +390,11 @@ const sidebars = {
           type: "doc",
           id: "providers/wandb",
           label: "Weights & Biases",
+        },
+        {
+          type: "doc",
+          id: "providers/xiaomi",
+          label: "Xiaomi",
         },
         {
           type: "doc",

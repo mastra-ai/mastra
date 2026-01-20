@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { ChunkType, ChunkFrom } from '@mastra/core/stream';
@@ -154,7 +155,7 @@ describe('toUIMessage', () => {
           },
           step2: {
             status: 'failed',
-            error: 'error-message',
+            error: new Error('error-message'),
             payload: {},
             startedAt: Date.now(),
             endedAt: Date.now(),
@@ -184,13 +185,13 @@ describe('toUIMessage', () => {
           },
           step2: {
             status: 'failed',
-            error: 'error-message',
+            error: expect.any(Error),
             payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
         },
-        error: 'error-message',
+        error: expect.any(Error),
       });
     });
 
@@ -332,7 +333,7 @@ describe('toUIMessage', () => {
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
-      expect(result.suspended).toEqual([['step1', 'nested1', 'nested2']]);
+      expect((result as any).suspended).toEqual([['step1', 'nested1', 'nested2']]);
     });
 
     it('should handle workflow-step-waiting chunk', () => {
@@ -437,7 +438,7 @@ describe('toUIMessage', () => {
     it('should create a new assistant message for tripwire chunk', () => {
       const chunk: ChunkType = {
         type: 'tripwire',
-        payload: { tripwireReason: 'Security warning detected' },
+        payload: { reason: 'Security warning detected' },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
       };
@@ -456,10 +457,52 @@ describe('toUIMessage', () => {
         ],
         metadata: {
           ...baseMetadata,
-          status: 'warning',
+          status: 'tripwire',
+          tripwire: {
+            retry: undefined,
+            tripwirePayload: undefined,
+            processorId: undefined,
+          },
         },
       });
       expect(result[0].id).toMatch(/^tripwire-run-123/);
+    });
+
+    it('should include tripwire metadata when provided', () => {
+      const chunk: ChunkType = {
+        type: 'tripwire',
+        payload: {
+          reason: 'PII detected in message',
+          retry: false,
+          metadata: { detectedPII: ['email', 'phone'], severity: 'high' },
+          processorId: 'pii-detection',
+        },
+        runId: 'run-456',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'PII detected in message',
+          },
+        ],
+        metadata: {
+          ...baseMetadata,
+          status: 'tripwire',
+          tripwire: {
+            retry: false,
+            tripwirePayload: { detectedPII: ['email', 'phone'], severity: 'high' },
+            processorId: 'pii-detection',
+          },
+        },
+      });
     });
   });
 
@@ -521,11 +564,12 @@ describe('toUIMessage', () => {
         type: 'text',
         text: '',
         state: 'streaming',
+        textId: 'text-1',
         providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
 
-    it('should not add text part if one already exists for text-start', () => {
+    it('should add new text part even if one already exists for text-start', () => {
       const chunk: ChunkType = {
         type: 'text-start',
         payload: {
@@ -551,10 +595,17 @@ describe('toUIMessage', () => {
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
-      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts).toHaveLength(2);
       expect(result[0].parts[0]).toMatchObject({
         type: 'text',
         text: 'existing',
+      });
+      expect(result[0].parts[1]).toEqual({
+        type: 'text',
+        text: '',
+        state: 'streaming',
+        textId: 'text-1',
+        providerMetadata: undefined,
       });
     });
 
@@ -620,6 +671,7 @@ describe('toUIMessage', () => {
         type: 'text',
         text: 'Hello',
         state: 'streaming',
+        textId: 'text-1',
         providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
@@ -781,7 +833,7 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'search',
-          args: { query: 'weather' },
+          args: { query: 'weather' } as any,
           providerMetadata: { latency: { value: 100 } },
         },
         runId: 'run-123',
@@ -815,7 +867,7 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'calculator',
-          args: { a: 1, b: 2 },
+          args: { a: 1, b: 2 } as any,
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1560,6 +1612,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-1',
           toolName: 'dangerous-tool',
           args: { action: 'delete', target: 'database' },
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1578,7 +1631,7 @@ describe('toUIMessage', () => {
       expect(result[0].metadata).toEqual({
         mode: 'stream',
         requireApprovalMetadata: {
-          'call-1': {
+          'dangerous-tool': {
             toolCallId: 'call-1',
             toolName: 'dangerous-tool',
             args: { action: 'delete', target: 'database' },
@@ -1594,6 +1647,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-2',
           toolName: 'another-tool',
           args: { param: 'value' },
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1607,7 +1661,7 @@ describe('toUIMessage', () => {
           metadata: {
             mode: 'stream',
             requireApprovalMetadata: {
-              'call-1': {
+              'first-tool': {
                 toolCallId: 'call-1',
                 toolName: 'first-tool',
                 args: {},
@@ -1620,8 +1674,8 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       expect(result[0].metadata?.mode).toBe('stream');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-1');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-2');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('first-tool');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('another-tool');
     });
 
     it('should return unchanged if no assistant message', () => {
@@ -1631,6 +1685,7 @@ describe('toUIMessage', () => {
           toolCallId: 'call-1',
           toolName: 'tool',
           args: {},
+          resumeSchema: z.any(),
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -2256,6 +2311,254 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('toUIMessage - text parts merging bug (Issue #11577)', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    it('should create separate text parts for text streams before and after tool calls', () => {
+      // Simulate: "Let me search for that" -> tool call -> "Here's what I found"
+
+      // Step 1: Start message
+      let conversation = toUIMessage({
+        chunk: {
+          type: 'start',
+          payload: {},
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation: [],
+        metadata: baseMetadata,
+      });
+
+      // Step 2: First text stream starts - "Let me search"
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-start',
+          payload: { id: 'text-1' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: 'Let me search for that.' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Step 3: Tool call
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'search',
+            args: { query: 'test' } as any,
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Step 4: Tool result
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'search',
+            result: { data: 'result' },
+            isError: false,
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Step 5: Second text stream starts - "Here's what I found"
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-start',
+          payload: { id: 'text-2' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-2', text: "Here's what I found." },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Step 6: Finish
+      conversation = toUIMessage({
+        chunk: {
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Verify: Should have 2 separate text parts, not 1 merged text part
+      const lastMessage = conversation[conversation.length - 1];
+      const textParts = lastMessage.parts.filter((part: any) => part.type === 'text');
+
+      expect(textParts).toHaveLength(2);
+      expect(textParts[0]).toMatchObject({
+        type: 'text',
+        text: 'Let me search for that.',
+        state: 'done',
+      });
+      expect(textParts[1]).toMatchObject({
+        type: 'text',
+        text: "Here's what I found.",
+        state: 'done',
+      });
+    });
+
+    it('should handle multiple text streams between multiple tool calls', () => {
+      // Simulate: text1 -> tool1 -> text2 -> tool2 -> text3
+
+      let conversation = toUIMessage({
+        chunk: { type: 'start', payload: {}, runId: 'run-123', from: ChunkFrom.AGENT },
+        conversation: [],
+        metadata: baseMetadata,
+      });
+
+      // Text 1
+      conversation = toUIMessage({
+        chunk: { type: 'text-start', payload: { id: 'text-1' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        conversation,
+        metadata: baseMetadata,
+      });
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-1', text: 'First text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Tool 1
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-call',
+          payload: { toolCallId: 'call-1', toolName: 'tool1', args: {} as any },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-result',
+          payload: { toolCallId: 'call-1', toolName: 'tool1', result: 'result1', isError: false },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Text 2
+      conversation = toUIMessage({
+        chunk: { type: 'text-start', payload: { id: 'text-2' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        conversation,
+        metadata: baseMetadata,
+      });
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-2', text: 'Second text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Tool 2
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-call',
+          payload: { toolCallId: 'call-2', toolName: 'tool2', args: {} as any },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+      conversation = toUIMessage({
+        chunk: {
+          type: 'tool-result',
+          payload: { toolCallId: 'call-2', toolName: 'tool2', result: 'result2', isError: false },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Text 3
+      conversation = toUIMessage({
+        chunk: { type: 'text-start', payload: { id: 'text-3' }, runId: 'run-123', from: ChunkFrom.AGENT },
+        conversation,
+        metadata: baseMetadata,
+      });
+      conversation = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: { id: 'text-3', text: 'Third text' },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      // Verify: Should have 3 separate text parts
+      const lastMessage = conversation[conversation.length - 1];
+      const textParts = lastMessage.parts.filter((part: any) => part.type === 'text');
+
+      expect(textParts).toHaveLength(3);
+      expect((textParts[0] as any).text).toBe('First text');
+      expect((textParts[1] as any).text).toBe('Second text');
+      expect((textParts[2] as any).text).toBe('Third text');
     });
   });
 

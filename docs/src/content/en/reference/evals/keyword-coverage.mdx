@@ -1,6 +1,9 @@
 ---
 title: "Reference: Keyword Coverage Scorer | Evals"
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Keyword Coverage Scorer
@@ -106,7 +109,7 @@ The scorer handles several special cases:
 
 Evaluate keyword coverage between input queries and agent responses:
 
-```typescript title="src/example-keyword-coverage.ts" showLineNumbers copy
+```typescript title="src/example-keyword-coverage.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createKeywordCoverageScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

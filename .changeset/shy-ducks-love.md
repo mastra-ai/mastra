@@ -3,8 +3,6 @@
 '@mastra/core': patch
 ---
 
-Fix network data step formatting in AI SDK stream transformation
-
 Previously, network execution steps were not being tracked correctly in the AI SDK stream transformation. Steps were being duplicated rather than updated, and critical metadata like step IDs, iterations, and task information was missing or incorrectly structured.
 
 **Changes:**

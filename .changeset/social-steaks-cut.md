@@ -7,7 +7,7 @@ This now works, but zod validation will fail, please use `extend` instead
 
 Instead of 
 
-```
+```ts
 z.discriminatedUnion('type', [
   z.object({ type: z.literal('byCity'), city: z.string() }),
   z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }),
@@ -18,7 +18,7 @@ z.discriminatedUnion('type', [
 
 do
 
-```
+```ts
 z.discriminatedUnion('type', [
   z.object({ type: z.literal('byCity'), city: z.string() }).extend({ order: z.number() }),
   z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }).extend({ order: z.number() }),

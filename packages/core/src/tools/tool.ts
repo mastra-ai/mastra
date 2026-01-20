@@ -1,7 +1,8 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext } from './types';
+import type { SchemaWithValidation } from '../stream/base/schema';
+import type { SuspendOptions } from '../workflows';
+import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
@@ -57,17 +58,16 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  * ```
  */
 export class Tool<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspendSchema = unknown,
+  TResumeSchema = unknown,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>
-{
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -75,16 +75,16 @@ export class Tool<
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: TSchemaIn;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: TSchemaOut;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: TSuspendSchema;
+  suspendSchema?: SchemaWithValidation<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: TResumeSchema;
+  resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
    * Tool execution function
@@ -122,6 +122,26 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
+   * @example
+   * ```typescript
+   * mcp: {
+   *   annotations: {
+   *     title: 'Weather Lookup',
+   *     readOnlyHint: true,
+   *     destructiveHint: false
+   *   },
+   *   _meta: {
+   *     version: '1.0.0',
+   *     author: 'team@example.com'
+   *   }
+   * }
+   * ```
+   */
+  mcp?: MCPToolProperties;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -145,6 +165,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.mcp = opts.mcp;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
@@ -165,9 +186,9 @@ export class Tool<
               ...context,
               ...(context.suspend
                 ? {
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return context.suspend?.(args);
+                      return context.suspend?.(args, suspendOptions);
                     },
                   }
                 : {}),
@@ -231,18 +252,18 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.agent?.suspend?.(args);
+                      return baseContext.agent?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.agent,
               workflow: baseContext.workflow
                 ? {
                     ...baseContext.workflow,
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.workflow?.suspend?.(args);
+                      return baseContext.workflow?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.workflow,
@@ -363,35 +384,13 @@ export class Tool<
  */
 export function createTool<
   TId extends string = string,
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
-  TExecute extends ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId
-  >['execute'] = ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>['execute'],
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-    execute?: TExecute;
-  },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-      inputSchema: TSchemaIn;
-      outputSchema: TSchemaOut;
-      execute: (
-        inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-        context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : unknown>;
-    }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
-  return new Tool(opts) as any;
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId> {
+  return new Tool(opts);
 }

@@ -41,6 +41,7 @@ export interface ModelSettings {
   temperature?: number;
   topK?: number;
   topP?: number;
+  seed?: number;
   providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;

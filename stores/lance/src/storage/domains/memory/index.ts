@@ -11,24 +11,100 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsLance } from '../operations';
-import { getTableSchema, processResultWithTypeConversion } from '../utils';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
+import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
-  private operations: StoreOperationsLance;
-  constructor({ client, operations }: { client: Connection; operations: StoreOperationsLance }) {
+  #db: LanceDB;
+
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new LanceDB({ client });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Get messages to find their threadIds before deleting
+      for (const messageId of messageIds) {
+        const message = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id: messageId } });
+        if (message?.thread_id) {
+          threadIds.add(message.thread_id);
+        }
+      }
+
+      // Delete messages
+      const messagesTable = await this.client.openTable(TABLE_MESSAGES);
+      const idConditions = messageIds.map(id => `id = '${this.escapeSql(id)}'`).join(' OR ');
+      await messagesTable.delete(idConditions);
+
+      // Update thread timestamps using mergeInsert
+      const now = new Date().getTime();
+      const threadsTable = await this.client.openTable(TABLE_THREADS);
+      for (const threadId of threadIds) {
+        const thread = await this.getThreadById({ threadId });
+        if (thread) {
+          const record = {
+            id: threadId,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: JSON.stringify(thread.metadata),
+            createdAt: new Date(thread.createdAt).getTime(),
+            updatedAt: now,
+          };
+          await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Utility to escape single quotes in SQL strings
@@ -38,7 +114,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
+      const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
       if (!thread) {
         return null;
@@ -282,7 +358,8 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.getTime()
             : new Date(filter.dateRange.start).getTime();
-        conditions.push(`\`createdAt\` >= ${startTime}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`\`createdAt\` ${startOp} ${startTime}`);
       }
 
       if (filter?.dateRange?.end) {
@@ -290,7 +367,8 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.getTime()
             : new Date(filter.dateRange.end).getTime();
-        conditions.push(`\`createdAt\` <= ${endTime}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`\`createdAt\` ${endOp} ${endTime}`);
       }
 
       const whereClause = conditions.join(' AND ');
@@ -485,36 +563,85 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
 
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
+    const perPage = normalizePerPage(perPageInput, 100);
 
-      // When perPage is false (get all), ignore page offset
+    // Validate metadata keys to prevent prototype pollution and ensure safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    try {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
-      // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      // Build WHERE clause
+      const whereClauses: string[] = [];
 
-      // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
-      const records = await query.toArray();
+      if (filter?.resourceId) {
+        whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
+      }
+
+      const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
+
+      // Get ALL matching records (no limit/offset yet - need to filter metadata + sort)
+      // Lance doesn't support nested JSON path queries in SQL WHERE clause
+      const query = whereClause ? table.query().where(whereClause) : table.query();
+      let records = await query.toArray();
+
+      // Apply metadata filters in-memory (AND logic)
+      // Lance stores metadata as a JSON column, not flattened fields
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        records = records.filter((record: any) => {
+          if (!record.metadata) return false;
+
+          // Handle both object and stringified JSON metadata
+          let recordMeta: Record<string, unknown>;
+          if (typeof record.metadata === 'string') {
+            try {
+              recordMeta = JSON.parse(record.metadata);
+            } catch {
+              return false;
+            }
+          } else {
+            recordMeta = record.metadata;
+          }
+
+          // Check all metadata filters match (AND logic)
+          return Object.entries(filter.metadata!).every(([key, value]) => recordMeta[key] === value);
+        });
+      }
+
+      const total = records.length;
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
@@ -550,7 +677,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -681,7 +808,7 @@ export class StoreMemoryLance extends MemoryStorage {
         const { id, ...updates } = updateData;
 
         // Get the existing message
-        const existingMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const existingMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (!existingMessage) {
           this.logger.warn('Message not found for update', { id });
           continue;
@@ -730,10 +857,10 @@ export class StoreMemoryLance extends MemoryStorage {
         }
 
         // Update the message using merge insert
-        await this.operations.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
+        await this.#db.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
 
         // Get the updated message
-        const updatedMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const updatedMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (updatedMessage) {
           updatedMessages.push(this.parseMessageData(updatedMessage));
         }
@@ -741,7 +868,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.operations.insert({
+        await this.#db.insert({
           tableName: TABLE_THREADS,
           record: { id: threadId, updatedAt: Date.now() },
         });
@@ -763,7 +890,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const resource = await this.operations.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
+      const resource = await this.#db.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
 
       if (!resource) {
         return null;

@@ -7,19 +7,65 @@ export const threadIdPathParams = z.object({
 });
 
 /**
- * Common query parameter: optional agent ID
+ * Common query parameter: required agent ID
  */
 export const agentIdQuerySchema = z.object({
   agentId: z.string(),
 });
 
 /**
- * Storage order by configuration
+ * Common query parameter: optional agent ID
+ * Used for read operations that can fall back to storage when agentId is not provided
  */
-const storageOrderBySchema = z.object({
-  field: z.enum(['createdAt', 'updatedAt']).optional(),
-  direction: z.enum(['ASC', 'DESC']).optional(),
+export const optionalAgentIdQuerySchema = z.object({
+  agentId: z.string().optional(),
 });
+
+/**
+ * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
+ * Handles JSON parsing from query strings
+ */
+const storageOrderBySchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      field: z.enum(['createdAt', 'updatedAt']).optional(),
+      direction: z.enum(['ASC', 'DESC']).optional(),
+    })
+    .optional(),
+);
+
+/**
+ * Storage order by configuration for messages (only have createdAt)
+ * Handles JSON parsing from query strings
+ */
+const messageOrderBySchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      field: z.enum(['createdAt']).optional(),
+      direction: z.enum(['ASC', 'DESC']).optional(),
+    })
+    .optional(),
+);
 
 /**
  * Include schema for message listing - handles JSON parsing from query strings
@@ -30,7 +76,8 @@ const includeSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.array will reject string type)
+        return val;
       }
     }
     return val;
@@ -56,7 +103,8 @@ const filterSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.object will reject string type)
+        return val;
       }
     }
     return val;
@@ -69,6 +117,7 @@ const filterSchema = z.preprocess(
           end: z.coerce.date().optional(),
         })
         .optional(),
+      roles: z.array(z.string()).optional(),
     })
     .optional(),
 );
@@ -81,7 +130,8 @@ const memoryConfigSchema = z.preprocess(val => {
     try {
       return JSON.parse(val);
     } catch {
-      return undefined;
+      // Return invalid string to fail validation (z.record will reject string type)
+      return val;
     }
   }
   return val;
@@ -127,25 +177,44 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/threads
+ * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string(),
-  resourceId: z.string(),
-  orderBy: storageOrderBySchema.optional(),
+  agentId: z.string().optional(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
+  orderBy: storageOrderBySchema,
 });
 
 /**
  * GET /api/memory/threads/:threadId
+ * agentId is optional - can use storage fallback when not provided
  */
-export const getThreadByIdQuerySchema = agentIdQuerySchema;
+export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /api/memory/threads/:threadId/messages
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
 });
@@ -170,25 +239,44 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads
+ * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string(),
-  resourceId: z.string(),
-  orderBy: storageOrderBySchema.optional(),
+  agentId: z.string().optional(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
+  orderBy: storageOrderBySchema,
 });
 
 /**
  * GET /api/memory/network/threads/:threadId
+ * agentId is optional - can use storage fallback when not provided
  */
-export const getThreadByIdNetworkQuerySchema = agentIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads/:threadId/messages
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
 });
@@ -358,4 +446,34 @@ export const searchMemoryResponseSchema = z.object({
   query: z.string(),
   searchScope: z.string().optional(),
   searchType: z.string().optional(),
+});
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadBodySchema = z.object({
+  newThreadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  title: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  options: z
+    .object({
+      messageLimit: z.number().optional(),
+      messageFilter: z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+          messageIds: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadResponseSchema = z.object({
+  thread: threadSchema,
+  clonedMessages: z.array(messageSchema),
 });

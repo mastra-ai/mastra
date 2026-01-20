@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-feat: Composite auth implementation
+Composite auth implementation

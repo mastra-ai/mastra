@@ -1,6 +1,8 @@
 ---
 title: "Reference: Moderation Processor | Processors"
 description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
+packages:
+  - "@mastra/core"
 ---
 
 # ModerationProcessor
@@ -9,7 +11,7 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
@@ -113,7 +115,7 @@ const processor = new ModerationProcessor({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
       description: "Processes input messages to moderate content before sending to LLM",
       isOptional: false,
     },
@@ -130,7 +132,7 @@ const processor = new ModerationProcessor({
 
 ### Input processing
 
-```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
@@ -155,7 +157,7 @@ export const agent = new Agent({
 
 When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
 
-```typescript title="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/output-moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
 

@@ -3,12 +3,12 @@ import type { BaseChunkOptions, CharacterChunkOptions, RecursiveChunkOptions } f
 
 import { TextTransformer } from './text';
 
-function splitTextWithRegex(text: string, separator: string, keepSeparator: boolean | 'start' | 'end'): string[] {
+function splitTextWithRegex(text: string, separator: string, separatorPosition?: 'start' | 'end'): string[] {
   if (!separator) {
     return text.split('');
   }
 
-  if (!keepSeparator) {
+  if (!separatorPosition) {
     return text.split(new RegExp(separator)).filter(s => s !== '');
   }
 
@@ -20,7 +20,7 @@ function splitTextWithRegex(text: string, separator: string, keepSeparator: bool
   const splits = text.split(new RegExp(`(${separator})`));
   const result: string[] = [];
 
-  if (keepSeparator === 'end') {
+  if (separatorPosition === 'end') {
     // Process all complete pairs
     for (let i = 0; i < splits.length - 1; i += 2) {
       if (i + 1 < splits.length) {
@@ -62,7 +62,7 @@ export class CharacterTransformer extends TextTransformer {
     // First, split the text into initial chunks
     const separator = this.isSeparatorRegex ? this.separator : this.separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const initialSplits = splitTextWithRegex(text, separator, this.keepSeparator);
+    const initialSplits = splitTextWithRegex(text, separator, this.separatorPosition);
 
     // If length of any split is greater than chunk size, perform additional splitting
     const chunks: string[] = [];
@@ -140,10 +140,10 @@ export class RecursiveCharacterTransformer extends TextTransformer {
 
     const _separator = this.isSeparatorRegex ? separator : separator?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const splits = splitTextWithRegex(text, _separator, this.keepSeparator);
+    const splits = splitTextWithRegex(text, _separator, this.separatorPosition);
 
     const goodSplits: string[] = [];
-    const mergeSeparator = this.keepSeparator ? '' : separator;
+    const mergeSeparator = this.separatorPosition ? '' : separator;
 
     for (const s of splits) {
       if (this.lengthFunction(s) < this.maxSize) {

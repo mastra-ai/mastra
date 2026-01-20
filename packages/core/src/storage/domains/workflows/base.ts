@@ -1,8 +1,8 @@
-import { MastraBase } from '../../../base';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import { StorageDomain } from '../base';
 
-export abstract class WorkflowsStorage extends MastraBase {
+export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',
@@ -31,13 +31,7 @@ export abstract class WorkflowsStorage extends MastraBase {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined>;
 
   abstract persistWorkflowSnapshot(_: {
@@ -45,6 +39,8 @@ export abstract class WorkflowsStorage extends MastraBase {
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void>;
 
   abstract loadWorkflowSnapshot({

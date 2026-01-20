@@ -1,6 +1,10 @@
 ---
 title: "Reference: voice.connect() | Voice"
 description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.connect()
@@ -100,7 +104,7 @@ import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 const realtimeVoice = new OpenAIRealtimeVoice();
 const voice = new CompositeVoice({
-  realtimeProvider: realtimeVoice,
+  realtime: realtimeVoice,
 });
 // This will use the OpenAIRealtimeVoice provider
 await voice.connect();

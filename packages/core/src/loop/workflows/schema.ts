@@ -5,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
+import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
   StepResult,
   ModelMessage,
@@ -18,13 +18,13 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
   GeneratedFile,
-} from 'ai-v5';
+} from '@internal/ai-sdk-v5';
 import z from 'zod';
-import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
-  reason: LanguageModelV2FinishReason | 'abort';
+  /** Includes 'tripwire' and 'retry' for processor scenarios */
+  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
   logprobs?: LanguageModelV1LogProbs;
@@ -34,7 +34,7 @@ export interface LLMIterationStepResult {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   text?: string;
   reasoning?: ReasoningPart[];
   reasoningText?: string;
@@ -48,7 +48,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   dynamicToolResults?: DynamicToolResult[];
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
 }
 
 export interface LLMIterationMetadata {
@@ -66,7 +66,7 @@ export interface LLMIterationMetadata {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   messageId: string;
   messages: {
     all: ModelMessage[];
@@ -76,14 +76,24 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extend
   output: LLMIterationOutput<Tools, OUTPUT>;
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Used to enforce maxProcessorRetries limit.
+   */
+  processorRetryCount?: number;
+  /**
+   * Feedback message from processor to be added as system message on retry.
+   * This is passed through workflow state so it survives the system message reset.
+   */
+  processorRetryFeedback?: string;
 }
 
 // Zod schemas for common types used in validation
 
 const languageModelUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
 });
@@ -139,6 +149,8 @@ export const llmIterationOutputSchema = z.object({
     request: z.record(z.any()).optional(),
   }),
   stepResult: llmIterationStepResultSchema,
+  processorRetryCount: z.number().optional(),
+  processorRetryFeedback: z.string().optional(),
 });
 
 export const toolCallInputSchema = z.object({

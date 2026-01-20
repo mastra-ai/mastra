@@ -1,11 +1,11 @@
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { TracingContext } from '../../observability';
-import type { RequestContext } from '../../request-context';
+import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessInputArgs, ProcessInputResult, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -30,10 +30,13 @@ export interface TokenLimiterOptions {
 }
 
 /**
- * Output processor that limits the number of tokens in generated responses.
- * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
+ * Processor that limits the number of tokens in messages.
+ *
+ * Can be used as:
+ * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
+ * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter'> {
+export class TokenLimiterProcessor implements Processor<'token-limiter', { systemTokens: number; limit: number }> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoder: Tiktoken;
@@ -65,41 +68,53 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
    * Process input messages to limit them to the configured token limit.
    * This filters historical messages to fit within the token budget,
    * prioritizing the most recent messages.
+   *
+   * Uses messageList.get.all.db() to access ALL messages (memory + input),
+   * not just the input messages passed in the messages parameter.
+   * System messages are accessed via args.systemMessages (they're stored separately).
+   * Removes filtered messages directly from messageList and returns it.
    */
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
+    const { messageList, systemMessages: coreSystemMessages } = args;
+
+    // Use messageList to get ALL messages (memory + input)
+    // Note: System messages are NOT in messageList.get.all.db() - they're in args.systemMessages
+    const messages = messageList?.get.all.db() ?? args.messages;
     const limit = this.maxTokens;
 
-    // If no messages or empty array, return as-is
+    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
     if (!messages || messages.length === 0) {
-      return messages;
+      throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
+        retry: false,
+      });
     }
 
-    // Separate system messages from other messages
-    const systemMessages = messages.filter(msg => msg.role === 'system');
-    const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
-
-    // Calculate token count for system messages (always included)
+    // Calculate token count for system messages (always included, never filtered)
+    // System messages come from args.systemMessages, not from the messages array
     let systemTokens = 0;
-    for (const msg of systemMessages) {
-      systemTokens += this.countInputMessageTokens(msg);
+    if (coreSystemMessages && coreSystemMessages.length > 0) {
+      for (const msg of coreSystemMessages) {
+        systemTokens += this.countCoreSystemMessageTokens(msg);
+      }
     }
 
-    // If system messages alone exceed the limit (accounting for conversation overhead), return only system messages
+    // All messages from messageList.get.all.db() are non-system messages
+    const nonSystemMessages = messages;
+
+    // If system messages alone exceed the limit (accounting for conversation overhead),
+    // throw TripWire - can't send LLM a request with only system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
-      return systemMessages;
+      throw new TripWire(
+        'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
+        { retry: false, metadata: { systemTokens, limit } },
+      );
     }
 
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
     // Process non-system messages in reverse order (newest first)
-    const result: MastraDBMessage[] = [];
+    const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
     // Iterate through messages in reverse to prioritize recent messages
@@ -110,14 +125,44 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
       const messageTokens = this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        result.unshift(message); // Add to beginning to maintain order
+        messagesToKeep.unshift(message); // Add to beginning to maintain order
         currentTokens += messageTokens;
       }
       // Continue checking all messages, don't break early
     }
 
-    // Return system messages followed by the filtered non-system messages
-    return [...systemMessages, ...result];
+    // If we have messageList, remove filtered messages directly and return messageList
+    if (messageList) {
+      const keepIds = new Set(messagesToKeep.map(m => m.id));
+      const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+      }
+      return messageList;
+    }
+
+    // Fallback: return array of filtered non-system messages
+    return messagesToKeep;
+  }
+
+  /**
+   * Count tokens for a system message (CoreMessageV4 from args.systemMessages).
+   * This method only accepts system messages with string content and will throw otherwise.
+   */
+  private countCoreSystemMessageTokens(message: CoreMessageV4): number {
+    if (message.role !== 'system') {
+      throw new Error(
+        `countCoreSystemMessageTokens can only be used with system messages, received role: ${message.role}`,
+      );
+    }
+
+    if (typeof message.content !== 'string') {
+      throw new Error('countCoreSystemMessageTokens: System message content must be a string');
+    }
+
+    const tokenString = message.role + message.content;
+
+    return this.encoder.encode(tokenString).length + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
   /**

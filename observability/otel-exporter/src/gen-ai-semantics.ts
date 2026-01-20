@@ -17,7 +17,6 @@ import type {
   ModelGenerationAttributes,
   ToolCallAttributes,
   UsageStats,
-  WorkflowRunAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
 import {
@@ -133,31 +132,15 @@ function sanitizeSpanName(name: string): string {
   return name.replace(/[^\p{L}\p{N}._ -]/gu, '');
 }
 
-function getSpanIdentifier(span: AnyExportedSpan): string | null {
+function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
     case SpanType.MODEL_GENERATION: {
       const attrs = span.attributes as ModelGenerationAttributes;
-      return attrs?.model ?? 'unknown';
-    }
-
-    case SpanType.TOOL_CALL:
-    case SpanType.MCP_TOOL_CALL: {
-      const attrs = span.attributes as ToolCallAttributes | MCPToolCallAttributes;
-      return attrs?.toolId ?? 'unknown';
-    }
-
-    case SpanType.AGENT_RUN: {
-      const attrs = span.attributes as AgentRunAttributes;
-      return attrs?.agentName ?? attrs?.agentId ?? 'unknown';
-    }
-
-    case SpanType.WORKFLOW_RUN: {
-      const attrs = span.attributes as WorkflowRunAttributes;
-      return attrs?.workflowId ?? 'unknown';
+      return attrs?.model;
     }
 
     default:
-      return null;
+      return span.entityName ?? span.entityId;
   }
 }
 
@@ -232,12 +215,14 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
 
     // Agent context - allows correlating model generation with the agent that invoked it
-    if (modelAttrs.agentId) {
-      attributes[ATTR_GEN_AI_AGENT_ID] = modelAttrs.agentId;
+    if (span.entityId) {
+      attributes[ATTR_GEN_AI_AGENT_ID] = span.entityId;
     }
-    if (modelAttrs.agentName) {
-      attributes[ATTR_GEN_AI_AGENT_NAME] = modelAttrs.agentName;
+
+    if (span.entityName) {
+      attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
+
     // Token usage - use OTEL standard naming + OpenInference conventions
     Object.assign(attributes, formatUsageMetrics(modelAttrs.usage));
 
@@ -291,26 +276,25 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
   // Add tool-specific attributes using OTEL conventions
   if ((span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) && span.attributes) {
-    const toolAttrs = span.attributes as ToolCallAttributes | MCPToolCallAttributes;
-
     // Tool identification
-    if (toolAttrs.toolId) {
-      attributes[ATTR_GEN_AI_TOOL_NAME] = toolAttrs.toolId;
-    }
+    attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
     //TODO:
     // attributes['gen_ai.tool.call.id'] = call_mszuSIzqtI65i1wAUOE8w5H4
-    // attributes['gen_ai.tool.type'] = function; extension; datastore
 
     // MCP-specific attributes
     if (span.type === SpanType.MCP_TOOL_CALL) {
-      const mcpAttrs = toolAttrs as MCPToolCallAttributes;
+      const mcpAttrs = span.attributes as MCPToolCallAttributes;
       if (mcpAttrs.mcpServer) {
         attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
       }
     } else {
-      if ((toolAttrs as ToolCallAttributes).toolDescription) {
-        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = (toolAttrs as ToolCallAttributes).toolDescription;
+      const toolAttrs = span.attributes as ToolCallAttributes;
+      if (toolAttrs.toolDescription) {
+        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+      }
+      if (toolAttrs.toolType) {
+        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
       }
     }
   }
@@ -318,11 +302,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   // Add agent-specific attributes
   if (span.type === SpanType.AGENT_RUN && span.attributes) {
     const agentAttrs = span.attributes as AgentRunAttributes;
-    if (agentAttrs.agentId) {
-      attributes[ATTR_GEN_AI_AGENT_ID] = agentAttrs.agentId;
+    if (span.entityId) {
+      attributes[ATTR_GEN_AI_AGENT_ID] = span.entityId;
     }
-    if (agentAttrs.agentName) {
-      attributes[ATTR_GEN_AI_AGENT_NAME] = agentAttrs.agentName;
+    if (span.entityName) {
+      attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
     if (agentAttrs.conversationId) {
       attributes[ATTR_GEN_AI_CONVERSATION_ID] = agentAttrs.conversationId;

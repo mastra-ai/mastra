@@ -4,10 +4,10 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { LanguageModelV3FinishReason, LanguageModelV3Usage } from '@ai-sdk/provider-v6';
+import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
-import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
-import type { ChunkType } from '../../types';
+import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
@@ -15,7 +15,8 @@ export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
+      /** Includes 'tripwire' and 'retry' for processor scenarios */
+      finishReason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
@@ -220,14 +221,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: {
           stepResult: {
-            reason: value.finishReason,
+            reason: normalizeFinishReason(value.finishReason),
           },
           output: {
-            usage: {
-              ...(value.usage ?? {}),
-              totalTokens:
-                value?.usage?.totalTokens ?? (value.usage?.inputTokens ?? 0) + (value.usage?.outputTokens ?? 0),
-            },
+            // Normalize usage to handle both V2 (flat) and V3 (nested) formats
+            usage: normalizeUsage(value.usage),
           },
           metadata: {
             providerMetadata: value.providerMetadata,
@@ -253,87 +251,14 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       };
   }
   return;
-  // if (value.type === 'step-start') {
-  //     return {
-  //         type: 'step-start',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             messageId: value.messageId,
-  //             request: { body: JSON.parse(value.request!.body ?? '{}') },
-  //             warnings: value.warnings,
-  //         },
-  //     };
-  // } else if (value.type === 'tool-error') {
-  //     return {
-  //         type: 'tool-error',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             id: value.id,
-  //             providerMetadata: value.providerMetadata,
-  //             toolCallId: value.toolCallId,
-  //             toolName: value.toolName,
-  //             args: value.args,
-  //             error: value.error,
-  //         },
-  //     };
-  // } else if (value.type === 'step-finish') {
-  //     return {
-  //         type: 'step-finish',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             id: value.id,
-  //             providerMetadata: value.providerMetadata,
-  //             reason: value.finishReason,
-  //             totalUsage: value.usage,
-  //             response: value.response,
-  //             messageId: value.messageId,
-  //         },
-  //     };
-  // else if (value.type === 'reasoning-signature') {
-  //     return {
-  //         type: 'reasoning-signature',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             id: value.id,
-  //             signature: value.signature,
-  //             providerMetadata: value.providerMetadata,
-  //         },
-  //     };
-  // } else if (value.type === 'redacted-reasoning') {
-  //     return {
-  //         type: 'redacted-reasoning',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             id: value.id,
-  //             data: value.data,
-  //             providerMetadata: value.providerMetadata,
-  //         },
-  //     };
-  //  else if (value.type === 'error') {
-  //     return {
-  //         type: 'error',
-  //         runId: ctx.runId,
-  //         from: 'AGENT',
-  //         payload: {
-  //             id: value.id,
-  //             providerMetadata: value.providerMetadata,
-  //             error: value.error,
-  //         },
-  //     };
-  // }
 }
 
-export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
+export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
-  | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | ObjectStreamPart<Partial<OUTPUT>>
   | undefined;
 
-export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
 }: {
@@ -361,8 +286,10 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
-        totalUsage: chunk.payload.output.usage,
+        // Cast needed: Mastra extends reason with 'tripwire' | 'retry' for processor scenarios
+        finishReason: chunk.payload.stepResult.reason as LanguageModelV2FinishReason,
+        // Cast needed: Mastra's LanguageModelUsage has optional properties, V2 has required-but-nullable
+        totalUsage: chunk.payload.output.usage as LanguageModelV2Usage,
       };
     }
     case 'reasoning-start':
@@ -380,18 +307,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
       };
     case 'reasoning-signature':
       throw new Error('AISDKv5 chunk type "reasoning-signature" not supported');
-    // return {
-    //   type: 'reasoning-signature' as const,
-    //   id: chunk.payload.id,
-    //   signature: chunk.payload.signature,
-    // };
     case 'redacted-reasoning':
       throw new Error('AISDKv5 chunk type "redacted-reasoning" not supported');
-    // return {
-    //   type: 'redacted-reasoning',
-    //   id: chunk.payload.id,
-    //   data: chunk.payload.data,
-    // };
+
     case 'reasoning-end':
       return {
         type: 'reasoning-end',
@@ -549,4 +467,104 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
       }
       return;
   }
+}
+
+/**
+ * Type guard to check if usage is in V3 format (nested objects)
+ */
+function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
+  if (!usage || typeof usage !== 'object') return false;
+  const u = usage as Record<string, unknown>;
+  return (
+    typeof u.inputTokens === 'object' &&
+    u.inputTokens !== null &&
+    'total' in (u.inputTokens as object) &&
+    typeof u.outputTokens === 'object' &&
+    u.outputTokens !== null &&
+    'total' in (u.outputTokens as object)
+  );
+}
+
+/**
+ * Normalizes usage from either V2 (flat) or V3 (nested) format to Mastra's flat format.
+ * V2 format: { inputTokens: number, outputTokens: number, totalTokens?: number }
+ * V3 format: { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
+ *
+ * The original usage data is preserved in the `raw` field for advanced use cases.
+ */
+function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined): LanguageModelUsage {
+  if (!usage) {
+    return {
+      inputTokens: undefined,
+      outputTokens: undefined,
+      totalTokens: undefined,
+      reasoningTokens: undefined,
+      cachedInputTokens: undefined,
+      raw: undefined,
+    };
+  }
+
+  if (isV3Usage(usage)) {
+    // V3 format - extract from nested structure
+    const inputTokens = usage.inputTokens.total;
+    const outputTokens = usage.outputTokens.total;
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      reasoningTokens: usage.outputTokens.reasoning,
+      cachedInputTokens: usage.inputTokens.cacheRead,
+      raw: usage,
+    };
+  }
+
+  // V2 format - already flat
+  const v2Usage = usage as LanguageModelV2Usage;
+  return {
+    inputTokens: v2Usage.inputTokens,
+    outputTokens: v2Usage.outputTokens,
+    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
+    reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
+    cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    raw: usage,
+  };
+}
+
+/**
+ * Type guard to check if a finish reason is V3 format (object with unified/raw properties)
+ */
+function isV3FinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): finishReason is LanguageModelV3FinishReason {
+  return typeof finishReason === 'object' && finishReason !== null && 'unified' in finishReason;
+}
+
+/**
+ * Normalize finish reason from either V2/V5 (string) or V3/V6 (object) format to a string.
+ *
+ * V2/V5 format: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown'
+ * V3/V6 format: { unified: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other', raw: string | undefined }
+ *
+ * We normalize to the unified string value for internal Mastra use.
+ * Note: V6 removed 'unknown' and merged it into 'other'.
+ */
+function normalizeFinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): LanguageModelV2FinishReason | 'tripwire' | 'retry' {
+  if (!finishReason) {
+    return 'other';
+  }
+
+  // Handle Mastra-specific finish reasons
+  if (finishReason === 'tripwire' || finishReason === 'retry') {
+    return finishReason;
+  }
+
+  // V3/V6 format - extract unified value
+  if (isV3FinishReason(finishReason)) {
+    return finishReason.unified;
+  }
+
+  // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
+  return finishReason === 'unknown' ? 'other' : finishReason;
 }

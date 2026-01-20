@@ -1,28 +1,32 @@
 import { useContext, useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { WorkflowInputData } from './workflow-input-data';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { z } from 'zod';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-const buttonClass = 'text-icon3 hover:text-icon6';
+const buttonClass = 'text-neutral3 hover:text-neutral6';
 
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
   closeModal: () => void;
+  isPerStepRun?: boolean;
+  isContinueRun?: boolean;
+  buttonText?: string;
+  inputData?: unknown;
 };
 
 const prettyJson = (value: unknown) => {
@@ -80,7 +84,7 @@ const JsonField = ({
       {isExampleOpen && (
         <div className="border border-border1 rounded-lg bg-surface3 p-3 space-y-2">
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-icon3">
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
               Example {label}
             </Txt>
             <Tooltip>
@@ -110,11 +114,11 @@ const JsonField = ({
       <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex items-center justify-between w-full px-3">
           <div>
-            <Txt as="label" variant="ui-md" className="text-icon3">
+            <Txt as="label" variant="ui-md" className="text-neutral3">
               {label}
             </Txt>
             {helperText && (
-              <Txt variant="ui-xs" className="text-icon3">
+              <Txt variant="ui-xs" className="text-neutral3">
                 {helperText}
               </Txt>
             )}
@@ -189,17 +193,24 @@ const JsonField = ({
   );
 };
 
-export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTravelFormProps) => {
+export const WorkflowTimeTravelForm = ({
+  stepKey,
+  closeModal,
+  isPerStepRun,
+  isContinueRun,
+  buttonText = 'Start time travel',
+  inputData,
+}: WorkflowTimeTravelFormProps) => {
   const {
     result,
     workflow,
     timeTravelWorkflowStream,
-    createWorkflowRun,
     runId: prevRunId,
     workflowId,
+    setDebugMode,
   } = useContext(WorkflowRunContext);
   const { requestContext } = usePlaygroundStore();
-  const stepResult = result?.steps?.[stepKey];
+  const stepResult = inputData ? { payload: inputData } : result?.steps?.[stepKey];
   const [resumeData, setResumeData] = useState(() => '{}');
   const [contextValue, setContextValue] = useState(() => '{}');
   const [nestedContextValue, setNestedContextValue] = useState(() => '{}');
@@ -215,12 +226,24 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
 
     try {
       const parsed = parse(stepDefinition.inputSchema);
-      return { schema: resolveSerializedZodOutput(jsonSchemaToZod(parsed as any)), schemaError: null };
+      const zodStateSchema = workflow?.stateSchema
+        ? resolveSerializedZodOutput(jsonSchemaToZod(parse(workflow.stateSchema)))
+        : null;
+
+      const zodStepSchema = resolveSerializedZodOutput(jsonSchemaToZod(parsed as any));
+
+      const schemaToUse = zodStateSchema
+        ? z.object({
+            inputData: zodStepSchema,
+            initialState: zodStateSchema.optional(),
+          })
+        : zodStepSchema;
+      return { schema: schemaToUse, schemaError: null };
     } catch (err) {
       console.error('Failed to parse step schema', err);
       return { schema: z.record(z.string(), z.any()) };
     }
-  }, [stepDefinition?.inputSchema]);
+  }, [stepDefinition?.inputSchema, workflow?.stateSchema]);
 
   const handleSubmit = async (data: Record<string, any>) => {
     setFormError(null);
@@ -230,19 +253,25 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       const parsedResume = resumeData.trim() ? JSON.parse(resumeData) : {};
       const parsedContext = contextValue.trim() ? JSON.parse(contextValue) : {};
       const parsedNestedContext = nestedContextValue.trim() ? JSON.parse(nestedContextValue) : {};
-
-      const { runId } = await createWorkflowRun({ workflowId, prevRunId });
+      const { initialState, inputData: dataInputData } = data ?? {};
+      const inputData = workflow?.stateSchema ? dataInputData : data;
 
       const payload = {
-        runId,
+        runId: prevRunId,
         workflowId,
         step: stepKey,
-        inputData: data,
+        inputData,
+        initialState,
         resumeData: Object.keys(parsedResume)?.length > 0 ? parsedResume : undefined,
         context: Object.keys(parsedContext)?.length > 0 ? parsedContext : undefined,
         nestedStepsContext: Object.keys(parsedNestedContext)?.length > 0 ? parsedNestedContext : undefined,
         requestContext: requestContext,
+        ...(isContinueRun ? { perStep: false } : {}),
       };
+
+      if (isContinueRun) {
+        setDebugMode(false);
+      }
 
       timeTravelWorkflowStream(payload);
 
@@ -259,10 +288,10 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="ui-lg" className="text-icon3">
+          <Txt as="p" variant="ui-lg" className="text-neutral3">
             Input data
           </Txt>
-          <Txt variant="ui-xs" className="text-icon3">
+          <Txt variant="ui-xs" className="text-neutral3">
             Step: {stepKey}
           </Txt>
         </div>
@@ -271,52 +300,56 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
           schema={stepSchema}
           defaultValues={stepResult?.payload}
           isSubmitLoading={isSubmitting}
-          submitButtonLabel="Start time travel"
+          submitButtonLabel={buttonText}
           onSubmit={handleSubmit}
         >
           <div className="space-y-4 pb-4">
-            <JsonField
-              label="Resume Data (JSON)"
-              value={resumeData}
-              onChange={setResumeData}
-              helperText="Provide any resume payloads that should be passed to the step."
-            />
-            <JsonField
-              label="Context (JSON)"
-              value={contextValue}
-              onChange={setContextValue}
-              helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
-              exampleCode={prettyJson({
-                stepId: {
-                  status: 'success',
-                  payload: {
-                    value: 'test value',
-                  },
-                  output: {
-                    value: 'test output',
-                  },
-                },
-              })}
-            />
-            <JsonField
-              label="Nested Step Context (JSON)"
-              value={nestedContextValue}
-              onChange={setNestedContextValue}
-              helperText="Includes nested workflow steps that are required in the time travel execution."
-              exampleCode={prettyJson({
-                nestedWorkflowId: {
-                  stepId: {
-                    status: 'success',
-                    payload: {
-                      value: 'test value',
+            {isPerStepRun || isContinueRun ? null : (
+              <>
+                <JsonField
+                  label="Resume Data (JSON)"
+                  value={resumeData}
+                  onChange={setResumeData}
+                  helperText="Provide any resume payloads that should be passed to the step."
+                />
+                <JsonField
+                  label="Context (JSON)"
+                  value={contextValue}
+                  onChange={setContextValue}
+                  helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
+                  exampleCode={prettyJson({
+                    stepId: {
+                      status: 'success',
+                      payload: {
+                        value: 'test value',
+                      },
+                      output: {
+                        value: 'test output',
+                      },
                     },
-                    output: {
-                      value: 'test output',
+                  })}
+                />
+                <JsonField
+                  label="Nested Step Context (JSON)"
+                  value={nestedContextValue}
+                  onChange={setNestedContextValue}
+                  helperText="Includes nested workflow steps that are required in the time travel execution."
+                  exampleCode={prettyJson({
+                    nestedWorkflowId: {
+                      stepId: {
+                        status: 'success',
+                        payload: {
+                          value: 'test value',
+                        },
+                        output: {
+                          value: 'test output',
+                        },
+                      },
                     },
-                  },
-                },
-              })}
-            />
+                  })}
+                />
+              </>
+            )}
             {formError && (
               <Txt variant="ui-sm" className="text-accent2">
                 {formError}

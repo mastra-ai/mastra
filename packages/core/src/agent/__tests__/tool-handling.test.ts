@@ -1,12 +1,16 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
 
-function toolhandlingTests(version: 'v1' | 'v2') {
+function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
   const dummyModel = getSingleDummyResponseModel(version);
   const openaiModel = getOpenAIModel(version);
 
@@ -17,7 +21,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       const toolName1 = base + 'X'; // 64 chars
       const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -28,7 +32,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -64,6 +68,36 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -98,7 +132,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should sanitize tool names with invalid characters', async () => {
       const badName = 'bad!@#tool$name';
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -109,7 +143,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -145,6 +179,36 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -173,7 +237,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should prefix tool names that do not start with a letter or underscore', async () => {
       const badStart = '1tool';
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -184,7 +248,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -224,6 +288,36 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             ]),
           }),
         });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
+              },
+            ]),
+          }),
+        });
       }
 
       const userAgent = new Agent({
@@ -248,7 +342,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should truncate tool names longer than 63 characters', async () => {
       const longName = 'a'.repeat(70);
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -259,7 +353,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -295,6 +389,36 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -416,3 +540,4 @@ function toolhandlingTests(version: 'v1' | 'v2') {
 
 toolhandlingTests('v1');
 toolhandlingTests('v2');
+toolhandlingTests('v3');

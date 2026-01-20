@@ -1,6 +1,8 @@
 ---
 title: "Reference: Express Adapter | Server"
 description: "API reference for the @mastra/express server adapter."
+packages:
+  - "@mastra/express"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -13,29 +15,21 @@ The `@mastra/express` package provides a server adapter for running Mastra with 
 
 :::info
 
-For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server-db/server-adapters).
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
 
 :::
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Express adapter and Express framework:
 
-```bash copy
-npm install @mastra/express express
+```bash
+npm install @mastra/express@beta express
 ```
 
-</StepItem>
+## Usage example
 
-<StepItem>
-
-Create your server file:
-
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -51,42 +45,11 @@ app.listen(4111, () => {
 });
 ```
 
-</StepItem>
-
-</Steps>
-
 :::note
 
 Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
 
 :::
-
-## Full example
-
-```typescript title="server.ts" copy
-import express from 'express';
-import { MastraServer } from '@mastra/express';
-import { mastra } from './mastra';
-
-const app = express();
-app.use(express.json());
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
-
-await server.init();
-
-app.listen(4111);
-```
 
 ## Constructor parameters
 
@@ -166,7 +129,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 const app = express();
 app.use(express.json());
 
@@ -196,7 +159,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy
+```typescript
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -223,7 +186,7 @@ Available properties on `res.locals`:
 
 Add Express middleware before or after `init()`:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 const app = express();
 app.use(express.json());
 
@@ -239,14 +202,13 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use((req, res, next) => {
   const mastra = res.locals.mastra;
-  // ...
   next();
 });
 ```
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server-db/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -254,7 +216,6 @@ For custom middleware ordering, call each method separately instead of `init()`.
 
 ## Related
 
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Shared adapter concepts
-- [Hono Adapter](/reference/v1/server/hono-adapter) - Alternative adapter
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

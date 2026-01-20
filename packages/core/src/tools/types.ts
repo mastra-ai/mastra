@@ -14,8 +14,8 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema, InferZodLikeSchemaInput } from '../types/zod-compat';
-import type { OutputWriter } from '../workflows/types';
+import type { SchemaWithValidation } from '../stream/base/schema';
+import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -28,40 +28,33 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
  * MCP-specific context properties available during tool execution in MCP environments.
  */
 // Agent tool execution context - properties specific when tools are executed by agents
-export interface AgentToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   toolCallId: string;
   messages: any[];
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
   threadId?: string;
   resourceId?: string;
 
   // Optional - only present if tool was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: TResume;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
-export interface WorkflowToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   // Always present when called from workflow context
   runId: string;
   workflowId: string;
   state: any;
   setState: (state: any) => void;
-  suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
-
+  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
-  resumeData?: InferZodLikeSchema<TResumeSchema>;
+  resumeData?: TResume;
 }
 
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
@@ -87,7 +80,7 @@ export interface MCPToolExecutionContext {
  * - Returns: Results back to AI SDK
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
-  suspend?: (suspendPayload: any) => Promise<any>;
+  suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
   resumeData?: any;
   outputWriter?: OutputWriter;
   tracingContext?: TracingContext;
@@ -105,6 +98,48 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
  */
 export type MCPToolType = 'agent' | 'workflow';
 
+/**
+ * MCP Tool Annotations for describing tool behavior and UI presentation.
+ * These annotations are part of the MCP protocol and are used by clients
+ * like OpenAI Apps SDK to control tool card display and permission hints.
+ *
+ * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+ */
+export interface ToolAnnotations {
+  /**
+   * A human-readable title for the tool.
+   * Used for display purposes in UI components.
+   */
+  title?: string;
+  /**
+   * If true, the tool does not modify its environment.
+   * This hint indicates the tool only reads data and has no side effects.
+   * @default false
+   */
+  readOnlyHint?: boolean;
+  /**
+   * If true, the tool may perform destructive updates to its environment.
+   * If false, the tool performs only additive updates.
+   * This hint helps clients determine if confirmation should be required.
+   * @default true
+   */
+  destructiveHint?: boolean;
+  /**
+   * If true, calling the tool repeatedly with the same arguments
+   * will have no additional effect on its environment.
+   * This hint indicates idempotent behavior.
+   * @default false
+   */
+  idempotentHint?: boolean;
+  /**
+   * If true, this tool may interact with an "open world" of external
+   * entities (e.g., web search, external APIs).
+   * If false, the tool's domain is closed and fully defined.
+   * @default true
+   */
+  openWorldHint?: boolean;
+}
+
 // MCP-specific properties for tools
 export interface MCPToolProperties {
   /**
@@ -113,6 +148,18 @@ export interface MCPToolProperties {
    * If not specified, it defaults to a regular tool.
    */
   toolType?: MCPToolType;
+  /**
+   * MCP tool annotations for describing tool behavior and UI presentation.
+   * These are exposed via MCP protocol and used by clients like OpenAI Apps SDK.
+   * @see https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations
+   */
+  annotations?: ToolAnnotations;
+  /**
+   * Arbitrary metadata that will be passed through to MCP clients.
+   * This field allows custom metadata to be attached to tools for
+   * client-specific functionality.
+   */
+  _meta?: Record<string, unknown>;
 }
 
 /**
@@ -186,10 +233,7 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-> {
+export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
   requestContext?: RequestContext;
@@ -203,42 +247,42 @@ export interface ToolExecutionContext<
   // ============ Context-specific nested properties ============
 
   // Agent-specific properties
-  agent?: AgentToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  agent?: AgentToolExecutionContext<TSuspend, TResume>;
 
   // Workflow-specific properties
-  workflow?: WorkflowToolExecutionContext<TSuspendSchema, TResumeSchema>;
+  workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 }
 
 export interface ToolAction<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
+  TSchemaIn,
+  TSchemaOut,
+  TSuspend = unknown,
+  TResume = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
 > {
   id: TId;
   description: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
-  suspendSchema?: TSuspendSchema;
-  resumeSchema?: TResumeSchema;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
+  suspendSchema?: SchemaWithValidation<TSuspend>;
+  resumeSchema?: SchemaWithValidation<TResume>;
+  /**
+   * Optional MCP-specific properties.
+   * Only populated when the tool is being used in an MCP context.
+   */
+  mcp?: MCPToolProperties;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
   // Returns: The expected output OR a validation error if input validation fails
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
-  execute?: (
-    inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-    context?: TContext,
-  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : any) | ValidationError>;
+  // Note: { error?: never } enables inline type narrowing with 'error' in result checks
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
@@ -262,12 +306,12 @@ export interface ToolAction<
   ) => void | PromiseLike<void>;
   onInputAvailable?: (
     options: {
-      input: InferZodLikeSchema<TSchemaIn>;
+      input: TSchemaIn;
     } & ToolCallOptions,
   ) => void | PromiseLike<void>;
   onOutput?: (
     options: {
-      output: TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : any;
+      output: TSchemaOut;
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;

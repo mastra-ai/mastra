@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflows API | Client SDK"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Workflows API
@@ -48,7 +50,15 @@ const run = await workflow.createRun();
 
 // Or with an existing runId
 const run = await workflow.createRun({ runId: "existing-run-id" });
+
+// Or with a resourceId to associate the run with a specific resource
+const run = await workflow.createRun({
+  runId: "my-run-id",
+  resourceId: "user-123"
+});
 ```
+
+The `resourceId` parameter associates the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the run and can be used for filtering and querying runs later.
 
 ### startAsync()
 
@@ -80,6 +90,18 @@ const result = await run.startAsync({
 
 The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
 
+To associate a run with a specific resource, pass `resourceId` to `createRun()`:
+
+```typescript
+const run = await workflow.createRun({ resourceId: "user-123" });
+
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
 ### start()
 
 Start a workflow run without waiting for completion:
@@ -94,7 +116,7 @@ await run.start({
 });
 
 // Poll for results later
-const result = await workflow.runExecutionResult(run.runId);
+const result = await workflow.runById(run.runId);
 ```
 
 This is useful for long-running workflows where you want to start execution and check results later.
@@ -125,6 +147,21 @@ await run.resume({
 });
 ```
 
+### cancel()
+
+Cancel a running workflow:
+
+```typescript
+const run = await workflow.createRun({ runId: existingRunId });
+
+const result = await run.cancel();
+// Returns: { message: 'Workflow run canceled' }
+```
+
+This method stops any running steps and prevents subsequent steps from executing. Steps that check the `abortSignal` parameter can respond to cancellation by cleaning up resources (timeouts, network requests, etc.).
+
+See the [Run.cancel()](/reference/v1/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
+
 ### stream()
 
 Stream workflow execution for real-time updates:
@@ -143,12 +180,19 @@ for await (const chunk of stream) {
 }
 ```
 
-### runExecutionResult()
+### runById()
 
 Get the execution result for a workflow run:
 
 ```typescript
-const result = await workflow.runExecutionResult(runId);
+const result = await workflow.runById(runId);
+
+// Or with options for performance optimization:
+const result = await workflow.runById(runId, {
+  fields: ['status', 'result'],  // Only fetch specific fields
+  withNestedWorkflows: false,    // Skip expensive nested workflow data
+  requestContext: { userId: 'user-123' }, // Optional request context
+});
 ```
 
 <h3>Run result format</h3>

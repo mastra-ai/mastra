@@ -1,6 +1,8 @@
 ---
 title: "Workflows overview | Workflows"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -8,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/v1/deployment/workflow-runners) like Inngest for managed infrastructure.
 
 ![Workflows overview](/img/workflows/workflows-overview.jpg)
 
@@ -32,7 +34,7 @@ Steps are the building blocks of workflows. Create a step using `createStep()` w
 
 The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
 
-```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({
@@ -53,7 +55,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+:::info
+
+Visit [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+
+:::
 
 ### Using agents and tools
 
@@ -63,7 +69,7 @@ Workflow steps can also call registered agents or import and execute tools direc
 
 Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. Add steps using `.then()` and complete the workflow with `.commit()`.
 
-```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -82,7 +88,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See the [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+:::info
+
+Visit [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+
+:::
 
 ### Understanding control flow
 
@@ -92,7 +102,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress, accumulating results, or sharing configuration across the entire workflow.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({ message: z.string() }),
@@ -110,13 +120,17 @@ const step1 = createStep({
 });
 ```
 
-> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+:::info
+
+Visit [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+
+:::
 
 ## Workflows as steps
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v1/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {26} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -150,7 +164,7 @@ export const testWorkflow = createWorkflow({
 
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
 
-```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
@@ -168,12 +182,11 @@ export const testWorkflow = createWorkflow({...})
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
-  // ...
   workflows: { testWorkflow },
 });
 ```
@@ -182,7 +195,7 @@ export const mastra = new Mastra({
 
 You can run workflows from agents, tools, the Mastra Client, or the command line. Get a reference by calling `.getWorkflow()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
-```typescript showLineNumbers copy
+```typescript
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
 :::info
@@ -197,7 +210,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
   <TabItem value="start" label="Start">
 Create a workflow run instance using `createRun()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await testWorkflow.createRun();
 
 const result = await run.start({
@@ -206,42 +219,74 @@ const result = await run.start({
   }
 });
 
-console.log(result);
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
   </TabItem>
   <TabItem value="stream" label="Stream">
-Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. Iterate over `fullStream` to track progress, then await `result` to get the final workflow result.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await testWorkflow.createRun();
 
-const result = await run.stream({
+const stream = run.stream({
   inputData: {
     message: "Hello world"
   }
 });
 
-for await (const chunk of result.fullStream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk);
+}
+
+// Get the final result (same type as run.start())
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
 }
 ```
   </TabItem>
 </Tabs>
 
 
-### Workflow status types
+### Workflow result type
 
-When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+
+Additionally, depending on the status, different properties are available:
+
+| Status      | Unique properties               | Description                                              |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `success`   | `result`                        | The workflow's output data                               |
+| `failed`    | `error`                         | The error that caused the failure                        |
+| `tripwire`  | `tripwire`                      | Contains `reason`, `retry?`, `metadata?`, `processorId?` |
+| `suspended` | `suspendPayload`, `suspended`   | Suspension data and array of suspended step paths        |
+| `paused`    | _(none)_                        | Only common properties available                         |
+
+To access status-specific properties, check the `status` first:
+
+```typescript
+const result = await run.start({ inputData: { message: "Hello world" } });
+
+if (result.status === "success") {
+  console.log(result.result); // Only available when status is "success"
+} else if (result.status === "failed") {
+  console.log(result.error.message);
+} else if (result.status === "suspended") {
+  console.log(result.suspendPayload);
+}
+```
 
 ### Workflow output
 
-The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
+Here's an example of a successful workflow result, showing the `input`, `steps`, and `result` properties:
 
 ```json
 {
   "status": "success",
   "steps": {
-    // ...
     "step-1": {
       "status": "success",
       "payload": {
@@ -249,7 +294,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      },
+      }
     },
     "step-2": {
       "status": "success",
@@ -258,7 +303,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      },
+      }
     }
   },
   "input": {
@@ -278,7 +323,7 @@ When a workflow run loses connection to the server, it can be restarted from the
 
 Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a workflow. This helps restart all active workflow runs of a workflow, without having to manually loop through each run and restart.
 
-```typescript showLineNumbers copy
+```typescript
 workflow.restartAllActiveWorkflowRuns();
 ```
 
@@ -286,12 +331,10 @@ workflow.restartAllActiveWorkflowRuns();
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
-
-//.. server connection lost,
 
 const restartedResult = await run.restart();
 ```
@@ -300,7 +343,7 @@ const restartedResult = await run.restart();
 
 When a workflow run is active, it will have a `status` of `running` or `waiting`. You can check the workflow's `status` to confirm it's active, and use `active` to identify the active workflow run.
 
-```typescript showLineNumbers copy
+```typescript
 const activeRuns = await workflow.listActiveWorkflowRuns();
 if (activeRuns.runs.length > 0) {
   console.log(activeRuns.runs);
@@ -315,15 +358,14 @@ When running the local mastra server, all active workflow runs will be restarted
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
 const step1 = createStep({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -336,7 +378,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Request Context](/docs/v1/server-db/request-context) for more information.
+:::info
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 

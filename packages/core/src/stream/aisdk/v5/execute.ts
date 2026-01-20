@@ -1,15 +1,15 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import { APICallError } from 'ai-v5';
-import type { IdGenerator, ToolChoice, ToolSet } from 'ai-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
+import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
-import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
-import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
+import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
@@ -20,10 +20,10 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
   return newObj;
 }
 
-type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
+type ExecutionProps<OUTPUT = undefined> = {
   runId: string;
-  model: MastraLanguageModelV2;
-  providerOptions?: SharedV2ProviderOptions;
+  model: MastraLanguageModel;
+  providerOptions?: SharedProviderOptions;
   inputMessages: LanguageModelV2Prompt;
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
@@ -45,7 +45,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   generateId?: IdGenerator;
 };
 
-export function execute<OUTPUT extends OutputSchema = undefined>({
+export function execute<OUTPUT = undefined>({
   runId,
   model,
   providerOptions,
@@ -69,10 +69,15 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     generateId,
   });
 
+  // Determine target version based on model's specificationVersion
+  // V3 models (AI SDK v6) need 'provider' type, V2 models need 'provider-defined'
+  const targetVersion: ModelSpecVersion = model.specificationVersion === 'v3' ? 'v3' : 'v2';
+
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
     activeTools,
+    targetVersion,
   });
 
   const structuredOutputMode = structuredOutput?.schema
@@ -110,7 +115,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const providerOptionsToUse =
+  const providerOptionsToUse: SharedProviderOptions | undefined =
     model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
       ? {
           ...(providerOptions ?? {}),
@@ -134,7 +139,9 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           async () => {
             const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
 
-            const streamResult = await fn({
+            // Cast needed: V2 and V3 call options are structurally compatible but typed differently
+            // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
+            const streamResult = await (fn as Function)({
               ...toolsAndToolChoice,
               prompt,
               providerOptions: providerOptionsToUse,

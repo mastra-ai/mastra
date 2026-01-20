@@ -6,7 +6,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -181,9 +181,8 @@ async function runStructuredOutputSchemaTest(
       throw new Error(
         `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
       );
-    // Check if model is V1 or V2 and use appropriate method
-    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
-    const response = isV2Model
+    // Check if model is V1 or V2/V3 and use appropriate method
+    const response = isSupportedLanguageModel(model)
       ? await agent.generate(prompt, generateOptions)
       : await agent.generateLegacy(prompt, generateOptions);
 
@@ -240,9 +239,8 @@ async function runSingleToolSchemaTest(
       tools: { [toolName]: testTool },
     });
 
-    // Check if model is V1 or V2 and use appropriate method
-    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
-    const response = isV2Model
+    // Check if model is V1 or V2/V3 and use appropriate method
+    const response = isSupportedLanguageModel(model)
       ? await agent.generate(`Please call the tool named '${toolName}'.`, {
           toolChoice: 'required',
           maxSteps: 1,
@@ -588,10 +586,11 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'tracing-test-tool'",
       input: { message: 'test' },
       attributes: {
-        toolId: 'tracing-test-tool',
         toolDescription: 'Test tool that captures tracing context',
         toolType: 'tool',
       },
+      entityName: 'tracing-test-tool',
+      entityType: 'tool',
       tracingPolicy: undefined,
     });
 
@@ -599,8 +598,11 @@ describe('Tool Tracing Context Injection', () => {
     expect(receivedTracingContext).toBeTruthy();
     expect(receivedTracingContext.currentSpan).toBe(mockToolSpan);
 
-    // Verify tool span was ended with result
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { result: 'processed: test' } });
+    // Verify tool span was ended with result and success attribute
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: { result: 'processed: test' },
+      attributes: { success: true },
+    });
     expect(result).toEqual({ result: 'processed: test' });
   });
 
@@ -689,18 +691,22 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'vercel-tool'",
       input: { input: 'test' },
       attributes: {
-        toolId: 'vercel-tool',
         toolDescription: 'Vercel tool test',
         toolType: 'tool',
       },
+      entityName: 'vercel-tool',
+      entityType: 'tool',
       tracingPolicy: undefined,
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
     expect(executeCalled).toBe(true);
 
-    // Verify tool span was ended with result
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { output: 'vercel result: test' } });
+    // Verify tool span was ended with result and success attribute
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: { output: 'vercel result: test' },
+      attributes: { success: true },
+    });
     expect(result).toEqual({ output: 'vercel result: test' });
   });
 
@@ -750,8 +756,11 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tool span was created
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
 
-    // Verify tool span was ended with error
-    expect(mockToolSpan.error).toHaveBeenCalledWith({ error: testError });
+    // Verify tool span was ended with error and success: false attribute
+    expect(mockToolSpan.error).toHaveBeenCalledWith({
+      error: testError,
+      attributes: { success: false },
+    });
     expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
 
     // Verify the result is a MastraError
@@ -803,10 +812,11 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'toolset-tool'",
       input: { message: 'test' },
       attributes: {
-        toolId: 'toolset-tool',
         toolDescription: 'Tool from a toolset',
         toolType: 'toolset',
       },
+      entityName: 'toolset-tool',
+      entityType: 'tool',
       tracingPolicy: undefined,
     });
   });

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.timeTravelStream() | Streaming"
 description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.timeTravelStream()
@@ -9,7 +11,7 @@ The `.timeTravelStream()` method re-executes a workflow starting from any specif
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const output = run.timeTravelStream({
@@ -76,7 +78,7 @@ The stream emits various workflow events during execution:
 
 ### Processing events during time travel
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const output = run.timeTravelStream({
@@ -104,7 +106,7 @@ console.log("Time travel completed:", result);
 
 ### Time travel stream with context
 
-```typescript showLineNumbers copy
+```typescript
 const output = run.timeTravelStream({
   step: "step2",
   context: {
@@ -128,7 +130,7 @@ const result = await output.result;
 
 ### Time travel stream with nested workflows
 
-```typescript showLineNumbers copy
+```typescript
 const output = run.timeTravelStream({
   step: ["nestedWorkflow", "step3"],
   inputData: { value: 10 },

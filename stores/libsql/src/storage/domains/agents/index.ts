@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -6,6 +5,7 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  AGENTS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -14,14 +14,24 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsLibSQL } from '../operations';
+import { LibSQLDB, resolveClient } from '../../db';
+import type { LibSQLDomainConfig } from '../../db';
 
 export class AgentsLibSQL extends AgentsStorage {
-  private client: Client;
+  #db: LibSQLDB;
 
-  constructor({ client, operations: _ }: { client: Client; operations: StoreOperationsLibSQL }) {
+  constructor(config: LibSQLDomainConfig) {
     super();
-    this.client = client;
+    const client = resolveClient(config);
+    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_AGENTS });
   }
 
   private parseJson(value: any, fieldName?: string): any {
@@ -74,16 +84,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     try {
-      const result = await this.client.execute({
-        sql: `SELECT * FROM "${TABLE_AGENTS}" WHERE id = ?`,
-        args: [id],
+      const result = await this.#db.select<Record<string, any>>({
+        tableName: TABLE_AGENTS,
+        keys: { id },
       });
 
-      if (!result.rows || result.rows.length === 0) {
-        return null;
-      }
-
-      return this.parseRow(result.rows[0]);
+      return result ? this.parseRow(result) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -100,29 +106,27 @@ export class AgentsLibSQL extends AgentsStorage {
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     try {
       const now = new Date();
-      const nowIso = now.toISOString();
 
-      await this.client.execute({
-        sql: `INSERT INTO "${TABLE_AGENTS}" (id, name, description, instructions, model, tools, "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, "createdAt", "updatedAt")
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          agent.id,
-          agent.name,
-          agent.description ?? null,
-          agent.instructions,
-          JSON.stringify(agent.model),
-          agent.tools ? JSON.stringify(agent.tools) : null,
-          agent.defaultOptions ? JSON.stringify(agent.defaultOptions) : null,
-          agent.workflows ? JSON.stringify(agent.workflows) : null,
-          agent.agents ? JSON.stringify(agent.agents) : null,
-          agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
-          agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
-          agent.memory ? JSON.stringify(agent.memory) : null,
-          agent.scorers ? JSON.stringify(agent.scorers) : null,
-          agent.metadata ? JSON.stringify(agent.metadata) : null,
-          nowIso,
-          nowIso,
-        ],
+      await this.#db.insert({
+        tableName: TABLE_AGENTS,
+        record: {
+          id: agent.id,
+          name: agent.name,
+          description: agent.description ?? null,
+          instructions: agent.instructions,
+          model: agent.model,
+          tools: agent.tools ?? null,
+          defaultOptions: agent.defaultOptions ?? null,
+          workflows: agent.workflows ?? null,
+          agents: agent.agents ?? null,
+          inputProcessors: agent.inputProcessors ?? null,
+          outputProcessors: agent.outputProcessors ?? null,
+          memory: agent.memory ?? null,
+          scorers: agent.scorers ?? null,
+          metadata: agent.metadata ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
       });
 
       return {
@@ -157,89 +161,34 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      const setClauses: string[] = [];
-      const args: InValue[] = [];
+      // Build the data object with only the fields that are being updated
+      const data: Record<string, any> = {
+        updatedAt: new Date(),
+      };
 
-      if (updates.name !== undefined) {
-        setClauses.push('name = ?');
-        args.push(updates.name);
-      }
-
-      if (updates.description !== undefined) {
-        setClauses.push('description = ?');
-        args.push(updates.description);
-      }
-
-      if (updates.instructions !== undefined) {
-        setClauses.push('instructions = ?');
-        args.push(updates.instructions);
-      }
-
-      if (updates.model !== undefined) {
-        setClauses.push('model = ?');
-        args.push(JSON.stringify(updates.model));
-      }
-
-      if (updates.tools !== undefined) {
-        setClauses.push('tools = ?');
-        args.push(JSON.stringify(updates.tools));
-      }
-
-      if (updates.defaultOptions !== undefined) {
-        setClauses.push('"defaultOptions" = ?');
-        args.push(JSON.stringify(updates.defaultOptions));
-      }
-
-      if (updates.workflows !== undefined) {
-        setClauses.push('workflows = ?');
-        args.push(JSON.stringify(updates.workflows));
-      }
-
-      if (updates.agents !== undefined) {
-        setClauses.push('agents = ?');
-        args.push(JSON.stringify(updates.agents));
-      }
-
-      if (updates.inputProcessors !== undefined) {
-        setClauses.push('"inputProcessors" = ?');
-        args.push(JSON.stringify(updates.inputProcessors));
-      }
-
-      if (updates.outputProcessors !== undefined) {
-        setClauses.push('"outputProcessors" = ?');
-        args.push(JSON.stringify(updates.outputProcessors));
-      }
-
-      if (updates.memory !== undefined) {
-        setClauses.push('memory = ?');
-        args.push(JSON.stringify(updates.memory));
-      }
-
-      if (updates.scorers !== undefined) {
-        setClauses.push('scorers = ?');
-        args.push(JSON.stringify(updates.scorers));
-      }
-
+      if (updates.name !== undefined) data.name = updates.name;
+      if (updates.description !== undefined) data.description = updates.description;
+      if (updates.instructions !== undefined) data.instructions = updates.instructions;
+      if (updates.model !== undefined) data.model = updates.model;
+      if (updates.tools !== undefined) data.tools = updates.tools;
+      if (updates.defaultOptions !== undefined) data.defaultOptions = updates.defaultOptions;
+      if (updates.workflows !== undefined) data.workflows = updates.workflows;
+      if (updates.agents !== undefined) data.agents = updates.agents;
+      if (updates.inputProcessors !== undefined) data.inputProcessors = updates.inputProcessors;
+      if (updates.outputProcessors !== undefined) data.outputProcessors = updates.outputProcessors;
+      if (updates.memory !== undefined) data.memory = updates.memory;
+      if (updates.scorers !== undefined) data.scorers = updates.scorers;
       if (updates.metadata !== undefined) {
         // Merge metadata
-        const mergedMetadata = { ...existingAgent.metadata, ...updates.metadata };
-        setClauses.push('metadata = ?');
-        args.push(JSON.stringify(mergedMetadata));
+        data.metadata = { ...existingAgent.metadata, ...updates.metadata };
       }
 
-      // Always update the updatedAt timestamp
-      const now = new Date();
-      setClauses.push('"updatedAt" = ?');
-      args.push(now.toISOString());
-
-      // Add the ID for the WHERE clause
-      args.push(id);
-
-      if (setClauses.length > 1) {
-        // More than just updatedAt
-        await this.client.execute({
-          sql: `UPDATE "${TABLE_AGENTS}" SET ${setClauses.join(', ')} WHERE id = ?`,
-          args,
+      // Only update if there's more than just updatedAt
+      if (Object.keys(data).length > 1) {
+        await this.#db.update({
+          tableName: TABLE_AGENTS,
+          keys: { id },
+          data,
         });
       }
 
@@ -274,9 +223,9 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
-      await this.client.execute({
-        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE id = ?`,
-        args: [id],
+      await this.#db.delete({
+        tableName: TABLE_AGENTS,
+        keys: { id },
       });
     } catch (error) {
       throw new MastraError(
@@ -312,11 +261,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
     try {
       // Get total count
-      const countResult = await this.client.execute({
-        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}"`,
-        args: [],
-      });
-      const total = Number(countResult.rows?.[0]?.count ?? 0);
+      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
 
       if (total === 0) {
         return {
@@ -330,12 +275,14 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.client.execute({
-        sql: `SELECT * FROM "${TABLE_AGENTS}" ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [limitValue, offset],
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENTS,
+        orderBy: `"${field}" ${direction}`,
+        limit: limitValue,
+        offset,
       });
 
-      const agents = (dataResult.rows || []).map(row => this.parseRow(row));
+      const agents = rows.map(row => this.parseRow(row));
 
       return {
         agents,

@@ -1,9 +1,22 @@
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, PluginOption, UserConfig } from 'vite';
+
+const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginOption => ({
+  name: 'studio-standalone-plugin',
+  transformIndexHtml(html: string) {
+    return html
+      .replace(/%%MASTRA_SERVER_HOST%%/g, targetHost)
+      .replace(/%%MASTRA_SERVER_PORT%%/g, targetPort)
+      .replace(/%%MASTRA_HIDE_CLOUD_CTA%%/g, 'true')
+      .replace(/%%MASTRA_STUDIO_BASE_PATH%%/g, '')
+      .replace(/%%MASTRA_SERVER_PROTOCOL%%/g, 'http')
+      .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '');
+  },
+});
 
 export default defineConfig(({ mode }) => {
-  const commonConfig = {
+  const commonConfig: UserConfig = {
     plugins: [react()],
     base: './',
     resolve: {
@@ -33,6 +46,10 @@ export default defineConfig(({ mode }) => {
     // Use environment variable for the target port, fallback to 4111
     const targetPort = process.env.PORT || '4111';
     const targetHost = process.env.HOST || 'localhost';
+
+    if (commonConfig.plugins) {
+      commonConfig.plugins.push(studioStandalonePlugin(targetPort, targetHost));
+    }
 
     return {
       ...commonConfig,

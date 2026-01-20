@@ -6,7 +6,7 @@ export interface AgentSettingsStateProps {
   defaultSettings?: AgentSettings;
 }
 
-const defaultSettings: AgentSettings = {
+export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
     maxSteps: 5,
@@ -25,22 +25,23 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const settings = {
-          ...parsed,
-          modelSettings: {
-            ...(defaultSettingsProp?.modelSettings ?? {}),
-            ...(parsed?.modelSettings ?? {}),
-          },
-        };
-        setSettingsState(settings ?? undefined);
-      }
+      const parsed = stored ? JSON.parse(stored) : {};
+
+      // Merge order: fallback defaults < localStorage < agent code defaults
+      // Agent code defaults win so developers can iterate on their defaults
+      const mergedSettings = {
+        ...parsed,
+        modelSettings: {
+          ...defaultSettings.modelSettings,
+          ...(parsed?.modelSettings ?? {}),
+          ...(defaultSettingsProp?.modelSettings ?? {}), // Code defaults win
+        },
+      };
+      setSettingsState(mergedSettings);
     } catch (e) {
       // ignore
-      console.error(e);
     }
-  }, [LOCAL_STORAGE_KEY]);
+  }, [LOCAL_STORAGE_KEY, defaultSettingsProp]);
 
   const setSettings = (settingsValue: AgentSettings) => {
     setSettingsState(prev => ({ ...prev, ...settingsValue }));
@@ -48,15 +49,17 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
   };
 
   const resetAll = () => {
-    const settings = {
+    // Reset to agent defaults (if any), with fallback defaults as base
+    const resetSettings = {
       modelSettings: {
-        ...(defaultSettingsProp?.modelSettings ?? {}),
         ...defaultSettings.modelSettings,
+        ...(defaultSettingsProp?.modelSettings ?? {}),
       },
     };
-    setSettingsState(settings);
+    setSettingsState(resetSettings);
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
+    // Clear localStorage so code defaults take precedence on next load
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
   };
 
   return {

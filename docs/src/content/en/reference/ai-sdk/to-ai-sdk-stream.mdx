@@ -1,6 +1,10 @@
 ---
 title: "Reference: toAISdkStream() | AI SDK"
 description: API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -15,7 +19,7 @@ This is useful when building custom streaming endpoints outside Mastra's provide
 
 Next.js App Router example:
 
-```typescript title="app/api/chat/route.ts" copy
+```typescript title="app/api/chat/route.ts"
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
@@ -124,7 +128,7 @@ The second parameter is an options object:
 
 ### Converting a workflow stream
 
-```typescript title="app/api/workflow/route.ts" copy {13}
+```typescript title="app/api/workflow/route.ts" {13}
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
@@ -151,7 +155,7 @@ export async function POST(req: Request) {
 
 ### Converting a network stream
 
-```typescript title="app/api/network/route.ts" copy {12}
+```typescript title="app/api/network/route.ts" {12}
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
@@ -177,7 +181,7 @@ export async function POST(req: Request) {
 
 ### Converting an agent stream with reasoning enabled
 
-```typescript title="app/api/reasoning/route.ts" copy {8-12,17-20}
+```typescript title="app/api/reasoning/route.ts" {8-12,17-20}
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
@@ -211,7 +215,7 @@ export async function POST(req: Request) {
 
 ### Using messageMetadata
 
-```typescript title="app/api/chat-with-metadata/route.ts" copy {13-19}
+```typescript title="app/api/chat-with-metadata/route.ts" {13-19}
 import { mastra } from "../../mastra";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
@@ -246,7 +250,7 @@ export async function POST(req: Request) {
 
 If you're using the Mastra client SDK (`@mastra/client-js`) on the client side and want to convert streams to AI SDK format:
 
-```typescript title="client-stream-to-ai-sdk.ts" copy {14-23,25-35}
+```typescript title="client-stream-to-ai-sdk.ts" {14-23,25-35}
 import { MastraClient } from "@mastra/client-js";
 import { createUIMessageStream } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";

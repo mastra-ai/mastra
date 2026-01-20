@@ -1,4 +1,4 @@
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from '@internal/ai-sdk-v5';
 import type { z } from 'zod';
 
 // Client-side tool execution context (simplified version without server dependencies)
@@ -17,7 +17,7 @@ export interface ClientToolAction<
   outputSchema?: TSchemaOut;
   execute?: (
     context: ClientToolExecutionContext<TSchemaIn>,
-    options?: ToolExecutionOptions,
+    options?: ToolCallOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
 }
 
@@ -25,8 +25,7 @@ export interface ClientToolAction<
 export class ClientTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-> implements ClientToolAction<TSchemaIn, TSchemaOut>
-{
+> implements ClientToolAction<TSchemaIn, TSchemaOut> {
   id: string;
   description: string;
   inputSchema?: TSchemaIn;

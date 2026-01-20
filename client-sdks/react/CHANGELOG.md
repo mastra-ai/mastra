@@ -1,5 +1,361 @@
 # @mastra/react-hooks
 
+## 1.0.0-beta.25
+
+### Minor Changes
+
+- Added human-in-the-loop (HITL) tool approval support for `generate()` method. ([#12056](https://github.com/mastra-ai/mastra/pull/12056))
+
+  **Why:** This provides parity between `stream()` and `generate()` for tool approval flows, allowing non-streaming use cases to leverage `requireToolApproval` without needing to switch to streaming.
+
+  Previously, tool approval with `requireToolApproval` only worked with `stream()`. Now you can use the same approval flow with `generate()` for non-streaming use cases.
+
+  **Using tool approval with generate()**
+
+  ```typescript
+  const output = await agent.generate('Find user John', {
+    requireToolApproval: true,
+  });
+
+  // Check if a tool is waiting for approval
+  if (output.finishReason === 'suspended') {
+    console.log('Tool requires approval:', output.suspendPayload.toolName);
+
+    // Approve the tool call
+    const result = await agent.approveToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+
+    console.log(result.text);
+  }
+  ```
+
+  **Declining a tool call**
+
+  ```typescript
+  if (output.finishReason === 'suspended') {
+    const result = await agent.declineToolCallGenerate({
+      runId: output.runId,
+      toolCallId: output.suspendPayload.toolCallId,
+    });
+  }
+  ```
+
+  **New methods added:**
+  - `agent.approveToolCallGenerate({ runId, toolCallId })` - Approves a pending tool call and returns the complete result
+  - `agent.declineToolCallGenerate({ runId, toolCallId })` - Declines a pending tool call and returns the complete result
+
+  **Server routes added:**
+  - `POST /api/agents/:agentId/approve-tool-call-generate`
+  - `POST /api/agents/:agentId/decline-tool-call-generate`
+
+  The playground UI now also supports tool approval when using generate mode.
+
+### Patch Changes
+
+- Updated dependencies [[`ed3e3dd`](https://github.com/mastra-ai/mastra/commit/ed3e3ddec69d564fe2b125e083437f76331f1283), [`47b1c16`](https://github.com/mastra-ai/mastra/commit/47b1c16a01c7ffb6765fe1e499b49092f8b7eba3), [`9312dcd`](https://github.com/mastra-ai/mastra/commit/9312dcd1c6f5b321929e7d382e763d95fdc030f5)]:
+  - @mastra/client-js@1.0.0-beta.25
+
+## 1.0.0-beta.24
+
+### Major Changes
+
+- **Fixed:** Align `Agent.network` with core and update `@mastra/react` network usage. ([#12015](https://github.com/mastra-ai/mastra/pull/12015))
+
+### Patch Changes
+
+- Fixed compatibility with updated `@mastra/client-js` generate and stream API signatures ([#12011](https://github.com/mastra-ai/mastra/pull/12011))
+
+- Updated dependencies [[`461e448`](https://github.com/mastra-ai/mastra/commit/461e448852fe999506a6046d50b1efc27d8aa378)]:
+  - @mastra/client-js@1.0.0-beta.24
+
+## 0.1.0-beta.23
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.23
+
+## 0.1.0-beta.22
+
+### Patch Changes
+
+- Removes the deprecated `threadId` and `resourceId` options from `AgentExecutionOptions`. These have been deprecated for months in favour of the `memory` option. ([#11897](https://github.com/mastra-ai/mastra/pull/11897))
+
+  ### Breaking Changes
+
+  #### `@mastra/core`
+
+  The `threadId` and `resourceId` options have been removed from `agent.generate()` and `agent.stream()`. Use the `memory` option instead:
+
+  ```ts
+  // Before
+  await agent.stream('Hello', {
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.stream('Hello', {
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+  #### `@mastra/server`
+
+  The `threadId`, `resourceId`, and `resourceid` fields have been removed from the main agent execution body schema. The server now expects the `memory` option format in request bodies. Legacy routes (`/api/agents/:agentId/generate-legacy` and `/api/agents/:agentId/stream-legacy`) continue to support the deprecated fields.
+
+  #### `@mastra/react`
+
+  The `useChat` hook now internally converts `threadId` to the `memory` option format when making API calls. No changes needed in component code - the hook handles the conversion automatically.
+
+  #### `@mastra/client-js`
+
+  When using the client SDK agent methods, use the `memory` option instead of `threadId`/`resourceId`:
+
+  ```ts
+  const agent = client.getAgent('my-agent');
+
+  // Before
+  await agent.generate({
+    messages: [...],
+    threadId: 'thread-123',
+    resourceId: 'user-456',
+  });
+
+  // After
+  await agent.generate({
+    messages: [...],
+    memory: {
+      thread: 'thread-123',
+      resource: 'user-456',
+    },
+  });
+  ```
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fix text parts incorrectly merging across tool calls ([#11783](https://github.com/mastra-ai/mastra/pull/11783))
+
+  Previously, when an agent produced text before and after a tool call (e.g., "Let me search for that" → tool call → "Here's what I found"), the text parts would be merged into a single part, losing the separation. This fix introduces a `textId` property to track separate text streams, ensuring each text stream maintains its own text part in the UI message.
+
+  Fixes #11577
+
+- Updated dependencies [[`9d5059e`](https://github.com/mastra-ai/mastra/commit/9d5059eae810829935fb08e81a9bb7ecd5b144a7), [`ef756c6`](https://github.com/mastra-ai/mastra/commit/ef756c65f82d16531c43f49a27290a416611e526), [`610a70b`](https://github.com/mastra-ai/mastra/commit/610a70bdad282079f0c630e0d7bb284578f20151)]:
+  - @mastra/client-js@1.0.0-beta.22
+
+## 0.1.0-beta.21
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.21
+
+## 0.1.0-beta.20
+
+### Patch Changes
+
+- Fix TypeScript errors during build declaration generation ([#11682](https://github.com/mastra-ai/mastra/pull/11682))
+
+  Updated test file `toUIMessage.test.ts` to match current `@mastra/core` types:
+  - Changed `error` property from string to `Error` object (per `StepFailure` type)
+  - Added missing `resumeSchema` property to `tool-call-approval` payloads (per `ToolCallApprovalPayload` type)
+  - Added `zod` as peer/dev dependency for test type support
+
+- Fixed agent network not returning text response when routing agent handles requests without delegation. ([#11497](https://github.com/mastra-ai/mastra/pull/11497))
+
+  **What changed:**
+  - Agent networks now correctly stream text responses when the routing agent decides to handle a request itself instead of delegating to sub-agents, workflows, or tools
+  - Added fallback in transformers to ensure text is always returned even if core events are missing
+
+  **Why this matters:**
+  Previously, when using `toAISdkV5Stream` or `networkRoute()` outside of the Mastra Studio UI, no text content was returned when the routing agent handled requests directly. This fix ensures consistent behavior across all API routes.
+
+  Fixes #11219
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
+- Updated dependencies [[`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`e4d366a`](https://github.com/mastra-ai/mastra/commit/e4d366aeb500371dd4210d6aa8361a4c21d87034), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`08bb631`](https://github.com/mastra-ai/mastra/commit/08bb631ae2b14684b2678e3549d0b399a6f0561e), [`106c960`](https://github.com/mastra-ai/mastra/commit/106c960df5d110ec15ac8f45de8858597fb90ad5)]:
+  - @mastra/client-js@1.0.0-beta.20
+
+## 0.1.0-beta.19
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.19
+
+## 0.1.0-beta.18
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.18
+
+## 0.1.0-beta.17
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.17
+
+## 0.1.0-beta.16
+
+### Patch Changes
+
+- Updated dependencies [[`6cbb549`](https://github.com/mastra-ai/mastra/commit/6cbb549475201a2fbf158f0fd7323f6495f46d08)]:
+  - @mastra/client-js@1.0.0-beta.16
+
+## 0.1.0-beta.15
+
+### Minor Changes
+
+- Unified observability schema with entity-based span identification ([#11132](https://github.com/mastra-ai/mastra/pull/11132))
+
+  ## What changed
+
+  Spans now use a unified identification model with `entityId`, `entityType`, and `entityName` instead of separate `agentId`, `toolId`, `workflowId` fields.
+
+  **Before:**
+
+  ```typescript
+  // Old span structure
+  span.agentId; // 'my-agent'
+  span.toolId; // undefined
+  span.workflowId; // undefined
+  ```
+
+  **After:**
+
+  ```typescript
+  // New span structure
+  span.entityType; // EntityType.AGENT
+  span.entityId; // 'my-agent'
+  span.entityName; // 'My Agent'
+  ```
+
+  ## New `listTraces()` API
+
+  Query traces with filtering, pagination, and sorting:
+
+  ```typescript
+  const { spans, pagination } = await storage.listTraces({
+    filters: {
+      entityType: EntityType.AGENT,
+      entityId: 'my-agent',
+      userId: 'user-123',
+      environment: 'production',
+      status: TraceStatus.SUCCESS,
+      startedAt: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+    },
+    pagination: { page: 0, perPage: 50 },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
+  });
+  ```
+
+  **Available filters:** date ranges (`startedAt`, `endedAt`), entity (`entityType`, `entityId`, `entityName`), identity (`userId`, `organizationId`), correlation IDs (`runId`, `sessionId`, `threadId`), deployment (`environment`, `source`, `serviceName`), `tags`, `metadata`, and `status`.
+
+  ## New retrieval methods
+  - `getSpan({ traceId, spanId })` - Get a single span
+  - `getRootSpan({ traceId })` - Get the root span of a trace
+  - `getTrace({ traceId })` - Get all spans for a trace
+
+  ## Backward compatibility
+
+  The legacy `getTraces()` method continues to work. When you pass `name: "agent run: my-agent"`, it automatically transforms to `entityId: "my-agent", entityType: AGENT`.
+
+  ## Migration
+
+  **Automatic:** SQL-based stores (PostgreSQL, LibSQL, MSSQL) automatically add new columns to existing `spans` tables on initialization. Existing data is preserved with new columns set to `NULL`.
+
+  **No action required:** Your existing code continues to work. Adopt the new fields and `listTraces()` API at your convenience.
+
+### Patch Changes
+
+- Updated dependencies [[`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`632fdb8`](https://github.com/mastra-ai/mastra/commit/632fdb8b3cd9ff6f90399256d526db439fc1758b), [`184f01d`](https://github.com/mastra-ai/mastra/commit/184f01d1f534ec0be9703d3996f2e088b4a560eb)]:
+  - @mastra/client-js@1.0.0-beta.15
+
+## 0.1.0-beta.14
+
+### Patch Changes
+
+- Updated dependencies [[`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/client-js@1.0.0-beta.14
+
+## 0.1.0-beta.13
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.13
+
+## 0.1.0-beta.12
+
+### Patch Changes
+
+- Remove redundant toolCalls from network agent finalResult ([#11189](https://github.com/mastra-ai/mastra/pull/11189))
+
+  The network agent's `finalResult` was storing `toolCalls` separately even though all tool call information is already present in the `messages` array (as `tool-call` and `tool-result` type messages). This caused significant token waste since the routing agent reads this data from memory on every iteration.
+
+  **Before:** `finalResult: { text, toolCalls, messages }`
+  **After:** `finalResult: { text, messages }`
+
+  +**Migration:** If you were accessing `finalResult.toolCalls`, retrieve tool calls from `finalResult.messages` by filtering for messages with `type: 'tool-call'`.
+
+  Updated `@mastra/react` to extract tool calls directly from the `messages` array instead of the removed `toolCalls` field when resolving initial messages from memory.
+
+  Fixes #11059
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`1b85674`](https://github.com/mastra-ai/mastra/commit/1b85674123708d9b85834dccc9eae601a9d0891c), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`439eaf7`](https://github.com/mastra-ai/mastra/commit/439eaf75447809b05e326666675a4dcbf9c334ce)]:
+  - @mastra/client-js@1.0.0-beta.12
+
+## 0.1.0-beta.11
+
+### Patch Changes
+
+- Support new Workflow tripwire run status. Tripwires that are thrown from within a workflow will now bubble up and return a graceful state with information about tripwires. ([#10947](https://github.com/mastra-ai/mastra/pull/10947))
+
+  When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+  ```typescript showLineNumbers copy
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: { message: 'Hello' } });
+
+  if (result.status === 'tripwire') {
+    console.log('Workflow terminated by tripwire:', result.tripwire?.reason);
+    console.log('Processor ID:', result.tripwire?.processorId);
+    console.log('Retry requested:', result.tripwire?.retry);
+  }
+  ```
+
+  Adds new UI state for tripwire in agent chat and workflow UI.
+
+  This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
+
+- Updated dependencies [[`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/client-js@1.0.0-beta.11
+
 ## 0.1.0-beta.10
 
 ### Minor Changes

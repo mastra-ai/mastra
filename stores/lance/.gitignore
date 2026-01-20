@@ -3,3 +3,4 @@ dist/
 node_modules/
 lancedb-vector/
 lancedb-storage/
+test/*.lance/

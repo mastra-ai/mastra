@@ -3,32 +3,94 @@ import {
   createStorageErrorId,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+  CreateIndexOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
-  private operations: StoreOperationsMSSQL;
-  private schema: string;
+  private db: MssqlDB;
+  private schema?: string;
+  private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: sql.ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for workflows domain
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -153,13 +215,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
@@ -294,7 +350,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -425,7 +481,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;

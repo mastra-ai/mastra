@@ -23,7 +23,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.10.7)
+        version: 1.19.6(hono@4.11.3)
       '@mastra/auth':
         specifier: link:../../packages/auth
         version: link:../../packages/auth
@@ -58,8 +58,8 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
       hono:
-        specifier: ^4.10.4
-        version: 4.10.7
+        specifier: ^4.11.3
+        version: 4.11.3
       mastra:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
@@ -77,7 +77,7 @@ importers:
         specifier: ^4.19.3
         version: 4.20.6
       typescript:
-        specifier: ^5.8.3
+        specifier: ^5.9.3
         version: 5.9.3
 
 packages:
@@ -411,8 +411,8 @@ packages:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
 
-  hono@4.10.7:
-    resolution: {integrity: sha512-icXIITfw/07Q88nLSkB9aiUrd8rYzSweK681Kjo/TSggaGbOX4RRyxxm71v+3PC8C/j+4rlxGeoTRxQDkaJkUw==}
+  hono@4.11.3:
+    resolution: {integrity: sha512-PmQi306+M/ct/m5s66Hrg+adPnkD5jiO6IjA7WhWw0gSBSo1EcRegwuI1deZ+wd5pzCGynCcn2DprnE4/yEV4w==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.1:
@@ -650,9 +650,9 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@hono/node-server@1.19.6(hono@4.10.7)':
+  '@hono/node-server@1.19.6(hono@4.11.3)':
     dependencies:
-      hono: 4.10.7
+      hono: 4.11.3
 
   '@types/body-parser@1.19.6':
     dependencies:
@@ -881,7 +881,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.10.7: {}
+  hono@4.11.3: {}
 
   http-errors@2.0.1:
     dependencies:

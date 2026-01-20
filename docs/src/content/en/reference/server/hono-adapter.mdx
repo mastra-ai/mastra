@@ -1,6 +1,8 @@
 ---
 title: "Reference: Hono Adapter | Server"
 description: "API reference for the @mastra/hono server adapter."
+packages:
+  - "@mastra/hono"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -13,65 +15,27 @@ The `@mastra/hono` package provides a server adapter for running Mastra with [Ho
 
 :::info
 
-For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server-db/server-adapters).
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
 
 :::
 
 ## Installation
 
-<Steps>
-
-<StepItem>
-
 Install the Hono adapter and Hono framework:
 
-```bash copy
-npm install @mastra/hono hono
+```bash
+npm install @mastra/hono@beta hono
 ```
 
-</StepItem>
+## Usage example
 
-<StepItem>
-
-Create your server file:
-
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 const server = new MastraServer({ app, mastra });
-
-await server.init();
-
-export default app;
-```
-
-</StepItem>
-
-</Steps>
-
-## Full example
-
-```typescript title="server.ts" copy
-import { Hono } from 'hono';
-import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
-import { mastra } from './mastra';
-
-const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
-  openapiPath: '/openapi.json',
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
-  },
-  streamOptions: { redact: true },
-});
 
 await server.init();
 
@@ -147,7 +111,7 @@ export default app;
 
 Add routes directly to the Hono app:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -176,7 +140,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
-```typescript copy
+```typescript
 app.get('/custom', async (c) => {
   const mastra = c.get('mastra');
   const requestContext = c.get('requestContext');
@@ -203,7 +167,7 @@ Available context keys:
 
 Add Hono middleware before or after `init()`:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -221,14 +185,13 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use('*', async (c, next) => {
   const mastra = c.get('mastra');
-  // ...
   await next();
 });
 ```
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server-db/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -236,7 +199,6 @@ For custom middleware ordering, call each method separately instead of `init()`.
 
 ## Related
 
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Shared adapter concepts
-- [Express Adapter](/reference/v1/server/express-adapter) - Alternative adapter
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

@@ -1,13 +1,19 @@
 ---
 title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/openai"
+  - "@mastra/pinecone"
 ---
 
 # Memory Processors
 
 Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve conversation history, working memory, and semantically relevant messages, then persist new messages after the model responds.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
 Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
@@ -17,7 +23,7 @@ Mastra automatically adds these processors when memory is enabled:
 
 ### MessageHistory
 
-Retrieves conversation history and persists new messages.
+Retrieves message history and persists new messages.
 
 **When you configure:**
 
@@ -40,7 +46,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -89,7 +95,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -109,7 +115,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: "memory-vector",
       apiKey: process.env.PINECONE_API_KEY!,
-      environment: "us-east-1",
     }),
     embedder: new OpenAIEmbedder({
       model: "text-embedding-3-small",
@@ -145,7 +150,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -169,10 +174,10 @@ const agent = new Agent({
 
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { MessageHistory } from "@mastra/memory/processors";
+import { MessageHistory } from "@mastra/core/processors";
 import { TokenLimiter } from "@mastra/core/processors";
 import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
@@ -211,7 +216,7 @@ Understanding the execution order is important when combining guardrails with me
 1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
 2. **Your input processors run AFTER**: guardrails, filters, validators
 
-This means memory loads conversation history before your processors can validate or filter the input.
+This means memory loads message history before your processors can validate or filter the input.
 
 ### Output Processors
 
@@ -236,7 +241,7 @@ Output guardrails run **before** memory processors save messages. If a guardrail
 - Memory processors are skipped
 - **No messages are persisted to storage**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
@@ -267,7 +272,7 @@ const agent = new Agent({
 // If the guardrail aborts, nothing is saved to memory
 const result = await agent.generate("Hello");
 if (result.tripwire) {
-  console.log("Blocked:", result.tripwireReason);
+  console.log("Blocked:", result.tripwire.reason);
   // Memory is empty - no messages were persisted
 }
 ```
@@ -281,7 +286,7 @@ Input guardrails run **after** memory processors load history. If a guardrail ab
 - Output processors (including memory persistence) are skipped
 - **No messages are persisted to storage**
 
-```typescript copy showLineNumbers
+```typescript
 // Input guardrail that validates user input
 const inputValidator = {
   id: "input-validator",

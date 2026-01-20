@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.timeTravel() | Workflows"
 description: Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.timeTravel()
@@ -9,7 +11,7 @@ The `.timeTravel()` method re-executes a workflow starting from any specific ste
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.timeTravel({
@@ -213,7 +215,7 @@ const result = await run.timeTravel({
 
 ### Time travel with custom context
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   context: {
@@ -230,7 +232,7 @@ const result = await run.timeTravel({
 
 ### Time travel to nested workflow step
 
-```typescript showLineNumbers copy
+```typescript
 // Using dot notation
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
@@ -246,7 +248,7 @@ const result = await run.timeTravel({
 
 ### Time travel with initial state
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   inputData: { value: 10 },
@@ -259,7 +261,7 @@ const result = await run.timeTravel({
 
 ### Time travel with nested workflows context
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
   context: {

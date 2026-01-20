@@ -1,57 +1,41 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
-import type { StoreOperationsLibSQL } from '../operations';
-
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAt as string),
-    updatedAt: new Date(row.updatedAt as string),
-  };
-}
+import { LibSQLDB, resolveClient } from '../../db';
+import type { LibSQLDomainConfig } from '../../db';
+import { createExecuteWriteOperationWithRetry } from '../../db/utils';
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
-  operations: StoreOperationsLibSQL;
-  client: Client;
-  private readonly maxRetries: number;
-  private readonly initialBackoffMs: number;
+  #db: LibSQLDB;
+  #client: Client;
+  private readonly executeWithRetry: <T>(operationFn: () => Promise<T>, operationDescription: string) => Promise<T>;
 
-  constructor({
-    operations,
-    client,
-    maxRetries = 5,
-    initialBackoffMs = 500,
-  }: {
-    operations: StoreOperationsLibSQL;
-    client: Client;
-    maxRetries?: number;
-    initialBackoffMs?: number;
-  }) {
+  constructor(config: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
-    this.maxRetries = maxRetries;
-    this.initialBackoffMs = initialBackoffMs;
+    const client = resolveClient(config);
+    const maxRetries = config.maxRetries ?? 5;
+    const initialBackoffMs = config.initialBackoffMs ?? 500;
+
+    this.#client = client;
+    this.#db = new LibSQLDB({ client, maxRetries, initialBackoffMs });
+    this.executeWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries,
+      initialBackoffMs,
+    });
 
     // Set PRAGMA settings to help with database locks
     // Note: This is async but we can't await in constructor, so we'll handle it as a fire-and-forget
@@ -60,15 +44,49 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     );
   }
 
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    };
+  }
+
+  async init(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema,
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
   private async setupPragmaSettings() {
     try {
       // Set busy timeout to wait longer before returning busy errors
-      await this.client.execute('PRAGMA busy_timeout = 10000;');
+      await this.#client.execute('PRAGMA busy_timeout = 10000;');
       this.logger.debug('LibSQL Workflows: PRAGMA busy_timeout=10000 set.');
 
       // Enable WAL mode for better concurrency (if supported)
       try {
-        await this.client.execute('PRAGMA journal_mode = WAL;');
+        await this.#client.execute('PRAGMA journal_mode = WAL;');
         this.logger.debug('LibSQL Workflows: PRAGMA journal_mode=WAL set.');
       } catch {
         this.logger.debug('LibSQL Workflows: WAL mode not supported, using default journal mode.');
@@ -76,7 +94,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
       // Set synchronous mode for better durability vs performance trade-off
       try {
-        await this.client.execute('PRAGMA synchronous = NORMAL;');
+        await this.#client.execute('PRAGMA synchronous = NORMAL;');
         this.logger.debug('LibSQL Workflows: PRAGMA synchronous=NORMAL set.');
       } catch {
         this.logger.debug('LibSQL Workflows: Failed to set synchronous mode.');
@@ -84,57 +102,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     } catch (err) {
       this.logger.warn('LibSQL Workflows: Failed to set PRAGMA settings.', err);
     }
-  }
-
-  private async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
-    let attempts = 0;
-    let backoff = this.initialBackoffMs;
-
-    while (attempts < this.maxRetries) {
-      try {
-        return await operation();
-      } catch (error: any) {
-        // Log the error details for debugging
-        this.logger.debug('LibSQL Workflows: Error caught in retry loop', {
-          errorType: error.constructor.name,
-          errorCode: error.code,
-          errorMessage: error.message,
-          attempts,
-          maxRetries: this.maxRetries,
-        });
-
-        // Check for various database lock/busy conditions
-        const isLockError =
-          error.code === 'SQLITE_BUSY' ||
-          error.code === 'SQLITE_LOCKED' ||
-          error.message?.toLowerCase().includes('database is locked') ||
-          error.message?.toLowerCase().includes('database table is locked') ||
-          error.message?.toLowerCase().includes('table is locked') ||
-          (error.constructor.name === 'SqliteError' && error.message?.toLowerCase().includes('locked'));
-
-        if (isLockError) {
-          attempts++;
-          if (attempts >= this.maxRetries) {
-            this.logger.error(
-              `LibSQL Workflows: Operation failed after ${this.maxRetries} attempts due to database lock: ${error.message}`,
-              { error, attempts, maxRetries: this.maxRetries },
-            );
-            throw error;
-          }
-          this.logger.warn(
-            `LibSQL Workflows: Attempt ${attempts} failed due to database lock. Retrying in ${backoff}ms...`,
-            { errorMessage: error.message, attempts, backoff, maxRetries: this.maxRetries },
-          );
-          await new Promise(resolve => setTimeout(resolve, backoff));
-          backoff *= 2;
-        } else {
-          // Not a lock error, re-throw immediately
-          this.logger.error('LibSQL Workflows: Non-lock error occurred, not retrying', { error });
-          throw error;
-        }
-      }
-    }
-    throw new Error('LibSQL Workflows: Max retries reached, but no error was re-thrown from the loop.');
   }
 
   async updateWorkflowResults({
@@ -152,11 +119,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.executeWithRetry(async () => {
       // Use a transaction to ensure atomicity
-      const tx = await this.client.transaction('write');
+      const tx = await this.#client.transaction('write');
       try {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
-          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
           args: [workflowName, runId],
         });
 
@@ -187,10 +154,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         snapshot.context[stepId] = result;
         snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
-        // Update the snapshot within the same transaction
+        // Upsert the snapshot within the same transaction
+        const now = new Date().toISOString();
         await tx.execute({
-          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(snapshot), workflowName, runId],
+          sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, createdAt, updatedAt)
+                VALUES (?, ?, jsonb(?), ?, ?)
+                ON CONFLICT(workflow_name, run_id)
+                DO UPDATE SET snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+          args: [workflowName, runId, JSON.stringify(snapshot), now, now],
         });
 
         await tx.commit();
@@ -201,7 +172,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         }
         throw error;
       }
-    });
+    }, 'updateWorkflowResults');
   }
 
   async updateWorkflowState({
@@ -211,21 +182,15 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.executeWithRetry(async () => {
       // Use a transaction to ensure atomicity
-      const tx = await this.client.transaction('write');
+      const tx = await this.#client.transaction('write');
       try {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
-          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
           args: [workflowName, runId],
         });
 
@@ -248,7 +213,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
         // Update the snapshot within the same transaction
         await tx.execute({
-          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
+          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
           args: [JSON.stringify(updatedSnapshot), workflowName, runId],
         });
 
@@ -260,7 +225,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         }
         throw error;
       }
-    });
+    }, 'updateWorkflowState');
   }
 
   async persistWorkflowSnapshot({
@@ -268,23 +233,28 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }) {
+    const now = new Date();
     const data = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
       snapshot,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: createdAt ?? now,
+      updatedAt: updatedAt ?? now,
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
-    await this.operations.insert({
+    await this.#db.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
     });
@@ -298,7 +268,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     this.logger.debug('Loading workflow snapshot', { workflowName, runId });
-    const d = await this.operations.load<{ snapshot: WorkflowRunState }>({
+    const d = await this.#db.select<{ snapshot: WorkflowRunState }>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
@@ -329,8 +299,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     try {
-      const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
+      const result = await this.#client.execute({
+        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
         args,
       });
 
@@ -338,7 +308,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result.rows[0]);
+      return this.parseWorkflowRun(result.rows[0]);
     } catch (error) {
       throw new MastraError(
         {
@@ -352,22 +322,24 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    try {
-      await this.client.execute({
-        sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-        args: [workflowName, runId],
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { runId, workflowName },
-        },
-        error,
-      );
-    }
+    return this.executeWithRetry(async () => {
+      try {
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          args: [workflowName, runId],
+        });
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { runId, workflowName },
+          },
+          error,
+        );
+      }
+    }, 'deleteWorkflowRunById');
   }
 
   async listWorkflowRuns({
@@ -404,12 +376,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push('resourceId = ?');
           args.push(resourceId);
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -419,7 +391,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       // Only get total count when using pagination
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
       if (usePagination) {
-        const countResult = await this.client.execute({
+        const countResult = await this.#client.execute({
           sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
           args,
         });
@@ -429,12 +401,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       // Get results
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : 0;
-      const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+      const result = await this.#client.execute({
+        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
         args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 
-      const runs = (result.rows || []).map(row => parseWorkflowRun(row));
+      const runs = (result.rows || []).map(row => this.parseWorkflowRun(row));
 
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };

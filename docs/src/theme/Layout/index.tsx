@@ -16,8 +16,10 @@ import LayoutProvider from "@theme/Layout/Provider";
 import Navbar from "@theme/Navbar";
 import SkipToContent from "@theme/SkipToContent";
 import clsx from "clsx";
-import { type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import styles from "./styles.module.css";
+
+import FeatureVersioning from "../../../feature-versioning.json";
 
 export default function Layout(props: Props): ReactNode {
   const {
@@ -33,18 +35,22 @@ export default function Layout(props: Props): ReactNode {
 
   const location = useLocation();
   const { siteConfig } = useDocusaurusContext();
-  const cleanPath = location.pathname
-    .replace(/^\/ja(\/|$)/, "/")
-    .replace(/^\/([a-z]+)\/v1(\/|$)/, "/$1$2");
-  const canonicalUrl = `${siteConfig.url}${cleanPath}`;
+
+  const v0CanonicalUrl = useMemo(() => {
+    const cleanPath = location.pathname
+      .replace(/^\/ja(\/|$)/, "/")
+      .replace(/^\/([a-z]+)\/v1(\/|$)/, "/$1$2");
+    return Object.keys(FeatureVersioning).includes(cleanPath)
+      ? null
+      : `${siteConfig.url}${cleanPath}`;
+  }, [location, siteConfig]);
 
   return (
     <LayoutProvider>
       <PageMetadata title={title} description={description} />
 
       <Head>
-        <link rel="canonical" href={canonicalUrl} />
-        <link rel="alternate" hrefLang="en" href={canonicalUrl} />
+        {v0CanonicalUrl && <link rel="canonical" href={v0CanonicalUrl} />}
         <meta name="x-docs-origin" content="v1" />
       </Head>
 

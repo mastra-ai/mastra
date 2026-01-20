@@ -1,6 +1,8 @@
 ---
 title: "Reference: createRoute() | Server"
 description: "API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation."
+packages:
+  - "@mastra/server"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -11,13 +13,13 @@ The `createRoute()` function creates type-safe routes with Zod validation. When 
 
 ## Import
 
-```typescript copy
+```typescript
 import { createRoute } from '@mastra/server/server-adapter';
 ```
 
 ## Signature
 
-```typescript copy
+```typescript
 function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
   config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>
 ): ServerRoute
@@ -118,7 +120,7 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
 
 The handler receives validated parameters plus runtime context:
 
-```typescript copy showLineNumbers
+```typescript
 handler: async (params) => {
   // From schemas (typed from Zod)
   params.id;              // From pathParamSchema
@@ -142,7 +144,7 @@ Returns a `ServerRoute` object that can be registered with an adapter.
 
 ### GET route with path params
 
-```typescript copy showLineNumbers
+```typescript
 import { createRoute } from '@mastra/server/server-adapter';
 import { z } from 'zod';
 
@@ -167,7 +169,7 @@ const getAgent = createRoute({
 
 ### POST route with body
 
-```typescript copy showLineNumbers
+```typescript
 const createItem = createRoute({
   method: 'POST',
   path: '/api/items',
@@ -190,7 +192,7 @@ const createItem = createRoute({
 
 ### Query params with coercion
 
-```typescript copy showLineNumbers
+```typescript
 const listItems = createRoute({
   method: 'GET',
   path: '/api/items',
@@ -209,7 +211,7 @@ const listItems = createRoute({
 
 ### Streaming route
 
-```typescript copy showLineNumbers
+```typescript
 const streamAgent = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream',
@@ -223,14 +225,14 @@ const streamAgent = createRoute({
   }),
   handler: async ({ agentId, messages, mastra, abortSignal }) => {
     const agent = mastra.getAgent(agentId);
-    return agent.stream({ messages, abortSignal });
+    return agent.stream(messages, { abortSignal });
   },
 });
 ```
 
 ### Custom body size limit
 
-```typescript copy showLineNumbers
+```typescript
 const uploadRoute = createRoute({
   method: 'POST',
   path: '/api/upload',
@@ -249,7 +251,7 @@ const uploadRoute = createRoute({
 
 ### Passthrough for extensibility
 
-```typescript copy
+```typescript
 const bodySchema = z.object({
   required: z.string(),
 }).passthrough(); // Allow unknown fields
@@ -257,7 +259,7 @@ const bodySchema = z.object({
 
 ### Date coercion
 
-```typescript copy
+```typescript
 const querySchema = z.object({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
@@ -266,7 +268,7 @@ const querySchema = z.object({
 
 ### Union types
 
-```typescript copy
+```typescript
 const bodySchema = z.object({
   messages: z.union([
     z.array(z.any()),
@@ -279,7 +281,7 @@ const bodySchema = z.object({
 
 Throw an error with a `status` property to return specific HTTP status codes from handlers. If using Hono, you can use `HTTPException` from `hono/http-exception`:
 
-```typescript copy showLineNumbers
+```typescript
 import { createRoute } from '@mastra/server/server-adapter';
 import { HTTPException } from 'hono/http-exception';
 
@@ -300,7 +302,7 @@ const getAgent = createRoute({
 
 For Express or framework-agnostic code, throw an error with a `status` property:
 
-```typescript copy showLineNumbers
+```typescript
 class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -325,4 +327,4 @@ Common status codes:
 
 - [Server Routes](/reference/v1/server/routes) - Default Mastra routes
 - [MastraServer](/reference/v1/server/mastra-server) - Server adapter class
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters

@@ -1,109 +1,99 @@
-import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type {
-  PaginationInfo,
-  StorageColumn,
-  StorageResourceType,
-  TABLE_NAMES,
-  WorkflowRun,
-  WorkflowRuns,
-  StoragePagination,
-  StorageDomains,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  StorageListWorkflowRunsInput,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import pgPromise from 'pg-promise';
-import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { StorageDomains } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { Pool } from 'pg';
+import {
+  validateConfig,
+  isCloudSqlConfig,
+  isConnectionStringConfig,
+  isHostConfig,
+  isPoolConfig,
+} from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { PoolAdapter } from './client';
+import type { DbClient } from './client';
+import type { PgDomainClientConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
-import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+/** Default maximum number of connections in the pool */
+const DEFAULT_MAX_CONNECTIONS = 20;
+/** Default idle timeout in milliseconds */
+const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
+export { exportSchemas } from './db';
+// Export domain classes for direct use with MastraStorage composition
+export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export { PoolAdapter } from './client';
+export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
+export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
+
+/**
+ * PostgreSQL storage adapter for Mastra.
+ *
+ * @example
+ * ```typescript
+ * // Option 1: Connection string
+ * const store = new PostgresStore({
+ *   id: 'my-store',
+ *   connectionString: 'postgresql://...',
+ * });
+ *
+ * // Option 2: Pre-configured pool
+ * const pool = new Pool({ connectionString: 'postgresql://...' });
+ * const store = new PostgresStore({ id: 'my-store', pool });
+ *
+ * // Access domain storage
+ * const memory = await store.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Execute custom queries
+ * const rows = await store.db.any('SELECT * FROM my_table');
+ * ```
+ */
 export class PostgresStore extends MastraStorage {
-  #db: pgPromise.IDatabase<{}>;
-  #pgp: pgPromise.IMain;
+  #pool: Pool;
+  #db: DbClient;
+  #ownsPool: boolean;
   private schema: string;
   private isInitialized: boolean = false;
 
   stores: StorageDomains;
 
   constructor(config: PostgresStoreConfig) {
-    // Validation: connectionString or host/database/user/password must not be empty
     try {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
-      this.schema = config.schemaName || 'public';
+      // Validate schema name to prevent SQL injection
+      this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
-      let pgConfig: PostgresStoreConfig;
-      if (isConnectionStringConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          connectionString: config.connectionString,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-          ssl: config.ssl,
-        };
-      } else if (isCloudSqlConfig(config)) {
-        // Cloud SQL connector config
-        pgConfig = {
-          ...config,
-          id: config.id,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else if (isHostConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
+      if (isPoolConfig(config)) {
+        this.#pool = config.pool;
+        this.#ownsPool = false;
       } else {
-        // This should never happen due to validation above, but included for completeness
-        throw new Error(
-          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-        );
+        this.#pool = this.createPool(config);
+        this.#ownsPool = true;
       }
 
-      // Initialize pg-promise and create database connection synchronously
-      // Note: pg-promise creates connections lazily when queries are executed,
-      // so this is safe to do in the constructor
-      this.#pgp = pgPromise();
-      this.#db = this.#pgp(pgConfig as any);
+      this.#db = new PoolAdapter(this.#pool);
 
-      // Create all domain instances synchronously in the constructor
-      // This is required for Memory to work correctly, as it checks for
-      // stores.memory during getInputProcessors() before init() is called
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
-      const agents = new AgentsPG({ client: this.#db, schema: this.schema });
+      const domainConfig: PgDomainClientConfig = {
+        client: this.#db,
+        schemaName: this.schema,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+        indexes: config.indexes,
+      };
 
       this.stores = {
-        operations,
-        scores,
-        workflows,
-        memory,
-        observability,
-        agents,
+        scores: new ScoresPG(domainConfig),
+        workflows: new WorkflowsPG(domainConfig),
+        memory: new MemoryPG(domainConfig),
+        observability: new ObservabilityPG(domainConfig),
+        agents: new AgentsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
@@ -117,6 +107,36 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private createPool(config: PostgresStoreConfig): Pool {
+    if (isConnectionStringConfig(config)) {
+      return new Pool({
+        connectionString: config.connectionString,
+        ssl: config.ssl,
+        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+    }
+
+    if (isHostConfig(config)) {
+      return new Pool({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        password: config.password,
+        ssl: config.ssl,
+        max: config.max ?? DEFAULT_MAX_CONNECTIONS,
+        idleTimeoutMillis: config.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
+      });
+    }
+
+    if (isCloudSqlConfig(config)) {
+      return new Pool(config as any);
+    }
+
+    throw new Error('PostgresStore: invalid config');
+  }
+
   async init(): Promise<void> {
     if (this.isInitialized) {
       return;
@@ -124,18 +144,7 @@ export class PostgresStore extends MastraStorage {
 
     try {
       this.isInitialized = true;
-
       await super.init();
-
-      // Create automatic performance indexes by default
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await (this.stores.operations as StoreOperationsPG).createAutomaticIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        console.warn('Failed to create indexes:', indexError);
-      }
     } catch (error) {
       this.isInitialized = false;
       throw new MastraError(
@@ -149,390 +158,33 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  public get db() {
+  /**
+   * Database client for executing queries.
+   *
+   * @example
+   * ```typescript
+   * const rows = await store.db.any('SELECT * FROM users WHERE active = $1', [true]);
+   * const user = await store.db.one('SELECT * FROM users WHERE id = $1', [userId]);
+   * ```
+   */
+  public get db(): DbClient {
     return this.#db;
   }
 
-  public get pgp() {
-    return this.#pgp;
-  }
-
-  public get supports() {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observabilityInstance: true,
-      indexManagement: true,
-      listScoresBySpan: true,
-      agents: true,
-    };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
+  /**
+   * The underlying pg.Pool for direct database access or ORM integration.
+   */
+  public get pool(): Pool {
+    return this.#pool;
   }
 
   /**
-   * Memory
+   * Closes the connection pool if it was created by this store.
+   * If a pool was passed in via config, it will not be closed.
    */
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateMessages({
-    messages,
-  }: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      content?: {
-        metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
-      };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages({ messages });
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  /**
-   * Workflows
-   */
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
-  }
-
   async close(): Promise<void> {
-    this.pgp.end();
-  }
-
-  /**
-   * Tracing / Observability
-   */
-  async createSpan(span: SpanRecord): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
+    if (this.#ownsPool) {
+      await this.#pool.end();
     }
-    return this.stores.observability.createSpan(span);
-  }
-
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.updateSpan({ spanId, traceId, updates });
-  }
-
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getTrace(traceId);
-  }
-
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getTracesPaginated(args);
-  }
-
-  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchCreateSpans(args);
-  }
-
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-    }[];
-  }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchUpdateSpans(args);
-  }
-
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchDeleteTraces(args);
-  }
-
-  /**
-   * Scorers
-   */
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
-  }
-
-  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId, pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({
-      entityId,
-      entityType,
-      pagination,
-    });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 }

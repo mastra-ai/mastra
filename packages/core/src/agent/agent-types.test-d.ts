@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import type { OutputSchema } from '../stream/base/schema';
@@ -19,13 +20,13 @@ describe('Agent Type Tests', () => {
 
       // When OUTPUT is explicitly specified, structuredOutput.schema should accept that schema
       // This works correctly because the generic parameter is specified
-      const options: AgentExecutionOptions<typeof mySchema> = {
+      const options: AgentExecutionOptions<z.infer<typeof mySchema>> = {
         structuredOutput: {
           schema: mySchema,
         },
       };
 
-      expectTypeOf(options.structuredOutput?.schema).toEqualTypeOf<typeof mySchema | undefined>();
+      expectTypeOf(options.structuredOutput.schema).toExtend<NonNullable<OutputSchema<z.infer<typeof mySchema>>>>();
     });
 
     it('should allow Zod schema in defaultOptions.structuredOutput (AgentConfig)', () => {
@@ -38,7 +39,7 @@ describe('Agent Type Tests', () => {
       // When defaultOptions is used in AgentConfig, it should accept any valid OutputSchema
       // for the structuredOutput.schema property
 
-      const config: Partial<AgentConfig> = {
+      const config: Pick<AgentConfig<any, any, z.infer<typeof mySchema>>, 'defaultOptions'> = {
         defaultOptions: {
           structuredOutput: {
             schema: mySchema,
@@ -47,21 +48,22 @@ describe('Agent Type Tests', () => {
       };
 
       // The schema should accept any OutputSchema type
-      assertType<Partial<AgentConfig>>(config);
+      expectTypeOf(
+        (config.defaultOptions as AgentExecutionOptions<z.infer<typeof mySchema>>).structuredOutput.schema!,
+      ).toExtend<NonNullable<OutputSchema<z.infer<typeof mySchema>>>>();
     });
 
     it('should accept OutputSchema types in structuredOutput.schema after fix', () => {
       // OutputSchema includes: ZodType, Schema, JSONSchema7, undefined
       // After the fix, defaultOptions.structuredOutput.schema should accept all of these
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const zodSchema = z.object({ name: z.string() });
 
       // This tests that Zod schemas are valid OutputSchema types
       expectTypeOf<typeof zodSchema>().toExtend<OutputSchema>();
 
       // Test with a discriminated union (from the original issue)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       const zodDiscriminatedUnion = z.discriminatedUnion('status', [
         z.object({ status: z.literal('success'), data: z.string() }),
         z.object({ status: z.literal('error'), error: z.string() }),
@@ -79,7 +81,7 @@ describe('Agent Type Tests', () => {
       type SchemaType = StructuredOutputType['schema'];
 
       // After fix: SchemaType is `OutputSchema` (accepts Zod schemas, JSONSchema7, etc.)
-      expectTypeOf<SchemaType>().toEqualTypeOf<OutputSchema>();
+      expectTypeOf<SchemaType>().toExtend<NonNullable<OutputSchema<any>>>();
     });
   });
 });

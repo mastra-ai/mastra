@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.10",
+  "version": "1.0.0-beta.25",
   "description": "",
   "type": "module",
   "files": [
@@ -83,8 +83,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/deployer",
+    "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
     "lint": "eslint ."
@@ -95,7 +96,7 @@
   "dependencies": {
     "@babel/core": "^7.28.5",
     "@babel/preset-typescript": "^7.27.1",
-    "@mastra/server": "workspace:^",
+    "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
     "@rollup/plugin-commonjs": "29.0.0",
@@ -107,8 +108,8 @@
     "empathic": "^2.0.0",
     "esbuild": "^0.25.10",
     "find-workspaces": "^0.3.1",
-    "fs-extra": "^11.3.2",
-    "hono": "^4.10.5",
+    "fs-extra": "^11.3.3",
+    "hono": "^4.11.3",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
     "resolve.exports": "^2.0.3",
@@ -120,14 +121,13 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
-    "@hono/standard-validator": "^0.2.0",
+    "@hono/standard-validator": "^0.2.1",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.13.17",
@@ -139,7 +139,7 @@
     "stacktrace-parser": "^0.1.11",
     "tsup": "^8.5.0",
     "type-fest": "^5.2.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

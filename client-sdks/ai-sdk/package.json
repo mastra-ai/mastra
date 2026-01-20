@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "1.0.0-beta.7",
+  "version": "1.0.0-beta.16",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",
@@ -36,6 +36,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -43,9 +44,10 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "ai": "^5.0.60",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },
@@ -68,10 +70,6 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
-  },
-  "dependencies": {
-    "@ai-sdk/provider": "^2.0.0",
-    "ai": "^5.0.60"
   },
   "engines": {
     "node": ">=22.13.0"

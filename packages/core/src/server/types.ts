@@ -135,7 +135,7 @@ export type ServerConfig = {
   };
   /**
    * Body size limit for the server
-   * @default 4.5mb
+   * @default 4_718_592 bytes (4.5 MB)
    */
   bodySizeLimit?: number;
 
@@ -151,4 +151,33 @@ export type ServerConfig = {
     key: Buffer;
     cert: Buffer;
   };
+
+  /**
+   * Custom error handler for the server. This hook is called when an unhandled error occurs.
+   * Use this to customize error responses, log errors to external services (e.g., Sentry),
+   * or implement custom error formatting.
+   *
+   * @param err - The error that was thrown
+   * @param c - The Hono context object, providing access to request details and response methods
+   * @returns A Response object or a Promise that resolves to a Response
+   *
+   * @example
+   * ```ts
+   * const mastra = new Mastra({
+   *   server: {
+   *     onError: (err, c) => {
+   *       // Log to Sentry
+   *       Sentry.captureException(err);
+   *
+   *       // Return custom formatted response
+   *       return c.json({
+   *         error: err.message,
+   *         timestamp: new Date().toISOString(),
+   *       }, 500);
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  onError?: (err: Error, c: Context) => Response | Promise<Response>;
 };

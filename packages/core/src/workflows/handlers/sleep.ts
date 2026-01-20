@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import type { ExecuteFunction } from '../step';
+import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
-  Emitter,
   ExecutionContext,
   OutputWriter,
   SerializedStepFlowEntry,
@@ -37,7 +37,7 @@ export interface ExecuteSleepParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -51,7 +51,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
@@ -61,14 +61,18 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
 
   let { duration, fn } = entry;
 
-  const sleepSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_SLEEP,
-    name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
-    attributes: {
-      durationMs: duration,
-      sleepType: fn ? 'dynamic' : 'fixed',
+  const sleepSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_SLEEP,
+      name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
+      attributes: {
+        durationMs: duration,
+        sleepType: fn ? 'dynamic' : 'fixed',
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   if (fn) {
@@ -92,11 +96,11 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        bail: (() => {}) as () => InnerOutput,
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -122,9 +126,16 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
 
   try {
     await engine.executeSleepDuration(!duration || duration < 0 ? 0 : duration, entry.id, workflowId);
-    sleepSpan?.end();
+    await engine.endChildSpan({
+      span: sleepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`,
+    });
   } catch (e) {
-    sleepSpan?.error({ error: e as Error });
+    await engine.errorChildSpan({
+      span: sleepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.error`,
+      errorOptions: { error: e as Error },
+    });
     throw e;
   }
 }
@@ -149,7 +160,7 @@ export interface ExecuteSleepUntilParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -166,7 +177,7 @@ export async function executeSleepUntil(
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
@@ -176,15 +187,19 @@ export async function executeSleepUntil(
 
   let { date, fn } = entry;
 
-  const sleepUntilSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_SLEEP,
-    name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
-    attributes: {
-      untilDate: date,
-      durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
-      sleepType: fn ? 'dynamic' : 'fixed',
+  const sleepUntilSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_SLEEP,
+      name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
+      attributes: {
+        untilDate: date,
+        durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
+        sleepType: fn ? 'dynamic' : 'fixed',
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   if (fn) {
@@ -208,11 +223,11 @@ export async function executeSleepUntil(
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?
         suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        bail: (() => {}) as () => InnerOutput,
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -240,15 +255,25 @@ export async function executeSleepUntil(
   }
 
   if (!date) {
-    sleepUntilSpan?.end();
+    await engine.endChildSpan({
+      span: sleepUntilSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
+    });
     return;
   }
 
   try {
     await engine.executeSleepUntilDate(date, entry.id, workflowId);
-    sleepUntilSpan?.end();
+    await engine.endChildSpan({
+      span: sleepUntilSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,
+    });
   } catch (e) {
-    sleepUntilSpan?.error({ error: e as Error });
+    await engine.errorChildSpan({
+      span: sleepUntilSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.error`,
+      errorOptions: { error: e as Error },
+    });
     throw e;
   }
 }

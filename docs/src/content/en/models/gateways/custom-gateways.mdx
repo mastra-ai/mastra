@@ -139,10 +139,11 @@ mastra.addGateway(new MyPrivateGateway());
 Reference models from your custom gateway using the gateway ID as prefix:
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'my-agent',
+  id: 'my-agent',
+  name: 'My Agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1', // Uses MyPrivateGateway
 });
@@ -181,8 +182,7 @@ When running in development mode (`MASTRA_DEV=true`), Mastra automatically gener
 4. **Autocomplete now works**:
    ```typescript
    const agent = new Agent({
-     model: 'my-gateway-id/my-provider/model-1', // ✅ Full autocomplete!
-
+     model: 'my-gateway-id/my-provider/model-1', // Full autocomplete!
    });
    ```
 
@@ -205,6 +205,7 @@ If you're not running in development mode or need immediate type updates:
 **Option 1: Use type assertion (simplest)**
 ```typescript
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' as any, // Bypass type checking
@@ -225,6 +226,7 @@ type CustomModelId =
 type AllModelIds = ModelRouterModelId | CustomModelId;
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' satisfies AllModelIds,
@@ -323,7 +325,6 @@ Understanding the distinction:
 class VersionedGateway extends MastraModelGateway {
   readonly id = 'my-gateway-v2';     // Unique ID for versioning and prefixing
   readonly name = 'My Gateway';       // Display name
-\  // ... implementation
 }
 
 const mastra = new Mastra({

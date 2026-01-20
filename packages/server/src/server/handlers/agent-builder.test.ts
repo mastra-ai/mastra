@@ -15,14 +15,11 @@ import {
   RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_AGENT_BUILDER_ACTION_ROUTE,
   LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE,
-  GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE,
   CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE,
   STREAM_AGENT_BUILDER_ACTION_ROUTE,
   STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
-  STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE,
-  OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE,
 } from './agent-builder';
 import { createTestServerContext } from './test-utils';
@@ -351,67 +348,6 @@ describe('Agent Builder Handlers', () => {
     });
   });
 
-  describe('GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE', () => {
-    it('should throw error when actionId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          actionId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
-    });
-
-    it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run',
-      });
-      await run.start({ inputData: {} });
-
-      const result = await GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        actionId: 'merge-template',
-        runId: 'test-run',
-      });
-
-      expect(result).toEqual({
-        activeStepsPath: {},
-        error: undefined,
-        status: 'success',
-        result: { result: 'success' },
-        payload: {},
-        steps: {
-          'test-step': {
-            status: 'success',
-            output: { result: 'success' },
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {},
-          },
-        },
-        serializedStepGraph: mockWorkflow.serializedStepGraph,
-      });
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-    });
-  });
-
   describe('CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE', () => {
     it('should throw error when actionId is not provided', async () => {
       await expect(
@@ -704,34 +640,6 @@ describe('Agent Builder Handlers', () => {
     });
   });
 
-  describe('STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE', () => {
-    it('should handle workflow registry correctly on streamVNext', async () => {
-      await expect(
-        STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          inputData: {},
-          runId: undefined,
-        } as any),
-      ).rejects.toThrow(); // Will throw because streaming is complex to mock
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Streaming agent builder action (v2)',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
   describe('STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE', () => {
     it('should handle workflow registry correctly on streamLegacy', async () => {
       await expect(
@@ -847,63 +755,6 @@ describe('Agent Builder Handlers', () => {
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Observing agent builder action stream',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
-  describe('OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE', () => {
-    it('should throw error when actionId is not provided', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          actionId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to observe workflow stream' }));
-    });
-
-    it('should throw error when action is not found', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'non-existent',
-          runId: 'test-run',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should handle workflow registry correctly on observeStreamVNext', async () => {
-      await expect(
-        OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(); // Will throw because run doesn't exist
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Observing agent builder action stream (v2)',
         expect.objectContaining({
           actionId: 'merge-template',
         }),

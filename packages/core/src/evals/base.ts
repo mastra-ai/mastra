@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Agent } from '../agent';
+import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
@@ -455,7 +455,7 @@ class MastraScorer<
         outputSchema: z.any(),
         execute: async ({ inputData, getInitData, tracingContext }) => {
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
-          const { run } = getInitData();
+          const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
 
@@ -514,7 +514,6 @@ class MastraScorer<
 
     let chainedWorkflow = workflow;
     for (const step of workflowSteps) {
-      // @ts-ignore - Complain about the type mismatch when we chain the steps
       chainedWorkflow = chainedWorkflow.then(step);
     }
 
@@ -577,7 +576,7 @@ class MastraScorer<
     if (scorerStep.name === 'generateScore') {
       const schema = z.object({ score: z.number() });
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema,
@@ -595,7 +594,7 @@ class MastraScorer<
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await judge.generate(prompt, { tracingContext });
       } else {
         result = await judge.generateLegacy(prompt, { tracingContext });
@@ -604,7 +603,7 @@ class MastraScorer<
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: promptStep.outputSchema,

@@ -1,6 +1,9 @@
 ---
 title: "Reference: MCPClient | Tools & MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MCPClient
@@ -125,6 +128,12 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       description: "Server-specific capabilities configuration.",
     },
     {
+      name: "authProvider",
+      type: "OAuthClientProvider",
+      isOptional: true,
+      description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.",
+    },
+    {
       name: "enableServerLogs",
       type: "boolean",
       isOptional: true,
@@ -142,7 +151,7 @@ Retrieves all tools from all configured servers, with tool names namespaced by t
 Intended to be passed onto an Agent definition.
 
 ```ts
-new Agent({ tools: await mcp.listTools() });
+new Agent({ id: "agent", tools: await mcp.listTools() });
 ```
 
 ### listToolsets()
@@ -687,6 +696,104 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 - **Clear UI**: Make it obvious what information is being requested and why
 - **Security**: Never auto-accept requests for sensitive information
 
+## OAuth Authentication
+
+For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+
+```typescript
+import { MCPClient, MCPOAuthClientProvider } from "@mastra/mcp";
+
+// Create an OAuth provider
+const oauthProvider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/oauth/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/oauth/callback"],
+    client_name: "My MCP Client",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+  },
+  onRedirectToAuthorization: (url) => {
+    // Handle authorization redirect (open browser, redirect response, etc.)
+    console.log(`Please visit: ${url}`);
+  },
+});
+
+// Use the provider with MCPClient
+const client = new MCPClient({
+  servers: {
+    protectedServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: oauthProvider,
+    },
+  },
+});
+```
+
+### Quick Token Provider
+
+For testing or when you already have a valid access token:
+
+```typescript
+import { MCPClient, createSimpleTokenProvider } from "@mastra/mcp";
+
+const provider = createSimpleTokenProvider("your-access-token", {
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/callback"],
+    client_name: "Test Client",
+  },
+});
+
+const client = new MCPClient({
+  servers: {
+    testServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: provider,
+    },
+  },
+});
+```
+
+### Custom Token Storage
+
+For persistent token storage across sessions, implement the `OAuthStorage` interface:
+
+```typescript
+import { MCPOAuthClientProvider, OAuthStorage } from "@mastra/mcp";
+
+class DatabaseOAuthStorage implements OAuthStorage {
+  constructor(private db: Database, private userId: string) {}
+
+  async set(key: string, value: string): Promise<void> {
+    await this.db.query(
+      "INSERT INTO oauth_tokens (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET value = ?",
+      [this.userId, key, value, value]
+    );
+  }
+
+  async get(key: string): Promise<string | undefined> {
+    const result = await this.db.query(
+      "SELECT value FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+    return result?.[0]?.value;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.db.query(
+      "DELETE FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+  }
+}
+
+const provider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: { /* ... */ },
+  storage: new DatabaseOAuthStorage(db, "user-123"),
+});
+```
+
 ## Examples
 
 ### Static Tool Configuration
@@ -718,6 +825,7 @@ const mcp = new MCPClient({
 
 // Create an agent with access to all tools
 const agent = new Agent({
+  id: "multi-tool-agent",
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
   model: "openai/gpt-5.1",
@@ -773,6 +881,7 @@ import { MCPClient } from "@mastra/mcp";
 
 // Create the agent first, without any tools
 const agent = new Agent({
+  id: "multi-tool-agent",
   name: "Multi-tool Agent",
   instructions: "You help users check stocks and weather.",
   model: "openai/gpt-5.1",

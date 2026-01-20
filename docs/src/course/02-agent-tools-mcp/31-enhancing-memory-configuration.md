@@ -12,9 +12,9 @@ const memory = new Memory({
   }),
   vector: new LibSQLVector({
     id: "learning-memory-vector",
-    connectionUrl: "file:../../memory.db",
+    url: "file:../../memory.db",
   }),
-  embedder: openai.embedding("text-embedding-3-small"),
+  embedder: "openai/text-embedding-3-small",
   options: {
     // Keep last 20 messages in context
     lastMessages: 20,
@@ -61,7 +61,7 @@ export const personalAssistantAgent = new Agent({
     Always maintain a helpful and professional tone.
     Use the stored information to provide more personalized responses.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   tools: { ...mcpTools },
   memory,
 });

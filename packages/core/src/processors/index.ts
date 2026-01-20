@@ -1,30 +1,42 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
+import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
+import type { ProcessorStepOutput } from './step-schema';
 
 /**
  * Base context shared by all processor methods
  */
-export interface ProcessorContext {
-  /** Function to abort processing with an optional reason */
-  abort: (reason?: string) => never;
+export interface ProcessorContext<TTripwireMetadata = unknown> {
+  /**
+   * Function to abort processing with an optional reason and options.
+   * @param reason - The reason for aborting
+   * @param options - Options including retry flag and metadata
+   */
+  abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional tracing context for observability */
   tracingContext?: TracingContext;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Use this to implement retry limits within your processor.
+   */
+  retryCount: number;
 }
 
 /**
  * Context for message-based processor methods (processInput, processOutputResult, processInputStep)
  */
-export interface ProcessorMessageContext extends ProcessorContext {
+export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
   /** The current messages being processed */
   messages: MastraDBMessage[];
   /** MessageList instance for managing message sources */
@@ -54,7 +66,7 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
 /**
  * Arguments for processInput method
  */
-export interface ProcessInputArgs extends ProcessorMessageContext {
+export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
 }
@@ -62,7 +74,9 @@ export interface ProcessInputArgs extends ProcessorMessageContext {
 /**
  * Arguments for processOutputResult method
  */
-export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
+export interface ProcessOutputResultArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
  * Arguments for processInputStep method
@@ -71,33 +85,39 @@ export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
  * processors run in a chain and any previous processor may have modified structuredOutput.
  * The actual schema type is only known at the generate()/stream() call site.
  */
-export interface ProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> extends ProcessorMessageContext {
+export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
-  steps: Array<StepResult<TOOLS>>;
+  steps: Array<StepResult<any>>;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
 
-  model: MastraLanguageModelV2;
+  /**
+   * Current model for this step.
+   * Can be a resolved MastraLanguageModelV2 or an unresolved config (string, OpenAI-compatible config).
+   */
+  model: MastraLanguageModel;
   /** Current tools available for this step */
-  tools?: TOOLS;
-  toolChoice?: ToolChoice<TOOLS> | ToolChoice<any>;
-  activeTools?: Array<keyof TOOLS>;
+  tools?: Record<string, unknown>;
+  toolChoice?: ToolChoice<any>;
+  activeTools?: string[];
 
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Use this to implement retry limits within your processor.
+   */
+  retryCount: number;
 }
 
-export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
-  ProcessInputStepArgs<TOOLS>,
-  'messages' | 'systemMessages' | 'abort'
->;
+export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
 
 /**
  * Result from processInputStep method
@@ -105,35 +125,37 @@ export type RunProcessInputStepArgs<TOOLS extends ToolSet = ToolSet> = Omit<
  * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
-export type ProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
+export type ProcessInputStepResult = {
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
-  tools?: ToolSet | Record<string, unknown>;
-  toolChoice?: ToolChoice<TOOLS | any>;
-  activeTools?: Array<keyof TOOLS>;
+  tools?: Record<string, unknown>;
+  toolChoice?: ToolChoice<any>;
+  activeTools?: string[];
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  /**
+   * Number of times processors have triggered retry for this generation.
+   * Use this to implement retry limits within your processor.
+   */
+  retryCount?: number;
 };
 
-export type RunProcessInputStepResult<TOOLS extends ToolSet = ToolSet> = Omit<
-  ProcessInputStepResult<TOOLS>,
-  'model'
-> & { model?: MastraLanguageModelV2 };
+export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
 
 /**
  * Arguments for processOutputStream method
  */
-export interface ProcessOutputStreamArgs extends ProcessorContext {
+export interface ProcessOutputStreamArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
   /** The current chunk being processed */
   part: ChunkType;
   /** All chunks seen so far */
@@ -144,9 +166,46 @@ export interface ProcessOutputStreamArgs extends ProcessorContext {
   messageList?: MessageList;
 }
 
-export interface Processor<TId extends string = string> {
+/**
+ * Tool call information for processOutputStep
+ */
+export interface ToolCallInfo {
+  toolName: string;
+  toolCallId: string;
+  args: unknown;
+}
+
+/**
+ * Arguments for processOutputStep method.
+ * Called after each LLM response in the agentic loop, before tool execution.
+ */
+export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** The finish reason from the LLM (stop, tool-use, length, etc.) */
+  finishReason?: string;
+  /** Tool calls made in this step (if any) */
+  toolCalls?: ToolCallInfo[];
+  /** Generated text from this step */
+  text?: string;
+  /** All system messages */
+  systemMessages: CoreMessageV4[];
+  /** All completed steps so far (including the current step) */
+  steps: Array<StepResult<any>>;
+}
+
+/**
+ * Processor interface for transforming messages and stream chunks.
+ *
+ * @template TId - The processor's unique identifier type
+ * @template TTripwireMetadata - The type of metadata passed when calling abort()
+ */
+export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
+  readonly description?: string;
+  /** Index of this processor in the workflow (set at runtime when combining processors) */
+  processorIndex?: number;
 
   /**
    * Process input messages before they are sent to the LLM
@@ -156,14 +215,14 @@ export interface Processor<TId extends string = string> {
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    *  - { messages, systemMessages }: Object with both messages and modified system messages
    */
-  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+  processInput?(args: ProcessInputArgs<TTripwireMetadata>): Promise<ProcessInputResult> | ProcessInputResult;
 
   /**
    * Process output stream chunks with built-in state management
    * This allows processors to accumulate chunks and make decisions based on larger context
    * Return null or undefined to skip emitting the part
    */
-  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputStream?(args: ProcessOutputStreamArgs<TTripwireMetadata>): Promise<ChunkType | null | undefined>;
 
   /**
    * Process the complete output result after streaming/generate is finished
@@ -172,7 +231,7 @@ export interface Processor<TId extends string = string> {
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    */
-  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+  processOutputResult?(args: ProcessOutputResultArgs<TTripwireMetadata>): ProcessorMessageResult;
 
   /**
    * Process input messages at each step of the agentic loop, before they are sent to the LLM.
@@ -184,31 +243,131 @@ export interface Processor<TId extends string = string> {
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    *  - undefined/void: No changes
    */
-  processInputStep?<TOOLS extends ToolSet = ToolSet>(
-    args: ProcessInputStepArgs<TOOLS>,
+  processInputStep?(
+    args: ProcessInputStepArgs<TTripwireMetadata>,
   ):
-    | Promise<ProcessInputStepResult<TOOLS> | MessageList | MastraDBMessage[] | undefined | void>
-    | ProcessInputStepResult<TOOLS>
+    | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | undefined | void>
+    | ProcessInputStepResult
     | MessageList
     | MastraDBMessage[]
     | void
     | undefined;
+
+  /**
+   * Process output after each LLM response in the agentic loop, before tool execution.
+   * Unlike processOutputResult which runs once at the end, this runs at every step.
+   *
+   * This is the ideal place to implement guardrails that can trigger retries:
+   * - Validate tone, format, or content of LLM responses
+   * - Check for policy violations before tools are executed
+   * - Implement self-correction by calling abort({ retry: true })
+   *
+   * @returns Either:
+   *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
+   *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   */
+  processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
 }
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
 // InputProcessor requires either processInput OR processInputStep (or both)
-export type InputProcessor =
-  | (WithRequired<Processor, 'id' | 'processInput'> & Processor)
-  | (WithRequired<Processor, 'id' | 'processInputStep'> & Processor);
+export type InputProcessor<TTripwireMetadata = unknown> =
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
+      Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires either processOutputStream OR processOutputResult (or both)
-export type OutputProcessor =
-  | (WithRequired<Processor, 'id' | 'processOutputStream'> & Processor)
-  | (WithRequired<Processor, 'id' | 'processOutputResult'> & Processor);
+// OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
+export type OutputProcessor<TTripwireMetadata = unknown> =
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputResult'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
+      Processor<string, TTripwireMetadata>);
 
-export type ProcessorTypes = InputProcessor | OutputProcessor;
+export type ProcessorTypes<TTripwireMetadata = unknown> =
+  | InputProcessor<TTripwireMetadata>
+  | OutputProcessor<TTripwireMetadata>;
+
+/**
+ * A Workflow that can be used as a processor.
+ * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
+ */
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
+
+/**
+ * Input processor config: can be a Processor or a Workflow.
+ */
+export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
+  | InputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
+
+/**
+ * Output processor config: can be a Processor or a Workflow.
+ */
+export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
+  | OutputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
+
+/**
+ * Type guard to check if an object is a Workflow that can be used as a processor.
+ * A ProcessorWorkflow must have 'id', 'inputSchema', 'outputSchema', and 'execute' properties.
+ */
+export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    'id' in obj &&
+    typeof (obj as any).id === 'string' &&
+    'inputSchema' in obj &&
+    'outputSchema' in obj &&
+    'execute' in obj &&
+    typeof (obj as any).execute === 'function' &&
+    // Must NOT have processor-specific methods (to distinguish from Processor)
+    !('processInput' in obj) &&
+    !('processInputStep' in obj) &&
+    !('processOutputStream' in obj) &&
+    !('processOutputResult' in obj) &&
+    !('processOutputStep' in obj)
+  );
+}
 
 export * from './processors';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';
+export type { TripWireOptions } from '../agent/trip-wire';
+export {
+  ProcessorStepSchema,
+  ProcessorStepInputSchema,
+  ProcessorStepOutputSchema,
+  // Phase-specific schemas for UI/documentation
+  ProcessorInputPhaseSchema,
+  ProcessorInputStepPhaseSchema,
+  ProcessorOutputStreamPhaseSchema,
+  ProcessorOutputResultPhaseSchema,
+  ProcessorOutputStepPhaseSchema,
+  // Message schemas for UI components
+  ProcessorMessageSchema,
+  ProcessorMessageContentSchema,
+  MessageContentSchema,
+  // Part schemas for documentation/validation
+  MessagePartSchema,
+  TextPartSchema,
+  ImagePartSchema,
+  FilePartSchema,
+  ToolInvocationPartSchema,
+  ReasoningPartSchema,
+  SourcePartSchema,
+  StepStartPartSchema,
+} from './step-schema';
+export type {
+  ProcessorStepData,
+  ProcessorStepDataFlexible,
+  ProcessorStepInput,
+  ProcessorStepOutput,
+  // Message types for UI components
+  ProcessorMessage,
+  MessageContent,
+  MessagePart,
+} from './step-schema';

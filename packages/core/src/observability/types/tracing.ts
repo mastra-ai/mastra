@@ -5,7 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata } from '../../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -50,6 +50,27 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
+export enum EntityType {
+  /** Agent/Model execution */
+  AGENT = 'agent',
+  /** Eval */
+  EVAL = 'eval',
+  /** Input Processor */
+  INPUT_PROCESSOR = 'input_processor',
+  /** Input Step Processor */
+  INPUT_STEP_PROCESSOR = 'input_step_processor',
+  /** Output Processor */
+  OUTPUT_PROCESSOR = 'output_processor',
+  /** Output Step Processor */
+  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
+  /** Workflow Step */
+  WORKFLOW_STEP = 'workflow_step',
+  /** Tool */
+  TOOL = 'tool',
+  /** Workflow */
+  WORKFLOW_RUN = 'workflow_run',
+}
+
 // ============================================================================
 // Type-Specific Attributes Interfaces
 // ============================================================================
@@ -63,10 +84,6 @@ export interface AIBaseAttributes {}
  * Agent Run attributes
  */
 export interface AgentRunAttributes extends AIBaseAttributes {
-  /** Agent identifier */
-  agentId: string;
-  /** Human-readable agent name */
-  agentName?: string;
   /** Conversation/thread/session identifier for multi-turn interactions */
   conversationId?: string;
   /** Agent Instructions **/
@@ -127,10 +144,6 @@ export interface UsageStats {
  * Model Generation attributes
  */
 export interface ModelGenerationAttributes extends AIBaseAttributes {
-  /** Agent identifier (when generation is part of an agent run) */
-  agentId?: string;
-  /** Human-readable agent name (when generation is part of an agent run) */
-  agentName?: string;
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
@@ -203,7 +216,6 @@ export interface ModelChunkAttributes extends AIBaseAttributes {
  * Tool Call attributes
  */
 export interface ToolCallAttributes extends AIBaseAttributes {
-  toolId?: string;
   toolType?: string;
   toolDescription?: string;
   success?: boolean;
@@ -213,8 +225,6 @@ export interface ToolCallAttributes extends AIBaseAttributes {
  * MCP Tool Call attributes
  */
 export interface MCPToolCallAttributes extends AIBaseAttributes {
-  /** Id of the MCP tool/function */
-  toolId: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */
@@ -227,10 +237,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
-  /** Name of the Processor */
-  processorName: string;
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output';
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */
@@ -249,8 +257,6 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
  * Workflow Run attributes
  */
 export interface WorkflowRunAttributes extends AIBaseAttributes {
-  /** Workflow identifier */
-  workflowId: string;
   /** Workflow status */
   status?: WorkflowRunStatus;
 }
@@ -259,8 +265,6 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
  * Workflow Step attributes
  */
 export interface WorkflowStepAttributes extends AIBaseAttributes {
-  /** Step identifier */
-  stepId: string;
   /** Step status */
   status?: WorkflowStepStatus;
 }
@@ -368,6 +372,14 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // Span Interfaces
 // ============================================================================
 
+export interface SpanErrorInfo {
+  message: string;
+  id?: string;
+  domain?: string;
+  category?: string;
+  details?: Record<string, any>;
+}
+
 /**
  * Base Span interface
  */
@@ -380,6 +392,12 @@ interface BaseSpan<TType extends SpanType> {
   name: string;
   /** Type of the span */
   type: TType;
+  /** Entity type that created the span */
+  entityType?: EntityType;
+  /** Entity id that created the span */
+  entityId?: string;
+  /** Entity name that created the span */
+  entityName?: string;
   /** When span started */
   startTime: Date;
   /** When span ended */
@@ -395,13 +413,7 @@ interface BaseSpan<TType extends SpanType> {
   /** Output generated at the end of the span */
   output?: any;
   /** Error information if span failed */
-  errorInfo?: {
-    message: string;
-    id?: string;
-    domain?: string;
-    category?: string;
-    details?: Record<string, any>;
-  };
+  errorInfo?: SpanErrorInfo;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }
@@ -572,6 +584,7 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
+  startStep(payload?: StepStartPayload): void;
 }
 
 /**
@@ -623,6 +636,28 @@ export interface ObservabilityInstance {
   startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
 
   /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have end()/update()/error() called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+
+  /**
+   * Force flush any buffered/queued spans from all exporters and the bridge
+   * without shutting down the observability instance.
+   *
+   * This is useful in serverless environments (like Vercel's fluid compute) where
+   * you need to ensure all spans are exported before the runtime instance is
+   * terminated, while keeping the observability system active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future tracing.
+   */
+  flush(): Promise<void>;
+
+  /**
    * Shutdown tracing and clean up resources
    */
   shutdown(): Promise<void>;
@@ -646,6 +681,12 @@ interface CreateBaseOptions<TType extends SpanType> {
   name: string;
   /** Span type */
   type: TType;
+  /** Entity type that created the span */
+  entityType?: EntityType;
+  /** Entity id that created the span */
+  entityId?: string;
+  /** Entity name that created the span */
+  entityName?: string;
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
   /** Request Context for metadata extraction */
@@ -672,10 +713,20 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    */
   traceId?: string;
   /**
+   * Span ID to use for this span (1-16 hexadecimal characters).
+   * Only used when rebuilding a span from cached data.
+   */
+  spanId?: string;
+  /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /**
+   * Start time for this span.
+   * Only used when rebuilding a span from cached data.
+   */
+  startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
 }
@@ -738,6 +789,9 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
 export interface GetOrCreateSpanOptions<TType extends SpanType> {
   type: TType;
   name: string;
+  entityType?: EntityType;
+  entityId?: string;
+  entityName?: string;
   input?: any;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
@@ -819,6 +873,14 @@ export interface TraceState {
    * with the per-request requestContextKeys.
    */
   requestContextKeys: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   */
+  hideOutput?: boolean;
 }
 
 /**
@@ -849,6 +911,16 @@ export interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 
 export interface SpanIds {
@@ -878,6 +950,33 @@ export type TracingProperties = {
 // ============================================================================
 
 /**
+ * Options for controlling serialization of span data.
+ * These options control how input, output, and attributes are cleaned before export.
+ */
+export interface SerializationOptions {
+  /**
+   * Maximum length for string values
+   * @default 1024
+   */
+  maxStringLength?: number;
+  /**
+   * Maximum depth for nested objects
+   * @default 6
+   */
+  maxDepth?: number;
+  /**
+   * Maximum number of items in arrays
+   * @default 50
+   */
+  maxArrayLength?: number;
+  /**
+   * Maximum number of keys in objects
+   * @default 50
+   */
+  maxObjectKeys?: number;
+}
+
+/**
  * Configuration for a single observability instance
  */
 export interface ObservabilityInstanceConfig {
@@ -897,10 +996,15 @@ export interface ObservabilityInstanceConfig {
   includeInternalSpans?: boolean;
   /**
    * RequestContext keys to automatically extract as metadata for all spans
-   * created with this observablity configuration.
+   * created with this observability configuration.
    * Supports dot notation for nested values.
    */
   requestContextKeys?: string[];
+  /**
+   * Options for controlling serialization of span data (input/output/attributes).
+   * Use these to customize truncation limits for large payloads.
+   */
+  serializationOptions?: SerializationOptions;
 }
 
 /**
@@ -1011,6 +1115,16 @@ export interface ObservabilityExporter {
     metadata?: Record<string, any>;
   }): Promise<void>;
 
+  /**
+   * Force flush any buffered/queued spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the exporter active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
@@ -1067,6 +1181,16 @@ export interface ObservabilityBridge {
    */
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
 
+  /**
+   * Force flush any buffered/queued spans without shutting down the bridge.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated, while keeping
+   * the bridge active for future requests.
+   *
+   * Unlike shutdown(), flush() does not release resources or prevent future exports.
+   */
+  flush(): Promise<void>;
+
   /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;
 }
@@ -1082,6 +1206,56 @@ export interface SpanOutputProcessor {
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }
+
+/**
+ * Function type for formatting exported spans at the exporter level.
+ *
+ * This allows customization of how spans appear in vendor-specific observability platforms
+ * (e.g., Langfuse, Braintrust). Unlike SpanOutputProcessor which operates on the internal
+ * Span object before export, this formatter operates on the ExportedSpan data structure
+ * after the span has been prepared for export.
+ *
+ * Formatters can be synchronous or asynchronous, enabling use cases like:
+ * - Extract plain text from structured AI SDK messages for better readability
+ * - Transform input/output format for specific vendor requirements
+ * - Add or remove fields based on the target platform
+ * - Redact or transform sensitive data in a vendor-specific way
+ * - Enrich spans with data from external APIs (async)
+ * - Perform database lookups to add context (async)
+ *
+ * @param span - The exported span to format
+ * @returns The formatted span (sync) or a Promise resolving to the formatted span (async)
+ *
+ * @example
+ * ```typescript
+ * // Synchronous formatter that extracts plain text from AI messages
+ * const plainTextFormatter: CustomSpanFormatter = (span) => {
+ *   if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+ *     const userMessage = span.input.find(m => m.role === 'user');
+ *     return {
+ *       ...span,
+ *       input: userMessage?.content ?? span.input,
+ *     };
+ *   }
+ *   return span;
+ * };
+ *
+ * // Async formatter that enriches spans with external data
+ * const enrichmentFormatter: CustomSpanFormatter = async (span) => {
+ *   const userData = await fetchUserData(span.metadata?.userId);
+ *   return {
+ *     ...span,
+ *     metadata: { ...span.metadata, userName: userData.name },
+ *   };
+ * };
+ *
+ * // Use with an exporter
+ * new BraintrustExporter({
+ *   customSpanFormatter: plainTextFormatter,
+ * });
+ * ```
+ */
+export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan | Promise<AnyExportedSpan>;
 
 // ============================================================================
 // Tracing Config Selector Interfaces
@@ -1103,9 +1277,3 @@ export type ConfigSelector = (
   options: ConfigSelectorOptions,
   availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
 ) => string | undefined;
-
-// ============================================================================
-// Tracing Storage Interfaces
-// ============================================================================
-
-export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';

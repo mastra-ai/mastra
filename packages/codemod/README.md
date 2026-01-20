@@ -45,6 +45,7 @@ npx @mastra/codemod@beta v1/mastra-core-imports .
 | `v1/agent-property-access`           | Transforms agent property access to method calls: `agent.llm` → `agent.getLLM()`                                   |
 | `v1/agent-voice`                     | Moves agent voice methods to namespace: `agent.speak()` → `agent.voice.speak()`                                    |
 | `v1/client-get-memory-thread`        | Updates `client.getMemoryThread(threadId, agentId)` to use object parameter                                        |
+| `v1/client-msg-function-args`        | Transforms MastraClient agent method calls to use messages as the first argument                                   |
 | `v1/client-offset-limit`             | Renames pagination properties from `offset`/`limit` to `page`/`perPage`                                            |
 | `v1/client-sdk-types`                | Renames Client SDK types from Get\* to List\* pattern                                                              |
 | `v1/client-to-ai-sdk-format`         | Renames `toAISdkFormat` to `toAISdkStream`                                                                         |
@@ -59,6 +60,7 @@ npx @mastra/codemod@beta v1/mastra-core-imports .
 | `v1/memory-message-v2-type`          | Renames `MastraMessageV2` type → `MastraDBMessage` in imports and usages                                           |
 | `v1/memory-query-to-recall`          | Renames `memory.query()` → `memory.recall()`                                                                       |
 | `v1/memory-vector-search-param`      | Renames `vectorMessageSearch` parameter → `vectorSearchString` in `memory.recall()` calls                          |
+| `v1/memory-readonly-to-options`      | Moves `memory.readOnly` to `memory.options.readOnly` in agent method calls                                         |
 | `v1/runtime-context`                 | Renames `RuntimeContext` to `RequestContext` and updates parameter names from `runtimeContext` to `requestContext` |
 | `v1/storage-get-messages-paginated`  | Renames `storage.getMessagesPaginated()` → `storage.listMessages()` and `offset`/`limit` → `page`/`perPage`        |
 | `v1/storage-get-threads-by-resource` | Renames `storage.getThreadsByResourceId()` → `storage.listThreadsByResourceId()`                                   |
