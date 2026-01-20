@@ -41,6 +41,12 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
+    // Migrate existing table if it has the old sorting key (createdAt, traceId, spanId)
+    // to the new sorting key (traceId, spanId) for proper uniqueness enforcement.
+    // This migration is idempotent and only runs if the old key is detected.
+    await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+
+    // Create the table (or add missing columns if it already exists)
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
   }
 
