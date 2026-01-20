@@ -259,7 +259,6 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           ' ',
           '',
         ];
-      // ... (add other language cases following the same pattern)
       case Language.GO:
         return [
           '\\nfunc ',
