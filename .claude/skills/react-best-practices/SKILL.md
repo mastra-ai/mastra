@@ -28,8 +28,9 @@ Rules are prioritized by impact:
 | 1        | Eliminating Waterfalls    | CRITICAL    |
 | 2        | Bundle Size Optimization  | CRITICAL    |
 | 3        | Client-Side Data Fetching | MEDIUM-HIGH |
-| 4        | Rendering Performance     | MEDIUM      |
-| 5        | JavaScript Performance    | LOW-MEDIUM  |
+| 4        | Re-render Optimization    | MEDIUM      |
+| 5        | Rendering Performance     | MEDIUM      |
+| 6        | JavaScript Performance    | LOW-MEDIUM  |
 
 ## Quick Reference
 
