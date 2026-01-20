@@ -2,7 +2,6 @@ import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
-import { resolveFromProjectRoot } from '@mastra/core/utils';
 
 import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
@@ -101,22 +100,13 @@ export class LibSQLStore extends MastraCompositeStore {
         this.shouldCacheInit = false;
       }
 
-      // Resolve relative file: URLs from project root
-      // e.g., file:./mastra.db → file:/Users/me/project/mastra.db
-      // Skip :memory: URLs (e.g., file::memory:?cache=shared)
-      let url = config.url;
-      if (url.startsWith('file:') && !url.startsWith('file:/') && !url.includes(':memory:')) {
-        const relativePath = url.slice(5); // Remove 'file:' prefix
-        url = `file:${resolveFromProjectRoot(relativePath)}`;
-      }
-
       this.client = createClient({
-        url,
+        url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
       });
 
       // Set PRAGMAs for better concurrency, especially for file-based databases
-      if (url.startsWith('file:') || url.includes(':memory:')) {
+      if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
         this.client
           .execute('PRAGMA journal_mode=WAL;')
           .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))

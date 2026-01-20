@@ -1,22 +1,20 @@
 ---
 '@mastra/core': minor
-'@mastra/libsql': patch
 ---
 
-Added getProjectRoot and resolveFromProjectRoot utilities for consistent path resolution.
+Added `getProjectRoot` and `resolveFromProjectRoot` utilities for path resolution.
 
-**Problem:** Relative file paths (like `file:./mastra.db`) resolved from `process.cwd()`, which varies depending on execution context (`mastra dev`, `mastra start`, `tsx`, `bun`, etc.), causing paths to resolve inconsistently.
-
-**Solution:** New utilities that resolve relative paths from the project root (nearest `package.json`):
+These utilities find the project root by searching upward for the nearest `package.json` and can resolve relative paths from that location:
 
 ```typescript
-import { resolveFromProjectRoot } from '@mastra/core/utils';
+import { getProjectRoot, resolveFromProjectRoot } from '@mastra/core/utils';
 
-// Relative paths → resolved from project root
+// Find project root
+getProjectRoot(); // → /Users/me/project
+
+// Resolve relative paths from project root
 resolveFromProjectRoot('./data/db.sqlite'); // → /project/data/db.sqlite
 
-// Absolute paths → returned as-is
+// Absolute paths returned as-is
 resolveFromProjectRoot('/var/data/db.sqlite'); // → /var/data/db.sqlite
 ```
-
-LibSQLStore now automatically resolves relative `file:` URLs from project root.
