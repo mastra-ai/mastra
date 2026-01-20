@@ -28,7 +28,7 @@ export default function DocRootLayoutMain({
         <div className="text-center lg:text-left lg:max-w-250 lg:mx-auto lg:px-4 text-[--mastra-text-secondary]!">
           Mastra 1.0 is available 🎉{" "}
           <a
-            href="#todo"
+            href="https://mastra.ai/blog/announcing-mastra-1"
             target="_blank"
             className="ml-4 underline! text-green-700! hover:no-underline! dark:text-green-400!"
           >
