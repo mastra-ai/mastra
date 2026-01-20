@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Make swagger link relative instead of point to localhost
+Make swagger-ui link relative instead of point to localhost
