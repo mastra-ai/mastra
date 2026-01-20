@@ -50,19 +50,19 @@ USING snapshot::jsonb;
 
 ## Added
 
-### Storage composition in MastraStorage
+### Storage composition in MastraCompositeStore
 
-`MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+`MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
 // Compose domains from different stores
 const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     domains: {
       memory: new MemoryLibSQL({ url: "file:./local.db" }),

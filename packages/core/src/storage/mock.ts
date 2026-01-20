@@ -1,4 +1,4 @@
-import { MastraStorage } from './base';
+import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
@@ -25,7 +25,7 @@ import { WorkflowsInMemory } from './domains/workflows/inmemory';
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class InMemoryStore extends MastraStorage {
+export class InMemoryStore extends MastraCompositeStore {
   stores: StorageDomains;
 
   /**

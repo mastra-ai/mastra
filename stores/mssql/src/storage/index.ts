@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 
 import sql from 'mssql';
@@ -143,7 +143,7 @@ const isPoolConfig = (config: MSSQLConfigType): config is MSSQLConfigType & { po
  * await observability?.createSpan(span);
  * ```
  */
-export class MSSQLStore extends MastraStorage {
+export class MSSQLStore extends MastraCompositeStore {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
