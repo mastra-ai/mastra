@@ -1894,11 +1894,6 @@
       "source": "/guides/migrations/upgrade-to-v1/rag",
       "destination": "/guides/migrations/upgrade-to-latest-0x",
       "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/guides/migrations/upgrade-to-v1/overview",
-      "destination": "/:path/guides/migrations/upgrade-to-latest-0x",
-      "permanent": true
     }
   ]
 }
