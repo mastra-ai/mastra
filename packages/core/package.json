@@ -272,8 +272,7 @@
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76",
-    "zod-v4": "npm:zod@4.1.12"
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=22.13.0"
