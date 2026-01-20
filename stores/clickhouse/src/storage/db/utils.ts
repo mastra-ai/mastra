@@ -17,8 +17,10 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_SCORERS]: `MergeTree()`,
   [TABLE_RESOURCES]: `ReplacingMergeTree()`,
-  // TODO: verify this is the correct engine for Spans when implementing clickhouse storage
-  [TABLE_SPANS]: `ReplacingMergeTree()`,
+  // ReplacingMergeTree(updatedAt) deduplicates rows with the same (traceId, spanId) sorting key,
+  // keeping the row with the highest updatedAt value. Combined with ORDER BY (traceId, spanId),
+  // this provides eventual uniqueness for the (traceId, spanId) composite key.
+  [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
 };
 
