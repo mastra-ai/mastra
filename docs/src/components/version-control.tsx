@@ -17,30 +17,30 @@ import {
 } from "@site/src/components/icons/icon";
 
 const versions = [
-  { value: "stable", label: "Stable" },
-  { value: "beta", label: "Beta" },
-];
+  { value: "v0", label: "v0" },
+  { value: "v1", label: "Latest Version" },
+] as const;
 
-type Version = "beta" | "stable";
+type Version = "v1" | "v0";
 
 const getVersionFromPath = (pathname: string): Version =>
-  pathname.includes("/docs/v1") ? "beta" : "stable";
+  pathname.includes("/docs/v0") ? "v0" : "v1";
 
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
   let newPath: string | undefined;
 
-  if (nextVersion === "beta") {
+  if (nextVersion === "v0") {
     if (pathChunks?.[1] === "ja") {
       pathChunks.splice(1, 1);
       newPath = pathChunks.join("/");
     }
-    if (pathChunks?.[2] !== "v1") {
-      pathChunks.splice(2, 0, "v1");
+    if (pathChunks?.[2] !== "v0") {
+      pathChunks.splice(2, 0, "v0");
       newPath = pathChunks.join("/");
     }
   } else {
-    if (pathChunks?.[2] === "v1") {
+    if (pathChunks?.[2] === "v0") {
       pathChunks.splice(2, 1);
       newPath = pathChunks.join("/");
     }
@@ -79,7 +79,7 @@ export default function VersionControl({
         >
           <div className="flex items-center gap-2">
             <VersionLabel />
-            {currentVersion === "beta" ? "Beta" : "Stable"}
+            {currentVersion === "v0" ? "v0" : "Latest Version"}
           </div>
           <TriggerIcon />
         </Button>
@@ -104,7 +104,7 @@ export default function VersionControl({
                 className="flex w-full items-center justify-between no-underline"
               >
                 <span className="inline-flex dark:text-white text-black items-center gap-2">
-                  {version.value === "stable" ? <StableIcon /> : <BetaIcon />}
+                  {version.value === "v0" ? <StableIcon /> : <BetaIcon />}
                   <span>{version.label}</span>
                 </span>
                 {isActive && (

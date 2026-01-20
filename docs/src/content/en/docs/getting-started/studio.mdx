@@ -61,7 +61,7 @@ The Studio UI provides an interactive development environment for you to test yo
 
 ### Agents
 
-Chat with your agent directly, dynamically switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
+Chat with your agent directly, dynamically switch [models](/models/v0), and tweak settings like temperature and top-p to understand how they affect the output.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
@@ -99,7 +99,7 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [production server](/docs/server-db/mastra-server), allowing you to develop and test against it with full parity.
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [production server](/docs/v0/server-db/mastra-server), allowing you to develop and test against it with full parity.
 
 You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request and response schemas.
 
@@ -128,7 +128,7 @@ export const mastra = new Mastra({
 
 ### Local HTTPS
 
-Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
+Mastra supports local HTTPS development through the [`--https`](/reference/v0/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -146,5 +146,5 @@ export const mastra = new Mastra({
 
 ## Next steps
 
-- Learn more about Mastra's suggested [project structure](/docs/getting-started/project-structure).
-- Integrate Mastra with your frontend framework of choice - [Next.js](/docs/frameworks/web-frameworks/next-js), [React](/docs/frameworks/web-frameworks/vite-react), or [Astro](/docs/frameworks/web-frameworks/astro).
+- Learn more about Mastra's suggested [project structure](/docs/v0/getting-started/project-structure).
+- Integrate Mastra with your frontend framework of choice - [Next.js](/docs/v0/frameworks/web-frameworks/next-js), [React](/docs/v0/frameworks/web-frameworks/vite-react), or [Astro](/docs/v0/frameworks/web-frameworks/astro).

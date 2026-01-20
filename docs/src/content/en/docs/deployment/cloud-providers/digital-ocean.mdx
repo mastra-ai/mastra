@@ -14,7 +14,7 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
 :::note
 This guide assumes your Mastra application has been created using the default
-`npx create-mastra@latest` command.
+`npx create-mastra@^0` command.
 For more information on how to create a new Mastra application,
 refer to our [getting started guide](./../../getting-started/installation)
 :::
@@ -220,7 +220,7 @@ Your Mastra application will run on port 4111 by default. Ensure your reverse pr
 
 You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
 
-Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
+Refer to the [`MastraClient` documentation](/docs/v0/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
 import { MastraClient } from "@mastra/client-js";
@@ -232,6 +232,6 @@ const mastraClient = new MastraClient({
 
 ## Next steps
 
-- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [Mastra Client SDK](/reference/v0/client-js/mastra-client)
 - [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
 - [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)

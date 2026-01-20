@@ -33,7 +33,7 @@ FIRESTORE_DATABASE_ID=(default)
 Before you can use the `MastraAuthFirebase` class you have to install the `@mastra/auth-firebase` package.
 
 ```bash copy
-npm install @mastra/auth-firebase@latest
+npm install @mastra/auth-firebase@^0
 ```
 
 ## Usage examples
@@ -106,7 +106,7 @@ const firebaseAuth = new MastraAuthFirebase({
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/auth/firebase) API reference for all available configuration options.
+> See the [MastraAuthFirebase](/reference/v0/auth/firebase) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -190,7 +190,7 @@ export const createMastraClient = (idToken: string) => {
 
 > **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
+> See [Mastra Client SDK](/docs/v0/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 

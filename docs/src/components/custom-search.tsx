@@ -248,17 +248,17 @@ export const CustomSearch: FC<SearchProps> = ({
   // Handler for empty state item selection
   const handleEmptyStateSelect = (index: number) => {
     const emptyStateLinks = [
-      "/docs/getting-started/installation",
-      "/docs/agents/overview",
-      "/docs/workflows/overview",
-      "/docs/server-db/local-dev-playground",
-      "/docs/streaming/overview",
-      "/docs/tools-mcp/mcp-overview",
-      "/docs/memory/overview",
-      "/docs/scorers/overview",
-      "/docs/rag/overview",
-      "/docs/observability/overview",
-      "/docs/deployment/overview",
+      "/docs/v0/getting-started/installation",
+      "/docs/v0/agents/overview",
+      "/docs/v0/workflows/overview",
+      "/docs/v0/server-db/local-dev-playground",
+      "/docs/v0/streaming/overview",
+      "/docs/v0/tools-mcp/mcp-overview",
+      "/docs/v0/memory/overview",
+      "/docs/v0/scorers/overview",
+      "/docs/v0/rag/overview",
+      "/docs/v0/observability/overview",
+      "/docs/v0/deployment/overview",
     ];
 
     const link = emptyStateLinks[index];

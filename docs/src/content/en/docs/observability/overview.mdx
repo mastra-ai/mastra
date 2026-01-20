@@ -28,7 +28,7 @@ Specialized tracing for AI operations that captures:
 ### OTEL Tracing (Deprecated)
 
 :::warning
-OTEL Tracing via the `telemetry` configuration is deprecated and will be removed in a future release. Use [AI Tracing](/docs/observability/ai-tracing/overview) with the [OpenTelemetry exporter](/docs/observability/ai-tracing/exporters/otel) instead for OTLP-compatible tracing.
+OTEL Tracing via the `telemetry` configuration is deprecated and will be removed in a future release. Use [AI Tracing](/docs/v0/observability/ai-tracing/overview) with the [OpenTelemetry exporter](/docs/v0/observability/ai-tracing/exporters/otel) instead for OTLP-compatible tracing.
 
 If you are not using the old `telemetry` system, you should explicitly disable it to suppress deprecation warnings:
 
@@ -70,11 +70,11 @@ export const mastra = new Mastra({
 
 With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
 
-We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing/overview) documentation.
+We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/v0/observability/ai-tracing/overview) documentation.
 
 ## What's Next?
 
-- **[Set up AI Tracing](/docs/observability/ai-tracing/overview)**: Configure tracing for your application
-- **[Configure Logging](/docs/observability/logging)**: Add structured logging
-- **[View Examples](/examples/observability/basic-ai-tracing)**: See observability in action
-- **[API Reference](/reference/observability/ai-tracing/)**: Detailed configuration options
+- **[Set up AI Tracing](/docs/v0/observability/ai-tracing/overview)**: Configure tracing for your application
+- **[Configure Logging](/docs/v0/observability/logging)**: Add structured logging
+- **[View Examples](/examples/v0/observability/basic-ai-tracing)**: See observability in action
+- **[API Reference](/reference/v0/observability/ai-tracing/)**: Detailed configuration options

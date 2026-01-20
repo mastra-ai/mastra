@@ -33,7 +33,9 @@ export default function Layout(props: Props): ReactNode {
 
   const location = useLocation();
   const { siteConfig } = useDocusaurusContext();
-  const cleanPath = location.pathname.replace(/^\/ja(\/|$)/, "/");
+  const cleanPath = location.pathname
+    .replace(/^\/ja(\/|$)/, "/")
+    .replace(/^\/([a-z]+)\/v0(\/|$)/, "/$1$2");
   const canonicalUrl = `${siteConfig.url}${cleanPath}`;
 
   return (

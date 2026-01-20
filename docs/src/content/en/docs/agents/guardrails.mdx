@@ -65,7 +65,7 @@ export const normalizedAgent = new Agent({
 });
 ```
 
-> See [UnicodeNormalizer](/reference/processors/unicode-normalizer) for a full list of configuration options.
+> See [UnicodeNormalizer](/reference/v0/processors/unicode-normalizer) for a full list of configuration options.
 
 ### Preventing prompt injection
 
@@ -87,7 +87,7 @@ export const secureAgent = new Agent({
 });
 ```
 
-> See [PromptInjectionDetector](/reference/processors/prompt-injection-detector) for a full list of configuration options.
+> See [PromptInjectionDetector](/reference/v0/processors/prompt-injection-detector) for a full list of configuration options.
 
 ### Detecting and translating language
 
@@ -109,7 +109,7 @@ export const multilingualAgent = new Agent({
 });
 ```
 
-> See [LanguageDetector](/reference/processors/language-detector) for a full list of configuration options.
+> See [LanguageDetector](/reference/v0/processors/language-detector) for a full list of configuration options.
 
 ## Output processors
 
@@ -134,7 +134,7 @@ export const batchedAgent = new Agent({
 });
 ```
 
-> See [BatchPartsProcessor](/reference/processors/batch-parts-processor) for a full list of configuration options.
+> See [BatchPartsProcessor](/reference/v0/processors/batch-parts-processor) for a full list of configuration options.
 
 ### Limiting token usage
 
@@ -155,7 +155,7 @@ export const limitedAgent = new Agent({
 });
 ```
 
-> See [TokenLimiterProcessor](/reference/processors/token-limiter-processor) for a full list of configuration options.
+> See [TokenLimiterProcessor](/reference/v0/processors/token-limiter-processor) for a full list of configuration options.
 
 ### Scrubbing system prompts
 
@@ -180,7 +180,7 @@ const scrubbedAgent = new Agent({
 });
 ```
 
-> See [SystemPromptScrubber](/reference/processors/system-prompt-scrubber) for a full list of configuration options.
+> See [SystemPromptScrubber](/reference/v0/processors/system-prompt-scrubber) for a full list of configuration options.
 
 ## Hybrid processors
 
@@ -211,7 +211,7 @@ export const moderatedAgent = new Agent({
 });
 ```
 
-> See [ModerationProcessor](/reference/processors/moderation-processor) for a full list of configuration options.
+> See [ModerationProcessor](/reference/v0/processors/moderation-processor) for a full list of configuration options.
 
 ### Detecting and redacting PII
 
@@ -240,7 +240,7 @@ export const privateAgent = new Agent({
 });
 ```
 
-> See [PIIDetector](/reference/processors/pii-detector) for a full list of configuration options.
+> See [PIIDetector](/reference/v0/processors/pii-detector) for a full list of configuration options.
 
 ## Applying multiple processors
 
@@ -344,6 +344,6 @@ If the built-in processors don’t cover your needs, you can create your own by 
 
 Available examples:
 
-- [Message Length Limiter](../../examples/processors/message-length-limiter)
-- [Response Length Limiter](../../examples/processors/response-length-limiter)
-- [Response Validator](../../examples/processors/response-validator)
+- [Message Length Limiter](/examples/v0/processors/message-length-limiter)
+- [Response Length Limiter](/examples/v0/processors/response-length-limiter)
+- [Response Validator](/examples/v0/processors/response-validator)

@@ -19,14 +19,14 @@ In this guide you'll learn how to install the necessary Mastra dependencies, cre
 
 - An existing Express app set up with TypeScript
 - Node.js `v20.0` or higher
-- An API key from a supported [Model Provider](/models)
+- An API key from a supported [Model Provider](/models/v0)
 
 ## Adding Mastra
 
-First, install the necessary Mastra dependencies to run an Agent. This guide uses OpenAI as its model but you can use any supported [model provider](/models).
+First, install the necessary Mastra dependencies to run an Agent. This guide uses OpenAI as its model but you can use any supported [model provider](/models/v0).
 
 ```bash copy
-npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @ai-sdk/openai@^1.0.0
+npm install mastra@^0 @mastra/core@^0 @mastra/libsql@^0 zod@^3.0.0 @ai-sdk/openai@^1.0.0
 ```
 
 If not existent yet, create an `.env` file and add your OpenAI API key:
@@ -168,11 +168,11 @@ app.listen(port, () => {
 });
 ```
 
-By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/core/getAgent) to get programmatic access. With [`.generate()`](/reference/agents/generate) you then can interact with the respective agent.
+By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/v0/core/getAgent) to get programmatic access. With [`.generate()`](/reference/v0/agents/generate) you then can interact with the respective agent.
 
 :::note
 
-Read the [Agent reference docs](/reference/agents/agent) to learn more.
+Read the [Agent reference docs](/reference/v0/agents/agent) to learn more.
 
 :::
 
@@ -190,7 +190,7 @@ The weather in London is currently sunny. If you need more details like humidity
 
 ## Running the Agent Server
 
-In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/getting-started/studio) which you can use to improve and debug your agent.
+In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/v0/getting-started/studio) which you can use to improve and debug your agent.
 
 Add a script to your `package.json`:
 

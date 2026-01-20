@@ -27,7 +27,7 @@ CLERK_JWKS_URI=https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.jso
 Before you can use the `MastraAuthClerk` class you have to install the `@mastra/auth-clerk` package.
 
 ```bash copy
-npm install @mastra/auth-clerk@latest
+npm install @mastra/auth-clerk@^0
 ```
 
 ## Usage example
@@ -50,7 +50,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthClerk](/reference/auth/clerk) API reference for all available configuration options.
+> See the [MastraAuthClerk](/reference/v0/auth/clerk) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -93,7 +93,7 @@ export const mastraClient = new MastraClient({
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
+> See [Mastra Client SDK](/docs/v0/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 

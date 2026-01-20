@@ -46,7 +46,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models).
+Mastra supports more than 600 models. Choose from the [full list](/models/v0).
 
 :::
 
@@ -161,7 +161,7 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/agents/agent) for more information.
+> See the [Agent reference doc](/reference/v0/agents/agent) for more information.
 
 ### Registering an agent
 
@@ -318,7 +318,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
+> See [.generate()](/reference/v0/agents/generate) or [.stream()](/reference/v0/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -446,7 +446,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](/docs/agents/using-tools) for more information.
+> See [Using Tools](/docs/v0/agents/using-tools) for more information.
 
 ## Using `RuntimeContext`
 
@@ -469,7 +469,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Runtime Context](/docs/v0/server-db/runtime-context) for more information.
 
 ## Using `maxSteps`
 
@@ -524,10 +524,10 @@ console.log(response.text);
 
 ## Testing with Studio
 
-Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/v0/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](/docs/agents/using-tools)
-- [Agent Memory](/docs/agents/agent-memory)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Using Tools](/docs/v0/agents/using-tools)
+- [Agent Memory](/docs/v0/agents/agent-memory)
+- [Runtime Context](/docs/v0/server-db/runtime-context)

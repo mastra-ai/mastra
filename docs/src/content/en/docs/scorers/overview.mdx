@@ -24,7 +24,7 @@ There are different kinds of scorers, each serving a specific purpose. Here are 
 To access Mastra's scorers feature install the `@mastra/evals` package.
 
 ```bash copy
-npm install @mastra/evals@latest
+npm install @mastra/evals@^0
 ```
 
 ## Live evaluations
@@ -33,7 +33,7 @@ npm install @mastra/evals@latest
 
 ### Adding scorers to agents
 
-You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/built-in-scorers) for all available options.
+You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v0/scorers/built-in-scorers) for all available options.
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -130,10 +130,10 @@ Once registered, you can score traces interactively within Studio under the Obse
 
 Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see [Studio](/docs/getting-started/studio) docs.
+For more details, see [Studio](/docs/v0/getting-started/studio) docs.
 
 ## Next steps
 
-- Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
-- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/built-in-scorers) section
-- Test scorers with [Studio](/docs/getting-started/studio)
+- Learn how to create your own scorers in the [Creating Custom Scorers](/docs/v0/scorers/custom-scorers) guide
+- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/v0/scorers/built-in-scorers) section
+- Test scorers with [Studio](/docs/v0/getting-started/studio)

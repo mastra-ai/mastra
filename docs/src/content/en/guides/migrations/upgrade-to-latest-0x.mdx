@@ -7,7 +7,7 @@ description: "Learn how to upgrade through breaking changes in pre-v1 versions o
 
 :::note Upgrading to Mastra v1?
 
-If your goal is to upgrade to Mastra v1, you should first complete this guide to reach the latest 0.x version. Then, switch to the [v1 documentation](https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview) and follow the comprehensive [v1 migration guide](https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview), which covers all breaking changes when upgrading from 0.x to v1, including automated codemods to help with the migration.
+If your goal is to upgrade to Mastra v1, you should first complete this guide to reach the latest 0.x version. Then, switch to the [v1 documentation](https://mastra.ai/guides/migrations/upgrade-to-v1/overview) and follow the comprehensive [v1 migration guide](https://mastra.ai/guides/migrations/upgrade-to-v1/overview), which covers all breaking changes when upgrading from 0.x to v1, including automated codemods to help with the migration.
 
 :::
 
@@ -79,15 +79,15 @@ If you want to adopt the new default behavior, you can optionally remove explici
 
 ### Deprecated: `format: "aisdk"`
 
-The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
+The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](/docs/v0/frameworks/agentic-uis/ai-sdk).
 
 ### Removed: MCP Classes
 
 `@mastra/mcp` - `0.14.0`
 
-- Removed `MastraMCPClient` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
-- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) type instead. The API is identical.
-- Removed `MCPConfiguration` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
+- Removed `MastraMCPClient` class. Use [`MCPClient`](/reference/v0/tools/mcp-client) class instead.
+- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](/reference/v0/tools/mcp-client#mcpclientoptions) type instead. The API is identical.
+- Removed `MCPConfiguration` class. Use [`MCPClient`](/reference/v0/tools/mcp-client) class instead.
 
 ### Removed: CLI flags & commands
 

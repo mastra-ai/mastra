@@ -17,20 +17,17 @@ function AnnouncementBanner() {
         <GithubCautionIcon />
       </div>
       <div>
-        <span className="font-semibold">
-          Mastra v1 is coming in January 2026.
-        </span>{" "}
-        Get ahead by starting{" "}
+        <span className="font-semibold">Mastra v1 was released!</span> Start{" "}
         <a
           className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
-          href="https://mastra.ai/docs/v1/getting-started/start"
+          href="https://mastra.ai/docs/getting-started/start"
         >
           new projects
         </a>{" "}
-        with the beta or{" "}
+        with v1 or{" "}
         <a
           className="text-yellow-700! dark:text-yellow-500! underline! hover:no-underline! font-medium!"
-          href="https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview"
+          href="https://mastra.ai/guides/migrations/upgrade-to-v1/overview"
         >
           upgrade
         </a>{" "}
@@ -46,7 +43,7 @@ function NavbarContentDesktop() {
   return (
     <div className="flex px-4 border-b-[0.5px] h-(--ifm-navbar-height) border-(--border-subtle) mx-auto w-full items-center justify-between @container">
       <div className="flex gap-2 items-center">
-        <Link href="/docs">
+        <Link href="/docs/v0">
           <Logo />
         </Link>
         <div className="hidden @[1262px]:block">

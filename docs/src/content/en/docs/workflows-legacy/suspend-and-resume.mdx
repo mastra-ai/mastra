@@ -310,7 +310,7 @@ The LibSQL storage can be configured in different modes:
 For serverless applications or environments where Redis is preferred:
 
 ```bash copy
-npm install @mastra/upstash@latest
+npm install @mastra/upstash@^0
 ```
 
 ```typescript
@@ -394,13 +394,13 @@ await start({ triggerData: { requestId: "auto-123" } });
 
 For a deeper understanding of how suspend and resume works under the hood:
 
-- [Understanding Snapshots in Mastra Workflows](/reference/legacyWorkflows/snapshots) - Learn about the snapshot mechanism that powers suspend and resume functionality
+- [Understanding Snapshots in Mastra Workflows](/reference/v0/legacyWorkflows/snapshots) - Learn about the snapshot mechanism that powers suspend and resume functionality
 - [Step Configuration Guide](./steps) - Learn more about configuring steps in your workflows
 - [Control Flow Guide](./control-flow) - Advanced workflow control patterns
-- [Event-Driven Workflows](/reference/legacyWorkflows/events) - Detailed reference for event-based workflows
+- [Event-Driven Workflows](/reference/v0/legacyWorkflows/events) - Detailed reference for event-based workflows
 
 ## Related Resources
 
-- See the [Suspend and Resume Example](/examples/workflows_legacy/suspend-and-resume) for a complete working example
-- Check the [Step Class Reference](/reference/legacyWorkflows/step-class) for suspend/resume API details
-- Review [Workflow Observability](/docs/observability/otel-tracing) for monitoring suspended workflows
+- See the [Suspend and Resume Example](/examples/v0/workflows_legacy/suspend-and-resume) for a complete working example
+- Check the [Step Class Reference](/reference/v0/legacyWorkflows/step-class) for suspend/resume API details
+- Review [Workflow Observability](/docs/v0/observability/otel-tracing) for monitoring suspended workflows

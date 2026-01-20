@@ -6,7 +6,7 @@ description: "Overview of evals in Mastra, detailing their capabilities for eval
 # Evals Overview
 
 :::info Scorers
-This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
+This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/v0/scorers/overview).
 :::
 
 While traditional software tests have clear pass/fail conditions, AI outputs are non-deterministic — they can vary with the same input. Evals help bridge this gap by providing quantifiable metrics for measuring agent quality.
@@ -28,7 +28,7 @@ There are different kinds of evals, each serving a specific purpose. Here are so
 To access Mastra's evals feature install the `@mastra/evals` package.
 
 ```bash copy
-npm install @mastra/evals@latest
+npm install @mastra/evals@^0
 ```
 
 ## Getting started
@@ -99,8 +99,8 @@ Once you're hitting your targets:
 3. Test edge cases - Add examples that cover unusual scenarios
 4. Fine-tune - Look for ways to improve efficiency
 
-See [Textual Evals](/docs/scorers/evals-legacy/textual-evals) for more info on what evals can do.
+See [Textual Evals](/docs/v0/scorers/evals-legacy/textual-evals) for more info on what evals can do.
 
-For more info on how to create your own evals, see the [Custom Evals](/docs/scorers/evals-legacy/custom-eval) guide.
+For more info on how to create your own evals, see the [Custom Evals](/docs/v0/scorers/evals-legacy/custom-eval) guide.
 
-For running evals in your CI pipeline, see the [Running in CI](/docs/scorers/evals-legacy/running-in-ci) guide.
+For running evals in your CI pipeline, see the [Running in CI](/docs/v0/scorers/evals-legacy/running-in-ci) guide.

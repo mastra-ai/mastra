@@ -33,7 +33,7 @@ AUTH0_AUDIENCE=your-api-identifier
 Before you can use the `MastraAuthAuth0` class you have to install the `@mastra/auth-auth0` package.
 
 ```bash copy
-npm install @mastra/auth-auth0@latest
+npm install @mastra/auth-auth0@^0
 ```
 
 ## Usage examples
@@ -93,7 +93,7 @@ const auth0Provider = new MastraAuthAuth0({
 });
 ```
 
-> See the [MastraAuthAuth0](/reference/auth/auth0) API reference for all available configuration options.
+> See the [MastraAuthAuth0](/reference/v0/auth/auth0) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -170,7 +170,7 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
+> See [Mastra Client SDK](/docs/v0/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 

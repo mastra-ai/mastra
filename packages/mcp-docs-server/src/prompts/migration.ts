@@ -3,15 +3,15 @@ import type { Prompt, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
 const UPGRADE_MESSAGE = `# Migration Guide Upgrade Required
 
-To access migration guides for upgrading to Mastra v1.0-beta, you need to upgrade your mcp-docs-server to the beta version.
+To access migration guides for upgrading to Mastra v1, you need to upgrade your mcp-docs-server to the latest version.
 
 ## How to Upgrade
 
-The migration tool and prompts are only available in the beta version of the mcp-docs-server.
+The migration tool and prompts are only available in the latest version of the mcp-docs-server.
 
-Visit the installation guide for detailed instructions on how to upgrade to the beta version:
+Visit the installation guide for detailed instructions on how to upgrade to the latest version:
 
-https://mastra.ai/docs/v1/getting-started/mcp-docs-server#installation
+https://mastra.ai/docs/getting-started/mcp-docs-server#installation
 
 Once upgraded, you'll be able to:
 - Browse migration guides with the \`mastraMigration\` tool
@@ -19,19 +19,15 @@ Once upgraded, you'll be able to:
 - Get step-by-step migration instructions for each breaking change
 - Use automated codemods to handle many migrations automatically
 
-## Why Beta?
-
-The migration guides are specific to the v1.0-beta release and are actively being updated as the beta evolves. The stable (0.x) documentation server doesn't include these guides as they're not relevant to users on the stable version.
-
 ---
 
-**Note:** This message is shown because you're currently using the stable (@latest) version of @mastra/mcp-docs-server. Upgrade to @beta to access migration guides and prompts.`;
+**Note:** This message is shown because you're currently using the 0.x version of @mastra/mcp-docs-server. Upgrade to @latest to access migration guides and prompts.`;
 
 const migrationPrompts: Prompt[] = [
   {
     name: 'upgrade-to-v1',
     description:
-      'Get a guided migration plan for upgrading from Mastra v0.x to v1.0-beta. Optionally specify an area (e.g., "agent", "workflow") to focus on.',
+      'Get a guided migration plan for upgrading from Mastra v0.x to v1. Optionally specify an area (e.g., "agent", "workflow") to focus on.',
     arguments: [
       {
         name: 'area',
@@ -43,7 +39,7 @@ const migrationPrompts: Prompt[] = [
   {
     name: 'migration-checklist',
     description:
-      'Get a comprehensive checklist for migrating to Mastra v1.0-beta. Lists all breaking changes organized by area.',
+      'Get a comprehensive checklist for migrating to Mastra v1. Lists all breaking changes organized by area.',
   },
 ];
 

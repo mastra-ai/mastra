@@ -30,28 +30,28 @@ Install the required Mastra packages:
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+npm install mastra@^0 @mastra/core@^0 @mastra/libsql@^0 @mastra/client-js@^0
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+yarn add mastra@^0 @mastra/core@^0 @mastra/libsql@^0 @mastra/client-js@^0
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+pnpm add mastra@^0 @mastra/core@^0 @mastra/libsql@^0 @mastra/client-js@^0
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
+bun add mastra@^0 @mastra/core@^0 @mastra/libsql@^0 @mastra/client-js@^0
 ```
 
 </TabItem>
@@ -66,17 +66,17 @@ To integrate Mastra into your project, you have two options:
 Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
 ```bash copy
-npx mastra@latest init --dir . --components agents,tools --example --llm openai
+npx mastra@^0 init --dir . --components agents,tools --example --llm openai
 ```
 
-> See [mastra init](/reference/cli/create-mastra) for more information.
+> See [mastra init](/reference/v0/cli/create-mastra) for more information.
 
 ### 2. Use the Interactive CLI
 
 If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
 ```bash copy
-npx mastra@latest init
+npx mastra@^0 init
 ```
 
 :::warning
@@ -164,7 +164,7 @@ mastra dev:mastra
 </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/v0/getting-started/studio) for more information.
 
 ## Start Vite Dev Server
 

@@ -7,7 +7,7 @@ Then, let's check if @mastra/core is in the package.json and there is a src/mast
 If you haven't installed Mastra yet, you can do so by running:
 
 ```bash
-npm -y create mastra@latest
+npm -y create mastra@^0
 ```
 
 If you do need to install mastra, follow the on-screen prompts and make sure to:

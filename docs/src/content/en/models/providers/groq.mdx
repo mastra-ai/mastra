@@ -81,7 +81,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 131072,
     "inputCost": 0.05,
     "outputCost": 0.08
   },
@@ -165,7 +165,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 128,
+    "maxOutput": 1024,
     "inputCost": 0.2,
     "outputCost": 0.2
   },
@@ -213,9 +213,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 65536,
     "inputCost": 0.15,
-    "outputCost": 0.75
+    "outputCost": 0.6
   },
   {
     "model": "groq/openai/gpt-oss-20b",
@@ -225,9 +225,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.5
+    "maxOutput": 65536,
+    "inputCost": 0.075,
+    "outputCost": 0.3
   },
   {
     "model": "groq/qwen-qwq-32b",

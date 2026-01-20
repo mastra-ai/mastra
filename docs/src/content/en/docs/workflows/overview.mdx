@@ -53,11 +53,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](/reference/workflows/step) for a full list of configuration options.
+> See the [Step Class](/reference/v0/workflows/step) for a full list of configuration options.
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/v0/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -82,11 +82,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
+> See the [Workflow Class](/reference/v0/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/v0/workflows/control-flow) page for more information.
 
 ## Workflow state
 
@@ -110,11 +110,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Workflow State](/docs/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+> See [Workflow State](/docs/v0/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 ## Workflows as steps
 
-Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v0/workflows/control-flow).
 
 ```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
@@ -307,7 +307,7 @@ if (activeRuns.runs.length > 0) {
 }
 ```
 
-:::Note
+:::note
 
 When running the local mastra server, all active workflow runs will be restarted automatically when the server starts.
 
@@ -315,7 +315,7 @@ When running the local mastra server, all active workflow runs will be restarted
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](/docs/v0/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -336,17 +336,17 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Runtime Context](/docs/v0/server-db/runtime-context) for more information.
 
 ## Testing with Studio
 
-Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/v0/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](/guides/v0/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Workflow State](/docs/workflows/workflow-state)
-- [Control Flow](/docs/workflows/control-flow)
-- [Suspend & Resume](/docs/workflows/suspend-and-resume)
-- [Error Handling](/docs/workflows/error-handling)
+- [Workflow State](/docs/v0/workflows/workflow-state)
+- [Control Flow](/docs/v0/workflows/control-flow)
+- [Suspend & Resume](/docs/v0/workflows/suspend-and-resume)
+- [Error Handling](/docs/v0/workflows/error-handling)

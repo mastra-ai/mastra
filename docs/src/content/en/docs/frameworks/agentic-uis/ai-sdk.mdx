@@ -24,7 +24,7 @@ export const weatherAgent = new Agent({
 });
 ```
 
-> See [Using AI SDK with Mastra](/models#use-ai-sdk-with-mastra) for more information.
+> See [Using AI SDK with Mastra](/models/v0#use-ai-sdk-with-mastra) for more information.
 
 ## Streaming
 
@@ -55,7 +55,7 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 
 ### `chatRoute()`
 
-When setting up a [custom API route](/docs/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
+When setting up a [custom API route](/docs/v0/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
@@ -148,7 +148,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 });
 ```
 
-To  enable agent text chunks and tool calls streaming when a workflow step pipes an agent's stream to the workflow writer (see [Workflow Streaming](/docs/streaming/workflow-streaming#workflow-using-an-agent)).
+To  enable agent text chunks and tool calls streaming when a workflow step pipes an agent's stream to the workflow writer (see [Workflow Streaming](/docs/v0/streaming/workflow-streaming#workflow-using-an-agent)).
 
 Set the `includeTextStreamParts` `workflowRoute` option to `true`
 ```typescript title="src/mastra/index.ts" copy
@@ -213,7 +213,7 @@ The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, 
   - `data-tool-network`: Nested network emitted from within an tool stream.
   - `data-tool-agent`: Nested agent emitted from within an tool stream.
 
-Here's an example: For a [nested agent stream within a tool](/docs/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
+Here's an example: For a [nested agent stream within a tool](/docs/v0/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
 
 ```typescript title="app/page.tsx" copy
 "use client";
@@ -302,7 +302,7 @@ export const testTool = createTool({
 });
 ```
 
-For more information about tool streaming see [Tool streaming documentation](/docs/streaming/tool-streaming)
+For more information about tool streaming see [Tool streaming documentation](/docs/v0/streaming/tool-streaming)
 
 ### Stream Transformations
 
@@ -454,7 +454,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory) for key implementation details.
+> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/v0/agents/agent-memory) for key implementation details.
 
 ### Using `useCompletion()`
 
@@ -599,7 +599,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/v0/server-db/runtime-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 
