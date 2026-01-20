@@ -7,10 +7,11 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
 import { TEST_CONFIG, connectionString } from './test-utils';
 import { PostgresStore } from '.';
+import { ObservabilityPG } from './domains/observability';
 
 /**
  * PostgreSQL-specific migration tests that verify the spans table migration
@@ -400,6 +401,604 @@ describe('PostgreSQL Spans Table Migration', () => {
     expect(createdSpan).not.toBeNull();
     expect(createdSpan!.name).toBe('Test Span After Migration');
   }, 30000); // 30 second timeout
+});
+
+/**
+ * PostgreSQL-specific tests for duplicate spans handling during migration.
+ * Issue #11840: Migration fails when existing data contains duplicate (traceId, spanId) combinations.
+ */
+describe('PostgreSQL Duplicate Spans Migration', () => {
+  const testSchema = `dup_spans_${Date.now().toString(36)}`; // Keep schema name short
+  let adminPool: Pool;
+
+  beforeAll(async () => {
+    adminPool = new Pool({ connectionString });
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${testSchema}`);
+    } finally {
+      client.release();
+    }
+  }, 30000);
+
+  afterAll(async () => {
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+    } finally {
+      client.release();
+      await adminPool.end();
+    }
+  }, 30000);
+
+  /**
+   * Helper to create the spans table with OLD schema (no PK constraint)
+   */
+  async function createOldSpansTable(pool: Pool, schema: string): Promise<void> {
+    const client = await pool.connect();
+    try {
+      const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+        .map(([colName, colDef]) => {
+          const sqlType =
+            colDef.type === 'text'
+              ? 'TEXT'
+              : colDef.type === 'jsonb'
+                ? 'JSONB'
+                : colDef.type === 'timestamp'
+                  ? 'TIMESTAMP'
+                  : colDef.type === 'boolean'
+                    ? 'BOOLEAN'
+                    : 'TEXT';
+          const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+          return `"${colName}" ${sqlType} ${nullable}`.trim();
+        })
+        .join(', ');
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ${schema}.${TABLE_SPANS} (
+          ${oldColumns}
+        )
+      `);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Helper to insert a span with specific timestamp values
+   */
+  async function insertSpan(
+    pool: Pool,
+    schema: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO ${schema}.${TABLE_SPANS}
+         ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          span.traceId,
+          span.spanId,
+          null,
+          span.name,
+          'agent_run',
+          false,
+          new Date('2024-01-01T00:00:00Z'),
+          span.endedAt ?? null,
+          span.createdAt,
+          span.updatedAt,
+        ],
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  it('should fail to add PRIMARY KEY when duplicate spans exist (current buggy behavior)', async () => {
+    const subSchema = `${testSchema}_fpk`;
+    const client = await adminPool.connect();
+
+    try {
+      // Setup: Create schema and table
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1', // Same spanId - this creates a duplicate
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify we have 2 rows with same traceId/spanId
+      const count = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(Number(count.rows[0].count)).toBe(2);
+
+      // Now try to add the PRIMARY KEY constraint - this should fail with error 23505
+      // This test documents the current buggy behavior
+      await expect(
+        client.query(`
+          ALTER TABLE "${subSchema}".${TABLE_SPANS}
+          ADD CONSTRAINT ${subSchema}_spans_pk
+          PRIMARY KEY ("traceId", "spanId")
+        `),
+      ).rejects.toThrow(/could not create unique index|duplicate key/i);
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should deduplicate spans keeping completed spans over incomplete', async () => {
+    const subSchema = `${testSchema}_dc`;
+    const client = await adminPool.connect();
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      // Insert incomplete span (endedAt is NULL)
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Incomplete span',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      // Insert completed span (endedAt is set) - should be kept
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Completed span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Run migration with deduplication
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'dedup-completed-test',
+        schemaName: subSchema,
+      });
+      await store.init();
+
+      // Verify only one span remains
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(Number(countResult.rows[0].count)).toBe(1);
+
+      // Verify the completed span was kept
+      const keptSpan = await client.query(
+        `SELECT name, "endedAt" FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(keptSpan.rows[0].name).toBe('Completed span');
+      expect(keptSpan.rows[0].endedAt).not.toBeNull();
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should deduplicate spans keeping most recent updatedAt when both completed', async () => {
+    const subSchema = `${testSchema}_du`;
+    const client = await adminPool.connect();
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      // Insert older completed span
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older completed span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'), // older
+      });
+
+      // Insert newer completed span - should be kept
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer completed span',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:05Z'), // newer
+      });
+
+      // Run migration with deduplication
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'dedup-updated-test',
+        schemaName: subSchema,
+      });
+      await store.init();
+
+      // Verify only one span remains
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(Number(countResult.rows[0].count)).toBe(1);
+
+      // Verify the newer updatedAt span was kept
+      const keptSpan = await client.query(
+        `SELECT name FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(keptSpan.rows[0].name).toBe('Newer completed span');
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should deduplicate spans keeping most recent createdAt as final fallback', async () => {
+    const subSchema = `${testSchema}_dcr`;
+    const client = await adminPool.connect();
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      const sameUpdatedAt = new Date('2024-01-01T00:00:05Z');
+
+      // Insert older createdAt span
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Older createdAt span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'), // older
+        updatedAt: sameUpdatedAt,
+      });
+
+      // Insert newer createdAt span - should be kept
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Newer createdAt span',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:02Z'), // newer
+        updatedAt: sameUpdatedAt,
+      });
+
+      // Run migration with deduplication
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'dedup-created-test',
+        schemaName: subSchema,
+      });
+      await store.init();
+
+      // Verify only one span remains
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(Number(countResult.rows[0].count)).toBe(1);
+
+      // Verify the newer createdAt span was kept
+      const keptSpan = await client.query(
+        `SELECT name FROM ${subSchema}.${TABLE_SPANS} WHERE "traceId" = 'trace-1' AND "spanId" = 'span-1'`,
+      );
+      expect(keptSpan.rows[0].name).toBe('Newer createdAt span');
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should log deleted duplicate spans during deduplication', async () => {
+    const subSchema = `${testSchema}_dl`;
+    const client = await adminPool.connect();
+    const loggedMessages: Array<{ level: string; message: string; data?: any }> = [];
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      // Insert duplicates
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate to delete',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      await insertSpan(adminPool, subSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate to keep',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Create store with custom logger to capture log messages
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'dedup-logging-test',
+        schemaName: subSchema,
+        logger: {
+          debug: (message: string, data?: any) => loggedMessages.push({ level: 'debug', message, data }),
+          info: (message: string, data?: any) => loggedMessages.push({ level: 'info', message, data }),
+          warn: (message: string, data?: any) => loggedMessages.push({ level: 'warn', message, data }),
+          error: (message: string, data?: any) => loggedMessages.push({ level: 'error', message, data }),
+        } as any,
+      });
+      await store.init();
+
+      // Verify that deleted duplicates were logged
+      const deduplicationLogs = loggedMessages.filter(
+        log => log.message.includes('duplicate') || log.message.includes('dedup'),
+      );
+      expect(deduplicationLogs.length).toBeGreaterThan(0);
+
+      // Verify log contains information about deleted spans
+      const deletedSpanLog = loggedMessages.find(
+        log => log.data && (log.data.traceId === 'trace-1' || log.data.deletedCount),
+      );
+      expect(deletedSpanLog).toBeDefined();
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+
+  it('should successfully add PRIMARY KEY after deduplication', async () => {
+    const subSchema = `${testSchema}_pk`;
+    const client = await adminPool.connect();
+
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${subSchema}`);
+      await createOldSpansTable(adminPool, subSchema);
+
+      // Insert multiple sets of duplicates
+      for (let i = 1; i <= 3; i++) {
+        await insertSpan(adminPool, subSchema, {
+          traceId: `trace-${i}`,
+          spanId: `span-${i}`,
+          name: `Duplicate A for trace-${i}`,
+          endedAt: null,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          updatedAt: new Date('2024-01-01T00:00:00Z'),
+        });
+
+        await insertSpan(adminPool, subSchema, {
+          traceId: `trace-${i}`,
+          spanId: `span-${i}`,
+          name: `Duplicate B for trace-${i}`,
+          endedAt: new Date('2024-01-01T00:00:01Z'),
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+          updatedAt: new Date('2024-01-01T00:00:01Z'),
+        });
+      }
+
+      // Verify we have 6 rows (2 duplicates each for 3 traces)
+      const beforeCount = await client.query(`SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS}`);
+      expect(Number(beforeCount.rows[0].count)).toBe(6);
+
+      // Run migration - should deduplicate and add PK successfully
+      const store = new PostgresStore({
+        ...TEST_CONFIG,
+        id: 'pk-after-dedup-test',
+        schemaName: subSchema,
+      });
+      await store.init();
+
+      // Verify we now have 3 rows (one per trace)
+      const afterCount = await client.query(`SELECT COUNT(*) as count FROM ${subSchema}.${TABLE_SPANS}`);
+      expect(Number(afterCount.rows[0].count)).toBe(3);
+
+      // Verify the PRIMARY KEY constraint exists
+      const pkExists = await client.query(`
+        SELECT 1 FROM pg_constraint
+        WHERE conname LIKE '${subSchema}%mastra_ai_spans%pk'
+      `);
+      expect(pkExists.rows.length).toBe(1);
+
+      await store.close();
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${subSchema} CASCADE`);
+      client.release();
+    }
+  }, 30000);
+});
+
+/**
+ * PostgreSQL-specific tests for ON CONFLICT handling to prevent future duplicates.
+ * This ensures that after migration, duplicate inserts are handled gracefully.
+ */
+describe('PostgreSQL Spans ON CONFLICT Handling', () => {
+  const testSchema = `on_conf_${Date.now().toString(36)}`; // Keep schema name short
+  let store: PostgresStore;
+  let observability: ObservabilityPG;
+  let adminPool: Pool;
+
+  beforeAll(async () => {
+    adminPool = new Pool({ connectionString });
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${testSchema}`);
+    } finally {
+      client.release();
+    }
+
+    store = new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'on-conflict-test-store',
+      schemaName: testSchema,
+    });
+    await store.init();
+    observability = (await store.getStore('observability')) as ObservabilityPG;
+  }, 30000);
+
+  afterAll(async () => {
+    await store?.close();
+
+    const client = await adminPool.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+    } finally {
+      client.release();
+      await adminPool.end();
+    }
+  }, 30000);
+
+  it('should handle duplicate span inserts gracefully with ON CONFLICT', async () => {
+    const spanData = {
+      traceId: 'trace-conflict-1',
+      spanId: 'span-conflict-1',
+      name: 'Original span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date('2024-01-01T00:00:00Z'),
+      endedAt: new Date('2024-01-01T00:00:01Z'),
+    };
+
+    // First insert should succeed
+    await observability.createSpan({ span: spanData });
+
+    // Second insert with same traceId/spanId should NOT throw
+    // It should either update or be ignored based on implementation
+    await expect(
+      observability.createSpan({
+        span: {
+          ...spanData,
+          name: 'Updated span name',
+        },
+      }),
+    ).resolves.not.toThrow();
+
+    // Verify only one span exists
+    const result = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-conflict-1' AND "spanId" = 'span-conflict-1'`,
+    );
+    expect(Number(result.count)).toBe(1);
+  }, 30000);
+
+  it('should handle batch inserts with duplicates gracefully', async () => {
+    const spans = [
+      {
+        traceId: 'trace-batch-1',
+        spanId: 'span-batch-1',
+        name: 'Batch span 1',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+      {
+        traceId: 'trace-batch-1',
+        spanId: 'span-batch-2',
+        name: 'Batch span 2',
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+    ];
+
+    // First batch insert
+    await observability.batchCreateSpans({ records: spans });
+
+    // Second batch insert with same spans should NOT throw
+    await expect(observability.batchCreateSpans({ records: spans })).resolves.not.toThrow();
+
+    // Verify only 2 spans exist (not 4)
+    const result = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-batch-1'`,
+    );
+    expect(Number(result.count)).toBe(2);
+  }, 30000);
+
+  it('should handle mixed new and duplicate spans in batch insert', async () => {
+    // Insert initial span
+    await observability.createSpan({
+      span: {
+        traceId: 'trace-mixed-1',
+        spanId: 'span-mixed-1',
+        name: 'Existing span',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+    });
+
+    // Batch with one duplicate and one new
+    const mixedSpans = [
+      {
+        traceId: 'trace-mixed-1',
+        spanId: 'span-mixed-1', // Duplicate
+        name: 'Duplicate span',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+      {
+        traceId: 'trace-mixed-1',
+        spanId: 'span-mixed-2', // New
+        name: 'New span',
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        startedAt: new Date('2024-01-01T00:00:00Z'),
+      },
+    ];
+
+    // Should not throw
+    await expect(observability.batchCreateSpans({ records: mixedSpans })).resolves.not.toThrow();
+
+    // Verify we have exactly 2 spans
+    const result = await store.db.one<{ count: string }>(
+      `SELECT COUNT(*) as count FROM ${testSchema}.${TABLE_SPANS}
+       WHERE "traceId" = 'trace-mixed-1'`,
+    );
+    expect(Number(result.count)).toBe(2);
+  }, 30000);
 });
 
 /**
