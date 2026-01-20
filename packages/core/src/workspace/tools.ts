@@ -238,23 +238,26 @@ export function createWorkspaceTools(workspace: Workspace) {
       },
     });
 
-    tools.workspace_index = createTool({
-      id: 'workspace_index',
-      description: 'Index a file for search. The file path becomes the document ID in search results.',
-      inputSchema: z.object({
-        path: z.string().describe('The file path to index (used as document ID)'),
-        content: z.string().describe('The text content to index'),
-        metadata: z.record(z.unknown()).optional().describe('Optional metadata to store with the document'),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        path: z.string().describe('The indexed file path'),
-      }),
-      execute: async ({ path, content, metadata }) => {
-        await workspace.index(path, content, { metadata });
-        return { success: true, path };
-      },
-    });
+    // Index is a write operation (to the search index)
+    if (!isReadOnly) {
+      tools.workspace_index = createTool({
+        id: 'workspace_index',
+        description: 'Index content for search. The path becomes the document ID in search results.',
+        inputSchema: z.object({
+          path: z.string().describe('The document ID/path for search results'),
+          content: z.string().describe('The text content to index'),
+          metadata: z.record(z.unknown()).optional().describe('Optional metadata to store with the document'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          path: z.string().describe('The indexed document ID'),
+        }),
+        execute: async ({ path, content, metadata }) => {
+          await workspace.index(path, content, { metadata });
+          return { success: true, path };
+        },
+      });
+    }
   }
 
   // Only add sandbox tools if sandbox is available

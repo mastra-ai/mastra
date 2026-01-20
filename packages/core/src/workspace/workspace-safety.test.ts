@@ -317,6 +317,7 @@ describe('Workspace Safety Features', () => {
     it('should exclude write tools in readonly mode', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
+        bm25: true,
         safety: {
           readOnly: true,
         },
@@ -329,11 +330,13 @@ describe('Workspace Safety Features', () => {
       expect(tools.workspace_read_file).toBeDefined();
       expect(tools.workspace_list_files).toBeDefined();
       expect(tools.workspace_file_exists).toBeDefined();
+      expect(tools.workspace_search).toBeDefined();
 
-      // Write tools should be absent
+      // Write tools should be absent (including index which writes to search index)
       expect(tools.workspace_write_file).toBeUndefined();
       expect(tools.workspace_delete_file).toBeUndefined();
       expect(tools.workspace_mkdir).toBeUndefined();
+      expect(tools.workspace_index).toBeUndefined();
 
       await workspace.destroy();
     });
@@ -341,6 +344,7 @@ describe('Workspace Safety Features', () => {
     it('should include write tools when not readonly', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
+        bm25: true,
         safety: {
           readOnly: false,
         },
@@ -352,6 +356,7 @@ describe('Workspace Safety Features', () => {
       expect(tools.workspace_write_file).toBeDefined();
       expect(tools.workspace_delete_file).toBeDefined();
       expect(tools.workspace_mkdir).toBeDefined();
+      expect(tools.workspace_index).toBeDefined();
 
       await workspace.destroy();
     });
