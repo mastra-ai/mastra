@@ -1,4 +1,5 @@
-import { createClient, type ClickHouseClient } from '@clickhouse/client';
+import { createClient } from '@clickhouse/client';
+import type { ClickHouseClient } from '@clickhouse/client';
 import { TABLE_SPANS, SPAN_SCHEMA } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
