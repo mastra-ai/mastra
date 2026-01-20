@@ -8,7 +8,7 @@ This example demonstrates how to store embeddings in LibSQL using Mastra. It sho
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 - LibSQL database
