@@ -33766,20 +33766,65 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 + const scores = await scoresStore?.listScoresByScorerId({ scorerId: 'helpfulness' });
 ```
 
-### `getThreadsByResourceId` to `listThreadsByResourceId`
+### `getThreadsByResourceId` to `listThreads`
 
-The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
+The `getThreadsByResourceId()` method has been replaced with `listThreads()`. The new method adds pagination support and filtering by `resourceId`, `metadata`, or both.
 
-To migrate, use the memory store and rename the method call with pagination parameters.
+:::important
+
+The old `getThreadsByResourceId()` returned all matching threads without pagination. The new `listThreads()` requires pagination parameters. To preserve the old behavior of fetching all threads, use `perPage: false`.
+
+:::
+
+To migrate, use the memory store and the new `listThreads()` method with pagination and an optional filter object.
 
 ```diff
 - const threads = await storage.getThreadsByResourceId({
+-   resourceId: 'res-123',
+- });
 + const memoryStore = await storage.getStore('memory');
-+ const threads = await memoryStore?.listThreadsByResourceId({
-    resourceId: 'res-123',
++
++ // Paginated (recommended for large datasets)
++ const result = await memoryStore?.listThreads({
++   filter: { resourceId: 'res-123' },
 +   page: 0,
 +   perPage: 20,
-  });
++ });
++ const threads = result?.threads;
++
++ // Or fetch all threads like before (use perPage: false)
++ const allResult = await memoryStore?.listThreads({
++   filter: { resourceId: 'res-123' },
++   perPage: false,
++ });
++ const allThreads = allResult?.threads;
+```
+
+The new method also supports:
+- Listing all threads (omit filter)
+- Filtering by metadata only
+- Combined resourceId + metadata filters
+
+```typescript
+// List all threads
+await memoryStore?.listThreads({ page: 0, perPage: 20 });
+
+// Filter by metadata only
+await memoryStore?.listThreads({
+  filter: { metadata: { status: 'active' } },
+  page: 0,
+  perPage: 20,
+});
+
+// Combined filter
+await memoryStore?.listThreads({
+  filter: {
+    resourceId: 'user-123',
+    metadata: { category: 'support' },
+  },
+  page: 0,
+  perPage: 20,
+});
 ```
 
 :::tip[Codemod]
@@ -33787,7 +33832,7 @@ To migrate, use the memory store and rename the method call with pagination para
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
+npx @mastra/codemod@beta v1/storage-list-threads-by-resource-to-list-threads .
 ```
 
 :::
@@ -79362,7 +79407,7 @@ async function manageClones() {
 - [cloneThread](/reference/v1/memory/cloneThread)
 - [Memory Class Reference](/reference/v1/memory/memory-class)
 - [getThreadById](/reference/v1/memory/getThreadById)
-- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
+- [listThreads](/reference/v1/memory/listThreads)
 
 
 ---
@@ -79725,9 +79770,8 @@ console.log(response.text);
 - [Memory Class Reference](/reference/v1/memory/memory-class)
 - [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads concept)
 - [getThreadById](/reference/v1/memory/getThreadById)
-- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
+- [listThreads](/reference/v1/memory/listThreads)
 - [recall](/reference/v1/memory/recall)
-
 
 ---
 title: "Reference: Memory.deleteMessages() | Memory"
@@ -79845,26 +79889,77 @@ await memory?.getThreadById({ threadId: "thread-123" });
 - [Memory Class Reference](/reference/v1/memory/memory-class)
 - [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads concept)
 - [createThread](/reference/v1/memory/createThread)
-- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
+- [listThreads](/reference/v1/memory/listThreads)
 
 
 ---
-title: "Reference: Memory.listThreadsByResourceId() | Memory"
-description: "Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
+title: "Reference: Memory.listThreads() | Memory"
+description: "Documentation for the `Memory.listThreads()` method in Mastra, which retrieves threads with optional filtering by resourceId and/or metadata."
 packages:
   - "@mastra/memory"
 ---
 
-# Memory.listThreadsByResourceId()
-[EN] Source: https://mastra.ai/en/reference/memory/listThreadsByResourceId
+# Memory.listThreads()
+[EN] Source: https://mastra.ai/en/reference/memory/listThreads
 
-The `.listThreadsByResourceId()` method retrieves threads associated with a specific resource ID with pagination support.
+The `listThreads()` method retrieves threads with pagination support and optional filtering by `resourceId`, `metadata`, or both.
 
-## Usage Example
+## Usage Examples
+
+### List all threads with pagination
 
 ```typescript
-await memory.listThreadsByResourceId({
-  resourceId: "user-123",
+const result = await memory.listThreads({
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Fetch all threads without pagination
+
+Use `perPage: false` to retrieve all matching threads at once.
+
+:::warning
+
+Generally speaking it's recommended to use pagination, especially for large datasets. Use this option cautiously.
+
+:::
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+### Filter by resourceId
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Filter by metadata
+
+```typescript
+const result = await memory.listThreads({
+  filter: { metadata: { category: "support", priority: "high" } },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### Combined filter (resourceId & metadata)
+
+```typescript
+const result = await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { status: "active" },
+  },
   page: 0,
   perPage: 10,
 });
@@ -79875,27 +79970,29 @@ await memory.listThreadsByResourceId({
 <PropertiesTable
   content={[
     {
-      name: "resourceId",
-      type: "string",
-      description: "The ID of the resource whose threads are to be retrieved",
-      isOptional: false,
+      name: "filter",
+      type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
+      description:
+        "Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)",
+      isOptional: true,
     },
     {
       name: "page",
       type: "number",
       description: "Page number (0-indexed) to retrieve",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "perPage",
-      type: "number",
-      description: "Maximum number of threads to return per page",
-      isOptional: false,
+      type: "number | false",
+      description: "Maximum number of threads to return per page, or false to fetch all",
+      isOptional: true,
     },
     {
       name: "orderBy",
       type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
-      description: "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+      description:
+        "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
       isOptional: true,
     },
   ]}
@@ -79907,16 +80004,16 @@ await memory.listThreadsByResourceId({
   content={[
     {
       name: "result",
-      type: "Promise<StorageListThreadsByResourceIdOutput>",
-      description:
-        "A promise that resolves to paginated thread results with metadata",
+      type: "Promise<StorageListThreadsOutput>",
+      description: "A promise that resolves to paginated thread results with metadata",
     },
   ]}
 />
 
 The return object contains:
+
 - `threads`: Array of thread objects
-- `total`: Total number of threads for this resource
+- `total`: Total number of threads matching the filter
 - `page`: Current page number (same as the input `page` parameter)
 - `perPage`: Items per page (same as the input `perPage` parameter)
 - `hasMore`: Boolean indicating if more results are available
@@ -79933,9 +80030,13 @@ let currentPage = 0;
 const perPage = 25;
 let hasMorePages = true;
 
+// Fetch all active threads for a user, sorted by creation date
 while (hasMorePages) {
-  const result = await memory?.listThreadsByResourceId({
-    resourceId: "user-123",
+  const result = await memory?.listThreads({
+    filter: {
+      resourceId: "user-123",
+      metadata: { status: "active" },
+    },
     page: currentPage,
     perPage: perPage,
     orderBy: { field: "createdAt", direction: "ASC" },
@@ -79953,6 +80054,24 @@ while (hasMorePages) {
   hasMorePages = result.hasMore;
   currentPage++; // Move to next page
 }
+```
+
+## Metadata Filtering
+
+The metadata filter uses AND logic - all specified key-value pairs must match for a thread to be included in the results:
+
+```typescript
+// This will only return threads where BOTH conditions are true:
+// - category === 'support'
+// - priority === 'high'
+await memory.listThreads({
+  filter: {
+    metadata: {
+      category: "support",
+      priority: "high",
+    },
+  },
+});
 ```
 
 ## Related
@@ -80183,7 +80302,7 @@ export const agent = new Agent({
 - [createThread](/reference/v1/memory/createThread)
 - [recall](/reference/v1/memory/recall)
 - [getThreadById](/reference/v1/memory/getThreadById)
-- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
+- [listThreads](/reference/v1/memory/listThreads)
 - [deleteMessages](/reference/v1/memory/deleteMessages)
 - [cloneThread](/reference/v1/memory/cloneThread)
 - [Clone Utility Methods](/reference/v1/memory/clone-utilities)
