@@ -16,9 +16,12 @@ export type MastraPrimitives = {
   memory?: MastraMemory;
 };
 
-export type MastraUnion = {
-  [K in keyof Mastra]: Mastra[K];
-} & MastraPrimitives;
+// Simple intersection type instead of mapped type to avoid infinite type expansion
+// The mapped type `[K in keyof Mastra]: Mastra[K]` was forcing TypeScript to fully
+// expand the Mastra class, which caused infinite recursion because:
+// ToolAction → ToolExecutionContext → MastraUnion → Mastra → ToolAction (circular!)
+// By using a simple intersection, TypeScript can lazily resolve the circular reference
+export type MastraUnion = Mastra & MastraPrimitives;
 
 export interface IExecutionContext<TInput> {
   context: TInput;
