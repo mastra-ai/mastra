@@ -1,7 +1,7 @@
 import { analytics, origin } from '../..';
 import { migrate as runMigrate } from '../migrate/migrate';
 
-export const migrate = async (args: { dir?: string; root?: string; env?: string; debug?: boolean }) => {
+export const migrate = async (args: { dir?: string; root?: string; env?: string; debug?: boolean; yes?: boolean }) => {
   await analytics.trackCommandExecution({
     command: 'mastra migrate',
     args: { ...args },
@@ -11,6 +11,7 @@ export const migrate = async (args: { dir?: string; root?: string; env?: string;
         root: args?.root,
         env: args?.env,
         debug: args?.debug ?? false,
+        yes: args?.yes ?? false,
       });
     },
     origin,

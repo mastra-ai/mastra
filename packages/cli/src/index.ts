@@ -163,6 +163,7 @@ program
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-e, --env <env>', 'Custom env file to include')
   .option('--debug', 'Enable debug logs', false)
+  .option('-y, --yes', 'Skip confirmation prompt (for CI/automation)')
   .action(migrate);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');

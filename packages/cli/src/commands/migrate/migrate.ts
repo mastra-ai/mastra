@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import process from 'node:process';
+import * as p from '@clack/prompts';
 import { FileService } from '@mastra/deployer';
 import { execa } from 'execa';
 import pc from 'picocolors';
@@ -20,11 +21,13 @@ export async function migrate({
   root,
   env,
   debug,
+  yes,
 }: {
   dir?: string;
   root?: string;
   env?: string;
   debug: boolean;
+  yes: boolean;
 }) {
   const logger = createLogger(debug);
   const rootDir = root || process.cwd();
@@ -33,6 +36,30 @@ export async function migrate({
 
   logger.info(pc.cyan('Mastra Storage Migration'));
   logger.info('');
+
+  // Show backup warning and ask for confirmation (unless --yes flag is used)
+  if (!yes) {
+    logger.info(pc.yellow('⚠️  Warning: This migration will modify your database.'));
+    logger.info('');
+    logger.info('   Before proceeding, please ensure you have:');
+    logger.info('   • Created a backup of your database');
+    logger.info('   • Tested this migration in a non-production environment');
+    logger.info('');
+
+    const confirmed = await p.confirm({
+      message: 'Have you backed up your database and are ready to proceed?',
+      initialValue: false,
+    });
+
+    if (p.isCancel(confirmed) || !confirmed) {
+      logger.info('');
+      logger.info('Migration cancelled. Please back up your database before running this command.');
+      logger.info(pc.dim('Tip: Use --yes or -y to skip this prompt in CI/automation.'));
+      process.exit(0);
+    }
+
+    logger.info('');
+  }
 
   try {
     const fileService = new FileService();

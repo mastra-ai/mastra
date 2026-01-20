@@ -112,7 +112,7 @@ export class ClickhouseDB extends MastraBase {
   async getTableSortingKey(tableName: string): Promise<string | null> {
     try {
       const result = await this.client.query({
-        query: `SELECT sorting_key FROM system.tables WHERE name = {tableName:String}`,
+        query: `SELECT sorting_key FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
         query_params: { tableName },
         format: 'JSONEachRow',
       });

@@ -18,8 +18,7 @@ Fixed duplicate spans migration issue across all storage backends. When upgradin
 
 - Added `migrateSpans()` method to observability stores for manual migration
 - Added `checkSpansMigrationStatus()` method to check if migration is needed
-- PostgreSQL and MSSQL use batched processing (1000 rows per batch) to avoid memory issues on large tables
-- ClickHouse, LibSQL, and MongoDB perform single-query migrations
+- All stores use optimized single-query deduplication to avoid memory issues on large tables
 
 **Usage example:**
 
