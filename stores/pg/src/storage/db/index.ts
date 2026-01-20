@@ -662,78 +662,37 @@ export class PgDB extends MastraBase {
   /**
    * Deduplicates spans in the mastra_ai_spans table before adding the PRIMARY KEY constraint.
    * Keeps spans based on priority: completed (endedAt NOT NULL) > most recent updatedAt > most recent createdAt.
-   * Logs information about deleted duplicates for audit purposes.
+   *
+   * Note: This prioritizes migration completion over perfect data preservation.
+   * Old trace data may be lost, which is acceptable for this use case.
    */
   private async deduplicateSpans(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
 
     try {
-      // First, check if there are any duplicates
-      const duplicateCheck = await this.client.oneOrNone<{ count: string }>(`
-        SELECT COUNT(*) as count FROM (
-          SELECT "traceId", "spanId"
+      // Quick check: are there any duplicates at all? Use LIMIT 1 for speed on large tables.
+      const duplicateCheck = await this.client.oneOrNone<{ has_duplicates: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1
           FROM ${fullTableName}
           GROUP BY "traceId", "spanId"
           HAVING COUNT(*) > 1
-        ) duplicates
+          LIMIT 1
+        ) as has_duplicates
       `);
 
-      const duplicateCount = Number(duplicateCheck?.count || 0);
-      if (duplicateCount === 0) {
+      if (!duplicateCheck?.has_duplicates) {
         this.logger?.debug?.(`No duplicate spans found in ${fullTableName}`);
         return;
       }
 
-      this.logger?.info?.(`Found duplicate span groups, starting deduplication`, {
-        duplicateCount,
-        tableName: fullTableName,
-      });
+      this.logger?.info?.(`Duplicate spans detected in ${fullTableName}, starting deduplication...`);
 
-      // Get details of duplicates for logging before deletion
-      const duplicateDetails = await this.client.manyOrNone<{
-        traceId: string;
-        spanId: string;
-        name: string;
-        endedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }>(`
-        WITH duplicates AS (
-          SELECT "traceId", "spanId"
-          FROM ${fullTableName}
-          GROUP BY "traceId", "spanId"
-          HAVING COUNT(*) > 1
-        )
-        SELECT s."traceId", s."spanId", s."name", s."endedAt", s."createdAt", s."updatedAt"
-        FROM ${fullTableName} s
-        INNER JOIN duplicates d ON s."traceId" = d."traceId" AND s."spanId" = d."spanId"
-        ORDER BY s."traceId", s."spanId",
-          (CASE WHEN s."endedAt" IS NOT NULL THEN 0 ELSE 1 END),
-          s."updatedAt" DESC NULLS LAST,
-          s."createdAt" DESC NULLS LAST
-      `);
-
-      // Log the duplicates that will be processed
-      this.logger?.info?.(`Deduplicating spans - processing duplicate records`, {
-        totalDuplicateRecords: duplicateDetails.length,
-      });
-      for (const dup of duplicateDetails) {
-        this.logger?.debug?.(`Duplicate span found`, {
-          traceId: dup.traceId,
-          spanId: dup.spanId,
-          name: dup.name,
-          endedAt: dup.endedAt,
-          updatedAt: dup.updatedAt,
-          createdAt: dup.createdAt,
-        });
-      }
-
-      // Delete duplicates, keeping the best record based on priority:
-      // 1. Completed spans (endedAt IS NOT NULL) preferred
-      // 2. Most recent updatedAt
-      // 3. Most recent createdAt
-      // We use ctid (physical row id) to identify and delete specific rows
-      const deletedRows = await this.client.manyOrNone<{ traceId: string; spanId: string }>(`
+      // Delete duplicates directly without fetching details into memory.
+      // This avoids OOM issues on large tables with many duplicates.
+      // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
+      // Uses ctid (physical row id) as final tiebreaker for deterministic results.
+      const result = await this.client.result(`
         DELETE FROM ${fullTableName} t1
         USING ${fullTableName} t2
         WHERE t1."traceId" = t2."traceId"
@@ -766,14 +725,9 @@ export class PgDB extends MastraBase {
               )
             )
           )
-        RETURNING t1."traceId", t1."spanId"
       `);
 
-      const deletedCount = deletedRows.length;
-      this.logger?.info?.(`Deduplication complete`, {
-        deletedCount,
-        tableName: fullTableName,
-      });
+      this.logger?.info?.(`Deduplication complete: removed ${result.rowCount} duplicate spans from ${fullTableName}`);
     } catch (error) {
       // Re-throw deduplication errors so PRIMARY KEY addition will fail with a clear error
       throw new MastraError(
