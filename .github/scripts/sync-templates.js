@@ -170,11 +170,11 @@ async function pushToRepo(repoName) {
     );
 
     try {
-      console.log(`Check out to main branch in local`);
+      console.log(`Check out to v0 branch in local`);
       execSync(
         ` 
-      git checkout main &&
-      git pull origin main
+      git checkout v0 &&
+      git pull origin v0
       `,
         {
           stdio: 'inherit',
@@ -182,11 +182,11 @@ async function pushToRepo(repoName) {
         },
       );
     } catch (error) {
-      console.log(`No main branch found in local, creating new main branch`);
+      console.log(`No v0 branch found in local, creating new v0 branch`);
       execSync(
         `
-        git checkout -b main &&
-        git branch -M main
+        git checkout -b v0 &&
+        git branch -M v0
       `,
         { stdio: 'inherit', cwd: tempDir },
       );
@@ -214,18 +214,18 @@ async function pushToRepo(repoName) {
     fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
-    console.log(`Pushing to main branch`);
+    console.log(`Pushing to v0 branch`);
     try {
       execSync(
         `
       git add . &&
       git commit -m "Update template from monorepo" &&
-      git push origin main
+      git push origin v0
     `,
         { stdio: 'inherit', cwd: tempDir },
       );
     } catch (error) {
-      console.log(`No changes to push to main branch, skipping`);
+      console.log(`No changes to push to v0 branch, skipping`);
     }
 
     // setup different branches
@@ -236,7 +236,7 @@ async function pushToRepo(repoName) {
     ] of Object.entries(PROVIDERS)) {
       console.log(`Setting up ${provider} branch`);
       // move to new branch
-      execSync(`git checkout main && git pull origin main`, {
+      execSync(`git checkout v0 && git pull origin v0`, {
         stdio: 'inherit',
         cwd: tempDir,
       });
