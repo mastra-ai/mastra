@@ -35,6 +35,7 @@ export const textToSpeechTool = createTool({
     speaker: z.string().describe('Voice speaker that was used for audio generation'),
     speed: z.number().describe('Speaking speed that was used for audio generation'),
   }),
+  // @ts-expect-error - TODO: remove once z.enum().optional().default() type error is fixed
   execute: async (inputData, context) => {
     const { extractedText, speaker, speed } = inputData;
 
