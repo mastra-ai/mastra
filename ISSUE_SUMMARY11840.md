@@ -178,8 +178,8 @@ Only 5 stores implement observability/spans storage. The others are either vecto
 | Store               | Unique Constraint?             | Affected? | Status                                                   |
 | ------------------- | ------------------------------ | --------- | -------------------------------------------------------- |
 | **PostgreSQL (pg)** | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication + ON CONFLICT            |
-| **MSSQL**           | PRIMARY KEY (traceId, spanId)  | YES       | Silent fail - logs warning, continues without constraint |
-| **MongoDB**         | Unique index {spanId, traceId} | YES       | Silent fail - logs warning, continues without index      |
+| **MSSQL**           | PRIMARY KEY (traceId, spanId)  | YES       | **FIXED** - Added deduplication before PRIMARY KEY       |
+| **MongoDB**         | Unique index {spanId, traceId} | YES       | **FIXED** - Added deduplication before unique index      |
 | **LibSQL**          | None                           | NO        | Missing unique constraint (oversight?)                   |
 | **ClickHouse**      | PRIMARY KEY (ordering only)    | NO        | ClickHouse PRIMARY KEY doesn't enforce uniqueness        |
 
@@ -260,6 +260,6 @@ These stores do not implement observability/spans and are NOT affected:
 
 ### Remaining Work
 
-1. **MSSQL**: Needs deduplication logic similar to PostgreSQL fix
-2. **MongoDB**: Needs deduplication logic similar to PostgreSQL fix
+1. ~~**MSSQL**: Needs deduplication logic similar to PostgreSQL fix~~ **DONE**
+2. ~~**MongoDB**: Needs deduplication logic similar to PostgreSQL fix~~ **DONE**
 3. **LibSQL**: Consider adding unique constraint (currently missing)
