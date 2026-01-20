@@ -102,7 +102,10 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
             {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />} />
+                  <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />}>
+                    {inputProcessorsCount + outputProcessorsCount} processor
+                    {inputProcessorsCount + outputProcessorsCount > 1 ? 's' : ''}
+                  </Badge>
                 </TooltipTrigger>
                 <TooltipContent className="flex flex-col gap-1">
                   <a
