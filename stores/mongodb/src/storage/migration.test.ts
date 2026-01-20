@@ -264,3 +264,207 @@ describe('MongoDB Spans Schema Compatibility', () => {
     await collection.deleteMany({ traceId: 'mixed-test-trace' });
   });
 });
+
+/**
+ * MongoDB-specific tests for handling duplicate (traceId, spanId) combinations
+ * during unique index creation.
+ *
+ * See GitHub Issue #11840: Migration fails when existing spans collection has duplicate
+ * (traceId, spanId) combinations from before the unique index was introduced.
+ */
+describe('MongoDB Duplicate Spans Handling', () => {
+  let client: MongoClient;
+
+  beforeAll(async () => {
+    client = new MongoClient(TEST_CONFIG.url);
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    try {
+      await client.close();
+    } catch (error) {
+      console.warn('MongoDB duplicate spans test cleanup failed:', error);
+    }
+  });
+
+  /**
+   * Helper to create a test database with a clean collection (no indexes)
+   */
+  async function createCleanCollection(dbName: string): Promise<void> {
+    const db = client.db(dbName);
+    try {
+      await db.collection(SPANS_COLLECTION).drop();
+    } catch {}
+    // Create empty collection
+    await db.createCollection(SPANS_COLLECTION);
+  }
+
+  /**
+   * Helper to insert a span document
+   */
+  async function insertSpan(
+    dbName: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    const db = client.db(dbName);
+    await db.collection(SPANS_COLLECTION).insertOne({
+      traceId: span.traceId,
+      spanId: span.spanId,
+      name: span.name,
+      spanType: 'agent_run',
+      isEvent: false,
+      startedAt: new Date('2024-01-01T00:00:00Z'),
+      endedAt: span.endedAt ?? null,
+      createdAt: span.createdAt,
+      updatedAt: span.updatedAt,
+    });
+  }
+
+  /**
+   * Helper to clean up test database
+   */
+  async function cleanupDatabase(dbName: string): Promise<void> {
+    try {
+      await client.db(dbName).dropDatabase();
+    } catch {}
+  }
+
+  it('should fail to create unique index when duplicates exist', async () => {
+    const testDbName = `dup_test_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert duplicate spans with same (traceId, spanId)
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist
+      const count = await collection.countDocuments({});
+      expect(count).toBe(2);
+
+      // Try to create unique index - should fail with duplicate key error
+      await expect(collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true })).rejects.toThrow();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+
+  it('should handle unique index creation when no duplicates exist', async () => {
+    const testDbName = `nodup_test_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert unique spans
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Unique span 1',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-2',
+        name: 'Unique span 2',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Create unique index - should succeed
+      await expect(collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true })).resolves.not.toThrow();
+
+      // Verify index exists
+      const indexes = await collection.indexes();
+      const uniqueIndex = indexes.find(
+        (idx: any) => idx.key?.spanId === 1 && idx.key?.traceId === 1 && idx.unique === true,
+      );
+      expect(uniqueIndex).toBeDefined();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+
+  it('should successfully initialize store with duplicates (logs warning but does not fail)', async () => {
+    const testDbName = `dup_init_${Date.now().toString(36)}`;
+
+    try {
+      await createCleanCollection(testDbName);
+      const db = client.db(testDbName);
+      const collection = db.collection(SPANS_COLLECTION);
+
+      // Insert duplicates
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate 1',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testDbName, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate 2',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      const store = new MongoDBStore({
+        id: `dup-test-store-${Date.now()}`,
+        url: TEST_CONFIG.url,
+        dbName: testDbName,
+      });
+
+      // init() should NOT throw (it catches the index error and logs a warning)
+      await expect(store.init()).resolves.not.toThrow();
+
+      // But unique index should NOT exist due to duplicates
+      const indexes = await collection.indexes();
+      const uniqueIndex = indexes.find(
+        (idx: any) => idx.key?.spanId === 1 && idx.key?.traceId === 1 && idx.unique === true,
+      );
+
+      // Index should NOT exist because of duplicates
+      expect(uniqueIndex).toBeUndefined();
+
+      // Duplicates should still exist
+      const count = await collection.countDocuments({});
+      expect(count).toBe(2);
+
+      await store.close();
+    } finally {
+      await cleanupDatabase(testDbName);
+    }
+  });
+});

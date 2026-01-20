@@ -284,3 +284,248 @@ describe('MSSQL Spans Table Migration', () => {
     expect(newSpan.environment).toBe('production');
   });
 });
+
+/**
+ * MSSQL-specific tests for handling duplicate (traceId, spanId) combinations
+ * during PRIMARY KEY constraint addition.
+ *
+ * See GitHub Issue #11840: Migration fails when existing spans table has duplicate
+ * (traceId, spanId) combinations from before the PRIMARY KEY was introduced.
+ */
+describe('MSSQL Duplicate Spans Handling', () => {
+  let pool: sql.ConnectionPool;
+
+  beforeAll(async () => {
+    pool = new sql.ConnectionPool({
+      server: (TEST_CONFIG as any).server,
+      port: (TEST_CONFIG as any).port,
+      database: (TEST_CONFIG as any).database,
+      user: (TEST_CONFIG as any).user,
+      password: (TEST_CONFIG as any).password,
+      options: { encrypt: true, trustServerCertificate: true },
+    });
+    await pool.connect();
+  });
+
+  afterAll(async () => {
+    try {
+      await pool.close();
+    } catch (error) {
+      console.warn('MSSQL duplicate spans test cleanup failed:', error);
+    }
+  });
+
+  /**
+   * Helper to create a test schema and table with OLD schema (no PRIMARY KEY)
+   */
+  async function createOldSchemaTable(schemaName: string): Promise<void> {
+    // Create schema
+    try {
+      await pool.request().query(`DROP SCHEMA IF EXISTS [${schemaName}]`);
+    } catch {}
+
+    // Drop table if it exists (in case schema drop failed)
+    try {
+      await pool.request().query(`DROP TABLE IF EXISTS [${schemaName}].[${TABLE_SPANS}]`);
+    } catch {}
+
+    await pool.request().query(`CREATE SCHEMA [${schemaName}]`);
+
+    // Create table with OLD schema columns (no PRIMARY KEY)
+    const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'NVARCHAR(100)'
+            : colDef.type === 'jsonb'
+              ? 'NVARCHAR(MAX)'
+              : colDef.type === 'timestamp'
+                ? 'DATETIME2'
+                : colDef.type === 'boolean'
+                  ? 'BIT'
+                  : 'NVARCHAR(MAX)';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : 'NULL';
+        return `[${colName}] ${sqlType} ${nullable}`;
+      })
+      .join(', ');
+
+    await pool.request().query(`
+      CREATE TABLE [${schemaName}].[${TABLE_SPANS}] (
+        ${oldColumns}
+      )
+    `);
+  }
+
+  /**
+   * Helper to insert a span record
+   */
+  async function insertSpan(
+    schemaName: string,
+    span: {
+      traceId: string;
+      spanId: string;
+      name: string;
+      endedAt?: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  ): Promise<void> {
+    const request = pool.request();
+    request.input('traceId', span.traceId);
+    request.input('spanId', span.spanId);
+    request.input('name', span.name);
+    request.input('spanType', 'agent_run');
+    request.input('isEvent', false);
+    request.input('startedAt', new Date('2024-01-01T00:00:00Z'));
+    request.input('endedAt', span.endedAt ?? null);
+    request.input('createdAt', span.createdAt);
+    request.input('updatedAt', span.updatedAt);
+
+    await request.query(`
+      INSERT INTO [${schemaName}].[${TABLE_SPANS}]
+      ([traceId], [spanId], [name], [spanType], [isEvent], [startedAt], [endedAt], [createdAt], [updatedAt])
+      VALUES (@traceId, @spanId, @name, @spanType, @isEvent, @startedAt, @endedAt, @createdAt, @updatedAt)
+    `);
+  }
+
+  /**
+   * Helper to clean up test schema
+   */
+  async function cleanupSchema(schemaName: string): Promise<void> {
+    try {
+      await pool.request().query(`DROP TABLE IF EXISTS [${schemaName}].[${TABLE_SPANS}]`);
+      await pool.request().query(`DROP SCHEMA IF EXISTS [${schemaName}]`);
+    } catch {}
+  }
+
+  it('should fail to add PRIMARY KEY when duplicates exist (current behavior)', async () => {
+    const testSchema = `dup_test_${Date.now().toString(36)}`;
+
+    try {
+      await createOldSchemaTable(testSchema);
+
+      // Insert duplicate spans with same (traceId, spanId)
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'First duplicate',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Second duplicate',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Verify duplicates exist
+      const countResult = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(countResult.recordset[0].count).toBe(2);
+
+      // Try to add PRIMARY KEY - should fail with unique violation
+      const pkConstraintName = `${testSchema}_mastra_ai_spans_traceid_spanid_pk`;
+      const addPkSql = `ALTER TABLE [${testSchema}].[${TABLE_SPANS}] ADD CONSTRAINT [${pkConstraintName}] PRIMARY KEY ([traceId], [spanId])`;
+
+      await expect(pool.request().query(addPkSql)).rejects.toThrow();
+    } finally {
+      await cleanupSchema(testSchema);
+    }
+  });
+
+  it('should handle PRIMARY KEY addition when no duplicates exist', async () => {
+    const testSchema = `nodup_test_${Date.now().toString(36)}`;
+
+    try {
+      await createOldSchemaTable(testSchema);
+
+      // Insert unique spans
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Unique span 1',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-2',
+        name: 'Unique span 2',
+        endedAt: new Date('2024-01-01T00:00:02Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      // Add PRIMARY KEY - should succeed
+      const pkConstraintName = `${testSchema}_mastra_ai_spans_traceid_spanid_pk`;
+      const addPkSql = `ALTER TABLE [${testSchema}].[${TABLE_SPANS}] ADD CONSTRAINT [${pkConstraintName}] PRIMARY KEY ([traceId], [spanId])`;
+
+      await expect(pool.request().query(addPkSql)).resolves.not.toThrow();
+
+      // Verify constraint exists
+      const constraintResult = await pool
+        .request()
+        .input('constraintName', pkConstraintName)
+        .query(`SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`);
+      expect(constraintResult.recordset.length).toBe(1);
+    } finally {
+      await cleanupSchema(testSchema);
+    }
+  });
+
+  it('should successfully run createTable with duplicates (logs warning but does not fail)', async () => {
+    const testSchema = `dup_create_${Date.now().toString(36)}`;
+
+    try {
+      await createOldSchemaTable(testSchema);
+
+      // Insert duplicates
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate 1',
+        endedAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      await insertSpan(testSchema, {
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        name: 'Duplicate 2',
+        endedAt: new Date('2024-01-01T00:00:01Z'),
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        updatedAt: new Date('2024-01-01T00:00:01Z'),
+      });
+
+      const dbOps = new MssqlDB({
+        pool,
+        schemaName: testSchema,
+      });
+
+      // createTable should NOT throw (it catches the PK error and logs a warning)
+      await expect(
+        dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] }),
+      ).resolves.not.toThrow();
+
+      // But PRIMARY KEY should NOT exist due to duplicates
+      const pkConstraintName = `${testSchema}_mastra_ai_spans_traceid_spanid_pk`;
+      const constraintResult = await pool
+        .request()
+        .input('constraintName', pkConstraintName)
+        .query(`SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`);
+
+      // Constraint should NOT exist because of duplicates
+      expect(constraintResult.recordset.length).toBe(0);
+
+      // Duplicates should still exist
+      const countResult = await pool.request().query(`SELECT COUNT(*) as count FROM [${testSchema}].[${TABLE_SPANS}]`);
+      expect(countResult.recordset[0].count).toBe(2);
+    } finally {
+      await cleanupSchema(testSchema);
+    }
+  });
+});
