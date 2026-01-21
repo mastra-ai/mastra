@@ -1,18 +1,50 @@
 import { StreamVNextChunkType, TimeTravelParams } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
-import { useMutation } from '@tanstack/react-query';
-import { useState, useRef, useEffect } from 'react';
-import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
-import { toast } from '@/lib/toast';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { useMastraClient } from '../mastra-client-context';
+import { useMutation } from '../lib/use-mutation';
+import { mapWorkflowStreamChunkToWatchResult } from '../lib/ai-sdk/utils/toUIMessage';
+import type {
+  UseStreamWorkflowParams,
+  WorkflowStreamResult,
+  StreamWorkflowParams,
+  ObserveWorkflowStreamParams,
+  ResumeWorkflowStreamParams,
+  TimeTravelWorkflowStreamParams,
+} from './types';
 
-type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
-
-export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
+/**
+ * Hook for streaming workflow execution with support for observing, resuming, and time-travel.
+ *
+ * @example
+ * ```tsx
+ * const {
+ *   streamWorkflow,
+ *   streamResult,
+ *   isStreaming,
+ *   observeWorkflowStream,
+ *   closeStreamsAndReset,
+ *   resumeWorkflowStream,
+ *   timeTravelWorkflowStream,
+ * } = useStreamWorkflow({
+ *   debugMode: true,
+ *   tracingOptions: { enabled: true },
+ *   onError: (error, defaultMessage) => console.error(defaultMessage, error),
+ * });
+ *
+ * // Start streaming a workflow
+ * await streamWorkflow.mutateAsync({
+ *   workflowId: 'my-workflow',
+ *   runId: 'run-123',
+ *   inputData: { key: 'value' },
+ *   requestContext: {},
+ * });
+ * ```
+ */
+export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStreamWorkflowParams) {
   const client = useMastraClient();
-  const { settings } = useTracingSettings();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
@@ -61,17 +93,20 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
     };
   }, []);
 
-  const handleStreamError = (err: unknown, defaultMessage: string, setIsStreaming?: (isStreaming: boolean) => void) => {
-    // Expected error during cleanup - safe to ignore
-    if (err instanceof TypeError) {
-      return;
-    }
-    const errorMessage = err instanceof Error ? err.message : defaultMessage;
-    toast.error(errorMessage);
-    setIsStreaming?.(false);
-  };
+  const handleStreamError = useCallback(
+    (err: unknown, defaultMessage: string, setStreamingState?: (isStreaming: boolean) => void) => {
+      // Expected error during cleanup - safe to ignore
+      if (err instanceof TypeError) {
+        return;
+      }
+      const error = err instanceof Error ? err : new Error(defaultMessage);
+      onError?.(error, defaultMessage);
+      setStreamingState?.(false);
+    },
+    [onError],
+  );
 
-  const handleWorkflowFinish = (value: StreamVNextChunkType) => {
+  const handleWorkflowFinish = useCallback((value: StreamVNextChunkType) => {
     if (value.type === 'workflow-finish') {
       const streamStatus = value.payload?.workflowStatus;
       const metadata = value.payload?.metadata;
@@ -85,24 +120,10 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       // Tripwire status is not an error - it's handled separately in the UI
       // Don't throw an error for tripwire status
     }
-  };
+  }, []);
 
-  const streamWorkflow = useMutation({
-    mutationFn: async ({
-      workflowId,
-      runId,
-      inputData,
-      initialState,
-      requestContext: playgroundRequestContext,
-      perStep,
-    }: {
-      workflowId: string;
-      runId: string;
-      inputData: Record<string, unknown>;
-      initialState?: Record<string, unknown>;
-      requestContext: Record<string, unknown>;
-      perStep?: boolean;
-    }) => {
+  const streamWorkflow = useMutation<void, Error, StreamWorkflowParams>(
+    async ({ workflowId, runId, inputData, initialState, requestContext: playgroundRequestContext, perStep }) => {
       // Clean up any existing reader before starting new stream
       if (readerRef.current) {
         readerRef.current.releaseLock();
@@ -123,7 +144,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         initialState,
         requestContext,
         closeOnSuspend: true,
-        tracingOptions: settings?.tracingOptions,
+        tracingOptions,
         perStep: perStep ?? debugMode,
       });
 
@@ -174,18 +195,10 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         }
       }
     },
-  });
+  );
 
-  const observeWorkflowStream = useMutation({
-    mutationFn: async ({
-      workflowId,
-      runId,
-      storeRunResult,
-    }: {
-      workflowId: string;
-      runId: string;
-      storeRunResult: WorkflowStreamResult | null;
-    }) => {
+  const observeWorkflowStream = useMutation<void, Error, ObserveWorkflowStreamParams>(
+    async ({ workflowId, runId, storeRunResult }) => {
       // Clean up any existing reader before starting new stream
       if (observerRef.current) {
         observerRef.current.releaseLock();
@@ -251,24 +264,10 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         }
       }
     },
-  });
+  );
 
-  const resumeWorkflowStream = useMutation({
-    mutationFn: async ({
-      workflowId,
-      runId,
-      step,
-      resumeData,
-      requestContext: playgroundRequestContext,
-      perStep,
-    }: {
-      workflowId: string;
-      step: string | string[];
-      runId: string;
-      resumeData: Record<string, unknown>;
-      requestContext: Record<string, unknown>;
-      perStep?: boolean;
-    }) => {
+  const resumeWorkflowStream = useMutation<void, Error, ResumeWorkflowStreamParams>(
+    async ({ workflowId, runId, step, resumeData, requestContext: playgroundRequestContext, perStep }) => {
       // Clean up any existing reader before starting new stream
       if (resumeStreamRef.current) {
         resumeStreamRef.current.releaseLock();
@@ -287,7 +286,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         step,
         resumeData,
         requestContext,
-        tracingOptions: settings?.tracingOptions,
+        tracingOptions,
         perStep: perStep ?? debugMode,
       });
 
@@ -338,20 +337,10 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         }
       }
     },
-  });
+  );
 
-  const timeTravelWorkflowStream = useMutation({
-    mutationFn: async ({
-      workflowId,
-      requestContext: playgroundRequestContext,
-      runId,
-      perStep,
-      ...params
-    }: {
-      runId?: string;
-      workflowId: string;
-      requestContext: Record<string, unknown>;
-    } & Omit<TimeTravelParams, 'requestContext'>) => {
+  const timeTravelWorkflowStream = useMutation<void, Error, TimeTravelWorkflowStreamParams>(
+    async ({ workflowId, requestContext: playgroundRequestContext, runId, perStep, ...params }) => {
       // Clean up any existing reader before starting new stream
       if (timeTravelStreamRef.current) {
         timeTravelStreamRef.current.releaseLock();
@@ -370,7 +359,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         ...params,
         perStep: perStep ?? debugMode,
         requestContext,
-        tracingOptions: settings?.tracingOptions,
+        tracingOptions,
       });
 
       if (!stream) {
@@ -420,9 +409,9 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         }
       }
     },
-  });
+  );
 
-  const closeStreamsAndReset = () => {
+  const closeStreamsAndReset = useCallback(() => {
     setIsStreaming(false);
     setStreamResult({} as WorkflowStreamResult);
     if (readerRef.current) {
@@ -457,7 +446,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       }
       timeTravelStreamRef.current = null;
     }
-  };
+  }, []);
 
   return {
     streamWorkflow,
@@ -468,4 +457,4 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
     resumeWorkflowStream,
     timeTravelWorkflowStream,
   };
-};
+}
