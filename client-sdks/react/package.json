@@ -44,7 +44,6 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-tooltip": "^1.2.7",
     "hast-util-to-jsx-runtime": "^2.3.6",
@@ -66,6 +65,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "catalog:",
+    "@mastra/core": "workspace:*",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^10.1.11",
