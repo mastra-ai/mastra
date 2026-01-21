@@ -1,0 +1,137 @@
+name: Major Version Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  check-major-bump:
+    runs-on: ubuntu-latest
+    # Only run on PR events or issue comments that are on PRs (not regular issues)
+    if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+    steps:
+      - name: Check for major changesets
+        id: check_major
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
+
+            if (!prNumber) {
+              core.setOutput('has_major_changeset', false);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            // Get list of files changed in the PR
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            // Filter to only changeset files early
+            const changesetFiles = files.filter(
+              file => file.filename.startsWith('.changeset/') && 
+                      file.filename.endsWith('.md') &&
+                      file.status !== 'removed'
+            );
+
+            if (changesetFiles.length === 0) {
+              core.setOutput('has_major_changeset', false);
+              return;
+            }
+
+            // Get PR head SHA - use context if available, otherwise fetch
+            const headSha = context.payload.pull_request?.head?.sha || (
+              await github.rest.pulls.get({ owner, repo, pull_number: prNumber })
+            ).data.head.sha;
+
+            // Regex to check for major in frontmatter
+            const majorRegex = /:\s*["']?major["']?/;
+
+            // Fetch all changeset contents in parallel
+            const contentPromises = changesetFiles.map(async (file) => {
+              const { data } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: file.filename,
+                ref: headSha,
+              });
+              return Buffer.from(data.content, data.encoding).toString();
+            });
+
+            const contents = await Promise.all(contentPromises);
+
+            // Check if any changeset has a major bump in frontmatter
+            const hasMajorChangeset = contents.some(content => {
+              const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/m);
+              return frontmatterMatch && majorRegex.test(frontmatterMatch[1]);
+            });
+
+            core.setOutput('has_major_changeset', hasMajorChangeset);
+
+      - name: Check if major version bump is allowed
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        id: check_approval
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
+            const { owner, repo } = context.repo;
+
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: prNumber,
+            });
+
+            // Filter to only approval comments first
+            const approvalComments = comments.filter(
+              comment => comment.body.trim().toLowerCase() === '!allow-major'
+            );
+
+            if (approvalComments.length === 0) {
+              core.setFailed('Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.');
+              return;
+            }
+
+            // Cache membership results to avoid duplicate API calls
+            const membershipCache = new Map();
+
+            const checkMembership = async (username) => {
+              if (membershipCache.has(username)) {
+                return membershipCache.get(username);
+              }
+
+              try {
+                await github.rest.orgs.checkMembershipForUser({
+                  org: owner,
+                  username,
+                });
+                membershipCache.set(username, true);
+                return true;
+              } catch {
+                membershipCache.set(username, false);
+                return false;
+              }
+            };
+
+            // Check membership for all approval comment authors
+            for (const comment of approvalComments) {
+              if (await checkMembership(comment.user.login)) {
+                console.log(`Major version bump approved by organization member: ${comment.user.login}`);
+                return;
+              }
+            }
+
+            core.setFailed('Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.');
