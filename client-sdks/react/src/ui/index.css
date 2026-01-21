@@ -1,21 +1,36 @@
 @import 'tailwindcss' prefix(mastra);
 
 :root {
+  --color-text1: #5c5c5c;
+  --color-text6: #ffffff;
+
   --color-accent1: #1afb6f;
   --color-accent2: #ff4931;
   --color-accent3: #267ad2;
   --color-accent4: #9e57b3;
   --color-accent5: #4a9df2;
   --color-accent6: #ecb047;
+
+  --color-accent1Dark: #16281f;
+  --color-accent2Dark: #281916;
+  --color-accent3Dark: #161a28;
+  --color-accent5Dark: #161a22;
+  --color-accent6Dark: #232214;
+
+  --color-accent1Darker: #141a16;
+  --color-accent2Darker: #1a1414;
+  --color-accent3Darker: #14141a;
+  --color-accent5Darker: #14161a;
+  --color-accent6Darker: #1a1a14;
 }
 
 @theme {
-  --color-text1: #5c5c5c;
+  --color-text1: var(--color-text1);
   --color-text2: #707070;
   --color-text3: #939393;
   --color-text4: #a9a9a9;
   --color-text5: #e6e6e6;
-  --color-text6: #ffffff;
+  --color-text6: var(--color-text6);
 
   --color-surface1: #000000;
   --color-surface2: #0f0f0f;
@@ -28,6 +43,18 @@
   --color-accent4: var(--color-accent4);
   --color-accent5: var(--color-accent5);
   --color-accent6: var(--color-accent6);
+
+  --color-accent1Dark: var(--color-accent1Dark);
+  --color-accent2Dark: var(--color-accent2Dark);
+  --color-accent3Dark: var(--color-accent3Dark);
+  --color-accent5Dark: var(--color-accent5Dark);
+  --color-accent6Dark: var(--color-accent6Dark);
+
+  --color-accent1Darker: var(--color-accent1Darker);
+  --color-accent2Darker: var(--color-accent2Darker);
+  --color-accent3Darker: var(--color-accent3Darker);
+  --color-accent5Darker: var(--color-accent5Darker);
+  --color-accent6Darker: var(--color-accent6Darker);
 
   --color-border1: rgba(48, 48, 48, 1);
   --color-border2: rgba(66, 66, 66, 1);
@@ -70,4 +97,9 @@
 
 .mastra-list::-webkit-scrollbar-thumb {
   border-radius: 4px;
+}
+
+.react-flow__node {
+  outline: none !important;
+  border: none !important;
 }
