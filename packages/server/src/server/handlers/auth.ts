@@ -14,7 +14,7 @@
  */
 
 import type { MastraAuthProvider, EEUser } from '@mastra/core/ee';
-import { buildPublicCapabilities } from '@mastra/core/ee';
+import { buildCapabilities } from '@mastra/core/ee';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -33,15 +33,13 @@ import { handleError } from './error';
 
 /**
  * Helper to get auth provider from Mastra instance.
- * This function will need to be updated once auth provider is integrated into Mastra config.
- *
- * @param mastra - Mastra instance
- * @returns Auth provider or null if not configured
  */
-function getAuthProvider(_mastra: any): MastraAuthProvider<EEUser> | null {
-  // TODO: Once auth is integrated into Mastra config, access it properly
-  // For now, return null to indicate auth is not configured
-  // This should become: return mastra.getAuthProvider?.() ?? null;
+function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
+  // Check server config first
+  const serverConfig = mastra.getServer?.();
+  if (serverConfig?.auth) {
+    return serverConfig.auth as MastraAuthProvider<EEUser>;
+  }
   return null;
 }
 
@@ -116,7 +114,7 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
   description:
     'Returns authentication capabilities and current user info. Used by Studio to determine available features and user state.',
   tags: ['Auth'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, rawRequest }) => {
     try {
       const authProvider = getAuthProvider(mastra);
 
@@ -128,10 +126,8 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
         } as const;
       }
 
-      // TODO: Once Request object is available in handler context, use buildCapabilities
-      // For now, return only public capabilities
-      // const capabilities = await buildCapabilities(authProvider, request);
-      const capabilities = buildPublicCapabilities(authProvider);
+      // Build capabilities - includes user info if authenticated
+      const capabilities = await buildCapabilities(authProvider, rawRequest!);
 
       return capabilities as any;
     } catch (error) {
@@ -152,17 +148,34 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
   summary: 'Get current user',
   description: 'Returns the currently authenticated user, or null if not authenticated.',
   tags: ['Auth'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, rawRequest }) => {
     try {
-      const authProvider = getAuthProvider(mastra);
+      console.log('[GET /api/auth/me] rawRequest:', rawRequest ? 'present' : 'missing');
 
-      if (!authProvider?.user) {
+      const authProvider = getAuthProvider(mastra);
+      console.log('[GET /api/auth/me] authProvider:', authProvider ? 'present' : 'missing');
+
+      if (!authProvider) {
         return null;
       }
 
-      // TODO: Once Request object is available, get current user
-      // const user = await authProvider.user.getCurrentUser(request);
-      // For now, return null as we can't authenticate without request
+      // Use EE provider's getCurrentUser if available
+      if (typeof (authProvider as any).getCurrentUser === 'function' && rawRequest) {
+        console.log('[GET /api/auth/me] Calling authProvider.getCurrentUser');
+        const user = await (authProvider as any).getCurrentUser(rawRequest);
+        console.log('[GET /api/auth/me] User result:', user ? user.email : 'null');
+        return user;
+      }
+
+      // Fallback: check user provider
+      if (authProvider.user && typeof authProvider.user.getCurrentUser === 'function' && rawRequest) {
+        console.log('[GET /api/auth/me] Calling authProvider.user.getCurrentUser');
+        const user = await authProvider.user.getCurrentUser(rawRequest);
+        console.log('[GET /api/auth/me] User result:', user ? user.email : 'null');
+        return user;
+      }
+
+      console.log('[GET /api/auth/me] No getCurrentUser method available');
       return null;
     } catch (error) {
       return handleError(error, 'Error getting current user');

@@ -140,9 +140,10 @@ export type ServerConfig = {
   bodySizeLimit?: number;
 
   /**
-   * Authentication configuration for the server
+   * Authentication configuration for the server.
+   * Accepts MastraAuthConfig, MastraAuthProvider (server), or EE auth providers (object).
    */
-  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | MastraAuthProvider<any> | object;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

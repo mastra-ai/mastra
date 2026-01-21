@@ -338,6 +338,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           tools: c.get('tools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
+          rawRequest: c.req.raw,
         };
 
         try {

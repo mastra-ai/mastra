@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { MastraAuthWorkosEE } from '@mastra/auth-workos';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -31,10 +32,11 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
+import { ConsoleAuditLogger } from '@mastra/core/ee';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: 'file:./mastra.db',
+  url: 'file:../mastra.db',
 });
 
 const testScorer = createScorer({
@@ -44,6 +46,9 @@ const testScorer = createScorer({
 }).generateScore(() => {
   return 1;
 });
+// const audit = new ConsoleAuditLogger({
+//   prefix: '[AUDIT]',
+// });
 
 const config = {
   agents: {
@@ -90,6 +95,24 @@ const config = {
     sourcemap: true,
   },
   server: {
+    audit: true,
+    auth: new MastraAuthWorkosEE({
+      apiKey: process.env.WORKOS_API_KEY!,
+      clientId: process.env.WORKOS_CLIENT_ID!,
+      redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/sso/callback',
+      cookiePassword: process.env.WORKOS_COOKIE_PASSWORD || 'dev-cookie-password-must-be-32-chars!',
+      sso: {
+        provider: 'GoogleOAuth',
+      },
+      rbac: {
+        organizationId: process.env.WORKOS_ORGANIZATION_ID, // Required for RBAC to lookup memberships
+        roleMapping: {
+          admin: ['*'], // Full access
+          member: ['agents:read', 'agents:execute', 'workflows:read', 'workflows:execute'],
+          viewer: ['agents:read', 'workflows:read'],
+        },
+      },
+    }),
     build: {
       swaggerUI: true,
     },

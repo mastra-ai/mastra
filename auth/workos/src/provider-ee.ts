@@ -123,7 +123,7 @@ export class MastraAuthWorkosEE extends MastraAuthProvider<EEUser> {
       clientId: options.clientId,
       cookiePassword: options.cookiePassword,
       redirectUri: options.redirectUri,
-      cookieName: options.session?.cookieName ?? 'wos_session',
+      cookieName: options.session?.cookieName ?? 'wos-session',
       cookieMaxAge: options.session?.maxAge ?? 34560000, // 400 days in seconds (WorkOS default)
       apiHttps: true, // Always use HTTPS for WorkOS API
     };
@@ -152,7 +152,7 @@ export class MastraAuthWorkosEE extends MastraAuthProvider<EEUser> {
       clientId: options.clientId,
       cookiePassword: options.cookiePassword,
       redirectUri: options.redirectUri,
-      cookieName: options.session?.cookieName ?? 'wos_session',
+      cookieName: options.session?.cookieName ?? 'wos-session',
       cookieMaxAge: options.session?.maxAge ?? 34560000, // 400 days in seconds (WorkOS default)
       apiHttps: true, // Always use HTTPS for WorkOS API
     });

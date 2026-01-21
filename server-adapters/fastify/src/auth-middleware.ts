@@ -9,7 +9,8 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastif
 
 export const authenticationMiddleware: preHandlerHookHandler = async (request: FastifyRequest, reply: FastifyReply) => {
   const mastra = request.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = request.customRouteAuthConfig;
 
   if (!authConfig) {
@@ -78,7 +79,8 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
 
 export const authorizationMiddleware: preHandlerHookHandler = async (request: FastifyRequest, reply: FastifyReply) => {
   const mastra = request.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = request.customRouteAuthConfig;
 
   if (!authConfig) {
