@@ -367,6 +367,49 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Handle tool-call-approval chunks.
+   * Creates a span for approval requests so they can be seen in traces for debugging.
+   */
+  #handleToolApprovalChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
+    if (chunk.type !== 'tool-call-approval') return;
+
+    const payload = chunk.payload as {
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, any>;
+      resumeSchema: string;
+    };
+
+    // Auto-create step if we see a chunk before step-start
+    if (!this.#currentStepSpan) {
+      this.startStep();
+    }
+
+    // Create an event span for the approval request
+    // Using createEventSpan since approvals are point-in-time events (not time ranges)
+    const span = this.#currentStepSpan?.createEventSpan({
+      name: `chunk: 'tool-call-approval'`,
+      type: SpanType.MODEL_CHUNK,
+      attributes: {
+        chunkType: 'tool-call-approval',
+        sequenceNumber: this.#chunkSequence,
+        toolCallId: payload.toolCallId,
+        toolName: payload.toolName,
+      },
+      output: {
+        toolCallId: payload.toolCallId,
+        toolName: payload.toolName,
+        args: payload.args,
+        resumeSchema: payload.resumeSchema,
+      },
+    });
+
+    if (span) {
+      this.#chunkSequence++;
+    }
+  }
+
+  /**
    * Handle tool-output chunks from sub-agents.
    * Consolidates streaming text/reasoning deltas into a single span per tool call.
    */
@@ -552,12 +595,15 @@ export class ModelSpanTracker {
             case 'tripwire': // Processor rejection
             case 'watch': // Internal watch event
             case 'tool-error': // Tool error handling
-            case 'tool-call-approval': // Approval request (not content)
             case 'tool-call-suspended': // Suspension (not content)
             case 'reasoning-signature': // Signature metadata
             case 'redacted-reasoning': // Redacted content metadata
             case 'step-output': // Step output wrapper (content is nested)
               // Don't create spans for these chunks
+              break;
+
+            case 'tool-call-approval': // Approval request - create span for debugging
+              this.#handleToolApprovalChunk(chunk);
               break;
 
             case 'tool-output':

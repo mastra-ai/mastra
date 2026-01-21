@@ -526,7 +526,6 @@ describe('ModelSpanTracker', () => {
         { type: 'tripwire', payload: { reason: 'blocked' } },
         { type: 'watch', payload: {} },
         { type: 'tool-error', payload: { toolCallId: 'tc-1', toolName: 'test', error: 'failed' } },
-        { type: 'tool-call-approval', payload: { toolCallId: 'tc-2', toolName: 'test', args: {} } },
         { type: 'tool-call-suspended', payload: { toolCallId: 'tc-3', toolName: 'test', args: {} } },
         { type: 'reasoning-signature', payload: { id: 'r-1', signature: 'sig' } },
         { type: 'redacted-reasoning', payload: { id: 'r-2', data: {} } },
@@ -627,6 +626,104 @@ describe('ModelSpanTracker', () => {
 
       expect(toolCallSpan).toBeDefined();
       expect(toolCallSpan!.output).toHaveProperty('toolName', 'myTool');
+    });
+  });
+
+  describe('tool-call-approval tracing', () => {
+    it('should create a span for tool-call-approval chunks', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const toolCallId = 'tc-approval-123';
+      const toolName = 'criticalAction';
+      const args = { param1: 'value1', param2: 42 };
+      const resumeSchema = '{"type":"object","properties":{"approved":{"type":"boolean"}}}';
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-call-approval',
+          runId: 'run-1',
+          from: 'AGENT',
+          payload: {
+            toolCallId,
+            toolName,
+            args,
+            resumeSchema,
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Should have exactly one tool-call-approval chunk span
+      const approvalSpans = testExporter.getSpansByName("chunk: 'tool-call-approval'");
+      expect(approvalSpans).toHaveLength(1);
+
+      // Verify span attributes
+      const span = approvalSpans[0]!;
+      expect(span.type).toBe(SpanType.MODEL_CHUNK);
+      expect(span.attributes).toMatchObject({
+        chunkType: 'tool-call-approval',
+        toolCallId,
+        toolName,
+      });
+
+      // Verify span output contains the full approval payload
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        args,
+        resumeSchema,
+      });
+    });
+
+    it('should handle tool-call-approval without prior step-start', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        // tool-call-approval before step-start - should auto-create step
+        {
+          type: 'tool-call-approval',
+          runId: 'run-1',
+          from: 'AGENT',
+          payload: {
+            toolCallId: 'tc-auto-step',
+            toolName: 'autoApprove',
+            args: {},
+            resumeSchema: '{}',
+          },
+        },
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Should have the approval span and step span
+      const approvalSpans = testExporter.getSpansByName("chunk: 'tool-call-approval'");
+      expect(approvalSpans).toHaveLength(1);
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
     });
   });
 });
