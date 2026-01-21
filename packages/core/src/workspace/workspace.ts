@@ -195,6 +195,16 @@ export interface WorkspaceSafetyConfig {
   requireSandboxApproval?: 'all' | 'commands' | 'none';
 
   /**
+   * Require approval for filesystem operations.
+   * - 'all': Require approval for all filesystem operations (read, write, list, delete, mkdir)
+   * - 'write': Require approval only for write operations (write, delete, mkdir)
+   * - 'none': No approval required (default)
+   *
+   * @default 'none'
+   */
+  requireFilesystemApproval?: 'all' | 'write' | 'none';
+
+  /**
    * When true, all write operations to the filesystem are blocked.
    * Read operations and sandbox execution are still allowed.
    * Write tools will not be included in the workspace tools.

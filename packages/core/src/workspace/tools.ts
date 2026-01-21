@@ -20,6 +20,7 @@ export function createWorkspaceTools(workspace: Workspace) {
   const safetyConfig = workspace.getSafetyConfig();
   const isReadOnly = safetyConfig?.readOnly ?? false;
   const sandboxApproval = safetyConfig?.requireSandboxApproval ?? 'none';
+  const fsApproval = safetyConfig?.requireFilesystemApproval ?? 'none';
 
   // Only add filesystem tools if filesystem is available
   if (workspace.filesystem) {
@@ -27,6 +28,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_read_file = createTool({
       id: 'workspace_read_file',
       description: 'Read the contents of a file from the workspace filesystem',
+      // Require approval when fsApproval is 'all'
+      requireApproval: fsApproval === 'all',
       inputSchema: z.object({
         path: z.string().describe('The path to the file to read (e.g., "/data/config.json")'),
         encoding: z
@@ -57,6 +60,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools.workspace_write_file = createTool({
         id: 'workspace_write_file',
         description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
+        // Require approval when fsApproval is 'all' or 'write'
+        requireApproval: fsApproval === 'all' || fsApproval === 'write',
         inputSchema: z.object({
           path: z.string().describe('The path where to write the file (e.g., "/data/output.txt")'),
           content: z.string().describe('The content to write to the file'),
@@ -85,6 +90,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_list_files = createTool({
       id: 'workspace_list_files',
       description: 'List files and directories in the workspace filesystem',
+      // Require approval when fsApproval is 'all'
+      requireApproval: fsApproval === 'all',
       inputSchema: z.object({
         path: z.string().default('/').describe('The directory path to list (e.g., "/" or "/data")'),
         recursive: z.boolean().optional().default(false).describe('Whether to list files recursively'),
@@ -123,6 +130,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools.workspace_delete_file = createTool({
         id: 'workspace_delete_file',
         description: 'Delete a file from the workspace filesystem',
+        // Require approval when fsApproval is 'all' or 'write'
+        requireApproval: fsApproval === 'all' || fsApproval === 'write',
         inputSchema: z.object({
           path: z.string().describe('The path to the file to delete'),
           force: z.boolean().optional().default(false).describe('Whether to ignore errors if the file does not exist'),
@@ -141,6 +150,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools.workspace_file_exists = createTool({
       id: 'workspace_file_exists',
       description: 'Check if a file or directory exists in the workspace',
+      // Require approval when fsApproval is 'all'
+      requireApproval: fsApproval === 'all',
       inputSchema: z.object({
         path: z.string().describe('The path to check'),
       }),
@@ -166,6 +177,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools.workspace_mkdir = createTool({
         id: 'workspace_mkdir',
         description: 'Create a directory in the workspace filesystem',
+        // Require approval when fsApproval is 'all' or 'write'
+        requireApproval: fsApproval === 'all' || fsApproval === 'write',
         inputSchema: z.object({
           path: z.string().describe('The path of the directory to create'),
           recursive: z
@@ -192,6 +205,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       id: 'workspace_search',
       description:
         'Search indexed content in the workspace. Supports keyword (BM25), semantic (vector), and hybrid search modes.',
+      // Require approval when fsApproval is 'all'
+      requireApproval: fsApproval === 'all',
       inputSchema: z.object({
         query: z.string().describe('The search query string'),
         topK: z.number().optional().default(5).describe('Maximum number of results to return'),
@@ -243,6 +258,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools.workspace_index = createTool({
         id: 'workspace_index',
         description: 'Index content for search. The path becomes the document ID in search results.',
+        // Require approval when fsApproval is 'all' or 'write'
+        requireApproval: fsApproval === 'all' || fsApproval === 'write',
         inputSchema: z.object({
           path: z.string().describe('The document ID/path for search results'),
           content: z.string().describe('The text content to index'),

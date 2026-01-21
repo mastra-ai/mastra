@@ -1,0 +1,1483 @@
+# Workspace Safety Features - Test Plan
+
+This document contains test cases for verifying workspace safety features work correctly across different agents and models.
+
+## Test Environment
+
+- **URL**: http://localhost:4111/agents
+- **Models to test**: `gpt-4o-mini`, `gpt-4o`
+
+## Agents Under Test
+
+| Agent                   | Workspace                    | Safety Config                        | Key Restriction                   |
+| ----------------------- | ---------------------------- | ------------------------------------ | --------------------------------- |
+| Research Agent          | `readonlyWorkspace`          | `readOnly: true`                     | No write operations               |
+| Editor Agent            | `safeWriteWorkspace`         | `requireReadBeforeWrite: true`       | Must read before write            |
+| Automation Agent        | `supervisedSandboxWorkspace` | `requireSandboxApproval: 'all'`      | All sandbox ops need approval     |
+| Script Runner Agent     | `commandApprovalWorkspace`   | `requireSandboxApproval: 'commands'` | Only shell commands need approval |
+| FS Write Approval Agent | `fsWriteApprovalWorkspace`   | `requireFilesystemApproval: 'write'` | Write ops need approval           |
+| FS All Approval Agent   | `fsAllApprovalWorkspace`     | `requireFilesystemApproval: 'all'`   | All fs ops need approval          |
+| Developer Agent         | `globalWorkspace`            | None                                 | Full access                       |
+| Documentation Agent     | `docsAgentWorkspace`         | None                                 | Full access + extra skills        |
+| Support Agent           | `isolatedDocsWorkspace`      | None                                 | Full access, limited skills       |
+
+---
+
+## Test Cases
+
+### 1. Research Agent (readOnly: true)
+
+#### 1.1 Happy Path: Read File
+
+**Prompt:**
+
+```
+Read the contents of /README.md
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` tool
+- Returns file contents successfully
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_read_file",
+  "args": { "path": "/README.md" }
+}
+```
+
+---
+
+#### 1.2 Happy Path: List Files
+
+**Prompt:**
+
+```
+List all files in the /skills directory
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_list_files` tool
+- Returns directory listing
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_list_files",
+  "args": { "path": "/skills" }
+}
+```
+
+---
+
+#### 1.3 Happy Path: Search Content
+
+**Prompt:**
+
+```
+Search for "API" in the workspace
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` tool
+- Returns search results
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_search",
+  "args": { "query": "API" }
+}
+```
+
+---
+
+#### 1.4 Failure Path: Attempt Write File
+
+**Prompt:**
+
+```
+Create a new file at /test-output.txt with the content "Hello World"
+```
+
+**Expected Behavior:**
+
+- Agent should NOT have `workspace_write_file` tool available
+- Agent should explain it cannot write files (read-only workspace)
+- No write operation attempted
+
+**Expected Response (paraphrased):**
+
+```
+I cannot create or write files. This workspace is configured as read-only,
+so I only have access to read operations.
+```
+
+---
+
+#### 1.5 Failure Path: Attempt Delete File
+
+**Prompt:**
+
+```
+Delete the file /README.md
+```
+
+**Expected Behavior:**
+
+- Agent should NOT have `workspace_delete_file` tool available
+- Agent should explain it cannot delete files
+
+**Expected Response (paraphrased):**
+
+```
+I cannot delete files. This workspace is configured as read-only.
+```
+
+---
+
+#### 1.6 Failure Path: Attempt Mkdir
+
+**Prompt:**
+
+```
+Create a new directory at /new-folder
+```
+
+**Expected Behavior:**
+
+- Agent should NOT have `workspace_mkdir` tool available
+- Agent should explain it cannot create directories
+
+**Expected Response (paraphrased):**
+
+```
+I cannot create directories. This workspace is configured as read-only.
+```
+
+---
+
+### 2. Editor Agent (requireReadBeforeWrite: true)
+
+#### 2.1 Happy Path: Read Then Write
+
+**Prompt:**
+
+```
+Read /README.md, then add a line "## Test Section" at the end
+```
+
+**Expected Behavior:**
+
+1. Agent reads file first with `workspace_read_file`
+2. Agent writes modified content with `workspace_write_file`
+3. Write succeeds because file was read first
+
+**Expected Tool Calls (in order):**
+
+```json
+[
+  { "tool": "workspace_read_file", "args": { "path": "/README.md" } },
+  { "tool": "workspace_write_file", "args": { "path": "/README.md", "content": "..." } }
+]
+```
+
+---
+
+#### 2.2 Failure Path: Overwrite Existing File Without Reading
+
+**Pre-condition:** Ensure `/README.md` exists (it should already).
+
+**Prompt:**
+
+```
+Overwrite /README.md with "Hello World". Do NOT read the file first - just write directly.
+```
+
+**Expected Behavior:**
+
+- Agent attempts `workspace_write_file` on an EXISTING file
+- Tool returns `FileReadRequiredError`
+- Error message explains file must be read first
+
+**Expected Error:**
+
+```json
+{
+  "error": "FileReadRequiredError",
+  "code": "EREAD_REQUIRED",
+  "message": "File \"/README.md\" has not been read. You must read a file before writing to it."
+}
+```
+
+**Note:** Writing to a NEW file (that doesn't exist) is allowed without reading. This test specifically targets overwriting an existing file.
+
+---
+
+#### 2.3 Failure Path: Write After External Modification
+
+**Pre-condition:**
+Before testing, manually modify `/README.md` externally (e.g., via terminal):
+
+```bash
+echo "# External Change" >> examples/unified-workspace/README.md
+```
+
+**Prompt:**
+
+```
+Read /README.md, then wait 5 seconds, then write "Updated content" to /README.md
+```
+
+**Between read and write:** Manually modify the file again externally.
+
+**Expected Behavior:**
+
+- Agent reads file successfully
+- Agent attempts write
+- Tool detects external modification
+- Returns error requiring re-read
+
+**Expected Error:**
+
+```json
+{
+  "error": "FileReadRequiredError",
+  "code": "EREAD_REQUIRED",
+  "message": "File \"/README.md\" was modified since last read. Please re-read the file to get the latest contents."
+}
+```
+
+---
+
+#### 2.4 Happy Path: Execute Code
+
+**Prompt:**
+
+```
+Run this JavaScript code: console.log(2 + 2)
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_code` tool
+- Code executes successfully
+- Output: `4`
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_execute_code",
+  "args": { "code": "console.log(2 + 2)", "language": "javascript" }
+}
+```
+
+---
+
+### 3. Automation Agent (requireSandboxApproval: 'all')
+
+#### 3.1 Happy Path: Read File (No Approval Needed)
+
+**Prompt:**
+
+```
+Read the contents of /package.json
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` tool
+- No approval dialog shown
+- Returns file contents
+
+---
+
+#### 3.2 Approval Path: Execute Code
+
+**Prompt:**
+
+```
+Run this JavaScript code: console.log("Hello from automation")
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_execute_code`
+2. **Approval dialog appears** with Approve/Decline buttons
+3. If Approved: Code executes, output shown
+4. If Declined: Error message about tool not approved
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_execute_code
+Args: { "code": "console.log(\"Hello from automation\")", "language": "javascript" }
+[Approve] [Decline]
+```
+
+**If Approved - Expected Output:**
+
+```
+Hello from automation
+```
+
+**If Declined - Expected Error:**
+
+```
+Tool call was not approved by the user
+```
+
+---
+
+#### 3.3 Approval Path: Execute Command
+
+**Prompt:**
+
+```
+Run the shell command: ls -la
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_execute_command`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_execute_command
+Args: { "command": "ls", "args": ["-la"] }
+[Approve] [Decline]
+```
+
+---
+
+#### 3.4 Approval Path: Install Package
+
+**Prompt:**
+
+```
+Install the npm package "lodash"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_install_package`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_install_package
+Args: { "packageName": "lodash" }
+[Approve] [Decline]
+```
+
+---
+
+### 4. Script Runner Agent (requireSandboxApproval: 'commands')
+
+#### 4.1 Happy Path: Execute Code (No Approval)
+
+**Prompt:**
+
+```
+Run this JavaScript code: console.log(3 * 3)
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_code` tool
+- **No approval dialog** (code execution allowed)
+- Output: `9`
+
+**Expected Output:**
+
+```
+9
+```
+
+---
+
+#### 4.2 Approval Path: Execute Command
+
+**Prompt:**
+
+```
+Run the shell command: pwd
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_execute_command`
+2. **Approval dialog appears** (commands need approval)
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_execute_command
+Args: { "command": "pwd" }
+[Approve] [Decline]
+```
+
+---
+
+#### 4.3 Happy Path: Complex Code Execution (No Approval)
+
+**Prompt:**
+
+```
+Run JavaScript code that calculates the factorial of 10
+```
+
+**Expected Behavior:**
+
+- Agent writes and executes factorial code
+- **No approval needed** for code execution
+- Returns result: `3628800`
+
+**Expected Output:**
+
+```
+3628800
+```
+
+---
+
+#### 4.4 Decline Path: Command Declined
+
+**Prompt:**
+
+```
+Run the shell command: echo "test"
+```
+
+**Action:** Click "Decline" when approval dialog appears
+
+**Expected Behavior:**
+
+- Approval dialog shown
+- User clicks Decline
+- Agent receives error
+- Agent explains the command was not approved
+
+**Expected Error:**
+
+```
+Tool call was not approved by the user
+```
+
+---
+
+### 5. Developer Agent (No Safety Restrictions)
+
+#### 5.1 Happy Path: Full Access - Read
+
+**Prompt:**
+
+```
+Read /README.md
+```
+
+**Expected Behavior:**
+
+- Agent reads file successfully
+- No restrictions
+
+---
+
+#### 5.2 Happy Path: Full Access - Write Without Reading
+
+**Prompt:**
+
+```
+Create a file /test-dev-output.txt with content "Developer test"
+```
+
+**Expected Behavior:**
+
+- Agent writes file successfully
+- No requireReadBeforeWrite restriction
+- File created
+
+---
+
+#### 5.3 Happy Path: Full Access - Execute Code
+
+**Prompt:**
+
+```
+Run: console.log("Developer agent test")
+```
+
+**Expected Behavior:**
+
+- Agent executes code
+- No approval needed
+- Output shown
+
+---
+
+#### 5.4 Happy Path: Full Access - Execute Command
+
+**Prompt:**
+
+```
+Run: ls -la
+```
+
+**Expected Behavior:**
+
+- Agent executes command
+- No approval needed
+- Output shown
+
+---
+
+#### 5.5 Happy Path: Access Global Skills
+
+**Prompt:**
+
+```
+What skills are available to you? List them.
+```
+
+**Expected Behavior:**
+
+- Agent lists skills from /skills directory
+- Should include: code-review, api-design, customer-support
+
+---
+
+### 6. Documentation Agent (docsAgentWorkspace)
+
+#### 6.1 Happy Path: Access All Skills (Global + Agent-Specific)
+
+**Prompt:**
+
+```
+List all the skills you have access to
+```
+
+**Expected Behavior:**
+
+- Agent lists skills from BOTH /skills and /docs-skills
+- Should include: code-review, api-design, customer-support, brand-guidelines
+
+**Expected Response (paraphrased):**
+
+```
+I have access to the following skills:
+- code-review: Guidelines for reviewing TypeScript code
+- api-design: Best practices for REST API design
+- customer-support: Support interaction guidelines
+- brand-guidelines: Documentation writing style guide
+```
+
+---
+
+#### 6.2 Happy Path: Use Agent-Specific Skill
+
+**Prompt:**
+
+```
+Read the brand-guidelines skill and summarize the key points
+```
+
+**Expected Behavior:**
+
+- Agent retrieves brand-guidelines skill content
+- Provides summary of the skill
+
+---
+
+### 7. Support Agent (isolatedDocsWorkspace)
+
+#### 7.1 Failure Path: No Access to Global Skills
+
+**Prompt:**
+
+```
+Show me the code-review skill content
+```
+
+**Expected Behavior:**
+
+- Agent does NOT have access to code-review (it's in /skills, not /docs-skills)
+- Agent explains skill is not available
+
+**Expected Response (paraphrased):**
+
+```
+I don't have access to a skill called "code-review".
+The skills available to me are: brand-guidelines
+```
+
+---
+
+#### 7.2 Happy Path: Access Agent-Specific Skill
+
+**Prompt:**
+
+```
+Show me the brand-guidelines skill
+```
+
+**Expected Behavior:**
+
+- Agent retrieves brand-guidelines (from /docs-skills)
+- Returns skill content
+
+---
+
+#### 7.3 Happy Path: Search Workspace
+
+**Prompt:**
+
+```
+Search for information about "password reset"
+```
+
+**Expected Behavior:**
+
+- Agent uses workspace search
+- Returns results from indexed FAQ content
+
+---
+
+## 8. Edge Cases: requireReadBeforeWrite
+
+### 8.1 Happy Path: Write to NEW File (Never Existed)
+
+**Agent:** Editor Agent
+
+**Prompt:**
+
+```
+Create a new file called /brand-new-file.txt with the content "This file never existed before"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_write_file`
+- Write SUCCEEDS because the file is new (doesn't exist yet)
+- No read required for new files
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_write_file",
+  "args": { "path": "/brand-new-file.txt", "content": "This file never existed before" }
+}
+```
+
+**Cleanup:**
+
+```bash
+rm -f examples/unified-workspace/brand-new-file.txt
+```
+
+---
+
+### 8.2 Failure Path: Read File A, Write to File B
+
+**Agent:** Editor Agent
+
+**Prompt:**
+
+```
+Read the file /README.md, then write "Hello" to /different-file.txt
+```
+
+**Expected Behavior:**
+
+- Agent reads `/README.md` successfully
+- Agent attempts to write to `/different-file.txt`
+- Write FAILS because `/different-file.txt` was never read
+
+**Expected Error:**
+
+```json
+{
+  "error": "FileReadRequiredError",
+  "code": "EREAD_REQUIRED",
+  "message": "File \"/different-file.txt\" has not been read. You must read a file before writing to it."
+}
+```
+
+---
+
+### 8.3 Happy Path: Multiple Writes After Single Read
+
+**Agent:** Editor Agent
+
+**Prompt:**
+
+```
+Read /README.md, then write "First update" to it, then write "Second update" to it
+```
+
+**Expected Behavior:**
+
+1. Agent reads file once
+2. First write succeeds
+3. Second write also succeeds (read tracking persists)
+
+**Note:** This tests that a single read allows multiple subsequent writes to the same file.
+
+---
+
+## 9. Edge Cases: Filesystem Error Handling
+
+### 9.1 Error Path: Read Non-Existent File
+
+**Agent:** Any agent with filesystem access (e.g., Developer Agent)
+
+**Prompt:**
+
+```
+Read the file /this-file-does-not-exist-12345.txt
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file`
+- Returns graceful error (not a crash)
+- Error indicates file not found
+
+**Expected Error (paraphrased):**
+
+```
+File not found: /this-file-does-not-exist-12345.txt
+```
+
+---
+
+### 9.2 Error Path: Write to Invalid Path (Non-Existent Parent Directory)
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Write "test" to /nonexistent-parent-dir/nested/file.txt
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_write_file`
+- Returns error about parent directory not existing
+- Does not crash
+
+**Expected Error (paraphrased):**
+
+```
+Parent directory does not exist: /nonexistent-parent-dir/nested
+```
+
+---
+
+### 9.3 Security Path: Path Traversal Attempt
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read the file at path /../../../etc/passwd
+```
+
+**Expected Behavior:**
+
+- Path should be sanitized or blocked
+- Should NOT escape the workspace basePath
+- Returns error or reads within workspace bounds
+
+**Expected Behavior Options:**
+
+1. Path normalized to `/etc/passwd` within workspace (file not found)
+2. Path blocked with security error
+3. Path resolved safely without escaping workspace
+
+**NOT Expected:**
+
+- Actually reading system `/etc/passwd` file
+
+---
+
+## 10. Edge Cases: Sandbox Error Handling
+
+### 10.1 Error Path: Code Execution Error
+
+**Agent:** Script Runner Agent
+
+**Prompt:**
+
+```
+Run this JavaScript code: throw new Error("Intentional test error")
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_code`
+- Code executes and throws error
+- Error is caught and returned gracefully
+- Agent reports the error to user
+
+**Expected Output (paraphrased):**
+
+```
+Error: Intentional test error
+```
+
+---
+
+### 10.2 Error Path: Command Not Found
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Run the shell command: nonexistent-command-xyz123
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_command`
+- Command fails (not found)
+- Error returned gracefully
+
+**Expected Error (paraphrased):**
+
+```
+Command not found: nonexistent-command-xyz123
+```
+
+---
+
+### 10.3 Error Path: Infinite Loop / Timeout
+
+**Agent:** Script Runner Agent
+
+**Prompt:**
+
+```
+Run this JavaScript code: while(true) { }
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_code`
+- Code runs but hits timeout
+- Timeout error returned (not infinite hang)
+
+**Expected Error (paraphrased):**
+
+```
+Execution timed out after X seconds
+```
+
+**Note:** Verify the sandbox has a reasonable timeout configured (default should be ~30 seconds).
+
+---
+
+## 11. Edge Cases: Skills
+
+### 11.1 Error Path: Get Non-Existent Skill
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Get the content of the skill called "fake-nonexistent-skill"
+```
+
+**Expected Behavior:**
+
+- Agent attempts to retrieve skill
+- Returns graceful error (skill not found)
+- Does not crash
+
+**Expected Response (paraphrased):**
+
+```
+Skill "fake-nonexistent-skill" not found. Available skills are: code-review, api-design, customer-support
+```
+
+---
+
+### 11.2 Happy Path: Search Skills
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search the skills for content about "code review best practices"
+```
+
+**Expected Behavior:**
+
+- Agent uses skill search functionality
+- Returns matching content from skills
+
+---
+
+## 12. Edge Cases: Search
+
+### 12.1 Happy Path: Empty Search Results
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search the workspace for "xyznonexistent12345abc"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search`
+- Returns empty results array
+- Does not error
+
+**Expected Response (paraphrased):**
+
+```
+No results found for "xyznonexistent12345abc"
+```
+
+---
+
+### 12.2 Happy Path: Search with Special Characters
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search the workspace for "function()"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search`
+- Special regex characters handled properly
+- Returns results or empty array (no crash)
+
+---
+
+## 13. Edge Cases: Approval Flow
+
+### 13.1 Happy Path: Multiple Approvals in Sequence
+
+**Agent:** Automation Agent
+
+**Prompt:**
+
+```
+First, run JavaScript code: console.log("step 1"). Then run the shell command: echo "step 2"
+```
+
+**Expected Behavior:**
+
+1. First approval dialog for `workspace_execute_code`
+2. User approves → code runs
+3. Second approval dialog for `workspace_execute_command`
+4. User approves → command runs
+5. Both outputs shown
+
+---
+
+### 13.2 Mixed Path: Approve Code, Decline Command
+
+**Agent:** Automation Agent
+
+**Prompt:**
+
+```
+Run JavaScript code: console.log("code ran"). Then run shell command: echo "command ran"
+```
+
+**Actions:**
+
+1. Approve the code execution
+2. Decline the command execution
+
+**Expected Behavior:**
+
+- Code executes successfully, output: "code ran"
+- Command blocked, error: "Tool call was not approved by the user"
+- Agent reports partial success
+
+---
+
+## 14. FS Write Approval Agent (requireFilesystemApproval: 'write')
+
+### 14.1 Happy Path: Read File (No Approval)
+
+**Prompt:**
+
+```
+Read the contents of /README.md
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` tool
+- **No approval dialog** (reads allowed without approval)
+- Returns file contents
+
+---
+
+### 14.2 Happy Path: List Files (No Approval)
+
+**Prompt:**
+
+```
+List all files in the /skills directory
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_list_files` tool
+- **No approval dialog** (listing allowed without approval)
+- Returns directory listing
+
+---
+
+### 14.3 Happy Path: File Exists Check (No Approval)
+
+**Prompt:**
+
+```
+Check if /README.md exists
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_file_exists` tool
+- **No approval dialog**
+- Returns exists: true
+
+---
+
+### 14.4 Approval Path: Write File
+
+**Prompt:**
+
+```
+Create a file /test-fs-approval.txt with content "Test content"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_write_file`
+2. **Approval dialog appears** with Approve/Decline buttons
+3. If Approved: File is written
+4. If Declined: Error message about tool not approved
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_write_file
+Args: { "path": "/test-fs-approval.txt", "content": "Test content" }
+[Approve] [Decline]
+```
+
+---
+
+### 14.5 Approval Path: Delete File
+
+**Prompt:**
+
+```
+Delete the file /test-fs-approval.txt
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_delete_file`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_delete_file
+Args: { "path": "/test-fs-approval.txt" }
+[Approve] [Decline]
+```
+
+---
+
+### 14.6 Approval Path: Create Directory
+
+**Prompt:**
+
+```
+Create a new directory at /test-approval-dir
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_mkdir`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_mkdir
+Args: { "path": "/test-approval-dir" }
+[Approve] [Decline]
+```
+
+---
+
+### 14.7 Approval Path: Index Content
+
+**Prompt:**
+
+```
+Index the content "Hello world" with path "/test-index.txt"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_index`
+2. **Approval dialog appears** (indexing is a write operation)
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_index
+Args: { "path": "/test-index.txt", "content": "Hello world" }
+[Approve] [Decline]
+```
+
+---
+
+### 14.8 Happy Path: Search (No Approval)
+
+**Prompt:**
+
+```
+Search the workspace for "API"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` tool
+- **No approval dialog** (search is a read operation)
+- Returns search results
+
+---
+
+## 15. FS All Approval Agent (requireFilesystemApproval: 'all')
+
+### 15.1 Approval Path: Read File
+
+**Prompt:**
+
+```
+Read the contents of /README.md
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_read_file`
+2. **Approval dialog appears** (ALL fs operations need approval)
+3. If Approved: File contents returned
+4. If Declined: Error message
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_read_file
+Args: { "path": "/README.md" }
+[Approve] [Decline]
+```
+
+---
+
+### 15.2 Approval Path: List Files
+
+**Prompt:**
+
+```
+List all files in the /skills directory
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_list_files`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_list_files
+Args: { "path": "/skills" }
+[Approve] [Decline]
+```
+
+---
+
+### 15.3 Approval Path: File Exists
+
+**Prompt:**
+
+```
+Check if /README.md exists
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_file_exists`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_file_exists
+Args: { "path": "/README.md" }
+[Approve] [Decline]
+```
+
+---
+
+### 15.4 Approval Path: Write File
+
+**Prompt:**
+
+```
+Create a file /test-all-approval.txt with content "Test"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_write_file`
+2. **Approval dialog appears**
+3. User must approve/decline
+
+---
+
+### 15.5 Approval Path: Search
+
+**Prompt:**
+
+```
+Search the workspace for "API"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_search`
+2. **Approval dialog appears** (all fs operations need approval)
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_search
+Args: { "query": "API" }
+[Approve] [Decline]
+```
+
+---
+
+### 15.6 Decline Path: Decline All Operations
+
+**Prompt:**
+
+```
+Read /README.md
+```
+
+**Action:** Click "Decline" when approval dialog appears
+
+**Expected Behavior:**
+
+- Approval dialog shown
+- User clicks Decline
+- Agent receives error: "Tool call was not approved by the user"
+- Agent explains the operation was not approved
+
+---
+
+### 15.7 Happy Path: Sandbox Operations (No FS Approval)
+
+**Prompt:**
+
+```
+Run JavaScript code: console.log(2 + 2)
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_execute_code` tool
+- **No approval dialog** (sandbox ops don't require fs approval)
+- Code executes, output: `4`
+
+**Note:** `requireFilesystemApproval` does NOT affect sandbox operations. Use `requireSandboxApproval` for that.
+
+---
+
+## Extended Test Matrix
+
+### Edge Cases: gpt-4o-mini vs gpt-4o
+
+| Test Case | Agent         | Expected Result             | gpt-4o-mini | gpt-4o   |
+| --------- | ------------- | --------------------------- | ----------- | -------- |
+| 8.1       | Editor        | New file write succeeds     | [ ] Pass    | [ ] Pass |
+| 8.2       | Editor        | Read A, write B fails       | [ ] Pass    | [ ] Pass |
+| 8.3       | Editor        | Multiple writes after read  | [ ] Pass    | [ ] Pass |
+| 9.1       | Developer     | Read non-existent graceful  | [ ] Pass    | [ ] Pass |
+| 9.2       | Developer     | Write invalid path graceful | [ ] Pass    | [ ] Pass |
+| 9.3       | Developer     | Path traversal blocked      | [ ] Pass    | [ ] Pass |
+| 10.1      | Script Runner | Code error graceful         | [ ] Pass    | [ ] Pass |
+| 10.2      | Developer     | Command not found graceful  | [ ] Pass    | [ ] Pass |
+| 10.3      | Script Runner | Infinite loop timeout       | [ ] Pass    | [ ] Pass |
+| 11.1      | Developer     | Non-existent skill graceful | [ ] Pass    | [ ] Pass |
+| 12.1      | Developer     | Empty search results        | [ ] Pass    | [ ] Pass |
+| 12.2      | Developer     | Special chars in search     | [ ] Pass    | [ ] Pass |
+| 13.1      | Automation    | Sequential approvals        | [ ] Pass    | [ ] Pass |
+| 13.2      | Automation    | Partial approval            | [ ] Pass    | [ ] Pass |
+
+### Filesystem Approval: gpt-4o-mini vs gpt-4o
+
+| Test Case | Agent             | Expected Result         | gpt-4o-mini | gpt-4o   |
+| --------- | ----------------- | ----------------------- | ----------- | -------- |
+| 14.1      | FS Write Approval | Read without approval   | [ ] Pass    | [ ] Pass |
+| 14.2      | FS Write Approval | List without approval   | [ ] Pass    | [ ] Pass |
+| 14.4      | FS Write Approval | Write needs approval    | [ ] Pass    | [ ] Pass |
+| 14.5      | FS Write Approval | Delete needs approval   | [ ] Pass    | [ ] Pass |
+| 14.6      | FS Write Approval | Mkdir needs approval    | [ ] Pass    | [ ] Pass |
+| 14.7      | FS Write Approval | Index needs approval    | [ ] Pass    | [ ] Pass |
+| 14.8      | FS Write Approval | Search without approval | [ ] Pass    | [ ] Pass |
+| 15.1      | FS All Approval   | Read needs approval     | [ ] Pass    | [ ] Pass |
+| 15.2      | FS All Approval   | List needs approval     | [ ] Pass    | [ ] Pass |
+| 15.5      | FS All Approval   | Search needs approval   | [ ] Pass    | [ ] Pass |
+| 15.7      | FS All Approval   | Sandbox no fs approval  | [ ] Pass    | [ ] Pass |
+
+---
+
+## Test Matrix
+
+### Model Comparison: gpt-4o-mini vs gpt-4o
+
+| Test Case | Agent         | Expected Result               | gpt-4o-mini | gpt-4o   |
+| --------- | ------------- | ----------------------------- | ----------- | -------- |
+| 1.1       | Research      | Read succeeds                 | [ ] Pass    | [ ] Pass |
+| 1.4       | Research      | Write blocked (no tool)       | [ ] Pass    | [ ] Pass |
+| 1.5       | Research      | Delete blocked (no tool)      | [ ] Pass    | [ ] Pass |
+| 2.1       | Editor        | Read-then-write succeeds      | [ ] Pass    | [ ] Pass |
+| 2.2       | Editor        | Write-without-read fails      | [ ] Pass    | [ ] Pass |
+| 3.2       | Automation    | Code needs approval           | [ ] Pass    | [ ] Pass |
+| 3.3       | Automation    | Command needs approval        | [ ] Pass    | [ ] Pass |
+| 4.1       | Script Runner | Code runs without approval    | [ ] Pass    | [ ] Pass |
+| 4.2       | Script Runner | Command needs approval        | [ ] Pass    | [ ] Pass |
+| 5.2       | Developer     | Write without read succeeds   | [ ] Pass    | [ ] Pass |
+| 5.4       | Developer     | Command runs without approval | [ ] Pass    | [ ] Pass |
+| 6.1       | Documentation | Has global + agent skills     | [ ] Pass    | [ ] Pass |
+| 7.1       | Support       | No global skills              | [ ] Pass    | [ ] Pass |
+
+---
+
+## Cleanup After Testing
+
+After running tests, clean up any created files:
+
+```bash
+cd examples/unified-workspace
+rm -f test-output.txt test-new-file.txt test-dev-output.txt brand-new-file.txt different-file.txt
+git checkout README.md
+```
+
+---
+
+## Test Summary
+
+| Category                                     | Test Count   |
+| -------------------------------------------- | ------------ |
+| Research Agent (readOnly)                    | 6 tests      |
+| Editor Agent (requireReadBeforeWrite)        | 4 tests      |
+| Automation Agent (approval: all)             | 4 tests      |
+| Script Runner Agent (approval: commands)     | 4 tests      |
+| FS Write Approval Agent (fs approval: write) | 8 tests      |
+| FS All Approval Agent (fs approval: all)     | 7 tests      |
+| Developer Agent (no restrictions)            | 5 tests      |
+| Documentation Agent (skills inheritance)     | 2 tests      |
+| Support Agent (isolated skills)              | 3 tests      |
+| Edge Cases: requireReadBeforeWrite           | 3 tests      |
+| Edge Cases: Filesystem Errors                | 3 tests      |
+| Edge Cases: Sandbox Errors                   | 3 tests      |
+| Edge Cases: Skills                           | 2 tests      |
+| Edge Cases: Search                           | 2 tests      |
+| Edge Cases: Approval Flow                    | 2 tests      |
+| **Total**                                    | **58 tests** |
+
+---
+
+## Notes
+
+### Verifying Tool Availability
+
+In Mastra Studio, you can verify which tools an agent has:
+
+1. Go to the agent's page
+2. Check the "Tools" section in the sidebar
+3. Agents with `readOnly: true` should NOT have:
+   - `workspace_write_file`
+   - `workspace_delete_file`
+   - `workspace_mkdir`
+
+### Verifying Approval Requirements
+
+For sandbox tools, check if `requireApproval: true` is set:
+
+- `requireSandboxApproval: 'all'` → execute_code, execute_command, install_package all need approval
+- `requireSandboxApproval: 'commands'` → only execute_command, install_package need approval
+
+For filesystem tools:
+
+- `requireFilesystemApproval: 'all'` → read_file, write_file, list_files, file_exists, delete_file, mkdir, search, index all need approval
+- `requireFilesystemApproval: 'write'` → only write_file, delete_file, mkdir, index need approval (read operations are allowed)
+
+### Common Issues
+
+1. **Agent doesn't follow instructions**: Some models may try to read before write even when told not to. Use more explicit prompts like "Do NOT read any files. Just write directly."
+
+2. **Approval dialog not appearing**: Ensure the workspace has a sandbox configured and the safety setting is correct.
+
+3. **Skills not found**: Verify the skillsPaths in the workspace configuration and that SKILL.md files exist in those paths.

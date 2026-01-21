@@ -222,3 +222,55 @@ export const commandApprovalWorkspace = new Workspace({
     requireSandboxApproval: 'commands',
   },
 });
+
+/**
+ * Filesystem write approval workspace - requires approval for write operations.
+ *
+ * Safety feature: requireFilesystemApproval: 'write'
+ * - Read operations (workspace_read_file, workspace_list_files, workspace_file_exists) run without approval
+ * - Write operations (workspace_write_file, workspace_delete_file, workspace_mkdir) require approval
+ * - Search/index operations: workspace_search runs without approval, workspace_index requires approval
+ */
+export const fsWriteApprovalWorkspace = new Workspace({
+  id: 'fs-write-approval-workspace',
+  name: 'Filesystem Write Approval Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    requireFilesystemApproval: 'write',
+  },
+});
+
+/**
+ * Filesystem all approval workspace - requires approval for all filesystem operations.
+ *
+ * Safety feature: requireFilesystemApproval: 'all'
+ * - All filesystem operations require approval
+ * - Read operations: workspace_read_file, workspace_list_files, workspace_file_exists, workspace_search
+ * - Write operations: workspace_write_file, workspace_delete_file, workspace_mkdir, workspace_index
+ */
+export const fsAllApprovalWorkspace = new Workspace({
+  id: 'fs-all-approval-workspace',
+  name: 'Filesystem All Approval Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: PROJECT_ROOT,
+    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+  }),
+  bm25: true,
+  skillsPaths: ['/skills'],
+  autoInit: true,
+  safety: {
+    requireFilesystemApproval: 'all',
+  },
+});
