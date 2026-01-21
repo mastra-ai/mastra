@@ -53,7 +53,7 @@ const getVersionFromPath = (pathname: string): Version => {
 const getPathForVersion = (pathname: string, nextVersion: Version): string => {
   const pathChunks = pathname.split("/");
 
-  if (pathChunks.length < 3) {
+  if (pathChunks.length < 2) {
     return pathname;
   }
 

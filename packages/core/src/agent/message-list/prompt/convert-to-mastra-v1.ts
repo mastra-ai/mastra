@@ -25,8 +25,7 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
       (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
     ) {
       for (const part of msg.content) {
-        // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-        // I'm not sure what's adding `never` to the union but this code definitely works..
+        // @ts-expect-error needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
         previousMessage.content.push(part);
       }
     } else {
@@ -96,7 +95,7 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             role: 'user',
             ...fields,
             type: 'text',
-            // @ts-ignore
+            // @ts-expect-error
             content: userContent,
           });
         } else {
