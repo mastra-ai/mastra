@@ -466,9 +466,11 @@ If you think your configuration is valid, please open an issue.`);
   );
 
   // Merge external dependencies from validateOutput and allUsedExternals
+  // Prefer entries with version info over entries without
   const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
   for (const [dep, info] of allUsedExternals) {
-    if (!mergedExternalDeps.has(dep)) {
+    const existing = mergedExternalDeps.get(dep);
+    if (!existing || (!existing.version && info.version)) {
       mergedExternalDeps.set(dep, info);
     }
   }
