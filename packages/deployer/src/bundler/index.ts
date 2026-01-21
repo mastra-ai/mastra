@@ -333,8 +333,8 @@ export abstract class Bundler extends MastraBundler {
 
       // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
       try {
-        // First try to resolve from the project root
-        let rootPath = await getPackageRootPath(dep);
+        // First try to resolve from the project root (provides correct context for monorepos)
+        let rootPath = await getPackageRootPath(dep, projectRoot);
 
         // If not found in user's project, try resolving from deployer's location
         // This handles packages like hono that are provided by @mastra/deployer
