@@ -8,22 +8,14 @@ import type { CreateWorkflowRunParams, CreateWorkflowRunResult } from './types';
  *
  * @example
  * ```tsx
- * const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
+ * const { createWorkflowRun } = useCreateWorkflowRun();
  *
  * // Create a run
  * const { runId } = await createWorkflowRun.mutateAsync({
  *   workflowId: 'my-workflow'
  * });
- *
- * // Start the run
- * await startWorkflowRun.mutateAsync({
- *   workflowId: 'my-workflow',
- *   runId,
- *   input: { foo: 'bar' }
- * });
- * ```
  */
-export function useExecuteWorkflow() {
+export function useCreateWorkflowRun() {
   const client = useMastraClient();
 
   const createWorkflowRun = useMutation<CreateWorkflowRunResult, Error, CreateWorkflowRunParams>(
