@@ -1,8 +1,8 @@
-import { NetworkChunkType } from '@mastra/core/stream';
+import { type NetworkChunkType } from '@mastra/core/stream';
 import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
-import { Transformer, TransformerArgs } from './types';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { WorkflowStreamResult } from '@mastra/core/workflows';
+import { type Transformer, type TransformerArgs } from './types';
+import { type MastraUIMessage, type MastraUIMessageMetadata } from '../types';
+import { type WorkflowStreamResult } from '@mastra/core/workflows';
 import { formatCompletionFeedback } from '@mastra/core/loop';
 
 export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {

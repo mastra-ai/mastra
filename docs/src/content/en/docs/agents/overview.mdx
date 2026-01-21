@@ -120,6 +120,16 @@ Visit [Agent reference](/reference/agents/agent) for more information.
 
 :::
 
+### Dynamic instructions
+
+Instructions can be provided as an async function, allowing you to resolve prompts at runtime. This enables patterns like personalizing instructions based on user context, fetching prompts from external registry services, and running A/B tests with different variants.
+
+:::info
+
+See [Dynamic instructions](/docs/server/request-context#dynamic-instructions) for examples.
+
+:::
+
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:

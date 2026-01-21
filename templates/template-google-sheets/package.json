@@ -19,19 +19,19 @@
   "dependencies": {
     "@composio/core": "^0.1.55",
     "@composio/mastra": "^0.1.56",
-    "@mastra/core": "beta",
-    "@mastra/fastembed": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/mcp": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "hono": "^4.11.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "beta",
+    "mastra": "latest",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3"
   }
