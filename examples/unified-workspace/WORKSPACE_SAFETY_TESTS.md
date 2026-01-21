@@ -7,6 +7,15 @@ This document contains test cases for verifying workspace safety features work c
 - **URL**: http://localhost:4111/agents
 - **Models to test**: `gpt-4o-mini`, `gpt-4o`
 
+## Result Legend
+
+| Symbol | Meaning        |
+| ------ | -------------- |
+| ⬜     | Not tested     |
+| ✅     | Pass           |
+| ❌     | Fail           |
+| ⚠️     | Partial/Issues |
+
 ## Agents Under Test
 
 | Agent                   | Workspace                    | Safety Config                        | Key Restriction                   |
@@ -40,14 +49,11 @@ Read the contents of /README.md
 - Agent uses `workspace_read_file` tool
 - Returns file contents successfully
 
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_read_file",
-  "args": { "path": "/README.md" }
-}
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ✅ | `workspace_read_file` (2x) | Returned full README.md content - "Unified Workspace Example" |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -64,14 +70,11 @@ List all files in the /skills directory
 - Agent uses `workspace_list_files` tool
 - Returns directory listing
 
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_list_files",
-  "args": { "path": "/skills" }
-}
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -88,14 +91,11 @@ Search for "API" in the workspace
 - Agent uses `workspace_search` tool
 - Returns search results
 
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_search",
-  "args": { "query": "API" }
-}
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -113,12 +113,11 @@ Create a new file at /test-output.txt with the content "Hello World"
 - Agent should explain it cannot write files (read-only workspace)
 - No write operation attempted
 
-**Expected Response (paraphrased):**
-
-```
-I cannot create or write files. This workspace is configured as read-only,
-so I only have access to read operations.
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -135,11 +134,11 @@ Delete the file /README.md
 - Agent should NOT have `workspace_delete_file` tool available
 - Agent should explain it cannot delete files
 
-**Expected Response (paraphrased):**
-
-```
-I cannot delete files. This workspace is configured as read-only.
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -156,11 +155,11 @@ Create a new directory at /new-folder
 - Agent should NOT have `workspace_mkdir` tool available
 - Agent should explain it cannot create directories
 
-**Expected Response (paraphrased):**
-
-```
-I cannot create directories. This workspace is configured as read-only.
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -180,20 +179,17 @@ Read /README.md, then add a line "## Test Section" at the end
 2. Agent writes modified content with `workspace_write_file`
 3. Write succeeds because file was read first
 
-**Expected Tool Calls (in order):**
-
-```json
-[
-  { "tool": "workspace_read_file", "args": { "path": "/README.md" } },
-  { "tool": "workspace_write_file", "args": { "path": "/README.md", "content": "..." } }
-]
-```
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
 #### 2.2 Failure Path: Overwrite Existing File Without Reading
 
-**Pre-condition:** Ensure `/README.md` exists (it should already).
+**Pre-condition:** Ensure `/README.md` exists.
 
 **Prompt:**
 
@@ -217,18 +213,17 @@ Overwrite /README.md with "Hello World". Do NOT read the file first - just write
 }
 ```
 
-**Note:** Writing to a NEW file (that doesn't exist) is allowed without reading. This test specifically targets overwriting an existing file.
+**Results:**
+| Model | Status | Error Returned? | Agent Response Summary |
+|-------|--------|-----------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
 #### 2.3 Failure Path: Write After External Modification
 
-**Pre-condition:**
-Before testing, manually modify `/README.md` externally (e.g., via terminal):
-
-```bash
-echo "# External Change" >> examples/unified-workspace/README.md
-```
+**Pre-condition:** Before testing, manually modify `/README.md` externally.
 
 **Prompt:**
 
@@ -236,7 +231,7 @@ echo "# External Change" >> examples/unified-workspace/README.md
 Read /README.md, then wait 5 seconds, then write "Updated content" to /README.md
 ```
 
-**Between read and write:** Manually modify the file again externally.
+**Between read and write:** Manually modify the file externally.
 
 **Expected Behavior:**
 
@@ -245,15 +240,11 @@ Read /README.md, then wait 5 seconds, then write "Updated content" to /README.md
 - Tool detects external modification
 - Returns error requiring re-read
 
-**Expected Error:**
-
-```json
-{
-  "error": "FileReadRequiredError",
-  "code": "EREAD_REQUIRED",
-  "message": "File \"/README.md\" was modified since last read. Please re-read the file to get the latest contents."
-}
-```
+**Results:**
+| Model | Status | Error Returned? | Agent Response Summary |
+|-------|--------|-----------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -271,14 +262,11 @@ Run this JavaScript code: console.log(2 + 2)
 - Code executes successfully
 - Output: `4`
 
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_execute_code",
-  "args": { "code": "console.log(2 + 2)", "language": "javascript" }
-}
-```
+**Results:**
+| Model | Status | Tools Called | Output |
+|-------|--------|--------------|--------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -298,6 +286,12 @@ Read the contents of /package.json
 - No approval dialog shown
 - Returns file contents
 
+**Results:**
+| Model | Status | Approval Dialog? | Agent Response Summary |
+|-------|--------|------------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
 #### 3.2 Approval Path: Execute Code
@@ -315,26 +309,17 @@ Run this JavaScript code: console.log("Hello from automation")
 3. If Approved: Code executes, output shown
 4. If Declined: Error message about tool not approved
 
-**Expected UI:**
+**Results (Approve):**
+| Model | Status | Approval Dialog Shown? | Output After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
-```
-[Approval Required]
-Tool: workspace_execute_code
-Args: { "code": "console.log(\"Hello from automation\")", "language": "javascript" }
-[Approve] [Decline]
-```
-
-**If Approved - Expected Output:**
-
-```
-Hello from automation
-```
-
-**If Declined - Expected Error:**
-
-```
-Tool call was not approved by the user
-```
+**Results (Decline):**
+| Model | Status | Error Message |
+|-------|--------|---------------|
+| gpt-4o-mini | ⬜ | |
+| gpt-4o | ⬜ | |
 
 ---
 
@@ -352,14 +337,11 @@ Run the shell command: ls -la
 2. **Approval dialog appears**
 3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_execute_command
-Args: { "command": "ls", "args": ["-la"] }
-[Approve] [Decline]
-```
+**Results (Approve):**
+| Model | Status | Approval Dialog Shown? | Output After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -377,14 +359,11 @@ Install the npm package "lodash"
 2. **Approval dialog appears**
 3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_install_package
-Args: { "packageName": "lodash" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Notes |
+|-------|--------|------------------------|-------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -404,11 +383,11 @@ Run this JavaScript code: console.log(3 * 3)
 - **No approval dialog** (code execution allowed)
 - Output: `9`
 
-**Expected Output:**
-
-```
-9
-```
+**Results:**
+| Model | Status | Approval Dialog? | Output |
+|-------|--------|------------------|--------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -426,14 +405,11 @@ Run the shell command: pwd
 2. **Approval dialog appears** (commands need approval)
 3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_execute_command
-Args: { "command": "pwd" }
-[Approve] [Decline]
-```
+**Results (Approve):**
+| Model | Status | Approval Dialog Shown? | Output After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -451,11 +427,11 @@ Run JavaScript code that calculates the factorial of 10
 - **No approval needed** for code execution
 - Returns result: `3628800`
 
-**Expected Output:**
-
-```
-3628800
-```
+**Results:**
+| Model | Status | Approval Dialog? | Output |
+|-------|--------|------------------|--------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -476,11 +452,11 @@ Run the shell command: echo "test"
 - Agent receives error
 - Agent explains the command was not approved
 
-**Expected Error:**
-
-```
-Tool call was not approved by the user
-```
+**Results:**
+| Model | Status | Error Message | Agent Response |
+|-------|--------|---------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -499,6 +475,12 @@ Read /README.md
 - Agent reads file successfully
 - No restrictions
 
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
 #### 5.2 Happy Path: Full Access - Write Without Reading
@@ -514,6 +496,12 @@ Create a file /test-dev-output.txt with content "Developer test"
 - Agent writes file successfully
 - No requireReadBeforeWrite restriction
 - File created
+
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -531,6 +519,12 @@ Run: console.log("Developer agent test")
 - No approval needed
 - Output shown
 
+**Results:**
+| Model | Status | Approval Dialog? | Output |
+|-------|--------|------------------|--------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
 #### 5.4 Happy Path: Full Access - Execute Command
@@ -547,6 +541,12 @@ Run: ls -la
 - No approval needed
 - Output shown
 
+**Results:**
+| Model | Status | Approval Dialog? | Output Summary |
+|-------|--------|------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
 #### 5.5 Happy Path: Access Global Skills
@@ -561,6 +561,12 @@ What skills are available to you? List them.
 
 - Agent lists skills from /skills directory
 - Should include: code-review, api-design, customer-support
+
+**Results:**
+| Model | Status | Skills Listed | Notes |
+|-------|--------|---------------|-------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -579,15 +585,11 @@ List all the skills you have access to
 - Agent lists skills from BOTH /skills and /docs-skills
 - Should include: code-review, api-design, customer-support, brand-guidelines
 
-**Expected Response (paraphrased):**
-
-```
-I have access to the following skills:
-- code-review: Guidelines for reviewing TypeScript code
-- api-design: Best practices for REST API design
-- customer-support: Support interaction guidelines
-- brand-guidelines: Documentation writing style guide
-```
+**Results:**
+| Model | Status | Skills Listed | Notes |
+|-------|--------|---------------|-------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -603,6 +605,12 @@ Read the brand-guidelines skill and summarize the key points
 
 - Agent retrieves brand-guidelines skill content
 - Provides summary of the skill
+
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -621,12 +629,11 @@ Show me the code-review skill content
 - Agent does NOT have access to code-review (it's in /skills, not /docs-skills)
 - Agent explains skill is not available
 
-**Expected Response (paraphrased):**
-
-```
-I don't have access to a skill called "code-review".
-The skills available to me are: brand-guidelines
-```
+**Results:**
+| Model | Status | Agent Response | Correctly Denied? |
+|-------|--------|----------------|-------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -643,6 +650,12 @@ Show me the brand-guidelines skill
 - Agent retrieves brand-guidelines (from /docs-skills)
 - Returns skill content
 
+**Results:**
+| Model | Status | Tools Called | Agent Response Summary |
+|-------|--------|--------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
 #### 7.3 Happy Path: Search Workspace
@@ -658,11 +671,17 @@ Search for information about "password reset"
 - Agent uses workspace search
 - Returns results from indexed FAQ content
 
+**Results:**
+| Model | Status | Tools Called | Results Found? |
+|-------|--------|--------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-## 8. Edge Cases: requireReadBeforeWrite
+### 8. Edge Cases: requireReadBeforeWrite
 
-### 8.1 Happy Path: Write to NEW File (Never Existed)
+#### 8.1 Happy Path: Write to NEW File (Never Existed)
 
 **Agent:** Editor Agent
 
@@ -678,24 +697,17 @@ Create a new file called /brand-new-file.txt with the content "This file never e
 - Write SUCCEEDS because the file is new (doesn't exist yet)
 - No read required for new files
 
-**Expected Tool Call:**
+**Results:**
+| Model | Status | Write Succeeded? | Notes |
+|-------|--------|------------------|-------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
-```json
-{
-  "tool": "workspace_write_file",
-  "args": { "path": "/brand-new-file.txt", "content": "This file never existed before" }
-}
-```
-
-**Cleanup:**
-
-```bash
-rm -f examples/unified-workspace/brand-new-file.txt
-```
+**Cleanup:** `rm -f examples/unified-workspace/brand-new-file.txt`
 
 ---
 
-### 8.2 Failure Path: Read File A, Write to File B
+#### 8.2 Failure Path: Read File A, Write to File B
 
 **Agent:** Editor Agent
 
@@ -713,17 +725,19 @@ Read the file /README.md, then write "Hello" to /different-file.txt
 
 **Expected Error:**
 
-```json
-{
-  "error": "FileReadRequiredError",
-  "code": "EREAD_REQUIRED",
-  "message": "File \"/different-file.txt\" has not been read. You must read a file before writing to it."
-}
 ```
+FileReadRequiredError: File "/different-file.txt" has not been read.
+```
+
+**Results:**
+| Model | Status | Error Returned? | Agent Response |
+|-------|--------|-----------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 8.3 Happy Path: Multiple Writes After Single Read
+#### 8.3 Happy Path: Multiple Writes After Single Read
 
 **Agent:** Editor Agent
 
@@ -739,15 +753,19 @@ Read /README.md, then write "First update" to it, then write "Second update" to 
 2. First write succeeds
 3. Second write also succeeds (read tracking persists)
 
-**Note:** This tests that a single read allows multiple subsequent writes to the same file.
+**Results:**
+| Model | Status | Both Writes Succeeded? | Notes |
+|-------|--------|------------------------|-------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-## 9. Edge Cases: Filesystem Error Handling
+### 9. Edge Cases: Filesystem Error Handling
 
-### 9.1 Error Path: Read Non-Existent File
+#### 9.1 Error Path: Read Non-Existent File
 
-**Agent:** Any agent with filesystem access (e.g., Developer Agent)
+**Agent:** Developer Agent
 
 **Prompt:**
 
@@ -761,15 +779,15 @@ Read the file /this-file-does-not-exist-12345.txt
 - Returns graceful error (not a crash)
 - Error indicates file not found
 
-**Expected Error (paraphrased):**
-
-```
-File not found: /this-file-does-not-exist-12345.txt
-```
+**Results:**
+| Model | Status | Error Graceful? | Agent Response |
+|-------|--------|-----------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 9.2 Error Path: Write to Invalid Path (Non-Existent Parent Directory)
+#### 9.2 Error Path: Write to Invalid Path
 
 **Agent:** Developer Agent
 
@@ -785,15 +803,15 @@ Write "test" to /nonexistent-parent-dir/nested/file.txt
 - Returns error about parent directory not existing
 - Does not crash
 
-**Expected Error (paraphrased):**
-
-```
-Parent directory does not exist: /nonexistent-parent-dir/nested
-```
+**Results:**
+| Model | Status | Error Graceful? | Agent Response |
+|-------|--------|-----------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 9.3 Security Path: Path Traversal Attempt
+#### 9.3 Security Path: Path Traversal Attempt
 
 **Agent:** Developer Agent
 
@@ -807,23 +825,18 @@ Read the file at path /../../../etc/passwd
 
 - Path should be sanitized or blocked
 - Should NOT escape the workspace basePath
-- Returns error or reads within workspace bounds
 
-**Expected Behavior Options:**
-
-1. Path normalized to `/etc/passwd` within workspace (file not found)
-2. Path blocked with security error
-3. Path resolved safely without escaping workspace
-
-**NOT Expected:**
-
-- Actually reading system `/etc/passwd` file
+**Results:**
+| Model | Status | Path Blocked/Sanitized? | Agent Response |
+|-------|--------|-------------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-## 10. Edge Cases: Sandbox Error Handling
+### 10. Edge Cases: Sandbox Error Handling
 
-### 10.1 Error Path: Code Execution Error
+#### 10.1 Error Path: Code Execution Error
 
 **Agent:** Script Runner Agent
 
@@ -840,15 +853,15 @@ Run this JavaScript code: throw new Error("Intentional test error")
 - Error is caught and returned gracefully
 - Agent reports the error to user
 
-**Expected Output (paraphrased):**
-
-```
-Error: Intentional test error
-```
+**Results:**
+| Model | Status | Error Caught Gracefully? | Agent Response |
+|-------|--------|--------------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 10.2 Error Path: Command Not Found
+#### 10.2 Error Path: Command Not Found
 
 **Agent:** Developer Agent
 
@@ -864,15 +877,15 @@ Run the shell command: nonexistent-command-xyz123
 - Command fails (not found)
 - Error returned gracefully
 
-**Expected Error (paraphrased):**
-
-```
-Command not found: nonexistent-command-xyz123
-```
+**Results:**
+| Model | Status | Error Graceful? | Agent Response |
+|-------|--------|-----------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 10.3 Error Path: Infinite Loop / Timeout
+#### 10.3 Error Path: Infinite Loop / Timeout
 
 **Agent:** Script Runner Agent
 
@@ -888,19 +901,17 @@ Run this JavaScript code: while(true) { }
 - Code runs but hits timeout
 - Timeout error returned (not infinite hang)
 
-**Expected Error (paraphrased):**
-
-```
-Execution timed out after X seconds
-```
-
-**Note:** Verify the sandbox has a reasonable timeout configured (default should be ~30 seconds).
+**Results:**
+| Model | Status | Timeout Triggered? | Agent Response |
+|-------|--------|-------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-## 11. Edge Cases: Skills
+### 11. Edge Cases: Skills
 
-### 11.1 Error Path: Get Non-Existent Skill
+#### 11.1 Error Path: Get Non-Existent Skill
 
 **Agent:** Developer Agent
 
@@ -916,15 +927,15 @@ Get the content of the skill called "fake-nonexistent-skill"
 - Returns graceful error (skill not found)
 - Does not crash
 
-**Expected Response (paraphrased):**
-
-```
-Skill "fake-nonexistent-skill" not found. Available skills are: code-review, api-design, customer-support
-```
+**Results:**
+| Model | Status | Error Graceful? | Agent Response |
+|-------|--------|-----------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 11.2 Happy Path: Search Skills
+#### 11.2 Happy Path: Search Skills
 
 **Agent:** Developer Agent
 
@@ -939,11 +950,17 @@ Search the skills for content about "code review best practices"
 - Agent uses skill search functionality
 - Returns matching content from skills
 
+**Results:**
+| Model | Status | Results Found? | Agent Response Summary |
+|-------|--------|----------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-## 12. Edge Cases: Search
+### 12. Edge Cases: Search
 
-### 12.1 Happy Path: Empty Search Results
+#### 12.1 Happy Path: Empty Search Results
 
 **Agent:** Developer Agent
 
@@ -959,15 +976,15 @@ Search the workspace for "xyznonexistent12345abc"
 - Returns empty results array
 - Does not error
 
-**Expected Response (paraphrased):**
-
-```
-No results found for "xyznonexistent12345abc"
-```
+**Results:**
+| Model | Status | Empty Results Handled? | Agent Response |
+|-------|--------|------------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 12.2 Happy Path: Search with Special Characters
+#### 12.2 Happy Path: Search with Special Characters
 
 **Agent:** Developer Agent
 
@@ -983,11 +1000,17 @@ Search the workspace for "function()"
 - Special regex characters handled properly
 - Returns results or empty array (no crash)
 
+**Results:**
+| Model | Status | Special Chars Handled? | Agent Response |
+|-------|--------|------------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-## 13. Edge Cases: Approval Flow
+### 13. Edge Cases: Approval Flow
 
-### 13.1 Happy Path: Multiple Approvals in Sequence
+#### 13.1 Happy Path: Multiple Approvals in Sequence
 
 **Agent:** Automation Agent
 
@@ -1005,9 +1028,15 @@ First, run JavaScript code: console.log("step 1"). Then run the shell command: e
 4. User approves → command runs
 5. Both outputs shown
 
+**Results:**
+| Model | Status | Both Dialogs Shown? | Both Outputs Correct? |
+|-------|--------|---------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-### 13.2 Mixed Path: Approve Code, Decline Command
+#### 13.2 Mixed Path: Approve Code, Decline Command
 
 **Agent:** Automation Agent
 
@@ -1028,11 +1057,17 @@ Run JavaScript code: console.log("code ran"). Then run shell command: echo "comm
 - Command blocked, error: "Tool call was not approved by the user"
 - Agent reports partial success
 
+**Results:**
+| Model | Status | Partial Success Reported? | Agent Response |
+|-------|--------|---------------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-## 14. FS Write Approval Agent (requireFilesystemApproval: 'write')
+### 14. FS Write Approval Agent (requireFilesystemApproval: 'write')
 
-### 14.1 Happy Path: Read File (No Approval)
+#### 14.1 Happy Path: Read File (No Approval)
 
 **Prompt:**
 
@@ -1046,9 +1081,15 @@ Read the contents of /README.md
 - **No approval dialog** (reads allowed without approval)
 - Returns file contents
 
+**Results:**
+| Model | Status | Approval Dialog? | Agent Response Summary |
+|-------|--------|------------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-### 14.2 Happy Path: List Files (No Approval)
+#### 14.2 Happy Path: List Files (No Approval)
 
 **Prompt:**
 
@@ -1059,12 +1100,18 @@ List all files in the /skills directory
 **Expected Behavior:**
 
 - Agent uses `workspace_list_files` tool
-- **No approval dialog** (listing allowed without approval)
+- **No approval dialog**
 - Returns directory listing
+
+**Results:**
+| Model | Status | Approval Dialog? | Agent Response Summary |
+|-------|--------|------------------|------------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 14.3 Happy Path: File Exists Check (No Approval)
+#### 14.3 Happy Path: File Exists Check (No Approval)
 
 **Prompt:**
 
@@ -1078,9 +1125,15 @@ Check if /README.md exists
 - **No approval dialog**
 - Returns exists: true
 
+**Results:**
+| Model | Status | Approval Dialog? | Agent Response |
+|-------|--------|------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-### 14.4 Approval Path: Write File
+#### 14.4 Approval Path: Write File
 
 **Prompt:**
 
@@ -1091,22 +1144,19 @@ Create a file /test-fs-approval.txt with content "Test content"
 **Expected Behavior:**
 
 1. Agent calls `workspace_write_file`
-2. **Approval dialog appears** with Approve/Decline buttons
+2. **Approval dialog appears**
 3. If Approved: File is written
-4. If Declined: Error message about tool not approved
+4. If Declined: Error message
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_write_file
-Args: { "path": "/test-fs-approval.txt", "content": "Test content" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 14.5 Approval Path: Delete File
+#### 14.5 Approval Path: Delete File
 
 **Prompt:**
 
@@ -1118,20 +1168,16 @@ Delete the file /test-fs-approval.txt
 
 1. Agent calls `workspace_delete_file`
 2. **Approval dialog appears**
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_delete_file
-Args: { "path": "/test-fs-approval.txt" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 14.6 Approval Path: Create Directory
+#### 14.6 Approval Path: Create Directory
 
 **Prompt:**
 
@@ -1143,20 +1189,16 @@ Create a new directory at /test-approval-dir
 
 1. Agent calls `workspace_mkdir`
 2. **Approval dialog appears**
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_mkdir
-Args: { "path": "/test-approval-dir" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 14.7 Approval Path: Index Content
+#### 14.7 Approval Path: Index Content
 
 **Prompt:**
 
@@ -1168,20 +1210,16 @@ Index the content "Hello world" with path "/test-index.txt"
 
 1. Agent calls `workspace_index`
 2. **Approval dialog appears** (indexing is a write operation)
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_index
-Args: { "path": "/test-index.txt", "content": "Hello world" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 14.8 Happy Path: Search (No Approval)
+#### 14.8 Happy Path: Search (No Approval)
 
 **Prompt:**
 
@@ -1195,11 +1233,17 @@ Search the workspace for "API"
 - **No approval dialog** (search is a read operation)
 - Returns search results
 
+**Results:**
+| Model | Status | Approval Dialog? | Results Found? |
+|-------|--------|------------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-## 15. FS All Approval Agent (requireFilesystemApproval: 'all')
+### 15. FS All Approval Agent (requireFilesystemApproval: 'all')
 
-### 15.1 Approval Path: Read File
+#### 15.1 Approval Path: Read File
 
 **Prompt:**
 
@@ -1212,20 +1256,16 @@ Read the contents of /README.md
 1. Agent calls `workspace_read_file`
 2. **Approval dialog appears** (ALL fs operations need approval)
 3. If Approved: File contents returned
-4. If Declined: Error message
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_read_file
-Args: { "path": "/README.md" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 15.2 Approval Path: List Files
+#### 15.2 Approval Path: List Files
 
 **Prompt:**
 
@@ -1237,20 +1277,16 @@ List all files in the /skills directory
 
 1. Agent calls `workspace_list_files`
 2. **Approval dialog appears**
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_list_files
-Args: { "path": "/skills" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 15.3 Approval Path: File Exists
+#### 15.3 Approval Path: File Exists
 
 **Prompt:**
 
@@ -1262,20 +1298,16 @@ Check if /README.md exists
 
 1. Agent calls `workspace_file_exists`
 2. **Approval dialog appears**
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_file_exists
-Args: { "path": "/README.md" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 15.4 Approval Path: Write File
+#### 15.4 Approval Path: Write File
 
 **Prompt:**
 
@@ -1287,11 +1319,16 @@ Create a file /test-all-approval.txt with content "Test"
 
 1. Agent calls `workspace_write_file`
 2. **Approval dialog appears**
-3. User must approve/decline
+
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 15.5 Approval Path: Search
+#### 15.5 Approval Path: Search
 
 **Prompt:**
 
@@ -1303,20 +1340,16 @@ Search the workspace for "API"
 
 1. Agent calls `workspace_search`
 2. **Approval dialog appears** (all fs operations need approval)
-3. User must approve/decline
 
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_search
-Args: { "query": "API" }
-[Approve] [Decline]
-```
+**Results:**
+| Model | Status | Approval Dialog Shown? | Result After Approval |
+|-------|--------|------------------------|----------------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
-### 15.6 Decline Path: Decline All Operations
+#### 15.6 Decline Path: Decline All Operations
 
 **Prompt:**
 
@@ -1333,9 +1366,15 @@ Read /README.md
 - Agent receives error: "Tool call was not approved by the user"
 - Agent explains the operation was not approved
 
+**Results:**
+| Model | Status | Error Message | Agent Response |
+|-------|--------|---------------|----------------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
+
 ---
 
-### 15.7 Happy Path: Sandbox Operations (No FS Approval)
+#### 15.7 Happy Path: Sandbox Operations (No FS Approval)
 
 **Prompt:**
 
@@ -1349,68 +1388,13 @@ Run JavaScript code: console.log(2 + 2)
 - **No approval dialog** (sandbox ops don't require fs approval)
 - Code executes, output: `4`
 
-**Note:** `requireFilesystemApproval` does NOT affect sandbox operations. Use `requireSandboxApproval` for that.
+**Note:** `requireFilesystemApproval` does NOT affect sandbox operations.
 
----
-
-## Extended Test Matrix
-
-### Edge Cases: gpt-4o-mini vs gpt-4o
-
-| Test Case | Agent         | Expected Result             | gpt-4o-mini | gpt-4o   |
-| --------- | ------------- | --------------------------- | ----------- | -------- |
-| 8.1       | Editor        | New file write succeeds     | [ ] Pass    | [ ] Pass |
-| 8.2       | Editor        | Read A, write B fails       | [ ] Pass    | [ ] Pass |
-| 8.3       | Editor        | Multiple writes after read  | [ ] Pass    | [ ] Pass |
-| 9.1       | Developer     | Read non-existent graceful  | [ ] Pass    | [ ] Pass |
-| 9.2       | Developer     | Write invalid path graceful | [ ] Pass    | [ ] Pass |
-| 9.3       | Developer     | Path traversal blocked      | [ ] Pass    | [ ] Pass |
-| 10.1      | Script Runner | Code error graceful         | [ ] Pass    | [ ] Pass |
-| 10.2      | Developer     | Command not found graceful  | [ ] Pass    | [ ] Pass |
-| 10.3      | Script Runner | Infinite loop timeout       | [ ] Pass    | [ ] Pass |
-| 11.1      | Developer     | Non-existent skill graceful | [ ] Pass    | [ ] Pass |
-| 12.1      | Developer     | Empty search results        | [ ] Pass    | [ ] Pass |
-| 12.2      | Developer     | Special chars in search     | [ ] Pass    | [ ] Pass |
-| 13.1      | Automation    | Sequential approvals        | [ ] Pass    | [ ] Pass |
-| 13.2      | Automation    | Partial approval            | [ ] Pass    | [ ] Pass |
-
-### Filesystem Approval: gpt-4o-mini vs gpt-4o
-
-| Test Case | Agent             | Expected Result         | gpt-4o-mini | gpt-4o   |
-| --------- | ----------------- | ----------------------- | ----------- | -------- |
-| 14.1      | FS Write Approval | Read without approval   | [ ] Pass    | [ ] Pass |
-| 14.2      | FS Write Approval | List without approval   | [ ] Pass    | [ ] Pass |
-| 14.4      | FS Write Approval | Write needs approval    | [ ] Pass    | [ ] Pass |
-| 14.5      | FS Write Approval | Delete needs approval   | [ ] Pass    | [ ] Pass |
-| 14.6      | FS Write Approval | Mkdir needs approval    | [ ] Pass    | [ ] Pass |
-| 14.7      | FS Write Approval | Index needs approval    | [ ] Pass    | [ ] Pass |
-| 14.8      | FS Write Approval | Search without approval | [ ] Pass    | [ ] Pass |
-| 15.1      | FS All Approval   | Read needs approval     | [ ] Pass    | [ ] Pass |
-| 15.2      | FS All Approval   | List needs approval     | [ ] Pass    | [ ] Pass |
-| 15.5      | FS All Approval   | Search needs approval   | [ ] Pass    | [ ] Pass |
-| 15.7      | FS All Approval   | Sandbox no fs approval  | [ ] Pass    | [ ] Pass |
-
----
-
-## Test Matrix
-
-### Model Comparison: gpt-4o-mini vs gpt-4o
-
-| Test Case | Agent         | Expected Result               | gpt-4o-mini | gpt-4o   |
-| --------- | ------------- | ----------------------------- | ----------- | -------- |
-| 1.1       | Research      | Read succeeds                 | [ ] Pass    | [ ] Pass |
-| 1.4       | Research      | Write blocked (no tool)       | [ ] Pass    | [ ] Pass |
-| 1.5       | Research      | Delete blocked (no tool)      | [ ] Pass    | [ ] Pass |
-| 2.1       | Editor        | Read-then-write succeeds      | [ ] Pass    | [ ] Pass |
-| 2.2       | Editor        | Write-without-read fails      | [ ] Pass    | [ ] Pass |
-| 3.2       | Automation    | Code needs approval           | [ ] Pass    | [ ] Pass |
-| 3.3       | Automation    | Command needs approval        | [ ] Pass    | [ ] Pass |
-| 4.1       | Script Runner | Code runs without approval    | [ ] Pass    | [ ] Pass |
-| 4.2       | Script Runner | Command needs approval        | [ ] Pass    | [ ] Pass |
-| 5.2       | Developer     | Write without read succeeds   | [ ] Pass    | [ ] Pass |
-| 5.4       | Developer     | Command runs without approval | [ ] Pass    | [ ] Pass |
-| 6.1       | Documentation | Has global + agent skills     | [ ] Pass    | [ ] Pass |
-| 7.1       | Support       | No global skills              | [ ] Pass    | [ ] Pass |
+**Results:**
+| Model | Status | Approval Dialog? | Output |
+|-------|--------|------------------|--------|
+| gpt-4o-mini | ⬜ | | |
+| gpt-4o | ⬜ | | |
 
 ---
 
@@ -1430,29 +1414,24 @@ git checkout README.md
 
 ## Test Summary
 
-| Category                                     | Test Count   |
-| -------------------------------------------- | ------------ |
-| Research Agent (readOnly)                    | 6 tests      |
-| Editor Agent (requireReadBeforeWrite)        | 4 tests      |
-| Automation Agent (approval: all)             | 4 tests      |
-| Script Runner Agent (approval: commands)     | 4 tests      |
-| FS Write Approval Agent (fs approval: write) | 8 tests      |
-| FS All Approval Agent (fs approval: all)     | 7 tests      |
-| Developer Agent (no restrictions)            | 5 tests      |
-| Documentation Agent (skills inheritance)     | 2 tests      |
-| Support Agent (isolated skills)              | 3 tests      |
-| Edge Cases: requireReadBeforeWrite           | 3 tests      |
-| Edge Cases: Filesystem Errors                | 3 tests      |
-| Edge Cases: Sandbox Errors                   | 3 tests      |
-| Edge Cases: Skills                           | 2 tests      |
-| Edge Cases: Search                           | 2 tests      |
-| Edge Cases: Approval Flow                    | 2 tests      |
-| Line-Range Reading                           | 6 tests      |
-| Edit File Tool                               | 8 tests      |
-| Skill Line-Range                             | 5 tests      |
-| BM25 Search                                  | 8 tests      |
-| Vector/Hybrid Search (config required)       | 3 tests      |
-| **Total**                                    | **88 tests** |
+| Category                                 | Test Count   |
+| ---------------------------------------- | ------------ |
+| Research Agent (readOnly)                | 6 tests      |
+| Editor Agent (requireReadBeforeWrite)    | 4 tests      |
+| Automation Agent (approval: all)         | 4 tests      |
+| Script Runner Agent (approval: commands) | 4 tests      |
+| Developer Agent (no restrictions)        | 5 tests      |
+| Documentation Agent (skills inheritance) | 2 tests      |
+| Support Agent (isolated skills)          | 3 tests      |
+| Edge Cases: requireReadBeforeWrite       | 3 tests      |
+| Edge Cases: Filesystem Errors            | 3 tests      |
+| Edge Cases: Sandbox Errors               | 3 tests      |
+| Edge Cases: Skills                       | 2 tests      |
+| Edge Cases: Search                       | 2 tests      |
+| Edge Cases: Approval Flow                | 2 tests      |
+| FS Write Approval Agent                  | 8 tests      |
+| FS All Approval Agent                    | 7 tests      |
+| **Total**                                | **58 tests** |
 
 ---
 
@@ -1464,931 +1443,22 @@ In Mastra Studio, you can verify which tools an agent has:
 
 1. Go to the agent's page
 2. Check the "Tools" section in the sidebar
-3. Agents with `readOnly: true` should NOT have:
-   - `workspace_write_file`
-   - `workspace_delete_file`
-   - `workspace_mkdir`
+3. Agents with `readOnly: true` should NOT have write tools
 
 ### Verifying Approval Requirements
 
-For sandbox tools, check if `requireApproval: true` is set:
+For sandbox tools:
 
 - `requireSandboxApproval: 'all'` → execute_code, execute_command, install_package all need approval
 - `requireSandboxApproval: 'commands'` → only execute_command, install_package need approval
 
 For filesystem tools:
 
-- `requireFilesystemApproval: 'all'` → read_file, write_file, edit_file, list_files, file_exists, delete_file, mkdir, search, index all need approval
-- `requireFilesystemApproval: 'write'` → only write_file, edit_file, delete_file, mkdir, index need approval (read operations are allowed)
+- `requireFilesystemApproval: 'all'` → all fs operations need approval
+- `requireFilesystemApproval: 'write'` → only write operations need approval
 
 ### Common Issues
 
-1. **Agent doesn't follow instructions**: Some models may try to read before write even when told not to. Use more explicit prompts like "Do NOT read any files. Just write directly."
-
+1. **Agent doesn't follow instructions**: Some models may try to read before write even when told not to. Use more explicit prompts.
 2. **Approval dialog not appearing**: Ensure the workspace has a sandbox configured and the safety setting is correct.
-
-3. **Skills not found**: Verify the skillsPaths in the workspace configuration and that SKILL.md files exist in those paths.
-
----
-
-## 16. Line-Range Reading Tests
-
-These tests verify the `offset`, `limit`, and `showLineNumbers` parameters for `workspace_read_file`.
-
-### 16.1 Happy Path: Read with Line Numbers (Default)
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Read the first 5 lines of /README.md
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_read_file` with `limit: 5`
-- File content is returned with line number prefixes
-- Format: `     1→Line content here`
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_read_file",
-  "args": { "path": "/README.md", "limit": 5 }
-}
-```
-
-**Expected Output Format:**
-
-```
-     1→# README
-     2→
-     3→This is the workspace...
-     4→...
-     5→...
-```
-
----
-
-### 16.2 Happy Path: Read with Offset and Limit
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Read lines 10-20 of /README.md (start at line 10, read 11 lines)
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_read_file` with `offset: 10, limit: 11`
-- Returns lines 10-20 with line numbers
-- Response includes `lines: { start: 10, end: 20 }` and `totalLines`
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_read_file",
-  "args": { "path": "/README.md", "offset": 10, "limit": 11 }
-}
-```
-
----
-
-### 16.3 Happy Path: Read Without Line Numbers
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Read the first 3 lines of /README.md but without line numbers
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_read_file` with `limit: 3, showLineNumbers: false`
-- Raw content returned without line number prefixes
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_read_file",
-  "args": { "path": "/README.md", "limit": 3, "showLineNumbers": false }
-}
-```
-
----
-
-### 16.4 Happy Path: Read from Offset to End
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Read /README.md starting from line 50 to the end
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_read_file` with `offset: 50` (no limit)
-- Returns all content from line 50 to end of file
-- Line numbers start at 50
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_read_file",
-  "args": { "path": "/README.md", "offset": 50 }
-}
-```
-
----
-
-### 16.5 Edge Case: Offset Beyond File Length
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Read /README.md starting from line 99999
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_read_file` with `offset: 99999`
-- Returns empty content (offset is beyond file)
-- No error thrown, just empty result
-
----
-
-### 16.6 Happy Path: Read Specific Line Range for Code Review
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-I found an issue on line 15. Read lines 10-20 of /package.json so I can see the context
-```
-
-**Expected Behavior:**
-
-- Agent reads the specific line range with context
-- Returns `lines` object showing the actual range read
-- Returns `totalLines` for reference
-
----
-
-## 17. Edit File Tool Tests
-
-These tests verify the `workspace_edit_file` tool with old_string/new_string replacement.
-
-### 17.1 Happy Path: Replace Unique String
-
-**Agent:** Developer Agent (or any agent with write access)
-
-**Pre-condition:** Create a test file first:
-
-```bash
-echo "Hello World\nThis is a test file\nGoodbye World" > examples/unified-workspace/test-edit.txt
-```
-
-**Prompt:**
-
-```
-In /test-edit.txt, replace "Hello World" with "Greetings Earth"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` tool
-- Replacement succeeds (string is unique)
-- Returns success with replacements: 1
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_edit_file",
-  "args": {
-    "path": "/test-edit.txt",
-    "old_string": "Hello World",
-    "new_string": "Greetings Earth"
-  }
-}
-```
-
----
-
-### 17.2 Failure Path: String Not Found
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Use the test file from 17.1
-
-**Prompt:**
-
-```
-In /test-edit.txt, replace "NONEXISTENT STRING xyz123" with "replacement"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` tool
-- Tool returns error: string not found
-- Agent reports the error to user
-
-**Expected Error:**
-
-```json
-{
-  "success": false,
-  "message": "String not found in file: \"NONEXISTENT STRING xyz123\""
-}
-```
-
----
-
-### 17.3 Failure Path: String Not Unique
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Create a file with duplicate strings:
-
-```bash
-echo "hello hello hello\nworld" > examples/unified-workspace/test-duplicates.txt
-```
-
-**Prompt:**
-
-```
-In /test-duplicates.txt, replace "hello" with "hi"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` tool
-- Tool returns error: string found multiple times
-- Error suggests using `replace_all: true`
-
-**Expected Error:**
-
-```json
-{
-  "success": false,
-  "message": "String found 3 times in file (must be unique, or use replace_all)"
-}
-```
-
----
-
-### 17.4 Happy Path: Replace All Occurrences
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Use the duplicates file from 17.3
-
-**Prompt:**
-
-```
-In /test-duplicates.txt, replace ALL occurrences of "hello" with "hi"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` with `replace_all: true`
-- All 3 occurrences replaced
-- Returns success with replacements: 3
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_edit_file",
-  "args": {
-    "path": "/test-duplicates.txt",
-    "old_string": "hello",
-    "new_string": "hi",
-    "replace_all": true
-  }
-}
-```
-
----
-
-### 17.5 Happy Path: Multi-Line Replacement
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Create a file with multi-line content:
-
-```bash
-cat > examples/unified-workspace/test-multiline.txt << 'EOF'
-function old() {
-  return "old";
-}
-EOF
-```
-
-**Prompt:**
-
-```
-In /test-multiline.txt, replace the function "old" with a function "new" that returns "new"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` with multi-line old_string and new_string
-- Correctly replaces the entire function block
-
-**Expected Tool Call (example):**
-
-```json
-{
-  "tool": "workspace_edit_file",
-  "args": {
-    "path": "/test-multiline.txt",
-    "old_string": "function old() {\n  return \"old\";\n}",
-    "new_string": "function new() {\n  return \"new\";\n}"
-  }
-}
-```
-
----
-
-### 17.6 Approval Path: Edit File with FS Write Approval
-
-**Agent:** FS Write Approval Agent
-
-**Prompt:**
-
-```
-In /README.md, replace "# README" with "# Project README"
-```
-
-**Expected Behavior:**
-
-1. Agent calls `workspace_edit_file`
-2. **Approval dialog appears** (edit is a write operation)
-3. User must approve/decline
-
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_edit_file
-Args: { "path": "/README.md", "old_string": "# README", "new_string": "# Project README" }
-[Approve] [Decline]
-```
-
----
-
-### 17.7 Failure Path: Edit Non-Existent File
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-In /nonexistent-file-xyz.txt, replace "foo" with "bar"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` tool
-- Tool returns error: file not found
-
-**Expected Error:**
-
-```json
-{
-  "success": false,
-  "message": "File not found: /nonexistent-file-xyz.txt"
-}
-```
-
----
-
-### 17.8 Edge Case: Replace with Empty String (Delete)
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Use test-edit.txt
-
-**Prompt:**
-
-```
-In /test-edit.txt, remove the line "This is a test file" (replace it with nothing)
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_edit_file` with `new_string: ""`
-- The matching text is deleted from the file
-- Returns success
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_edit_file",
-  "args": {
-    "path": "/test-edit.txt",
-    "old_string": "This is a test file\n",
-    "new_string": ""
-  }
-}
-```
-
----
-
-## 18. Skill Line-Range Tests
-
-These tests verify line-range reading in skill tools (`skill-read-reference`, `skill-read-script`).
-
-### 18.1 Happy Path: Read Reference with Line Range
-
-**Agent:** Developer Agent or Documentation Agent
-
-**Pre-condition:** Ensure a skill with reference files exists (e.g., code-review skill)
-
-**Prompt:**
-
-```
-Activate the code-review skill, then read lines 1-10 of its main reference file
-```
-
-**Expected Behavior:**
-
-1. Agent activates skill
-2. Agent uses `skill-read-reference` with `startLine: 1, endLine: 10`
-3. Returns content for lines 1-10 with `lines` and `totalLines` metadata
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "skill-read-reference",
-  "args": {
-    "skillName": "code-review",
-    "referencePath": "main.md",
-    "startLine": 1,
-    "endLine": 10
-  }
-}
-```
-
----
-
-### 18.2 Happy Path: Read Script with Line Range
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Skill with script files
-
-**Prompt:**
-
-```
-Activate the code-review skill and read lines 5-15 of one of its scripts
-```
-
-**Expected Behavior:**
-
-- Agent uses `skill-read-script` with line range
-- Returns partial content with line metadata
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "skill-read-script",
-  "args": {
-    "skillName": "code-review",
-    "scriptPath": "validate.js",
-    "startLine": 5,
-    "endLine": 15
-  }
-}
-```
-
----
-
-### 18.3 Happy Path: Read Reference Without Line Range
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Activate the code-review skill and read the entire main reference file
-```
-
-**Expected Behavior:**
-
-- Agent uses `skill-read-reference` without startLine/endLine
-- Returns full content with `lines: { start: 1, end: N }` and `totalLines: N`
-
----
-
-### 18.4 Edge Case: Line Range Beyond File
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Activate the code-review skill and read lines 9999-10000 of its main reference
-```
-
-**Expected Behavior:**
-
-- Agent uses `skill-read-reference` with out-of-bounds range
-- Returns empty or partial content (no error)
-- `lines` object reflects actual lines read
-
----
-
-### 18.5 Happy Path: Use Line Range for Large File Navigation
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-The code-review skill has a large reference file. First, read lines 1-20 to see the table of contents, then read lines 50-70 to see a specific section
-```
-
-**Expected Behavior:**
-
-1. First call: `skill-read-reference` with `startLine: 1, endLine: 20`
-2. Second call: `skill-read-reference` with `startLine: 50, endLine: 70`
-3. Both return appropriate line ranges
-
----
-
-## Line-Range and Edit File Test Matrix
-
-### Model Comparison: gpt-4o-mini vs gpt-4o
-
-| Test Case | Agent     | Expected Result              | gpt-4o-mini | gpt-4o   |
-| --------- | --------- | ---------------------------- | ----------- | -------- |
-| 16.1      | Developer | Read with line numbers       | [ ] Pass    | [ ] Pass |
-| 16.2      | Developer | Offset and limit work        | [ ] Pass    | [ ] Pass |
-| 16.3      | Developer | Read without line numbers    | [ ] Pass    | [ ] Pass |
-| 16.5      | Developer | Offset beyond file length    | [ ] Pass    | [ ] Pass |
-| 17.1      | Developer | Replace unique string        | [ ] Pass    | [ ] Pass |
-| 17.2      | Developer | String not found error       | [ ] Pass    | [ ] Pass |
-| 17.3      | Developer | String not unique error      | [ ] Pass    | [ ] Pass |
-| 17.4      | Developer | Replace all occurrences      | [ ] Pass    | [ ] Pass |
-| 17.5      | Developer | Multi-line replacement       | [ ] Pass    | [ ] Pass |
-| 17.6      | FS Write  | Edit needs approval          | [ ] Pass    | [ ] Pass |
-| 17.7      | Developer | Edit non-existent file error | [ ] Pass    | [ ] Pass |
-| 18.1      | Developer | Skill reference line range   | [ ] Pass    | [ ] Pass |
-| 18.2      | Developer | Skill script line range      | [ ] Pass    | [ ] Pass |
-| 18.4      | Developer | Skill line range beyond file | [ ] Pass    | [ ] Pass |
-
----
-
-## Cleanup After Line-Range and Edit Tests
-
-```bash
-cd examples/unified-workspace
-rm -f test-edit.txt test-duplicates.txt test-multiline.txt
-```
-
----
-
-## 19. BM25 Search Tests
-
-These tests verify the BM25 keyword search functionality via `workspace_search` and `workspace_index` tools.
-
-**Note:** All workspaces in this example have `bm25: true` configured, enabling keyword search.
-
-### 19.1 Happy Path: Search Indexed Content
-
-**Agent:** Developer Agent
-
-**Pre-condition:** Content is auto-indexed from `autoIndexPaths` on workspace init.
-
-**Prompt:**
-
-```
-Search the workspace for "password reset"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search` tool
-- Returns results from the indexed FAQ content
-- Results include `score`, `lineRange`, and `content` preview
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_search",
-  "args": { "query": "password reset" }
-}
-```
-
----
-
-### 19.2 Happy Path: Search with TopK Limit
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Search for "API" in the workspace and return only the top 3 results
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search` with `topK: 3`
-- Returns at most 3 results
-- Results are ranked by relevance score
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_search",
-  "args": { "query": "API", "topK": 3 }
-}
-```
-
----
-
-### 19.3 Happy Path: Index New Content
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Index this content for search: "Machine learning is a subset of AI" at path /ml-note.txt
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_index` tool
-- Content is added to the BM25 index
-- Subsequent searches for "machine learning" will find this content
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_index",
-  "args": { "path": "/ml-note.txt", "content": "Machine learning is a subset of AI" }
-}
-```
-
----
-
-### 19.4 Happy Path: Search After Indexing
-
-**Agent:** Developer Agent
-
-**Prompt (after 19.3):**
-
-```
-Now search for "machine learning"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search`
-- Results include the newly indexed `/ml-note.txt`
-- Shows that dynamic indexing works
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_search",
-  "args": { "query": "machine learning" }
-}
-```
-
----
-
-### 19.5 Happy Path: Search Returns Line Range
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Search for "billing" in the workspace
-```
-
-**Expected Behavior:**
-
-- Results include `lineRange` showing which lines contain the match
-- Useful for navigating to the exact location in a file
-
-**Expected Output (example):**
-
-```json
-{
-  "results": [
-    {
-      "id": "/.mastra-knowledge/knowledge/support/default/billing-cycle",
-      "score": 2.5,
-      "lineRange": { "start": 1, "end": 3 },
-      "content": "..."
-    }
-  ]
-}
-```
-
----
-
-### 19.6 Edge Case: Empty Search Results
-
-**Agent:** Developer Agent
-
-**Prompt:**
-
-```
-Search the workspace for "xyznonexistent12345abc"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search`
-- Returns empty results array
-- No error thrown
-
-**Expected Response:**
-
-```
-No results found for "xyznonexistent12345abc"
-```
-
----
-
-### 19.7 Approval Path: Index with FS Write Approval
-
-**Agent:** FS Write Approval Agent
-
-**Prompt:**
-
-```
-Index this content: "Test content for approval" at path /test-index.txt
-```
-
-**Expected Behavior:**
-
-1. Agent calls `workspace_index`
-2. **Approval dialog appears** (indexing is a write operation)
-3. User must approve/decline
-
-**Expected UI:**
-
-```
-[Approval Required]
-Tool: workspace_index
-Args: { "path": "/test-index.txt", "content": "Test content for approval" }
-[Approve] [Decline]
-```
-
----
-
-### 19.8 Happy Path: Search Without Approval (FS Write Approval)
-
-**Agent:** FS Write Approval Agent
-
-**Prompt:**
-
-```
-Search the workspace for "support"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search` tool
-- **No approval dialog** (search is a read operation)
-- Returns results
-
----
-
-## 20. Vector and Hybrid Search Tests (Configuration Required)
-
-**Note:** Vector search requires additional configuration not included in the default example:
-
-```typescript
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const vectorWorkspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './data' }),
-  bm25: true,
-  vectorStore: yourVectorStore, // e.g., Chroma, Pinecone, etc.
-  embedder: async text => {
-    const { embedding } = await embed({
-      model: openai.embedding('text-embedding-3-small'),
-      value: text,
-    });
-    return embedding;
-  },
-});
-```
-
-### 20.1 Vector Search (Requires Configuration)
-
-**Pre-condition:** Workspace configured with `vectorStore` and `embedder`.
-
-**Prompt:**
-
-```
-Search for documents semantically similar to "how do I change my subscription"
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search` with `mode: 'vector'`
-- Returns semantically similar results (not just keyword matches)
-- Results include similarity scores
-
----
-
-### 20.2 Hybrid Search (Requires Configuration)
-
-**Pre-condition:** Workspace configured with both `bm25: true` AND `vectorStore` + `embedder`.
-
-**Prompt:**
-
-```
-Search for "password" using hybrid search with 70% vector weight
-```
-
-**Expected Behavior:**
-
-- Agent uses `workspace_search` with `mode: 'hybrid', vectorWeight: 0.7`
-- Combines keyword matching (30%) with semantic similarity (70%)
-- Results include `scoreDetails` showing both scores
-
-**Expected Tool Call:**
-
-```json
-{
-  "tool": "workspace_search",
-  "args": { "query": "password", "mode": "hybrid", "vectorWeight": 0.7 }
-}
-```
-
----
-
-### 20.3 Mode Selection (Requires Configuration)
-
-**Pre-condition:** Workspace configured with both BM25 and vector.
-
-**Prompt:**
-
-```
-First, search for "authentication" using BM25 only. Then search again using vector only.
-```
-
-**Expected Behavior:**
-
-1. First search: `mode: 'bm25'` - keyword matching only
-2. Second search: `mode: 'vector'` - semantic similarity only
-3. Different results demonstrating the difference between modes
-
----
-
-## Search Test Matrix
-
-### BM25 Search: gpt-4o-mini vs gpt-4o
-
-| Test Case | Agent            | Expected Result         | gpt-4o-mini | gpt-4o   |
-| --------- | ---------------- | ----------------------- | ----------- | -------- |
-| 19.1      | Developer        | Search returns results  | [ ] Pass    | [ ] Pass |
-| 19.2      | Developer        | TopK limit respected    | [ ] Pass    | [ ] Pass |
-| 19.3      | Developer        | Index new content       | [ ] Pass    | [ ] Pass |
-| 19.4      | Developer        | Search finds indexed    | [ ] Pass    | [ ] Pass |
-| 19.5      | Developer        | LineRange in results    | [ ] Pass    | [ ] Pass |
-| 19.6      | Developer        | Empty results handled   | [ ] Pass    | [ ] Pass |
-| 19.7      | FS Write Approve | Index needs approval    | [ ] Pass    | [ ] Pass |
-| 19.8      | FS Write Approve | Search without approval | [ ] Pass    | [ ] Pass |
-
-### Vector/Hybrid Search (Configuration Required)
-
-| Test Case | Agent     | Expected Result      | gpt-4o-mini | gpt-4o   |
-| --------- | --------- | -------------------- | ----------- | -------- |
-| 20.1      | Developer | Vector search works  | [ ] Pass    | [ ] Pass |
-| 20.2      | Developer | Hybrid search works  | [ ] Pass    | [ ] Pass |
-| 20.3      | Developer | Mode selection works | [ ] Pass    | [ ] Pass |
+3. **Skills not found**: Verify the skillsPaths in the workspace configuration.
