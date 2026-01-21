@@ -32,10 +32,11 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
+import { ConsoleAuditLogger } from '@mastra/core/ee';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: 'file:./mastra.db',
+  url: 'file:../mastra.db',
 });
 
 const testScorer = createScorer({
@@ -45,6 +46,9 @@ const testScorer = createScorer({
 }).generateScore(() => {
   return 1;
 });
+// const audit = new ConsoleAuditLogger({
+//   prefix: '[AUDIT]',
+// });
 
 const config = {
   agents: {
@@ -91,6 +95,7 @@ const config = {
     sourcemap: true,
   },
   server: {
+    audit: true,
     auth: new MastraAuthWorkosEE({
       apiKey: process.env.WORKOS_API_KEY!,
       clientId: process.env.WORKOS_CLIENT_ID!,

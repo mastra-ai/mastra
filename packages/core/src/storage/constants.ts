@@ -10,6 +10,7 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_AUDIT_EVENTS = 'mastra_audit_events';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +20,8 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_AUDIT_EVENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -84,6 +86,24 @@ export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
   isEvent: { type: 'boolean', nullable: false },
+};
+
+export const AUDIT_EVENTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  timestamp: { type: 'timestamp', nullable: false },
+  actorType: { type: 'text', nullable: false }, // 'user' | 'system' | 'apikey'
+  actorId: { type: 'text', nullable: false },
+  actorEmail: { type: 'text', nullable: true },
+  actorIp: { type: 'text', nullable: true },
+  actorUserAgent: { type: 'text', nullable: true },
+  action: { type: 'text', nullable: false },
+  resourceType: { type: 'text', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  resourceName: { type: 'text', nullable: true },
+  outcome: { type: 'text', nullable: false }, // 'success' | 'failure' | 'denied'
+  metadata: { type: 'jsonb', nullable: true },
+  duration: { type: 'integer', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
@@ -167,4 +187,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_AUDIT_EVENTS]: AUDIT_EVENTS_SCHEMA,
 };

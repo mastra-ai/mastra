@@ -6,6 +6,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_AUDIT_EVENTS,
   safelyParseJSON,
   TABLE_SPANS,
 } from '@mastra/core/storage';
@@ -20,6 +21,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // TODO: verify this is the correct engine for Spans when implementing clickhouse storage
   [TABLE_SPANS]: `ReplacingMergeTree()`,
   mastra_agents: `ReplacingMergeTree()`,
+  [TABLE_AUDIT_EVENTS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

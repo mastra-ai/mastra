@@ -9,6 +9,7 @@
  * Access to audit logs requires the 'audit:read' permission.
  */
 
+import type { Mastra } from '@mastra/core';
 import type { MastraAuthProvider, EEUser } from '@mastra/core/ee';
 import type { AuditStorage } from '@mastra/core/storage';
 
@@ -32,21 +33,26 @@ const auditIdSchema = z.object({
 
 /**
  * Helper to get auth provider from Mastra instance.
- * This function will need to be updated once auth provider is integrated into Mastra config.
  */
-function getAuthProvider(_mastra: any): MastraAuthProvider<EEUser> | null {
-  // TODO: Update once auth is integrated into Mastra config
+function getAuthProvider(mastra: any): MastraAuthProvider<EEUser> | null {
+  const serverConfig = mastra.getServer?.();
+  if (serverConfig?.auth) {
+    return serverConfig.auth as MastraAuthProvider<EEUser>;
+  }
   return null;
 }
 
 /**
  * Helper to get audit storage from Mastra instance.
- * This function will need to be updated once storage is properly accessible.
  */
-function getAuditStorage(_mastra: any): AuditStorage | null {
-  // TODO: Access audit storage from Mastra instance
-  // This should become: return mastra.getStorage?.()?.audit ?? null;
-  return null;
+async function getAuditStorage(mastra: Mastra): Promise<AuditStorage | null> {
+  const storage = mastra.getStorage?.();
+  if (!storage) {
+    return null;
+  }
+  // Access the audit domain store via getStore
+  const auditStore = await storage.getStore('audit');
+  return auditStore ?? null;
 }
 
 /**
@@ -155,7 +161,7 @@ export const GET_AUDIT_EVENTS_ROUTE = createRoute({
       const authProvider = getAuthProvider(mastra);
       await checkPermission(authProvider, 'audit:read');
 
-      const auditStorage = getAuditStorage(mastra);
+      const auditStorage = await getAuditStorage(mastra);
       if (!auditStorage) {
         throw new HTTPException(503, { message: 'Audit storage not configured' });
       }
@@ -217,7 +223,7 @@ export const GET_AUDIT_EVENT_BY_ID_ROUTE = createRoute({
       const authProvider = getAuthProvider(mastra);
       await checkPermission(authProvider, 'audit:read');
 
-      const auditStorage = getAuditStorage(mastra);
+      const auditStorage = await getAuditStorage(mastra);
       if (!auditStorage) {
         throw new HTTPException(503, { message: 'Audit storage not configured' });
       }
@@ -256,7 +262,7 @@ export const GET_AUDIT_EXPORT_ROUTE = createRoute({
       const authProvider = getAuthProvider(mastra);
       await checkPermission(authProvider, 'audit:read');
 
-      const auditStorage = getAuditStorage(mastra);
+      const auditStorage = await getAuditStorage(mastra);
       if (!auditStorage) {
         throw new HTTPException(503, { message: 'Audit storage not configured' });
       }
