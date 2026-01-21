@@ -333,7 +333,15 @@ export abstract class Bundler extends MastraBundler {
 
       // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
       try {
-        const rootPath = await getPackageRootPath(dep);
+        // First try to resolve from the project root
+        let rootPath = await getPackageRootPath(dep);
+
+        // If not found in user's project, try resolving from deployer's location
+        // This handles packages like hono that are provided by @mastra/deployer
+        if (!rootPath) {
+          rootPath = await getPackageRootPath(dep, import.meta.dirname);
+        }
+
         if (rootPath) {
           const pkg = await readJSON(`${rootPath}/package.json`);
           actualPackageName = pkg.name;
