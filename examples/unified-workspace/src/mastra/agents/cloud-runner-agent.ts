@@ -1,20 +1,34 @@
 import { Agent } from '@mastra/core/agent';
-import { ComputeSDKSandbox } from '../computesdk-sandbox';
+import { ComputeSDKSandbox, ComputeSDKFilesystem } from '../computesdk-sandbox';
 import { Workspace } from '@mastra/core';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
+import { compute } from 'computesdk';
 
-const computeSDKSandbox = new ComputeSDKSandbox({
+const sandbox = await compute.sandbox.findOrCreate({
+  name: 'unified-workspace-sandbox',
+  timeout: 60_000,
+  // envs: {},
+});
+
+const workspaceSandbox = new ComputeSDKSandbox({
   name: 'unified-workspace-sandbox',
   namespace: 'mastra-examples',
   timeout: 60000,
   runtimes: ['node', 'python', 'bash'],
+  sandbox,
+});
+
+const filesystem = new ComputeSDKFilesystem({
+  workspaceSandbox: workspaceSandbox,
 });
 
 export const cloudSandboxWorkspace = new Workspace({
   id: 'cloud-sandbox-workspace',
   name: 'Cloud Sandbox Workspace',
-  sandbox: computeSDKSandbox,
+  filesystem,
+  sandbox: workspaceSandbox,
+  skillsPaths: ['skills'],
 });
 
 const storage = new LibSQLStore({
@@ -52,18 +66,21 @@ Key capabilities:
 2. Execute Node.js code for JavaScript/TypeScript tasks
 3. Run bash commands for system operations
 4. Install packages in the sandbox environment
+5. Read and write files in the cloud sandbox filesystem
 
 Benefits of cloud sandboxes:
 - Code runs in isolated environments (not on the user's machine)
 - Named sandboxes persist state across executions
 - Multiple runtime support (Python, Node.js, Bash)
 - Secure execution of untrusted code
+- Unified filesystem - files written are visible to code and vice versa
 
 When running code:
 1. Choose the appropriate runtime (python, node, or bash)
 2. Use execute_code for running code snippets
 3. Use execute_command for shell commands
-4. Report output and any errors clearly
+4. Use workspace file tools to read/write files in the sandbox
+5. Report output and any errors clearly
 
 Use workspace sandbox tools to execute code in the cloud.`,
 
