@@ -522,18 +522,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           '',
         ];
       case Language.LUA:
-        return [
-          '\nfunction ',
-          '\nlocal function ',
-          '\nif ',
-          '\nfor ',
-          '\nwhile ',
-          '\nrepeat ',
-          '\n\n',
-          '\n',
-          ' ',
-          '',
-        ];
+        return ['\nfunction ', '\nlocal function ', '\nif ', '\nfor ', '\nwhile ', '\nrepeat ', '\n\n', '\n', ' ', ''];
       case Language.PERL:
         return [
           '\nsub ',
@@ -615,16 +604,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           '',
         ];
       case Language.RST:
-        return [
-          '\n=+\n',
-          '\n-+\n',
-          '\n\\*+\n',
-          '\n\\.\\. ',
-          '\n\n',
-          '\n',
-          ' ',
-          '',
-        ];
+        return ['\n=+\n', '\n-+\n', '\n\\*+\n', '\n\\.\\. ', '\n\n', '\n', ' ', ''];
       default:
         throw new Error(`Language ${language} is not supported! Please choose from ${Object.values(Language)}`);
     }
