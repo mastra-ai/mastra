@@ -132,4 +132,117 @@ describe('ModelRouterLanguageModel - supportedUrls propagation (Issue #12152)', 
 
     expect(resolvedUrls).toHaveProperty('application/pdf');
   });
+
+  it('should NOT match URLs that do not fit the supportedUrls patterns', async () => {
+    const model = new ModelRouterLanguageModel('mistral/mistral-large-latest');
+    const resolvedUrls = await model.supportedUrls;
+
+    // Mistral only supports HTTPS for PDFs, not HTTP
+    const httpUrl = 'http://example.com/document.pdf';
+    const pdfPatterns = resolvedUrls['application/pdf'] || [];
+    const isHttpSupported = pdfPatterns.some((pattern: RegExp) => pattern.test(httpUrl));
+
+    // HTTP should NOT be supported (Mistral pattern is /^https:\/\/.*$/)
+    expect(isHttpSupported).toBe(false);
+
+    // Image URLs should not match PDF patterns
+    const imageUrl = 'https://example.com/image.png';
+    const imagePatterns = resolvedUrls['image/*'] || resolvedUrls['image/png'] || [];
+    expect(imagePatterns.length).toBe(0); // Mistral doesn't support images via URL
+  });
+
+  it('should return empty object when model has no supportedUrls defined', async () => {
+    const mockModelWithoutSupportedUrls = {
+      specificationVersion: 'v2',
+      provider: 'custom',
+      modelId: 'custom-model',
+      supportedUrls: undefined,
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+    };
+    mockGateway.resolveLanguageModel.mockResolvedValueOnce(mockModelWithoutSupportedUrls);
+
+    const model = new ModelRouterLanguageModel('custom/custom-model');
+    const resolvedUrls = await model.supportedUrls;
+
+    expect(resolvedUrls).toEqual({});
+  });
+
+  it('should return empty object when model resolution fails', async () => {
+    mockGateway.resolveLanguageModel.mockRejectedValueOnce(new Error('Model not found'));
+
+    const model = new ModelRouterLanguageModel('unknown/unknown-model');
+    const resolvedUrls = await model.supportedUrls;
+
+    // Should gracefully return empty object instead of throwing
+    expect(resolvedUrls).toEqual({});
+  });
+
+  it('should handle wildcard media types like image/*', async () => {
+    // OpenAI/Anthropic use "image/*" pattern for all image types
+    const mockOpenAISupportedUrls = {
+      'image/*': [/^https?:\/\/.*$/],
+    };
+    const mockOpenAIModel = {
+      specificationVersion: 'v2',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      supportedUrls: mockOpenAISupportedUrls,
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+    };
+    mockGateway.resolveLanguageModel.mockResolvedValueOnce(mockOpenAIModel);
+
+    const model = new ModelRouterLanguageModel('openai/gpt-4o');
+    const resolvedUrls = await model.supportedUrls;
+
+    expect(resolvedUrls).toHaveProperty('image/*');
+
+    // Should match both HTTP and HTTPS image URLs
+    const imagePatterns = resolvedUrls['image/*'];
+    expect(imagePatterns.some((pattern: RegExp) => pattern.test('https://example.com/image.png'))).toBe(true);
+    expect(imagePatterns.some((pattern: RegExp) => pattern.test('http://example.com/image.jpg'))).toBe(true);
+  });
+
+  it('should respect HTTP vs HTTPS distinction across providers', async () => {
+    // Mistral only supports HTTPS
+    const model = new ModelRouterLanguageModel('mistral/mistral-large-latest');
+    const mistralUrls = await model.supportedUrls;
+
+    const pdfPatterns = mistralUrls['application/pdf'] || [];
+
+    // HTTPS should be supported
+    expect(pdfPatterns.some((pattern: RegExp) => pattern.test('https://example.com/doc.pdf'))).toBe(true);
+
+    // HTTP should NOT be supported by Mistral
+    expect(pdfPatterns.some((pattern: RegExp) => pattern.test('http://example.com/doc.pdf'))).toBe(false);
+  });
+
+  it('should handle OpenAI response models with both image and PDF support', async () => {
+    // OpenAI response models support both images and PDFs
+    const mockOpenAIResponseSupportedUrls = {
+      'image/*': [/^https?:\/\/.*$/],
+      'application/pdf': [/^https?:\/\/.*$/],
+    };
+    const mockOpenAIResponseModel = {
+      specificationVersion: 'v2',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      supportedUrls: mockOpenAIResponseSupportedUrls,
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+    };
+    mockGateway.resolveLanguageModel.mockResolvedValueOnce(mockOpenAIResponseModel);
+
+    const model = new ModelRouterLanguageModel('openai/gpt-4o');
+    const resolvedUrls = await model.supportedUrls;
+
+    // Should have both image and PDF support
+    expect(resolvedUrls).toHaveProperty('image/*');
+    expect(resolvedUrls).toHaveProperty('application/pdf');
+
+    // Both should support HTTP and HTTPS
+    expect(resolvedUrls['image/*'].some((p: RegExp) => p.test('https://example.com/img.png'))).toBe(true);
+    expect(resolvedUrls['application/pdf'].some((p: RegExp) => p.test('https://example.com/doc.pdf'))).toBe(true);
+  });
 });
