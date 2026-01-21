@@ -24,3 +24,7 @@ const doc = new MDocument({
 ```
 
 [Documentation](https://mastra.ai/reference/rag/document)
+
+<!-- Test: Should NOT trigger RAG tests - Wed Jan 21 16:45:19 CET 2026 -->
+
+<!-- Test: Should NOT trigger RAG tests - Wed Jan 21 16:45:32 CET 2026 -->
