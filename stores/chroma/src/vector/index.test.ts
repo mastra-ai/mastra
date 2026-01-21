@@ -452,7 +452,7 @@ describe('ChromaVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName3,
             queryVector: [1, 0, 0],
-            // @ts-ignore
+            // @ts-expect-error
             documentFilter: {},
           }),
         ).rejects.toThrow();

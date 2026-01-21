@@ -7484,9 +7484,9 @@ describe('Agent Tests', () => {
 //       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
-//       // @ts-ignore
+//       // @ts-expect-error
 //       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
-//       // @ts-ignore
+//       // @ts-expect-error
 //       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();

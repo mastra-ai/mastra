@@ -283,7 +283,7 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-ignore
+          // @ts-expect-error
           return this.generate({
             ...params,
             messages: updatedMessages,
@@ -1214,7 +1214,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error
                   toolInvocation.result = result;
                 }
 
@@ -1728,7 +1728,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error
                   toolInvocation.result = result;
                 }
 

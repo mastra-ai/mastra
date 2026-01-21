@@ -3650,9 +3650,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
 
@@ -3757,9 +3757,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
       srv.close();
@@ -4127,9 +4127,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.finalIf.output).toMatchObject({ finalValue: 2 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toMatchObject({ newValue: 2 });
 
       srv.close();
@@ -4281,9 +4281,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['else-branch'].output).toMatchObject({ finalValue: 26 + 6 + 1 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toMatchObject({ newValue: 7 });
     });
   });
@@ -4702,7 +4702,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       const toolAction = vi.fn().mockImplementation(async ({ name }) => {
         return { name };
       });
@@ -9084,12 +9084,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9179,7 +9179,7 @@ describe('MastraInngestWorkflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-ignore
+          // @ts-expect-error
           [async () => true, finalStep],
         ])
         .map({
@@ -9240,12 +9240,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9405,7 +9405,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -9570,7 +9570,7 @@ describe('MastraInngestWorkflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9772,7 +9772,7 @@ describe('MastraInngestWorkflow', () => {
         // expect(first).toHaveBeenCalledTimes(1);
         // expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9930,12 +9930,12 @@ describe('MastraInngestWorkflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toMatchObject(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -10083,7 +10083,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -10274,7 +10274,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['last-step']).toMatchObject(undefined);
 
       if (result.status !== 'suspended') {
@@ -10290,7 +10290,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(resumedResults.steps['nested-workflow-c'].output).toMatchObject({
         finalValue: 26 + 1,
       });
@@ -10436,12 +10436,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a-clone'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -10516,7 +10516,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -10579,7 +10579,7 @@ describe('MastraInngestWorkflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
@@ -10859,7 +10859,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result?.steps.step1.output.hasEngine).toBe(true);
     });
   });
@@ -13135,7 +13135,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'start',
         'step-start',
