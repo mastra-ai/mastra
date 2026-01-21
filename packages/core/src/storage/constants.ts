@@ -107,6 +107,7 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
     workflow_name: {
       type: 'text',
     },
