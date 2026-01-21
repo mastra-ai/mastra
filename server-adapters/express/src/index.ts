@@ -323,6 +323,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       `${prefix}${route.path}`,
       ...middlewares,
       async (req: Request, res: Response) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: String(req.path || '/'),
+          method: String(req.method || 'GET'),
+          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => req.query[name] as string | undefined,
+          requestContext: res.locals.requestContext,
+        });
+
+        if (authError) {
+          return res.status(authError.status).json({ error: authError.error });
+        }
+
         const params = await this.getParams(route, req);
 
         if (params.queryParams) {

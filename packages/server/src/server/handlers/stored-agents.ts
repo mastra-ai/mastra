@@ -30,6 +30,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, page, perPage, orderBy }) => {
     try {
       const storage = mastra.getStorage();
@@ -68,6 +69,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
   summary: 'Get stored agent by ID',
   description: 'Returns a specific agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -106,6 +108,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Create stored agent',
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     id,
@@ -183,6 +186,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Update stored agent',
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     storedAgentId,
@@ -257,6 +261,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Delete stored agent',
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();

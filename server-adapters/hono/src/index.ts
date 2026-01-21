@@ -289,6 +289,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       `${prefix}${route.path}`,
       ...middlewares,
       async (c: Context) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+        });
+
+        if (authError) {
+          return c.json({ error: authError.error }, authError.status as any);
+        }
+
         const params = await this.getParams(route, c.req);
 
         if (params.queryParams) {

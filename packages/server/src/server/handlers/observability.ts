@@ -121,6 +121,7 @@ export const LIST_TRACES_ROUTE = createRoute({
   summary: 'List traces',
   description: 'Returns a paginated list of traces with optional filtering and sorting',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       // Transform legacy params to new format before processing
@@ -147,6 +148,7 @@ export const GET_TRACE_ROUTE = createRoute({
   summary: 'Get AI trace by ID',
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -172,6 +174,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
   summary: 'Score traces',
   description: 'Scores one or more traces using a specified scorer (fire-and-forget)',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       // Validate storage exists before starting background task
@@ -214,6 +217,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   summary: 'List scores by span',
   description: 'Returns all scores for a specific span within a trace',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       const pagination = pickParams(paginationArgsSchema, params);
