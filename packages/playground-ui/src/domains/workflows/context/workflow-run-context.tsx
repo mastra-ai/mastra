@@ -1,7 +1,8 @@
 import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { createContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
-import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks';
+import { useCreateWorkflowRun } from '@mastra/react';
+import { useCancelWorkflowRun, useStreamWorkflow } from '../hooks';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
@@ -97,7 +98,7 @@ export function WorkflowRunProvider({
 
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
 
-  const { createWorkflowRun } = useExecuteWorkflow();
+  const { createWorkflowRun } = useCreateWorkflowRun();
   const {
     streamWorkflow,
     streamResult,
