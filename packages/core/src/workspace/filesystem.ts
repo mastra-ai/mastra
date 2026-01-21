@@ -294,33 +294,33 @@ export interface WorkspaceState {
    * Get a value by key.
    * @returns The value, or null if not found
    */
-  get<T = unknown>(key: string): Promise<T | null>;
+  get<T = unknown>(key: string, options?: SharedFilesystemOptions): Promise<T | null>;
 
   /**
    * Set a value for a key.
    */
-  set<T = unknown>(key: string, value: T): Promise<void>;
+  set<T = unknown>(key: string, value: T, options?: SharedFilesystemOptions): Promise<void>;
 
   /**
    * Delete a key.
    * @returns true if the key existed
    */
-  delete(key: string): Promise<boolean>;
+  delete(key: string, options?: SharedFilesystemOptions): Promise<boolean>;
 
   /**
    * Check if a key exists.
    */
-  has(key: string): Promise<boolean>;
+  has(key: string, options?: SharedFilesystemOptions): Promise<boolean>;
 
   /**
    * List all keys, optionally filtered by prefix.
    */
-  keys(prefix?: string): Promise<string[]>;
+  keys(prefix?: string, options?: SharedFilesystemOptions): Promise<string[]>;
 
   /**
    * Clear all state.
    */
-  clear(): Promise<void>;
+  clear(options?: SharedFilesystemOptions): Promise<void>;
 }
 
 // =============================================================================

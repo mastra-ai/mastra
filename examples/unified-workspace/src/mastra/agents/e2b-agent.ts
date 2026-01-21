@@ -7,14 +7,15 @@ import { LibSQLStore } from '@mastra/libsql';
 const sandbox = new E2BSandbox({
   timeout: 60_000,
   runtimes: ['node', 'python', 'bash'],
+  id: 'e2b-agent-123',
   // Dynamic sandbox ID - each thread/resource gets its own sandbox
-  id: ctx => {
-    const parts = [ctx.resourceId, ctx.threadId].filter(Boolean);
-    if (parts.length === 0) {
-      return 'default';
-    }
-    return `${parts.join('-')}`;
-  },
+  // id: ctx => {
+  //   const parts = [ctx.resourceId, ctx.threadId].filter(Boolean);
+  //   if (parts.length === 0) {
+  //     return 'default';
+  //   }
+  //   return `${parts.join('-')}`;
+  // },
 });
 
 export const e2bWorkspace = new Workspace({
@@ -22,6 +23,7 @@ export const e2bWorkspace = new Workspace({
   name: 'E2B Workspace',
   sandbox,
   filesystem: sandbox.filesystem,
+  skillsPaths: ['skills'],
   // Note: Don't use skillsPaths with E2B sandboxes - skills discovery happens at startup
   // (not lazily), which would create a sandbox with no context (using 'default' ID).
   // If you need skills, use a LocalFilesystem for skills discovery instead.

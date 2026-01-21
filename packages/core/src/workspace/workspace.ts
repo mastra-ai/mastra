@@ -53,6 +53,7 @@ import type {
   CommandResult,
   ExecuteCodeOptions,
   ExecuteCommandOptions,
+  SharedSandboxOptions,
 } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
@@ -562,7 +563,7 @@ export class Workspace {
    * Read a file from the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
-  async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
+  async readFile(path: string, options?: ReadOptions & SharedSandboxOptions): Promise<string | Buffer> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
@@ -572,7 +573,7 @@ export class Workspace {
 
     // Track the read if requireReadBeforeWrite is enabled
     if (this._readTracker) {
-      const stat = await this._fs.stat(path);
+      const stat = await this._fs.stat(path, options);
       this._readTracker.recordRead(path, stat.modifiedAt);
     }
 
@@ -585,7 +586,7 @@ export class Workspace {
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
    * @throws {FileReadRequiredError} if requireReadBeforeWrite is enabled and file wasn't read or was modified
    */
-  async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
+  async writeFile(path: string, content: FileContent, options?: WriteOptions & SharedSandboxOptions): Promise<void> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
@@ -595,9 +596,9 @@ export class Workspace {
 
     // Check read-before-write requirement (only for existing files)
     if (this._readTracker) {
-      const exists = await this._fs.exists(path);
+      const exists = await this._fs.exists(path, options);
       if (exists) {
-        const stat = await this._fs.stat(path);
+        const stat = await this._fs.stat(path, options);
         const check = this._readTracker.needsReRead(path, stat.modifiedAt);
         if (check.needsReRead) {
           throw new FileReadRequiredError(path, check.reason!);
@@ -620,7 +621,7 @@ export class Workspace {
    * List directory contents.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
-  async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
+  async readdir(path: string, options?: ListOptions & SharedSandboxOptions): Promise<FileEntry[]> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
@@ -632,7 +633,7 @@ export class Workspace {
    * Check if a path exists.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
-  async exists(path: string, options?: ExistsOptions): Promise<boolean> {
+  async exists(path: string, options?: ExistsOptions & SharedSandboxOptions): Promise<boolean> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
@@ -781,10 +782,11 @@ export class Workspace {
    * Reads files from the specified paths (or autoIndexPaths from config) and indexes them.
    *
    * @param paths - Paths to index (defaults to autoIndexPaths from config)
+   * @param options - Context options for dynamic sandbox resolution
    * @throws {SearchNotAvailableError} if search is not configured
    * @throws {FilesystemNotAvailableError} if filesystem is not configured
    */
-  async rebuildIndex(paths?: string[]): Promise<void> {
+  async rebuildIndex(paths?: string[], options?: SharedSandboxOptions): Promise<void> {
     if (!this._searchEngine) {
       throw new SearchNotAvailableError();
     }
@@ -803,10 +805,10 @@ export class Workspace {
     // Index all files from specified paths
     for (const basePath of pathsToIndex) {
       try {
-        const files = await this.getAllFiles(basePath);
+        const files = await this.getAllFiles(basePath, options);
         for (const filePath of files) {
           try {
-            const content = await this._fs.readFile(filePath, { encoding: 'utf-8' });
+            const content = await this._fs.readFile(filePath, { encoding: 'utf-8', ...options });
             await this._searchEngine.index({
               id: filePath,
               content: content as string,
@@ -830,9 +832,10 @@ export class Workspace {
    * Useful for making persisted files available for execution.
    *
    * @param paths - Paths to sync (default: all files)
+   * @param options - Context options for dynamic sandbox resolution
    * @throws {Error} if either filesystem or sandbox is not available
    */
-  async syncToSandbox(paths?: string[]): Promise<SyncResult> {
+  async syncToSandbox(paths?: string[], options?: SharedSandboxOptions): Promise<SyncResult> {
     if (!this._fs || !this._sandbox) {
       throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
     }
@@ -842,12 +845,12 @@ export class Workspace {
     let bytesTransferred = 0;
     const startTime = Date.now();
 
-    const filesToSync = paths ?? (await this.getAllFiles('/'));
+    const filesToSync = paths ?? (await this.getAllFiles('/', options));
 
     for (const filePath of filesToSync) {
       try {
-        const content = await this._fs.readFile(filePath);
-        await this._sandbox.writeFile!(filePath, content as string | Buffer);
+        const content = await this._fs.readFile(filePath, options);
+        await this._sandbox.writeFile!(filePath, content as string | Buffer, options);
         synced.push(filePath);
         bytesTransferred += typeof content === 'string' ? Buffer.byteLength(content) : content.length;
       } catch (error: unknown) {
@@ -869,9 +872,10 @@ export class Workspace {
    * Useful for persisting execution outputs.
    *
    * @param paths - Paths to sync (default: all modified files)
+   * @param options - Context options for dynamic sandbox resolution
    * @throws {Error} if either filesystem or sandbox is not available
    */
-  async syncFromSandbox(paths?: string[]): Promise<SyncResult> {
+  async syncFromSandbox(paths?: string[], options?: SharedSandboxOptions): Promise<SyncResult> {
     if (!this._fs || !this._sandbox) {
       throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
     }
@@ -881,12 +885,12 @@ export class Workspace {
     let bytesTransferred = 0;
     const startTime = Date.now();
 
-    const filesToSync = paths ?? (await this._sandbox.listFiles!('/'));
+    const filesToSync = paths ?? (await this._sandbox.listFiles!('/', options));
 
     for (const filePath of filesToSync) {
       try {
-        const content = await this._sandbox.readFile!(filePath);
-        await this._fs.writeFile(filePath, content);
+        const content = await this._sandbox.readFile!(filePath, options);
+        await this._fs.writeFile(filePath, content, options);
         synced.push(filePath);
         bytesTransferred += Buffer.byteLength(content);
       } catch (error: unknown) {
@@ -903,18 +907,18 @@ export class Workspace {
     };
   }
 
-  private async getAllFiles(dir: string): Promise<string[]> {
+  private async getAllFiles(dir: string, options?: SharedSandboxOptions): Promise<string[]> {
     if (!this._fs) return [];
 
     const files: string[] = [];
-    const entries = await this._fs.readdir(dir);
+    const entries = await this._fs.readdir(dir, options);
 
     for (const entry of entries) {
       const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory') {
-        files.push(...(await this.getAllFiles(fullPath)));
+        files.push(...(await this.getAllFiles(fullPath, options)));
       }
     }
 
@@ -928,18 +932,19 @@ export class Workspace {
   /**
    * Create a snapshot of the current workspace state.
    * Captures filesystem contents (and optionally sandbox state).
+   * @param options - Snapshot options and context for dynamic sandbox resolution
    */
-  async snapshot(options?: SnapshotOptions): Promise<WorkspaceSnapshot> {
+  async snapshot(options?: SnapshotOptions & SharedSandboxOptions): Promise<WorkspaceSnapshot> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
 
     const files: Record<string, string | Buffer> = {};
-    const pathsToSnapshot = options?.paths ?? (await this.getAllFiles('/'));
+    const pathsToSnapshot = options?.paths ?? (await this.getAllFiles('/', options));
 
     for (const filePath of pathsToSnapshot) {
       try {
-        files[filePath] = await this._fs.readFile(filePath);
+        files[filePath] = await this._fs.readFile(filePath, options);
       } catch {
         // Skip files that can't be read
       }
@@ -963,8 +968,10 @@ export class Workspace {
 
   /**
    * Restore workspace from a snapshot.
+   * @param snapshot - The snapshot to restore from
+   * @param options - Restore options and context for dynamic sandbox resolution
    */
-  async restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void> {
+  async restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions & SharedSandboxOptions): Promise<void> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
@@ -974,10 +981,10 @@ export class Workspace {
 
     // Clear existing files if not merging
     if (!options?.merge) {
-      const existingFiles = await this.getAllFiles('/');
+      const existingFiles = await this.getAllFiles('/', options);
       for (const file of existingFiles) {
         if (!options?.paths || options.paths.includes(file)) {
-          await this._fs.deleteFile(file, { force: true });
+          await this._fs.deleteFile(file, { force: true, ...options });
         }
       }
     }
@@ -985,7 +992,7 @@ export class Workspace {
     // Restore files
     for (const filePath of pathsToRestore) {
       if (files[filePath]) {
-        await this._fs.writeFile(filePath, files[filePath], { recursive: true });
+        await this._fs.writeFile(filePath, files[filePath], { recursive: true, ...options });
       }
     }
   }
@@ -997,8 +1004,9 @@ export class Workspace {
   /**
    * Initialize the workspace.
    * Starts the sandbox and initializes the filesystem.
+   * @param options - Context options for dynamic sandbox resolution
    */
-  async init(): Promise<void> {
+  async init(options?: SharedSandboxOptions): Promise<void> {
     this._status = 'initializing';
 
     try {
@@ -1007,12 +1015,12 @@ export class Workspace {
       }
 
       if (this._sandbox) {
-        await this._sandbox.start();
+        await this._sandbox.start(options);
       }
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
-        await this.rebuildIndex(this._config.autoIndexPaths);
+        await this.rebuildIndex(this._config.autoIndexPaths, options);
       }
 
       this._status = 'ready';
@@ -1024,33 +1032,36 @@ export class Workspace {
 
   /**
    * Pause the workspace (stop sandbox but keep state).
+   * @param options - Context options for dynamic sandbox resolution
    */
-  async pause(): Promise<void> {
+  async pause(options?: SharedSandboxOptions): Promise<void> {
     if (this._sandbox?.stop) {
-      await this._sandbox.stop();
+      await this._sandbox.stop(options);
     }
     this._status = 'paused';
   }
 
   /**
    * Resume a paused workspace.
+   * @param options - Context options for dynamic sandbox resolution
    */
-  async resume(): Promise<void> {
+  async resume(options?: SharedSandboxOptions): Promise<void> {
     if (this._sandbox) {
-      await this._sandbox.start();
+      await this._sandbox.start(options);
     }
     this._status = 'ready';
   }
 
   /**
    * Destroy the workspace and clean up all resources.
+   * @param options - Context options for dynamic sandbox resolution
    */
-  async destroy(): Promise<void> {
+  async destroy(options?: SharedSandboxOptions): Promise<void> {
     this._status = 'destroying';
 
     try {
       if (this._sandbox) {
-        await this._sandbox.destroy();
+        await this._sandbox.destroy(options);
       }
 
       if (this._fs?.destroy) {
@@ -1070,8 +1081,9 @@ export class Workspace {
 
   /**
    * Get workspace information.
+   * @param options - Context options for dynamic sandbox resolution
    */
-  async getInfo(): Promise<WorkspaceInfo> {
+  async getInfo(options?: SharedSandboxOptions): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -1086,7 +1098,7 @@ export class Workspace {
       };
 
       try {
-        const files = await this.getAllFiles('/');
+        const files = await this.getAllFiles('/', options);
         info.filesystem.totalFiles = files.length;
       } catch {
         // Ignore
@@ -1094,7 +1106,7 @@ export class Workspace {
     }
 
     if (this._sandbox) {
-      const sandboxInfo = await this._sandbox.getInfo();
+      const sandboxInfo = await this._sandbox.getInfo(options);
       info.sandbox = {
         provider: this._sandbox.provider,
         status: sandboxInfo.status,
@@ -1219,40 +1231,40 @@ class FilesystemState implements WorkspaceState {
     return `${this.stateDir}/${safeKey}.json`;
   }
 
-  async get<T = unknown>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string, options?: SharedSandboxOptions): Promise<T | null> {
     const path = this.keyToPath(key);
     try {
-      const content = await this.fs.readFile(path, { encoding: 'utf-8' });
+      const content = await this.fs.readFile(path, { encoding: 'utf-8', ...options });
       return JSON.parse(content as string) as T;
     } catch {
       return null;
     }
   }
 
-  async set<T = unknown>(key: string, value: T): Promise<void> {
+  async set<T = unknown>(key: string, value: T, options?: SharedSandboxOptions): Promise<void> {
     const path = this.keyToPath(key);
-    await this.fs.mkdir(this.stateDir, { recursive: true });
-    await this.fs.writeFile(path, JSON.stringify(value, null, 2));
+    await this.fs.mkdir(this.stateDir, { recursive: true, ...options });
+    await this.fs.writeFile(path, JSON.stringify(value, null, 2), options);
   }
 
-  async delete(key: string): Promise<boolean> {
+  async delete(key: string, options?: SharedSandboxOptions): Promise<boolean> {
     const path = this.keyToPath(key);
     try {
-      await this.fs.deleteFile(path);
+      await this.fs.deleteFile(path, options);
       return true;
     } catch {
       return false;
     }
   }
 
-  async has(key: string): Promise<boolean> {
+  async has(key: string, options?: SharedSandboxOptions): Promise<boolean> {
     const path = this.keyToPath(key);
-    return this.fs.exists(path);
+    return this.fs.exists(path, options);
   }
 
-  async keys(prefix?: string): Promise<string[]> {
+  async keys(prefix?: string, options?: SharedSandboxOptions): Promise<string[]> {
     try {
-      const entries = await this.fs.readdir(this.stateDir);
+      const entries = await this.fs.readdir(this.stateDir, options);
       let keys = entries
         .filter(e => e.type === 'file' && e.name.endsWith('.json'))
         .map(e => e.name.replace('.json', ''));
@@ -1268,9 +1280,9 @@ class FilesystemState implements WorkspaceState {
     }
   }
 
-  async clear(): Promise<void> {
+  async clear(options?: SharedSandboxOptions): Promise<void> {
     try {
-      await this.fs.rmdir(this.stateDir, { recursive: true });
+      await this.fs.rmdir(this.stateDir, { recursive: true, ...options });
     } catch {
       // Ignore
     }
