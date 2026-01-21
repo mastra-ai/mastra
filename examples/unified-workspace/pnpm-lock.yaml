@@ -33,6 +33,9 @@ importers:
       ai:
         specifier: ^6.0.1
         version: 6.0.38(zod@3.25.76)
+      computesdk:
+        specifier: ^1.18.0
+        version: 1.18.0
       mastra:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
@@ -67,6 +70,9 @@ packages:
     resolution: {integrity: sha512-5KXyBOSEX+l67elrEa+wqo/LSsSTtrPj9Uoh3zMbe/ceQX4ucHI3b9nUEfNkGF3Ry1svv90widAt+aiKdIJasQ==}
     engines: {node: '>=18'}
 
+  '@computesdk/cmd@0.4.1':
+    resolution: {integrity: sha512-hhcYrwMnOpRSwWma3gkUeAVsDFG56nURwSaQx8vCepv0IuUv39bK4mMkgszolnUQrVjBDdW7b3lV+l5B2S8fRA==}
+
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
@@ -83,6 +89,9 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
+
+  computesdk@1.18.0:
+    resolution: {integrity: sha512-dOD9gcMeb005IVdVS/OGnPBig0FQ6iF9masF7o1PgVrEswE0n29xW/Ro/6TEfQyhPy5WwYiyV7TvK/tpat+MIQ==}
 
   eventsource-parser@3.0.6:
     resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
@@ -125,6 +134,8 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@computesdk/cmd@0.4.1': {}
+
   '@opentelemetry/api@1.9.0': {}
 
   '@standard-schema/spec@1.1.0': {}
@@ -138,6 +149,10 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.8(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  computesdk@1.18.0:
+    dependencies:
+      '@computesdk/cmd': 0.4.1
 
   eventsource-parser@3.0.6: {}
 
