@@ -138,11 +138,11 @@ export async function getInputOptions(
       // for debugging
       // {
       //   name: 'logger',
-      //   //@ts-ignore
+      //   //@ts-expect-error
       //   resolveId(id, ...args) {
       //     console.log({ id, args });
       //   },
-      //   // @ts-ignore
+      //   // @ts-expect-error
       // transform(code, id) {
       //   if (code.includes('class Duplexify ')) {
       //     console.log({ duplex: id });

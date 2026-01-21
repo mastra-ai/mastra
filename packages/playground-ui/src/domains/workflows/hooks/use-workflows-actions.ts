@@ -469,22 +469,3 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
     timeTravelWorkflowStream,
   };
 };
-
-export const useCancelWorkflowRun = () => {
-  const client = useMastraClient();
-  const cancelWorkflowRun = useMutation({
-    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-      try {
-        const workflow = client.getWorkflow(workflowId);
-        const run = await workflow.createRun({ runId });
-        const response = await run.cancelRun();
-        return response;
-      } catch (error) {
-        console.error('Error canceling workflow run:', error);
-        throw error;
-      }
-    },
-  });
-
-  return cancelWorkflowRun;
-};

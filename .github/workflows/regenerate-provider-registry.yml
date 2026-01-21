@@ -56,9 +56,6 @@ jobs:
       - name: Generate model documentation
         run: pnpx tsx packages/core/scripts/generate-model-docs.ts
 
-      - name: Generate llms.txt files
-        run: pnpx tsx docs/scripts/build-llms-text-files.ts docs
-
       - name: Format generated files with Prettier
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
@@ -67,7 +64,7 @@ jobs:
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ docs/public/llms.txt docs/public/llms-full.txt || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -107,8 +104,6 @@ jobs:
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add docs/src/content/en/models/
-          git add docs/public/llms.txt
-          git add docs/public/llms-full.txt
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
