@@ -22,7 +22,7 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   resources: 'usable',
 });
 
-// @ts-ignore - JSDOM types don't match exactly but this works for testing
+// @ts-expect-error - JSDOM types don't match exactly but this works for testing
 (globalThis as any).window = dom.window;
 (globalThis as any).document = dom.window.document;
 Object.defineProperty(globalThis, 'navigator', {

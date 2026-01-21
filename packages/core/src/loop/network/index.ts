@@ -145,7 +145,7 @@ export async function getRoutingAgent({
     instructions,
     model: model,
     memory: memoryToUse,
-    // @ts-ignore
+    // @ts-expect-error
     _agentNetworkAppend: true,
   });
 }

@@ -138,7 +138,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             type: 'step-finish',
             runId,
             from: ChunkFrom.AGENT,
-            // @ts-ignore TODO: Look into the proper types for this
+            // @ts-expect-error TODO: Look into the proper types for this
             payload: typedInputData,
           });
         }

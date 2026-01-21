@@ -161,9 +161,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -701,9 +701,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
 
         afterEach(async () => {
-          //@ts-ignore
+          //@ts-expect-error
           await storage.client.close();
-          //@ts-ignore
+          //@ts-expect-error
           await vector.turso.close();
         });
 
@@ -891,9 +891,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1107,9 +1107,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1461,9 +1461,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1579,9 +1579,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 

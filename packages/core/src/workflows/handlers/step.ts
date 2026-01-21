@@ -365,7 +365,6 @@ export async function executeStep(
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                // @ts-ignore
                 runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,
