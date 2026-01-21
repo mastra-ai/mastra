@@ -69,7 +69,7 @@ For scenarios where you need to handle workflow completion without awaiting the 
 
 Called when a workflow completes with any status (success, failed, suspended, or tripwire):
 
-```typescript {8-15} title="src/mastra/workflows/order-workflow.ts"
+```typescript {8-17} title="src/mastra/workflows/order-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -79,7 +79,9 @@ const orderWorkflow = createWorkflow({
   outputSchema: z.object({ orderId: z.string(), status: z.string() }),
   options: {
     onFinish: async (result) => {
-      await db.updateOrderStatus(result.result?.orderId, result.status);
+      if (result.status === 'success') {
+        await db.updateOrderStatus(result.result.orderId, result.status);
+      }
       await analytics.track('workflow_completed', {
         workflowId: 'order-processing',
         status: result.status,
@@ -359,7 +361,7 @@ for await (const chunk of stream.stream) {
 
 ## Related
 
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
-- [Time Travel](/docs/v1/workflows/time-travel)
-- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Time Travel](/docs/workflows/time-travel)
+- [Human-in-the-loop](/docs/workflows/human-in-the-loop)

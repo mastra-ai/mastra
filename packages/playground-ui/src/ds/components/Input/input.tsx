@@ -2,43 +2,61 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
+import { formElementSizes, formElementFocus, formElementRadius } from '@/ds/primitives/form-element';
 
 const inputVariants = cva(
-  'flex w-full text-neutral6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+  cn(
+    // Base styles with enhanced transitions
+    'flex w-full text-neutral6 border bg-transparent',
+    'transition-all duration-normal ease-out-custom',
+    'disabled:cursor-not-allowed disabled:opacity-50',
+    // Better placeholder styling
+    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70',
+    formElementRadius,
+    formElementFocus,
+  ),
   {
     variants: {
       variant: {
-        default: 'border-sm border-border1 placeholder:text-neutral3',
-        filled: 'border-sm bg-inputFill border-border1 placeholder:text-neutral3',
-        unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
+        default: 'border border-border1 hover:border-border2',
+        filled: 'border bg-surface2 border-border1 hover:border-border2',
+        unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
       },
-      customSize: {
-        default: 'px-[13px] text-[calc(13_/_16_*_1rem)] h-8',
-        sm: 'h-[30px] px-[13px] text-xs',
-        lg: 'h-10 px-[17px] text-[calc(13_/_16_*_1rem)]',
+      size: {
+        sm: `${formElementSizes.sm} px-2 text-ui-sm`,
+        md: `${formElementSizes.md} px-3 text-ui-sm`,
+        lg: `${formElementSizes.lg} px-4 text-ui-sm`,
       },
     },
     defaultVariants: {
       variant: 'default',
-      customSize: 'default',
+      size: 'md',
     },
   },
 );
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement> &
+export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
   VariantProps<typeof inputVariants> & {
     testId?: string;
+    error?: boolean;
   };
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, customSize, testId, variant, type, ...props }, ref) => {
+  ({ className, size, testId, variant, type, error, ...props }, ref) => {
     return (
       <input
         type={type}
-        className={clsx(className, inputVariants({ variant, customSize, className }))}
+        className={cn(
+          inputVariants({ variant, size }),
+          // Error state styling
+          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
+          className,
+        )}
         data-testid={testId}
         ref={ref}
+        aria-invalid={error}
         {...props}
       />
     );

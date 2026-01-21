@@ -20,7 +20,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type { MastraCompositeStore, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -113,7 +113,7 @@ export interface Config<
    * Storage provider for persisting data, conversation history, and workflow state.
    * Required for agent memory and workflow persistence.
    */
-  storage?: MastraStorage;
+  storage?: MastraCompositeStore;
 
   /**
    * Vector stores for semantic search and retrieval-augmented generation (RAG).
@@ -295,10 +295,12 @@ export class Mastra<
     path: string;
   }> = [];
 
-  #storage?: MastraStorage;
+  #storage?: MastraCompositeStore;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
+  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
+    new Map();
   #memory?: TMemory;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
@@ -1167,11 +1169,11 @@ export class Mastra<
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
    * ```
    */
-  public addAgent<A extends Agent<any> | ToolLoopAgentLike>(agent: A, key?: string): void {
+  public addAgent<A extends Agent | ToolLoopAgentLike>(agent: A, key?: string): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
-    let mastraAgent: Agent<any>;
+    let mastraAgent: Agent<any, any, any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
       mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
@@ -2068,6 +2070,52 @@ export class Mastra<
   }
 
   /**
+   * Registers a processor configuration with agent context.
+   * This tracks which agents use which processors with what configuration.
+   *
+   * @param processor - The processor instance
+   * @param agentId - The ID of the agent that uses this processor
+   * @param type - Whether this is an input or output processor
+   */
+  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+    const processorId = processor.id;
+    if (!this.#processorConfigurations.has(processorId)) {
+      this.#processorConfigurations.set(processorId, []);
+    }
+    const configs = this.#processorConfigurations.get(processorId)!;
+
+    // Check if this exact configuration already exists
+    const exists = configs.some(c => c.agentId === agentId && c.type === type);
+    if (!exists) {
+      configs.push({ processor, agentId, type });
+    }
+  }
+
+  /**
+   * Gets all processor configurations for a specific processor ID.
+   *
+   * @param processorId - The ID of the processor
+   * @returns Array of configurations with agent context
+   */
+  public getProcessorConfigurations(
+    processorId: string,
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+    return this.#processorConfigurations.get(processorId) || [];
+  }
+
+  /**
+   * Gets all processor configurations.
+   *
+   * @returns Map of processor IDs to their configurations
+   */
+  public listProcessorConfigurations(): Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+  > {
+    return this.#processorConfigurations;
+  }
+
+  /**
    * Retrieves a registered memory instance by its registration key.
    *
    * @throws {MastraError} When the memory instance with the specified key is not found
@@ -2299,7 +2347,7 @@ export class Mastra<
    * });
    * ```
    */
-  public setStorage(storage: MastraStorage) {
+  public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
   }
 

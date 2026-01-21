@@ -4,7 +4,7 @@ A simple example showing how to use hybrid vector search with Mastra and PGVecto
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 

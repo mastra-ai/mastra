@@ -81,7 +81,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
-          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
             <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">HTTP</span>}>
               Regular HTTP Endpoint
             </Badge>
@@ -97,7 +97,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </div>
 
           {/* SSE */}
-          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
             <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">SSE</span>}>
               Server-Sent Events
             </Badge>
@@ -113,7 +113,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </div>
 
           {/* Command Line */}
-          <div className="rounded-lg border-sm border-border1 bg-surface3 p-4">
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
             <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">CLI</span>}>Command Line</Badge>
 
             <Txt className="text-neutral3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
@@ -128,7 +128,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
       </div>
 
-      <div className="h-full overflow-y-scroll border-l-sm border-border1">
+      <div className="h-full overflow-y-scroll border-l border-border1">
         <McpToolList server={server} />
       </div>
     </MainContentContent>
@@ -174,7 +174,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ToolIconComponent className="group-hover/entity:text-[#ECB047]" />
+        <ToolIconComponent className="group-hover/entity:text-accent6" />
       </EntityIcon>
 
       <EntityContent>

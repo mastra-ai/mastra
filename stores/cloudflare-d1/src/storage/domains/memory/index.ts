@@ -18,8 +18,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
@@ -230,21 +230,39 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
       );
     }
 
@@ -263,20 +281,68 @@ export class MemoryStorageD1 extends MemoryStorage {
     });
 
     try {
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
+      let countQuery = createSqlBuilder().count().from(fullTableName);
+      let selectQuery = createSqlBuilder().select('*').from(fullTableName);
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
+        selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          // Handle null values specially: json_extract returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            const condition = `json_extract(metadata, '$.${key}') IS NULL`;
+            countQuery = countQuery.whereAnd(condition);
+            selectQuery = selectQuery.whereAnd(condition);
+          } else {
+            // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
+            // Pass native values directly so SQLite compares types correctly
+            const condition = `json_extract(metadata, '$.${key}') = ?`;
+            // Type assertion is safe here because we've validated above that value is a scalar type
+            const filterValue = value as string | number | boolean;
+            countQuery = countQuery.whereAnd(condition, filterValue);
+            selectQuery = selectQuery.whereAnd(condition, filterValue);
+          }
+        }
+      }
+
       const countResult = (await this.#db.executeQuery(countQuery.build())) as {
         count: number;
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('resourceId = ?', resourceId)
-        .orderBy(field, direction)
-        .limit(limitValue)
-        .offset(offset);
+      selectQuery = selectQuery.orderBy(field, direction).limit(limitValue).offset(offset);
 
       const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
@@ -289,15 +355,20 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
+          text: `Error listing threads: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

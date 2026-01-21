@@ -1,32 +1,35 @@
-import React, { ElementType, ReactNode } from 'react';
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-import { Txt } from '../Txt';
+export type EmptyStateProps = {
+  iconSlot: React.ReactNode;
+  titleSlot: React.ReactNode;
+  descriptionSlot?: React.ReactNode;
+  actionSlot?: React.ReactNode;
+  className?: string;
+  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+};
 
-export interface EmptyStateProps {
-  as?: ElementType;
-  iconSlot: ReactNode;
-  titleSlot: ReactNode;
-  descriptionSlot: ReactNode;
-  actionSlot: ReactNode;
-}
-
-export const EmptyState = ({
+export function EmptyState({
   iconSlot,
   titleSlot,
   descriptionSlot,
   actionSlot,
-  as: Component = 'div',
-}: EmptyStateProps) => {
+  className,
+  as: HeadingTag = 'h3',
+}: EmptyStateProps) {
   return (
-    <div className="flex w-[340px] flex-col items-center justify-center text-center">
-      <div className="h-auto [&>svg]:w-[126px]">{iconSlot}</div>
-      <Component className="text-neutral6 pt-[34px] font-serif text-[1.75rem] font-semibold">{titleSlot}</Component>
-
-      <Txt variant="ui-lg" className="text-neutral3 pb-[34px]">
-        {descriptionSlot}
-      </Txt>
-
-      {actionSlot}
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center text-center py-10 px-6',
+        'transition-opacity duration-normal ease-out-custom',
+        className,
+      )}
+    >
+      {iconSlot && <div className="mb-4">{iconSlot}</div>}
+      <HeadingTag className="font-medium text-neutral5 text-ui-md">{titleSlot}</HeadingTag>
+      {descriptionSlot && <p className="mt-1.5 text-neutral3 text-ui-sm max-w-md">{descriptionSlot}</p>}
+      {actionSlot && <div className="mt-5">{actionSlot}</div>}
     </div>
   );
-};
+}

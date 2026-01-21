@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
@@ -84,8 +85,10 @@ export * from './lib/framework';
 export { MemorySearch } from './lib/ai-ui/memory-search';
 export * from './domains/conversation/index';
 export * from './lib/errors';
+export { cn } from './lib/utils';
 export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './lib/mastra-platform';

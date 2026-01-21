@@ -1,4 +1,4 @@
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 import Link from "@docusaurus/Link";
 import { useLocation } from "@docusaurus/router";
 
@@ -6,26 +6,26 @@ const docsTabs = [
   {
     id: "Docs",
     label: "Docs",
-    href: "/docs/v1",
-    basePath: "/docs/v1",
+    href: "/docs",
+    basePath: "/docs",
   },
   {
     id: "Models",
     label: "Models",
-    href: "/models/v1",
-    basePath: "/models/v1",
+    href: "/models",
+    basePath: "/models",
   },
   {
     id: "Guides",
     label: "Guides & Migrations",
-    href: "/guides/v1",
-    basePath: "/guides/v1",
+    href: "/guides",
+    basePath: "/guides",
   },
   {
     id: "Reference",
     label: "Reference",
-    href: "/reference/v1",
-    basePath: "/reference/v1",
+    href: "/reference",
+    basePath: "/reference",
   },
   {
     id: "Showcase",
@@ -41,7 +41,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
   return (
     <div
       className={cn(
-        " px-4 -mb-[2px] bg-(--light-color-surface-15) dark:bg-(--primary-bg)",
+        " px-4 -mb-0.5 bg-(--light-color-surface-15) dark:bg-(--primary-bg)",
         className,
       )}
     >
@@ -59,16 +59,6 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 pathname.startsWith(tab.basePath + "/") ||
                 pathname === tab.basePath
               ) {
-                // For the general "Docs" tab, exclude paths that belong to other specific tabs
-                if (tab.basePath === "/docs/v1") {
-                  const otherTabPaths = docsTabs
-                    .filter((t) => t.id !== "Docs")
-                    .map((t) => t.basePath);
-                  return !otherTabPaths.some(
-                    (path) =>
-                      pathname.startsWith(path + "/") || pathname === path,
-                  );
-                }
                 return true;
               }
               return false;

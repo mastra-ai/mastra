@@ -1,10 +1,4 @@
-import type {
-  MastraModelOutput,
-  ChunkType,
-  OutputSchema,
-  MastraAgentNetworkStream,
-  WorkflowRunOutput,
-} from '@mastra/core/stream';
+import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodObject, ZodType } from 'zod';
@@ -89,11 +83,11 @@ export function toAISdkV5Stream<
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
   options: { from: 'workflow'; includeTextStreamParts?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkV5Stream<OUTPUT extends OutputSchema = undefined>(
+export function toAISdkV5Stream<OUTPUT = undefined>(
   stream: MastraAgentNetworkStream<OUTPUT>,
   options: { from: 'network' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
-export function toAISdkV5Stream<TOutput extends OutputSchema>(
+export function toAISdkV5Stream<TOutput>(
   stream: MastraModelOutput<TOutput>,
   options: {
     from: 'agent';
@@ -133,7 +127,7 @@ export function toAISdkV5Stream(
   if (from === 'workflow') {
     const includeTextStreamParts = options?.includeTextStreamParts ?? true;
 
-    return (stream as ReadableStream<ChunkType>).pipeThrough(
+    return (stream as ReadableStream<ChunkType<any>>).pipeThrough(
       WorkflowStreamToAISDKTransformer({ includeTextStreamParts }),
     ) as ReadableStream<InferUIMessageChunk<UIMessage>>;
   }
@@ -144,8 +138,8 @@ export function toAISdkV5Stream(
     >;
   }
 
-  const agentReadable: ReadableStream<ChunkType> =
-    'fullStream' in stream ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
+  const agentReadable: ReadableStream<ChunkType<any>> =
+    'fullStream' in stream ? (stream as MastraModelOutput<any>).fullStream : (stream as ReadableStream<ChunkType<any>>);
   return agentReadable.pipeThrough(
     AgentStreamToAISDKTransformer<any>({
       lastMessageId: options?.lastMessageId,

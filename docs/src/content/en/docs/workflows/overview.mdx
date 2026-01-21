@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/v1/deployment/workflow-runners) like Inngest for managed infrastructure.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
 
 ![Workflows overview](/img/workflows/workflows-overview.jpg)
 
@@ -57,13 +57,13 @@ const step1 = createStep({
 
 :::info
 
-Visit [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+Visit [Step Class](/reference/workflows/step) for a full list of configuration options.
 
 :::
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/v1/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -90,13 +90,13 @@ export const testWorkflow = createWorkflow({
 
 :::info
 
-Visit [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+Visit [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 :::
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/v1/workflows/control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
 
 ## Workflow state
 
@@ -122,13 +122,13 @@ const step1 = createStep({
 
 :::info
 
-Visit [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+Visit [Workflow State](/docs/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
 
 :::
 
 ## Workflows as steps
 
-Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v1/workflows/control-flow).
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
 ```typescript {26} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
@@ -219,36 +219,69 @@ const result = await run.start({
   }
 });
 
-console.log(result);
+if (result.status === "success") {
+  console.log(result.result);
+}
 ```
   </TabItem>
   <TabItem value="stream" label="Stream">
-Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. Iterate over `fullStream` to track progress, then await `result` to get the final workflow result.
 
 ```typescript
 const run = await testWorkflow.createRun();
 
-const result = await run.stream({
+const stream = run.stream({
   inputData: {
     message: "Hello world"
   }
 });
 
-for await (const chunk of result.fullStream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk);
+}
+
+// Get the final result (same type as run.start())
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
 }
 ```
   </TabItem>
 </Tabs>
 
 
-### Workflow status types
+### Workflow result type
 
-When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+
+Additionally, depending on the status, different properties are available:
+
+| Status      | Unique properties               | Description                                              |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `success`   | `result`                        | The workflow's output data                               |
+| `failed`    | `error`                         | The error that caused the failure                        |
+| `tripwire`  | `tripwire`                      | Contains `reason`, `retry?`, `metadata?`, `processorId?` |
+| `suspended` | `suspendPayload`, `suspended`   | Suspension data and array of suspended step paths        |
+| `paused`    | _(none)_                        | Only common properties available                         |
+
+To access status-specific properties, check the `status` first:
+
+```typescript
+const result = await run.start({ inputData: { message: "Hello world" } });
+
+if (result.status === "success") {
+  console.log(result.result); // Only available when status is "success"
+} else if (result.status === "failed") {
+  console.log(result.error.message);
+} else if (result.status === "suspended") {
+  console.log(result.suspendPayload);
+}
+```
 
 ### Workflow output
 
-The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
+Here's an example of a successful workflow result, showing the `input`, `steps`, and `result` properties:
 
 ```json
 {
@@ -261,7 +294,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      },
+      }
     },
     "step-2": {
       "status": "success",
@@ -270,7 +303,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      },
+      }
     }
   },
   "input": {
@@ -325,7 +358,7 @@ When running the local mastra server, all active workflow runs will be restarted
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export type UserTier = {
@@ -347,19 +380,19 @@ const step1 = createStep({
 
 :::info
 
-Visit [Request Context](/docs/v1/server/request-context) for more information.
+Visit [Request Context](/docs/server/request-context) for more information.
 
 :::
 
 ## Testing with Studio
 
-Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Workflow State](/docs/v1/workflows/workflow-state)
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
-- [Error Handling](/docs/v1/workflows/error-handling)
+- [Workflow State](/docs/workflows/workflow-state)
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Error Handling](/docs/workflows/error-handling)

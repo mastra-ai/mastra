@@ -698,5 +698,235 @@ describe('Memory', () => {
         expect(history).toHaveLength(0);
       });
     });
+
+    describe('listThreads', () => {
+      let memory: Memory;
+      let resourceId1: string;
+      let resourceId2: string;
+
+      beforeEach(async () => {
+        memory = new Memory({ storage: new InMemoryStore() });
+        resourceId1 = 'resource-1';
+        resourceId2 = 'resource-2';
+      });
+
+      it('should list threads filtered by resourceId', async () => {
+        // Create threads with different resourceIds
+        await memory.saveThread({
+          thread: {
+            id: 'thread-1',
+            resourceId: resourceId1,
+            title: 'Thread 1',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { type: 'test' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-2',
+            resourceId: resourceId1,
+            title: 'Thread 2',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { type: 'test' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-3',
+            resourceId: resourceId2,
+            title: 'Thread 3',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { type: 'test' },
+          },
+        });
+
+        const result = await memory.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        expect(result.threads.map(t => t.id)).toEqual(expect.arrayContaining(['thread-1', 'thread-2']));
+      });
+
+      it('should list threads filtered by metadata', async () => {
+        await memory.saveThread({
+          thread: {
+            id: 'thread-support-1',
+            resourceId: resourceId1,
+            title: 'Support Thread 1',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { category: 'support', priority: 'high' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-support-2',
+            resourceId: resourceId1,
+            title: 'Support Thread 2',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { category: 'support', priority: 'low' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-sales-1',
+            resourceId: resourceId1,
+            title: 'Sales Thread 1',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { category: 'sales', priority: 'high' },
+          },
+        });
+
+        const result = await memory.listThreads({
+          filter: { metadata: { category: 'support' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+        expect(result.total).toBe(2);
+        expect(result.threads.map(t => t.id)).toEqual(expect.arrayContaining(['thread-support-1', 'thread-support-2']));
+      });
+
+      it('should list threads filtered by both resourceId and metadata', async () => {
+        await memory.saveThread({
+          thread: {
+            id: 'thread-r1-high',
+            resourceId: resourceId1,
+            title: 'High Priority Thread',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { priority: 'high' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-r1-low',
+            resourceId: resourceId1,
+            title: 'Low Priority Thread',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { priority: 'low' },
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-r2-high',
+            resourceId: resourceId2,
+            title: 'High Priority Thread R2',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { priority: 'high' },
+          },
+        });
+
+        const result = await memory.listThreads({
+          filter: {
+            resourceId: resourceId1,
+            metadata: { priority: 'high' },
+          },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.total).toBe(1);
+        expect(result.threads[0]?.id).toBe('thread-r1-high');
+      });
+
+      it('should list all threads when no filter is provided', async () => {
+        await memory.saveThread({
+          thread: {
+            id: 'thread-all-1',
+            resourceId: resourceId1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        await memory.saveThread({
+          thread: {
+            id: 'thread-all-2',
+            resourceId: resourceId2,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const result = await memory.listThreads({
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads.length).toBeGreaterThanOrEqual(2);
+        expect(result.total).toBeGreaterThanOrEqual(2);
+      });
+
+      it('should return empty array when no threads match filter', async () => {
+        const result = await memory.listThreads({
+          filter: { metadata: { nonexistent: 'value' } },
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should paginate filtered results', async () => {
+        // Create multiple threads
+        for (let i = 1; i <= 5; i++) {
+          await memory.saveThread({
+            thread: {
+              id: `thread-page-${i}`,
+              resourceId: resourceId1,
+              title: `Thread ${i}`,
+              createdAt: new Date(Date.now() + i * 1000),
+              updatedAt: new Date(Date.now() + i * 1000),
+            },
+          });
+        }
+
+        const page1 = await memory.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 0,
+          perPage: 2,
+        });
+
+        expect(page1.threads).toHaveLength(2);
+        expect(page1.total).toBe(5);
+        expect(page1.hasMore).toBe(true);
+
+        const page2 = await memory.listThreads({
+          filter: { resourceId: resourceId1 },
+          page: 1,
+          perPage: 2,
+        });
+
+        expect(page2.threads).toHaveLength(2);
+        expect(page2.total).toBe(5);
+        expect(page2.hasMore).toBe(true);
+
+        // Ensure different threads
+        const page1Ids = page1.threads.map(t => t.id);
+        const page2Ids = page2.threads.map(t => t.id);
+        expect(page1Ids).not.toEqual(page2Ids);
+      });
+    });
   });
 });

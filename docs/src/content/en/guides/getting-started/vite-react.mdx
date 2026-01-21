@@ -14,7 +14,7 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later
 
 ## Create a new React + Vite app (optional)
@@ -138,14 +138,14 @@ Edit `tsconfig.app.json` to resolve paths:
 
 ## Initialize Mastra
 
-Run [`mastra init`](/reference/v1/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash
 cd mastra-react
-npx mastra@beta init
+npx mastra@latest init
 ```
 
 </TabItem>
@@ -153,7 +153,7 @@ npx mastra@beta init
 
 ```bash
 cd mastra-react
-pnpm dlx mastra@beta init
+pnpm dlx mastra@latest init
 ```
 
 </TabItem>
@@ -161,7 +161,7 @@ pnpm dlx mastra@beta init
 
 ```bash
 cd mastra-react
-yarn dlx mastra@beta init
+yarn dlx mastra@latest init
 ```
 
 </TabItem>
@@ -169,7 +169,7 @@ yarn dlx mastra@beta init
 
 ```bash
 cd mastra-react
-bunx mastra@beta init
+bunx mastra@latest init
 ```
 
 </TabItem>
@@ -191,28 +191,28 @@ Install AI SDK UI along with the Mastra adapter:
 <TabItem value="npm" label="npm">
 
 ```bash
-npm install @mastra/ai-sdk@beta @ai-sdk/react ai
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash
-pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+pnpm add @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash
-yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+yarn add @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash
-bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+bun add @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
 </TabItem>
@@ -255,7 +255,7 @@ This downloads the entire AI Elements UI component library into a `@/components/
 
 ## Create a chat route
 
-Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](https://github.com/reference/v1/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
+Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](/reference/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra';
@@ -415,11 +415,11 @@ Congratulations on building your Mastra agent with React! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
-- Learn more about [agents](/docs/v1/agents/overview)
-- Give your agent its own [tools](/docs/v1/agents/using-tools)
-- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
 
 When you're ready, read more about how Mastra integrates with AI SDK UI and React, and how to deploy your agent anywhere:
 
-- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/deployment/overview)

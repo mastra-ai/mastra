@@ -7,9 +7,10 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
+import type { ProcessorStepOutput } from './step-schema';
 
 /**
  * Base context shared by all processor methods
@@ -108,7 +109,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -141,7 +142,7 @@ export type ProcessInputStepResult = {
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -202,6 +203,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
+  readonly description?: string;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -292,7 +294,7 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
  */
-export type ProcessorWorkflow = Workflow<any, any, string, any, any, any>;
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
 
 /**
  * Input processor config: can be a Processor or a Workflow.

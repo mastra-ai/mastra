@@ -55,11 +55,10 @@ describe('Agent.stream', () => {
       age: z.number(),
     });
     const jsonSchema = zodToJsonSchema(outputSchema);
-    const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
+    const params: Omit<StreamParams<z.infer<typeof outputSchema>>, 'messages'> = {
       structuredOutput: { schema: outputSchema },
     };
-    await agent.stream(params);
+    await agent.stream([], params);
     expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
@@ -76,13 +75,12 @@ describe('Agent.stream', () => {
     // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
     Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       requestContext,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
     // Assert: Verify requestContext was converted to plain object
     expect(agent.lastProcessedParams?.requestContext).toEqual({
@@ -109,13 +107,12 @@ describe('Agent.stream', () => {
       },
     };
 
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       clientTools,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -129,13 +126,8 @@ describe('Agent.stream', () => {
   });
 
   it('should return a Response object with processDataStream method', async () => {
-    // Arrange: Create minimal params
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
-
     // Act: Call stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([]);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);
@@ -147,12 +139,10 @@ describe('Agent.stream', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
+    const params: Omit<StreamParams<undefined>, 'messages'> = {};
 
     // Act: Process the stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([], params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution

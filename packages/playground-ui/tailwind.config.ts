@@ -6,9 +6,11 @@ import {
   BorderColors,
   Colors,
   BorderRadius,
-  BorderWidth,
   Spacings,
   Sizes,
+  Animations,
+  Shadows,
+  Glows,
 } from './src/ds/tokens';
 import animate from 'tailwindcss-animate';
 import assistantUi from '@assistant-ui/react-ui/tailwindcss';
@@ -25,6 +27,7 @@ export default {
         '2xl': '1400px',
       },
     },
+    spacing: Spacings,
     extend: {
       screens: {
         '3xl': '1900px',
@@ -38,18 +41,6 @@ export default {
       },
       borderRadius: {
         ...BorderRadius,
-      },
-      borderWidth: {
-        ...BorderWidth,
-      },
-      padding: {
-        ...Spacings,
-      },
-      margin: {
-        ...Spacings,
-      },
-      gap: {
-        ...Spacings,
       },
       height: {
         ...Sizes,
@@ -71,6 +62,33 @@ export default {
         serif: ['var(--tasa-explorer)', ...defaultFont.fontFamily.serif],
         mono: ['var(--geist-mono)', ...defaultFont.fontFamily.mono],
         sans: ['var(--font-inter)', ...defaultFont.fontFamily.sans],
+      },
+      // Animation tokens
+      transitionDuration: {
+        normal: Animations.durationNormal,
+        slow: Animations.durationSlow,
+      },
+      transitionTimingFunction: {
+        'ease-out-custom': Animations.easeOut,
+      },
+      // Shadow tokens
+      boxShadow: {
+        sm: Shadows.sm,
+        md: Shadows.md,
+        lg: Shadows.lg,
+        inner: Shadows.inner,
+        card: Shadows.card,
+        elevated: Shadows.elevated,
+        dialog: Shadows.dialog,
+        'glow-accent1': Glows.accent1,
+        'glow-accent2': Glows.accent2,
+        'focus-ring': Glows.focusRing,
+      },
+      // Custom keyframes
+      keyframes: {
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
     },
   },

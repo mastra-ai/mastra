@@ -31,25 +31,29 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   return (
     <div
       className={cn(
-        'flex flex-col h-full px-[1rem] relative overflow-y-auto',
+        'flex flex-col h-full px-4 relative overflow-y-auto',
+        // Smooth width transition for collapse/expand
+        'transition-all duration-slow ease-out-custom',
         {
-          'lg:min-w-[13rem] xl:min-w-[14rem] 2xl:min-w-[15rem] 3xl:min-w-[16rem] 4xl:min-w-[17rem]': !isCollapsed,
+          'lg:min-w-52 xl:min-w-56 2xl:min-w-60 3xl:min-w-64 4xl:min-w-72': !isCollapsed,
         },
         className,
       )}
     >
       {children}
 
-      <div className="bg-surface1 grid sticky bottom-0 pb-[.75rem] ">
+      <div className="bg-surface1 grid sticky bottom-0 pb-3">
         <MainSidebarNavSeparator />
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={toggleSidebar}
               className={cn(
-                'inline-flex w-auto items-center text-neutral3 h-[2rem] px-[0.75rem] rounded-md ml-auto',
-                'hover:bg-surface4',
-                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3',
+                'inline-flex w-auto items-center text-neutral3 h-8 px-3 rounded-md ml-auto',
+                'hover:bg-surface4 hover:text-neutral5',
+                'transition-all duration-normal ease-out-custom',
+                'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
                 {
                   'ml-auto': !isCollapsed,
                 },

@@ -17,7 +17,14 @@ import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/ds/components/Dialog';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
 import { isObjectEmpty } from '@/lib/object';
@@ -212,9 +219,9 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
+      <div className="space-y-4 px-5 pb-5 border-b border-border1">
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b border-border1">
             <Icon>
               <Loader2 className="animate-spin text-neutral6" />
             </Icon>
@@ -235,6 +242,7 @@ export function WorkflowTrigger({
                   handleExecuteWorkflow(data);
                 }}
                 withoutSubmit={!!paramsRunId}
+                isProcessorWorkflow={workflow?.isProcessorWorkflow}
               />
             ) : !!paramsRunId ? null : (
               <Button
@@ -301,7 +309,6 @@ export function WorkflowTrigger({
           <Button
             variant="light"
             className="w-full"
-            size="lg"
             onClick={handleCancelWorkflowRun}
             disabled={
               !!cancelResponse?.message ||
@@ -324,12 +331,11 @@ export function WorkflowTrigger({
 
         {hasWorkflowActivePaths && (
           <>
-            <hr className="border-border1 border-sm my-5" />
-            <div className="flex flex-col gap-2">
-              <Txt variant="ui-xs" className="px-4 text-neutral3">
+            <div className="flex flex-col gap-2 pt-5 border-t border-border1">
+              <Txt variant="ui-xs" className="text-neutral3">
                 Status
               </Txt>
-              <div className="px-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
                   .map(([stepId, step]) => {
@@ -381,7 +387,7 @@ export function WorkflowTrigger({
       </div>
 
       {result && !isObjectEmpty(result) && (
-        <div className="p-5 border-b-sm border-border1">
+        <div className="p-5 border-b border-border1">
           <WorkflowJsonDialog result={result} />
         </div>
       )}
@@ -394,7 +400,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
 
   return (
     <>
-      <Button variant="light" onClick={() => setOpen(true)} className="w-full" size="lg">
+      <Button variant="light" onClick={() => setOpen(true)} className="w-full">
         <Icon>
           <Braces className="text-neutral3" />
         </Icon>
@@ -402,14 +408,15 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPortal>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <div className="w-full h-full overflow-x-scroll">
-              <CodeEditor data={result} className="p-4" />
-            </div>
-          </DialogContent>
-        </DialogPortal>
+            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="max-h-[90vh]">
+            <CodeEditor data={result} className="p-4" />
+          </DialogBody>
+        </DialogContent>
       </Dialog>
     </>
   );

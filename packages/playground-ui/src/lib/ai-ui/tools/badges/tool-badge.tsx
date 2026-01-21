@@ -61,7 +61,7 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      icon={<ToolsIcon className="text-[#ECB047]" />}
+      icon={<ToolsIcon className="text-accent6" />}
       title={toolName}
       extraInfo={
         metadata?.mode === 'network' && (
@@ -109,6 +109,7 @@ export const ToolBadge = ({
           toolApprovalMetadata={toolApprovalMetadata}
           toolName={toolName}
           isNetwork={isNetwork}
+          isGenerateMode={metadata?.mode === 'generate'}
         />
       </div>
     </BadgeWrapper>

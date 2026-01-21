@@ -9,32 +9,32 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown";
 import { Button } from "./ui/button";
-import { cn } from "@site/src/css/utils";
+import { cn } from "@site/src/lib/utils";
 
 const docsTabs = [
   {
     id: "Docs",
     label: "Docs",
-    href: "/docs/v1",
-    basePath: "/docs/v1",
+    href: "/docs/",
+    basePath: "/docs",
   },
   {
     id: "Models",
     label: "Models",
-    href: "/models/v1",
-    basePath: "/models/v1",
+    href: "/models/",
+    basePath: "/models",
   },
   {
     id: "Guides",
     label: "Guides & Migrations",
-    href: "/guides/v1",
-    basePath: "/guides/v1",
+    href: "/guides/",
+    basePath: "/guides",
   },
   {
     id: "Reference",
     label: "Reference",
-    href: "/reference/v1",
-    basePath: "/reference/v1",
+    href: "/reference/",
+    basePath: "/reference",
   },
   {
     id: "Showcase",
@@ -55,14 +55,6 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
         pathname.startsWith(tab.basePath + "/") ||
         pathname === tab.basePath
       ) {
-        if (tab.basePath === "/docs/v1") {
-          const otherTabPaths = docsTabs
-            .filter((t) => t.id !== "Docs")
-            .map((t) => t.basePath);
-          return !otherTabPaths.some(
-            (path) => pathname.startsWith(path + "/") || pathname === path,
-          );
-        }
         return true;
       }
       return false;
