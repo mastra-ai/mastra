@@ -31,3 +31,21 @@ export interface StartWorkflowRunParams {
   /** Optional request context to pass to the workflow */
   requestContext?: Record<string, unknown>;
 }
+
+/**
+ * Parameters for canceling a workflow run.
+ */
+export interface CancelWorkflowRunParams {
+  /** The ID of the workflow */
+  workflowId: string;
+  /** The ID of the run to cancel */
+  runId: string;
+}
+
+/**
+ * Result of canceling a workflow run.
+ */
+export interface CancelWorkflowRunResult {
+  /** Confirmation message */
+  message: string;
+}
