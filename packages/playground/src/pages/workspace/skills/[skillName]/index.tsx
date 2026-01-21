@@ -14,17 +14,24 @@ import {
   useWorkspaceSkillReference,
 } from '@mastra/playground-ui';
 
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName } = useParams<{ skillName: string }>();
+  const [searchParams] = useSearchParams();
   const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
+  const workspaceId = searchParams.get('workspaceId') ?? undefined;
+
+  // Build back link with workspaceId if present
+  const workspaceBackLink = workspaceId
+    ? `/workspace?workspaceId=${encodeURIComponent(workspaceId)}&tab=skills`
+    : '/workspace?tab=skills';
 
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
-  // Fetch skill details
-  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillName);
+  // Fetch skill details - pass workspaceId to fetch from correct workspace
+  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillName, { workspaceId });
 
   // Fetch reference content when viewing
   const { data: referenceData, isLoading: isLoadingReference } = useWorkspaceSkillReference(
@@ -32,6 +39,7 @@ export default function WorkspaceSkillDetailPage() {
     viewingReference ?? '',
     {
       enabled: !!viewingReference,
+      workspaceId,
     },
   );
 
@@ -40,13 +48,13 @@ export default function WorkspaceSkillDetailPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/workspace">
+            <Crumb as={Link} to={workspaceBackLink}>
               <Icon>
                 <Folder className="h-4 w-4" />
               </Icon>
               Workspace
             </Crumb>
-            <Crumb as={Link} to="/workspace">
+            <Crumb as={Link} to={workspaceBackLink}>
               <Icon>
                 <Wand2 className="h-4 w-4" />
               </Icon>
@@ -69,13 +77,13 @@ export default function WorkspaceSkillDetailPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/workspace">
+            <Crumb as={Link} to={workspaceBackLink}>
               <Icon>
                 <Folder className="h-4 w-4" />
               </Icon>
               Workspace
             </Crumb>
-            <Crumb as={Link} to="/workspace">
+            <Crumb as={Link} to={workspaceBackLink}>
               <Icon>
                 <Wand2 className="h-4 w-4" />
               </Icon>
@@ -100,13 +108,13 @@ export default function WorkspaceSkillDetailPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/workspace">
+          <Crumb as={Link} to={workspaceBackLink}>
             <Icon>
               <Folder className="h-4 w-4" />
             </Icon>
             Workspace
           </Crumb>
-          <Crumb as={Link} to="/workspace">
+          <Crumb as={Link} to={workspaceBackLink}>
             <Icon>
               <Wand2 className="h-4 w-4" />
             </Icon>

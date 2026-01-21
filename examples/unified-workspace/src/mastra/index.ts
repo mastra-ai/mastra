@@ -8,6 +8,7 @@ import {
   editorAgent,
   automationAgent,
   scriptRunnerAgent,
+  testAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
 
@@ -20,6 +21,7 @@ export {
   safeWriteWorkspace,
   supervisedSandboxWorkspace,
   commandApprovalWorkspace,
+  testAgentWorkspace,
 } from './workspaces';
 
 /**
@@ -51,6 +53,7 @@ export const mastra = new Mastra({
     editorAgent,
     automationAgent,
     scriptRunnerAgent,
+    testAgent,
   },
   workspace: globalWorkspace,
   storage,

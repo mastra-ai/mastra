@@ -301,3 +301,18 @@ export const fsAllApprovalWorkspace = new Workspace({
     requireFilesystemApproval: 'all',
   },
 });
+
+/**
+ * Test workspace with a different filesystem basePath.
+ * Used to verify the UI shows different files for different workspaces.
+ */
+export const testAgentWorkspace = new Workspace({
+  id: 'test-agent-workspace',
+  name: 'Test Agent Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: join(PROJECT_ROOT, 'agent-files'),
+  }),
+  bm25: true,
+  autoIndexPaths: ['/'],
+  autoInit: true,
+});
