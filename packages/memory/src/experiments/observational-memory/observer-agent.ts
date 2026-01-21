@@ -646,12 +646,13 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
       const timestampStr = timestamp ? ` (${timestamp})` : '';
 
       // Extract text content from the message
+      // IMPORTANT: Check parts FIRST since it contains the full message (including tool calls)
+      // The content.content string is just the text portion
       let content = '';
       if (typeof msg.content === 'string') {
         content = msg.content;
-      } else if (msg.content?.content) {
-        content = msg.content.content;
-      } else if (msg.content?.parts) {
+      } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
+        // Use parts array - this includes tool invocations and results
         content = msg.content.parts
           .map(part => {
             if (part.type === 'text') return part.text;
@@ -662,10 +663,15 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
               }
               return `[Tool Call: ${inv.toolName}]\n${JSON.stringify(inv.args, null, 2)}`;
             }
+            // Skip observation marker parts
+            if (part.type?.startsWith('data-om-observation-')) return '';
             return '';
           })
           .filter(Boolean)
           .join('\n');
+      } else if (msg.content?.content) {
+        // Fallback to text string if no parts
+        content = msg.content.content;
       }
 
       return `**${role}${timestampStr}:**\n${content}`;

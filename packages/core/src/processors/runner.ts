@@ -1024,6 +1024,9 @@ export class ProcessorRunner {
       // Get all system messages to pass to the processor
       const currentSystemMessages = messageList.getAllSystemMessages();
 
+      // Get or create processor state (persists across steps within a request)
+      const processorState = this.getProcessorState(processor.id);
+
       try {
         const result = await processMethod({
           messages: processableMessages,
@@ -1034,6 +1037,7 @@ export class ProcessorRunner {
           text,
           systemMessages: currentSystemMessages,
           steps,
+          state: processorState,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,

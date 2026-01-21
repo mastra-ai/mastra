@@ -1,13 +1,15 @@
 import { Agent, convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
   Processor,
   ProcessInputArgs,
   ProcessInputStepArgs,
   ProcessOutputResultArgs,
+  ProcessOutputStepArgs,
 } from '@mastra/core/processors';
+import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import * as fs from 'fs';
@@ -73,7 +75,17 @@ import {
   validateCompression,
 } from './reflector-agent';
 import { TokenCounter } from './token-counter';
-import type { ObserverConfig, ReflectorConfig, ThresholdRange, ModelSettings, ProviderOptions } from './types';
+import type {
+  ObserverConfig,
+  ReflectorConfig,
+  ThresholdRange,
+  ModelSettings,
+  ProviderOptions,
+  DataOmObservationStartPart,
+  DataOmObservationEndPart,
+  DataOmObservationFailedPart,
+  ObservationMarkerConfig,
+} from './types';
 
 /**
  * Debug logging controlled by OM_DEV_DEBUG environment variable.
@@ -341,7 +353,8 @@ export interface ObservationDebugEvent {
     | 'observation_complete'
     | 'reflection_triggered'
     | 'reflection_complete'
-    | 'tokens_accumulated';
+    | 'tokens_accumulated'
+    | 'step_progress';
   timestamp: Date;
   threadId: string;
   resourceId: string;
@@ -370,6 +383,12 @@ export interface ObservationDebugEvent {
     outputTokens?: number;
     totalTokens?: number;
   };
+  /** Step progress fields (for step_progress events) */
+  stepNumber?: number;
+  finishReason?: string;
+  thresholdPercent?: number;
+  willSave?: boolean;
+  willObserve?: boolean;
 }
 
 /**
@@ -586,6 +605,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /** Only observe messages created after OM is enabled */
   private observeFutureOnly: boolean;
 
+  /** Internal MessageHistory for message persistence */
+  private messageHistory: MessageHistory;
+
   /**
    * In-memory mutex for serializing observation/reflection cycles per resource/thread.
    * Prevents race conditions where two concurrent cycles could both read isObserving=false
@@ -646,7 +668,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.scope = config.scope ?? 'thread';
     this.observerRecognizePatterns = config.observer?.recognizePatterns ?? false;
     this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? false;
-    this.observeFutureOnly = config.observeFutureOnly ?? true;
+    // TODO: observeFutureOnly implementation is broken - it sets lastObservedAt to now on record creation,
+    // causing all existing messages to be skipped. Need to fix or remove this feature entirely.
+    // Also, this should only apply to per-resource scope, not per-thread.
+    this.observeFutureOnly = config.observeFutureOnly ?? false;
 
     // Resolve observer config with defaults
     this.observerConfig = {
@@ -686,6 +711,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     this.tokenCounter = new TokenCounter();
     this.onDebugEvent = config.onDebugEvent;
+
+    // Create internal MessageHistory for message persistence
+    // OM handles message saving itself (in processOutputStep) instead of relying on
+    // the Memory class's MessageHistory processor
+    this.messageHistory = new MessageHistory({ storage: this.storage });
 
     // ASYNC BUFFERING DISABLED - validation not needed
     // this.validateBufferConfig();
@@ -1027,27 +1057,298 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //   ]);
   // }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // DATA-OM-OBSERVATION PART HELPERS (Start/End/Failed markers)
+  // These helpers manage the observation boundary markers within messages.
+  //
+  // Flow:
+  // 1. Before observation: [...messageParts]
+  // 2. Insert start: [...messageParts, start] → stream to UI (loading state)
+  // 3. After success: [...messageParts, start, end] → stream to UI (complete)
+  // 4. After failure: [...messageParts, start, failed]
+  //
+  // For filtering, we look for the last completed observation (start + end pair).
+  // A start without end means observation is in progress.
+  // ════════════════════════════════════════════════════════════════════════════
+
   /**
-   * Get unobserved messages.
-   * With cursor-based loading via lastObservedAt, all messages returned from
-   * loadUnobservedMessages are already unobserved. This method is kept for
-   * compatibility with processOutputResult which receives messages from messageList.
+   * Get current config snapshot for observation markers.
+   */
+  private getObservationMarkerConfig(): ObservationMarkerConfig {
+    return {
+      observationThreshold: this.getMaxThreshold(this.observerConfig.observationThreshold),
+      reflectionThreshold: this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+      scope: this.scope,
+    };
+  }
+
+  /**
+   * Create a start marker for when observation begins.
+   */
+  private createObservationStartMarker(params: {
+    tokensToObserve: number;
+    recordId: string;
+    threadId: string;
+    threadIds: string[];
+  }): DataOmObservationStartPart {
+    return {
+      type: 'data-om-observation-start',
+      data: {
+        startedAt: new Date().toISOString(),
+        tokensToObserve: params.tokensToObserve,
+        recordId: params.recordId,
+        threadId: params.threadId,
+        threadIds: params.threadIds,
+        config: this.getObservationMarkerConfig(),
+      },
+    };
+  }
+
+  /**
+   * Create an end marker for when observation completes successfully.
+   */
+  private createObservationEndMarker(params: {
+    startedAt: string;
+    tokensObserved: number;
+    observationTokens: number;
+    recordId: string;
+    threadId: string;
+  }): DataOmObservationEndPart {
+    const completedAt = new Date().toISOString();
+    const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
+
+    return {
+      type: 'data-om-observation-end',
+      data: {
+        completedAt,
+        durationMs,
+        tokensObserved: params.tokensObserved,
+        observationTokens: params.observationTokens,
+        recordId: params.recordId,
+        threadId: params.threadId,
+      },
+    };
+  }
+
+  /**
+   * Create a failed marker for when observation fails.
+   */
+  private createObservationFailedMarker(params: {
+    startedAt: string;
+    tokensAttempted: number;
+    error: string;
+    recordId: string;
+    threadId: string;
+  }): DataOmObservationFailedPart {
+    const failedAt = new Date().toISOString();
+    const durationMs = new Date(failedAt).getTime() - new Date(params.startedAt).getTime();
+
+    return {
+      type: 'data-om-observation-failed',
+      data: {
+        failedAt,
+        durationMs,
+        tokensAttempted: params.tokensAttempted,
+        error: params.error,
+        recordId: params.recordId,
+        threadId: params.threadId,
+      },
+    };
+  }
+
+  /**
+   * Find the last completed observation boundary in a message's parts.
+   * A completed observation is a start marker followed by an end marker.
+   * 
+   * Returns the index of the END marker (which is the observation boundary),
+   * or -1 if no completed observation is found.
+   */
+  private findLastCompletedObservationBoundary(message: MastraDBMessage): number {
+    const parts = message.content?.parts;
+    if (!parts || !Array.isArray(parts)) return -1;
+
+    // Search from the end to find the most recent end marker
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i] as { type?: string };
+      if (part?.type === 'data-om-observation-end') {
+        // Found an end marker - this is the observation boundary
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Check if a message has an in-progress observation (start without end).
+   */
+  private hasInProgressObservation(message: MastraDBMessage): boolean {
+    const parts = message.content?.parts;
+    if (!parts || !Array.isArray(parts)) return false;
+
+    let lastStartIndex = -1;
+    let lastEndOrFailedIndex = -1;
+
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i] as { type?: string };
+      if (part?.type === 'data-om-observation-start' && lastStartIndex === -1) {
+        lastStartIndex = i;
+      }
+      if ((part?.type === 'data-om-observation-end' || part?.type === 'data-om-observation-failed') && lastEndOrFailedIndex === -1) {
+        lastEndOrFailedIndex = i;
+      }
+    }
+
+    // In progress if we have a start that comes after any end/failed
+    return lastStartIndex !== -1 && lastStartIndex > lastEndOrFailedIndex;
+  }
+
+  /**
+   * Insert an observation marker into a message.
+   * The marker is appended directly to the message's parts array (mutating in place).
+   * Storage will be updated when persistMessages() is called.
+   */
+  private insertObservationMarker(
+    message: MastraDBMessage,
+    marker: DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart,
+  ): void {
+    if (!message.id) {
+      omWarn(`[OM] Cannot insert observation marker: message has no ID`);
+      return;
+    }
+
+    // Mutate the message's parts array directly - this updates the in-memory messageList
+    // Storage will be updated when persistMessages() is called
+    if (!message.content?.parts) {
+      omWarn(`[OM] Message ${message.id.slice(-8)} has no content.parts, cannot insert marker`);
+      return;
+    }
+    message.content.parts.push(marker as any);
+
+    omDebug(`[OM] Inserted ${marker.type} marker into message ${message.id.slice(-8)}`);
+  }
+
+  /**
+   * Get unobserved parts from a message.
+   * If the message has a completed observation (start + end), only return parts after the end.
+   * If observation is in progress (start without end), include parts before the start.
+   * Otherwise, return all parts.
+   */
+  private getUnobservedParts(message: MastraDBMessage): MastraDBMessage['content']['parts'] {
+    const parts = message.content?.parts;
+    if (!parts || !Array.isArray(parts)) return [];
+
+    const endMarkerIndex = this.findLastCompletedObservationBoundary(message);
+    if (endMarkerIndex === -1) {
+      // No completed observation - all parts are unobserved
+      // (This includes the case where observation is in progress)
+      return parts.filter(p => {
+        const part = p as { type?: string };
+        // Exclude start markers that are in progress
+        return part?.type !== 'data-om-observation-start';
+      });
+    }
+
+    // Return only parts after the end marker (excluding start/end/failed markers)
+    return parts.slice(endMarkerIndex + 1).filter(p => {
+      const part = p as { type?: string };
+      return !part?.type?.startsWith('data-om-observation-');
+    });
+  }
+
+  /**
+   * Check if a message has any unobserved parts.
+   */
+  private hasUnobservedParts(message: MastraDBMessage): boolean {
+    return this.getUnobservedParts(message).length > 0;
+  }
+
+  /**
+   * Create a virtual message containing only the unobserved parts.
+   * This is used for token counting and observation.
+   */
+  private createUnobservedMessage(message: MastraDBMessage): MastraDBMessage | null {
+    const unobservedParts = this.getUnobservedParts(message);
+    if (unobservedParts.length === 0) return null;
+
+    return {
+      ...message,
+      content: {
+        ...message.content,
+        parts: unobservedParts,
+      },
+    };
+  }
+
+  /**
+   * Get unobserved messages with part-level filtering.
+   * 
+   * This method uses data-om-observation-end markers to filter at the part level:
+   * 1. For messages WITH a completed observation: only return parts AFTER the end marker
+   * 2. For messages WITHOUT completed observation: check timestamp against lastObservedAt
+   * 
+   * This handles the case where a single message accumulates many parts
+   * (like tool calls) during an agentic loop - we only observe the new parts.
    */
   private getUnobservedMessages(allMessages: MastraDBMessage[], record: ObservationalMemoryRecord): MastraDBMessage[] {
-    // With cursor-based loading, messages after lastObservedAt are unobserved.
-    // Filter by createdAt timestamp instead of message IDs.
     const lastObservedAt = record.lastObservedAt;
+    
     if (!lastObservedAt) {
       // No observations yet - all messages are unobserved
+      omDebug(`[OM getUnobservedMessages] No lastObservedAt, returning all ${allMessages.length} messages`);
       return allMessages;
     }
 
-    return allMessages.filter(msg => {
-      if (!msg.createdAt) return true; // Include messages without timestamps
-      const msgDate = new Date(msg.createdAt);
-      // Use > (exclusive) because lastObservedAt is the timestamp of the last observed message
-      return msgDate > lastObservedAt;
-    });
+    const result: MastraDBMessage[] = [];
+    let messagesWithCompletedObs = 0;
+    let messagesWithUnobservedParts = 0;
+    let messagesFullyObserved = 0;
+    let messagesWithoutObs = 0;
+    let messagesInProgress = 0;
+
+    for (const msg of allMessages) {
+      // Check if this message has a completed observation
+      const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
+      const inProgress = this.hasInProgressObservation(msg);
+      
+      if (inProgress) {
+        messagesInProgress++;
+        // Include the full message for in-progress observations
+        // The Observer is currently working on this
+        result.push(msg);
+      } else if (endMarkerIndex !== -1) {
+        // Message has a completed observation - only include parts after it
+        messagesWithCompletedObs++;
+        const virtualMsg = this.createUnobservedMessage(msg);
+        if (virtualMsg) {
+          result.push(virtualMsg);
+          messagesWithUnobservedParts++;
+        } else {
+          messagesFullyObserved++;
+        }
+      } else {
+        // No observation markers - fall back to timestamp-based filtering
+        messagesWithoutObs++;
+        if (!msg.createdAt) {
+          // Messages without timestamps are always included
+          result.push(msg);
+        } else {
+          const msgDate = new Date(msg.createdAt);
+          if (msgDate > lastObservedAt) {
+            result.push(msg);
+          }
+        }
+      }
+    }
+
+    omDebug(
+      `[OM getUnobservedMessages] Input: ${allMessages.length}, ` +
+        `Completed: ${messagesWithCompletedObs} (${messagesWithUnobservedParts} with unobserved parts, ${messagesFullyObserved} fully observed), ` +
+        `InProgress: ${messagesInProgress}, ` +
+        `NoMarkers: ${messagesWithoutObs}, ` +
+        `Output: ${result.length} unobserved`,
+    );
+
+    return result;
   }
 
   /**
@@ -1593,10 +1894,50 @@ ${suggestedResponse}
     const { threadId, resourceId } = context;
     omDebug(`[OM processInputStep] Thread: ${threadId}, Resource: ${resourceId}`);
 
+    // Always fetch fresh record to get latest lastObservedAt (may have been updated by mid-loop observation)
     const record = await this.getOrCreateRecord(threadId, resourceId);
     omDebug(
       `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, lastObservedAt: ${record.lastObservedAt?.toISOString() ?? 'never'}`,
     );
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FILTER OUT OBSERVED MESSAGES from messageList
+    // After mid-loop observation, we track which messages were observed and filter
+    // them out on EVERY step (since Mastra re-populates the messageList each step)
+    // ════════════════════════════════════════════════════════════════════════
+
+    // If observation was just triggered, identify which messages were observed
+    if (state.observationTriggeredThisLoop && record.lastObservedAt) {
+      const lastObservedAt = record.lastObservedAt;
+      const allMessages = messageList.get.all.db();
+      const observedIds = new Set<string>(state.observedMessageIds as string[] | undefined);
+
+      for (const msg of allMessages) {
+        if (msg.id && msg.createdAt) {
+          const msgDate = new Date(msg.createdAt);
+          if (msgDate <= lastObservedAt) {
+            observedIds.add(msg.id);
+          }
+        }
+      }
+
+      state.observedMessageIds = Array.from(observedIds);
+      state.observationTriggeredThisLoop = false; // Reset flag, but keep the IDs
+
+      omDebug(`[OM processInputStep] Tracked ${observedIds.size} observed message IDs for filtering`);
+    }
+
+    // Filter out observed messages on EVERY step (since messageList is re-populated)
+    const observedMessageIds = state.observedMessageIds as string[] | undefined;
+    if (observedMessageIds && observedMessageIds.length > 0) {
+      const allMessages = messageList.get.all.db();
+      const idsToRemove = allMessages.filter(m => m.id && observedMessageIds.includes(m.id)).map(m => m.id!);
+
+      if (idsToRemove.length > 0) {
+        omDebug(`[OM processInputStep] Filtering out ${idsToRemove.length} observed messages from context`);
+        messageList.removeByIds(idsToRemove);
+      }
+    }
 
     // Historical message loading should only happen once per request (on step 0)
     // Use state to track this so we don't re-load on subsequent steps
@@ -1680,11 +2021,103 @@ ${suggestedResponse}
         omDebug(`[OM processInputStep] Resource scope enabled`);
       }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
+      
+      // Add continuation reminder as a user message right after observations
+      // This helps with prompt caching (stable prefix) and tells the agent how to use observations
+      // Use Date(0) to ensure this is always sorted first (right after system prompt)
+      const continuationMessage: MastraDBMessage = {
+        id: `om-continuation`,
+        role: 'user',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: `<system-reminder>This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
+
+IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
+
+NOTE: Any messages following this system reminder are newer than your memories.
+</system-reminder>`,
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+      messageList.add(continuationMessage, 'memory');
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // APPLY PART-LEVEL FILTERING using data-om-observation markers
+    // The observation end marker tells us "everything before this was observed"
+    // We need to:
+    // 1. Find the message with the last observation end marker
+    // 2. Remove all messages BEFORE that message (they were fully observed)
+    // 3. For the message WITH the marker, filter to only unobserved parts
+    // 4. Keep all messages AFTER the marker message unchanged
+    // ════════════════════════════════════════════════════════════════════════
+    const allMessages = messageList.get.all.db();
+    let filteredCount = 0;
+    let removedCount = 0;
+
+    // Find the message with the last observation end marker and its index
+    let markerMessageIndex = -1;
+    let markerMessage: MastraDBMessage | null = null;
+    
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const msg = allMessages[i];
+      if (!msg) continue;
+      const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
+      if (endMarkerIndex !== -1) {
+        markerMessageIndex = i;
+        markerMessage = msg;
+        break;
+      }
+    }
+
+    if (markerMessage && markerMessageIndex !== -1) {
+      // Remove all messages BEFORE the marker message (they were fully observed)
+      // BUT skip the om-continuation message - it's a synthetic message we just added
+      const messagesToRemove: string[] = [];
+      for (let i = 0; i < markerMessageIndex; i++) {
+        const msg = allMessages[i];
+        if (msg?.id && msg.id !== 'om-continuation') {
+          messagesToRemove.push(msg.id);
+        }
+      }
+      
+      if (messagesToRemove.length > 0) {
+        messageList.removeByIds(messagesToRemove);
+        removedCount = messagesToRemove.length;
+        omDebug(`[OM processInputStep] Removed ${removedCount} fully observed messages before marker`);
+      }
+
+      // For the marker message itself, filter to only unobserved parts
+      const unobservedParts = this.getUnobservedParts(markerMessage);
+      
+      if (unobservedParts.length === 0) {
+        // All parts observed - remove this message too
+        if (markerMessage.id) {
+          messageList.removeByIds([markerMessage.id]);
+          removedCount++;
+          omDebug(`[OM processInputStep] Removed marker message (all parts observed)`);
+        }
+      } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
+        // Some parts observed - update to only contain unobserved parts
+        markerMessage.content.parts = unobservedParts;
+        filteredCount++;
+        omDebug(`[OM processInputStep] Filtered marker message to ${unobservedParts.length} unobserved parts`);
+      }
+    }
+
+    if (filteredCount > 0 || removedCount > 0) {
+      omDebug(`[OM processInputStep] Part-level filtering complete: ${filteredCount} messages filtered, ${removedCount} messages removed`);
     }
 
     // Log what agent will actually see
-    const finalMessages = messageList.get.all.db();
-    omDebug(`[OM processInputStep] Agent will see: observations + ${finalMessages.length} unobserved messages`);
+    omDebug(`[OM processInputStep] Agent will see: observations + ${messageList.get.all.db().length} messages`);
 
     return messageList;
   }
@@ -1946,6 +2379,160 @@ ${formattedMessages}
   }
 
   /**
+   * Process each output step - save messages incrementally and emit progress events.
+   * This runs after each LLM response in the agentic loop, before tool execution.
+   *
+   * Messages are saved:
+   * - When approaching the observation threshold (so observations can access them)
+   * - At the final step (finishReason === 'stop') to ensure no messages are lost
+   *
+   * This replaces MessageHistory's message saving when OM is enabled.
+   */
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, requestContext, finishReason, stepNumber, state } = args;
+
+    const context = this.getThreadContext(requestContext, messageList);
+    if (!context) {
+      return messageList;
+    }
+
+    const { threadId, resourceId } = context;
+
+    // Check if readOnly from memoryConfig
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    const readOnly = memoryContext?.memoryConfig?.readOnly;
+
+    if (readOnly) {
+      omDebug(`[OM processOutputStep] Read-only mode, skipping message save`);
+      return messageList;
+    }
+
+    // Get current record to check token counts
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+
+    // Calculate current token state
+    const allMessages = messageList.get.all.db();
+    const unobservedMessages = this.getUnobservedMessages(allMessages, record);
+    const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
+    const currentObservationTokens = record.observationTokenCount ?? 0;
+    const pendingTokens = record.pendingMessageTokens ?? 0;
+    const totalPendingTokens = pendingTokens + currentSessionTokens;
+
+    // 🔍 DEBUG: Log message counts and timestamps for debugging
+    const lastObsTime = record.lastObservedAt ? record.lastObservedAt.toISOString() : 'none';
+    const msgTimestamps = allMessages.slice(-5).map(m => ({
+      id: m.id?.slice(-8),
+      role: m.role,
+      createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : 'none',
+    }));
+    omDebug(
+      `[OM processOutputStep DEBUG] allMessages: ${allMessages.length}, unobserved: ${unobservedMessages.length}, ` +
+        `lastObservedAt: ${lastObsTime}, pendingFromRecord: ${pendingTokens}, currentSession: ${currentSessionTokens}`,
+    );
+    omDebug(`[OM processOutputStep DEBUG] Last 5 messages: ${JSON.stringify(msgTimestamps)}`);
+
+    const threshold = this.calculateDynamicThreshold(
+      this.observerConfig.observationThreshold,
+      currentObservationTokens,
+      this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+    );
+
+    // Determine if this is the final step
+    const isFinalStep = finishReason === 'stop';
+
+    // Determine if we should save messages now
+    // Save when: approaching threshold (80% of threshold) OR final step
+    const approachingThreshold = totalPendingTokens >= threshold * 0.8;
+    const shouldSaveNow = isFinalStep || approachingThreshold;
+
+    omDebug(
+      `[OM processOutputStep] Step ${stepNumber}, finishReason: ${finishReason}, ` +
+        `tokens: ${totalPendingTokens}/${threshold}, approaching: ${approachingThreshold}, save: ${shouldSaveNow}`,
+    );
+
+    // Emit progress event for UI feedback
+    this.emitDebugEvent({
+      type: 'step_progress',
+      timestamp: new Date(),
+      threadId,
+      resourceId: resourceId ?? '',
+      stepNumber,
+      finishReason: finishReason ?? 'unknown',
+      pendingTokens: totalPendingTokens,
+      threshold,
+      thresholdPercent: Math.round((totalPendingTokens / threshold) * 100),
+      willSave: shouldSaveNow,
+      willObserve: totalPendingTokens >= threshold,
+    });
+
+    if (shouldSaveNow) {
+      // Get messages to save (new input + response from this step)
+      const newInput = messageList.get.input.db();
+      const newOutput = messageList.get.response.db();
+      const messagesToSave = [...newInput, ...newOutput];
+
+      if (messagesToSave.length > 0) {
+        // Track which messages we've already saved to avoid duplicates
+        const savedMessageIds = (state.savedMessageIds as Set<string>) ?? new Set<string>();
+
+        // Only save messages we haven't saved yet
+        const unsavedMessages = messagesToSave.filter(m => m.id && !savedMessageIds.has(m.id));
+
+        if (unsavedMessages.length > 0) {
+          omDebug(`[OM processOutputStep] Saving ${unsavedMessages.length} messages via MessageHistory`);
+
+          // Delegate to MessageHistory for filtering and persistence
+          await this.messageHistory.persistMessages({
+            messages: unsavedMessages,
+            threadId,
+            resourceId,
+          });
+
+          // Track saved message IDs
+          for (const m of unsavedMessages) {
+            if (m.id) {
+              savedMessageIds.add(m.id);
+            }
+          }
+          state.savedMessageIds = savedMessageIds;
+        }
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TRIGGER OBSERVATION MID-LOOP if threshold exceeded
+    // This prevents context from growing unbounded during long agentic loops
+    // ════════════════════════════════════════════════════════════════════════
+    const shouldObserveNow = totalPendingTokens >= threshold;
+    if (shouldObserveNow && !state.observationTriggeredThisLoop) {
+      omDebug(`[OM processOutputStep] Threshold exceeded (${totalPendingTokens} >= ${threshold}), triggering mid-loop observation`);
+
+      // Mark that we've triggered observation this loop to avoid re-triggering
+      state.observationTriggeredThisLoop = true;
+
+      const lockKey = this.getLockKey(threadId, resourceId);
+      await this.withLock(lockKey, async () => {
+        // Re-fetch record inside lock to get latest state
+        const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+
+        // Get all messages including ones just saved
+        const allMessages = messageList.get.all.db();
+        const freshUnobservedMessages = this.getUnobservedMessages(allMessages, freshRecord);
+
+        if (freshUnobservedMessages.length > 0) {
+          if (this.scope === 'resource' && resourceId) {
+            await this.doResourceScopedObservation(freshRecord, threadId, resourceId, freshUnobservedMessages);
+          } else {
+            await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages);
+          }
+        }
+      });
+    }
+
+    return messageList;
+  }
+
+  /**
    * Process output - track messages and trigger Observer/Reflector.
    * Supports async buffering when bufferEvery is configured.
    */
@@ -2089,6 +2676,21 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setObservingFlag(record.id, true);
 
+    // Insert START marker before observation
+    const tokensToObserve = this.tokenCounter.countMessages(unobservedMessages);
+    const lastMessage = unobservedMessages[unobservedMessages.length - 1];
+    const startedAt = new Date().toISOString();
+    
+    if (lastMessage?.id) {
+      const startMarker = this.createObservationStartMarker({
+        tokensToObserve,
+        recordId: record.id,
+        threadId,
+        threadIds: [threadId],
+      });
+      this.insertObservationMarker(lastMessage, startMarker);
+    }
+
     try {
       // Re-check: reload record to see if another request already observed
       const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -2138,6 +2740,11 @@ ${formattedMessages}
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
 
+      omDebug(
+        `[OM doSynchronousObservation] Setting lastObservedAt to ${lastObservedAt.toISOString()} ` +
+          `(from ${unobservedMessages.length} messages, resetting pendingMessageTokens)`,
+      );
+
       // Pass patterns to storage - they'll be merged with existing patterns on the OM record
       await this.storage.updateActiveObservations({
         id: record.id,
@@ -2166,6 +2773,21 @@ ${formattedMessages}
 
       omDebug(`[OM] Observations stored successfully`);
 
+      // ════════════════════════════════════════════════════════════════════════
+      // INSERT END MARKER after successful observation
+      // This marks the boundary between observed and unobserved parts
+      // ════════════════════════════════════════════════════════════════════════
+      if (lastMessage?.id) {
+        const endMarker = this.createObservationEndMarker({
+          startedAt,
+          tokensObserved: tokensToObserve,
+          observationTokens: totalTokenCount,
+          recordId: record.id,
+          threadId,
+        });
+        this.insertObservationMarker(lastMessage, endMarker);
+      }
+
       // Emit debug event for observation complete
       this.emitDebugEvent({
         type: 'observation_complete',
@@ -2184,6 +2806,19 @@ ${formattedMessages}
 
       // Check for reflection (pass threadId so patterns can be cleared)
       await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId);
+    } catch (error) {
+      // Insert FAILED marker on error
+      if (lastMessage?.id) {
+        const failedMarker = this.createObservationFailedMarker({
+          startedAt,
+          tokensAttempted: tokensToObserve,
+          error: error instanceof Error ? error.message : String(error),
+          recordId: record.id,
+          threadId,
+        });
+        this.insertObservationMarker(lastMessage, failedMarker);
+      }
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }
@@ -2390,6 +3025,11 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setObservingFlag(record.id, true);
 
+    // Declare variables outside try block so they're accessible in catch
+    const threadsWithMessages = new Map<string, MastraDBMessage[]>();
+    const threadTokensToObserve = new Map<string, number>();
+    let observationStartedAt = '';
+
     try {
       // Re-check: reload record to see if another request already observed
       const freshRecord = await this.storage.getObservationalMemory(null, resourceId);
@@ -2409,7 +3049,6 @@ ${formattedMessages}
       // ════════════════════════════════════════════════════════════
 
       // Filter to only threads with messages
-      const threadsWithMessages = new Map<string, MastraDBMessage[]>();
       for (const threadId of threadOrder) {
         const msgs = messagesByThread.get(threadId);
         if (msgs && msgs.length > 0) {
@@ -2433,6 +3072,29 @@ ${formattedMessages}
       });
 
       omDebug(`[OM] Starting batched observation of ${threadsWithMessages.size} threads`);
+
+      // ════════════════════════════════════════════════════════════════════════
+      // INSERT START MARKERS before observation
+      // Each thread gets its own start marker in its last message
+      // ════════════════════════════════════════════════════════════════════════
+      observationStartedAt = new Date().toISOString();
+      const allThreadIds = Array.from(threadsWithMessages.keys());
+
+      for (const [threadId, msgs] of threadsWithMessages) {
+        const lastMessage = msgs[msgs.length - 1];
+        const tokensToObserve = this.tokenCounter.countMessages(msgs);
+        threadTokensToObserve.set(threadId, tokensToObserve);
+        
+        if (lastMessage?.id) {
+          const startMarker = this.createObservationStartMarker({
+            tokensToObserve,
+            recordId: record.id,
+            threadId,
+            threadIds: allThreadIds,
+          });
+          this.insertObservationMarker(lastMessage, startMarker);
+        }
+      }
 
       // ════════════════════════════════════════════════════════════
       // PARALLEL BATCHING: Chunk threads into batches and process in parallel
@@ -2702,6 +3364,27 @@ ${formattedMessages}
         patterns: Object.keys(allPatterns).length > 0 ? allPatterns : undefined,
       });
 
+      // ════════════════════════════════════════════════════════════════════════
+      // INSERT END MARKERS into each thread's last message
+      // This completes the observation boundary (start markers were inserted above)
+      // ════════════════════════════════════════════════════════════════════════
+      for (const obsResult of observationResults) {
+        if (!obsResult) continue;
+        const { threadId, threadMessages } = obsResult;
+        const lastMessage = threadMessages[threadMessages.length - 1];
+        if (lastMessage?.id) {
+          const tokensObserved = threadTokensToObserve.get(threadId) ?? this.tokenCounter.countMessages(threadMessages);
+          const endMarker = this.createObservationEndMarker({
+            startedAt: observationStartedAt,
+            tokensObserved,
+            observationTokens: totalTokenCount,
+            recordId: record.id,
+            threadId,
+          });
+          this.insertObservationMarker(lastMessage, endMarker);
+        }
+      }
+
       omDebug(`[OM] Resource-scoped observation complete`);
 
       writeDebugEntry('doResourceScopedObservation:before_maybeReflect', {
@@ -2716,6 +3399,23 @@ ${formattedMessages}
 
       // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
       await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId);
+    } catch (error) {
+      // Insert FAILED markers into each thread's last message on error
+      for (const [threadId, msgs] of threadsWithMessages) {
+        const lastMessage = msgs[msgs.length - 1];
+        if (lastMessage?.id) {
+          const tokensAttempted = threadTokensToObserve.get(threadId) ?? 0;
+          const failedMarker = this.createObservationFailedMarker({
+            startedAt: observationStartedAt,
+            tokensAttempted,
+            error: error instanceof Error ? error.message : String(error),
+            recordId: record.id,
+            threadId,
+          });
+          this.insertObservationMarker(lastMessage, failedMarker);
+        }
+      }
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }

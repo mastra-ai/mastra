@@ -206,7 +206,34 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    const filtered = this.filterMessagesForPersistence(messagesToSave);
+    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+
+    return messageList;
+  }
+
+  /**
+   * Persist messages to storage, filtering out partial tool calls and working memory tags.
+   * Also ensures the thread exists (creates if needed).
+   *
+   * This method can be called externally by other processors (e.g., ObservationalMemory)
+   * that need to save messages incrementally.
+   */
+  async persistMessages(args: {
+    messages: MastraDBMessage[];
+    threadId: string;
+    resourceId?: string;
+  }): Promise<void> {
+    const { messages, threadId, resourceId } = args;
+
+    if (messages.length === 0) {
+      return;
+    }
+
+    const filtered = this.filterMessagesForPersistence(messages);
+
+    if (filtered.length === 0) {
+      return;
+    }
 
     // Persist messages directly to storage
     await this.storage.saveMessages({ messages: filtered });
@@ -221,7 +248,6 @@ export class MessageHistory implements Processor {
       });
     } else {
       // Auto-create thread if it doesn't exist
-      const resourceId = context.resourceId;
       await this.storage.saveThread({
         thread: {
           id: threadId,
@@ -233,7 +259,5 @@ export class MessageHistory implements Processor {
         },
       });
     }
-
-    return messageList;
   }
 }

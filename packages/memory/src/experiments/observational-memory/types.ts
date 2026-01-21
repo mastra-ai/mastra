@@ -203,4 +203,134 @@ export interface ReflectorResult {
   suggestedContinuation?: string;
 }
 
+/**
+ * Config snapshot included in observation markers for debugging.
+ */
+export interface ObservationMarkerConfig {
+  observationThreshold: number;
+  reflectionThreshold: number;
+  scope: 'thread' | 'resource';
+}
+
+/**
+ * Start marker inserted when observation begins.
+ * Everything BEFORE this marker will be observed.
+ * 
+ * If this marker exists without a corresponding `end` or `failed` marker,
+ * observation is in progress.
+ */
+export interface DataOmObservationStartPart {
+  type: 'data-om-observation-start';
+  data: {
+    /** When observation started */
+    startedAt: string;
+
+    /** Tokens being observed in this batch */
+    tokensToObserve: number;
+
+    /** The OM record ID this observation belongs to */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** All thread IDs being observed in this batch (for resource-scoped) */
+    threadIds: string[];
+
+    /** Snapshot of config at observation time */
+    config: ObservationMarkerConfig;
+  };
+}
+
+/**
+ * End marker inserted when observation completes successfully.
+ * Parts BEFORE the corresponding `start` marker have been observed.
+ */
+export interface DataOmObservationEndPart {
+  type: 'data-om-observation-end';
+  data: {
+    /** When observation completed */
+    completedAt: string;
+
+    /** Duration in milliseconds */
+    durationMs: number;
+
+    /** Total tokens that were observed */
+    tokensObserved: number;
+
+    /** Resulting observation tokens after compression */
+    observationTokens: number;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+  };
+}
+
+/**
+ * Failed marker inserted when observation fails.
+ * Allows for retry logic and debugging.
+ */
+export interface DataOmObservationFailedPart {
+  type: 'data-om-observation-failed';
+  data: {
+    /** When observation failed */
+    failedAt: string;
+
+    /** Duration until failure in milliseconds */
+    durationMs: number;
+
+    /** Tokens that were attempted to observe */
+    tokensAttempted: number;
+
+    /** Error message */
+    error: string;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+  };
+}
+
+/**
+ * Union of all observation marker types.
+ */
+export type DataOmObservationPart =
+  | DataOmObservationStartPart
+  | DataOmObservationEndPart
+  | DataOmObservationFailedPart;
+
+/**
+ * @deprecated Use DataOmObservationStartPart and DataOmObservationEndPart instead.
+ * Kept for backwards compatibility during migration.
+ */
+export interface DataOmObservedPart {
+  type: 'data-om-observed';
+  data: {
+    /** When this observation occurred */
+    observedAt: string;
+
+    /** Total tokens observed across all threads in this batch */
+    tokensObserved: number;
+
+    /** Resulting observation tokens after compression */
+    observationTokens: number;
+
+    /** The OM record ID this observation belongs to */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** All thread IDs that were observed in this batch (for resource-scoped) */
+    threadIds: string[];
+
+    /** Snapshot of config at observation time (for debugging) */
+    config?: ObservationMarkerConfig;
+  };
+}
 

@@ -3908,7 +3908,7 @@ describe('observeFutureOnly', () => {
       },
     });
 
-    expect((om as any).observeFutureOnly).toBe(true);
+    expect((om as any).observeFutureOnly).toBe(false);
   });
 
   it('should set lastObservedAt to now when observeFutureOnly is true and record is created', async () => {

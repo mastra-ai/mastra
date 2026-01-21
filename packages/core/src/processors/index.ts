@@ -199,6 +199,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
+  /** Mutable state object that persists across steps */
+  state: Record<string, unknown>;
 }
 
 /**
