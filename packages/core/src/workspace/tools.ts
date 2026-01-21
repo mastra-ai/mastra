@@ -26,7 +26,7 @@ export function createWorkspaceTools(workspace: Workspace) {
   const tools: Record<string, any> = {};
   const safetyConfig = workspace.getSafetyConfig();
   const isReadOnly = safetyConfig?.readOnly ?? false;
-  const sandboxApproval = safetyConfig?.requireSandboxApproval ?? 'none';
+  const sandboxApproval = safetyConfig?.requireSandboxApproval ?? 'all';
   const fsApproval = safetyConfig?.requireFilesystemApproval ?? 'none';
 
   // Only add filesystem tools if filesystem is available

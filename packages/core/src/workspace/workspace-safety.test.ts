@@ -421,7 +421,7 @@ describe('Workspace Safety Features', () => {
       await workspace.destroy();
     });
 
-    it('should default to no approval when no safety config', async () => {
+    it('should default to requiring approval when no safety config', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
@@ -430,9 +430,10 @@ describe('Workspace Safety Features', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools.workspace_execute_code.requireApproval).toBe(false);
-      expect(tools.workspace_execute_command.requireApproval).toBe(false);
-      expect(tools.workspace_install_package.requireApproval).toBe(false);
+      // Default is now 'all' - all sandbox tools require approval
+      expect(tools.workspace_execute_code.requireApproval).toBe(true);
+      expect(tools.workspace_execute_command.requireApproval).toBe(true);
+      expect(tools.workspace_install_package.requireApproval).toBe(true);
 
       await workspace.destroy();
     });

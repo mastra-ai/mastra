@@ -236,13 +236,19 @@ describe('Workspace', () => {
     let workspace: Workspace;
 
     beforeEach(() => {
-      workspace = new Workspace({ filesystem: mockFs });
+      workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
     });
 
     it('should read file from filesystem', async () => {
       const files = new Map<string, string>([['/test.txt', 'Hello World']]);
       mockFs = createMockFilesystem(files);
-      workspace = new Workspace({ filesystem: mockFs });
+      workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const content = await workspace.readFile('/test.txt');
       expect(content).toBe('Hello World');
@@ -257,7 +263,10 @@ describe('Workspace', () => {
     it('should list directory contents', async () => {
       const files = new Map<string, string>([['/dir/file.txt', 'content']]);
       mockFs = createMockFilesystem(files);
-      workspace = new Workspace({ filesystem: mockFs });
+      workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       await workspace.readdir('/dir');
       expect(mockFs.readdir).toHaveBeenCalledWith('/dir', undefined);
@@ -266,7 +275,10 @@ describe('Workspace', () => {
     it('should check if path exists', async () => {
       const files = new Map<string, string>([['/exists.txt', 'content']]);
       mockFs = createMockFilesystem(files);
-      workspace = new Workspace({ filesystem: mockFs });
+      workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const exists = await workspace.exists('/exists.txt');
       expect(exists).toBe(true);
@@ -803,6 +815,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem: mockFs,
         sandbox: mockSandbox,
+        safety: { requireReadBeforeWrite: false },
       });
 
       const result = await workspace.syncToSandbox(['/app.py']);
@@ -819,6 +832,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem: mockFs,
         sandbox: mockSandbox,
+        safety: { requireReadBeforeWrite: false },
       });
 
       const result = await workspace.syncFromSandbox();
@@ -828,7 +842,10 @@ Line 3 conclusion`;
     });
 
     it('should throw when sync called without both fs and sandbox', async () => {
-      const fsOnly = new Workspace({ filesystem: mockFs });
+      const fsOnly = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       await expect(fsOnly.syncToSandbox()).rejects.toThrow('Both filesystem and sandbox are required');
     });
@@ -845,7 +862,10 @@ Line 3 conclusion`;
       ]);
       mockFs = createMockFilesystem(files);
 
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
       const snapshot = await workspace.snapshot({ name: 'my-snapshot' });
 
       expect(snapshot.name).toBe('my-snapshot');
@@ -858,7 +878,10 @@ Line 3 conclusion`;
       const files = new Map<string, string>();
       mockFs = createMockFilesystem(files);
 
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const snapshot = {
         id: 'snap-1',
@@ -879,7 +902,10 @@ Line 3 conclusion`;
       const files = new Map<string, string>([['/existing.txt', 'existing']]);
       mockFs = createMockFilesystem(files);
 
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const snapshot = {
         id: 'snap-1',
@@ -904,7 +930,10 @@ Line 3 conclusion`;
   // ===========================================================================
   describe('state storage', () => {
     it('should have state when filesystem is available', () => {
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
       expect(workspace.state).toBeDefined();
     });
 
@@ -914,7 +943,10 @@ Line 3 conclusion`;
     });
 
     it('should set and get state values', async () => {
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       await workspace.state!.set('myKey', { value: 42 });
       const result = await workspace.state!.get<{ value: number }>('myKey');
@@ -923,7 +955,10 @@ Line 3 conclusion`;
     });
 
     it('should return null for non-existent keys', async () => {
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const result = await workspace.state!.get('nonExistent');
       expect(result).toBeNull();
@@ -932,7 +967,10 @@ Line 3 conclusion`;
     it('should check if key exists', async () => {
       const files = new Map<string, string>([['/.state/myKey.json', '{"value":1}']]);
       mockFs = createMockFilesystem(files);
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const exists = await workspace.state!.has('myKey');
       expect(exists).toBe(true);
@@ -941,7 +979,10 @@ Line 3 conclusion`;
     it('should delete state value', async () => {
       const files = new Map<string, string>([['/.state/myKey.json', '{"value":1}']]);
       mockFs = createMockFilesystem(files);
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const deleted = await workspace.state!.delete('myKey');
       expect(deleted).toBe(true);
@@ -954,7 +995,10 @@ Line 3 conclusion`;
         ['/.state/key2.json', '{}'],
       ]);
       mockFs = createMockFilesystem(files);
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const keys = await workspace.state!.keys();
       expect(keys).toContain('key1');
@@ -982,7 +1026,10 @@ Line 3 conclusion`;
     });
 
     it('should return info without sandbox when not configured', async () => {
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const info = await workspace.getInfo();
 
@@ -1049,7 +1096,10 @@ Line 3 conclusion`;
     });
 
     it('should return filesystem-only when no sandbox configured', () => {
-      const workspace = new Workspace({ filesystem: mockFs });
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
 
       const context = workspace.getPathContext();
 

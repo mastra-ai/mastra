@@ -180,7 +180,7 @@ export interface WorkspaceSafetyConfig {
    *
    * New files (that don't exist yet) can be written without reading.
    *
-   * @default false
+   * @default true
    */
   requireReadBeforeWrite?: boolean;
 
@@ -188,9 +188,9 @@ export interface WorkspaceSafetyConfig {
    * Require approval for sandbox code/command execution.
    * - 'all': Require approval for all sandbox operations (code, commands, package installs)
    * - 'commands': Require approval only for executeCommand and installPackage (not executeCode)
-   * - 'none': No approval required (default)
+   * - 'none': No approval required
    *
-   * @default 'none'
+   * @default 'all'
    */
   requireSandboxApproval?: 'all' | 'commands' | 'none';
 
@@ -389,7 +389,7 @@ export class Workspace {
 
     // Initialize safety features
     this._readOnly = config.safety?.readOnly ?? false;
-    this._requireReadBeforeWrite = config.safety?.requireReadBeforeWrite ?? false;
+    this._requireReadBeforeWrite = config.safety?.requireReadBeforeWrite ?? true;
     if (this._requireReadBeforeWrite) {
       this._readTracker = new InMemoryFileReadTracker();
     }
