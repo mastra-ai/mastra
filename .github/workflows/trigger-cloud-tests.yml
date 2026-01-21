@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - 0.x
+      - ci/trigger-cloud-tests-on-stable-release
 
 jobs:
   trigger:
