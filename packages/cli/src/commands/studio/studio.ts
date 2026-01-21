@@ -72,7 +72,8 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
     .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
     .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
-    .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '');
+    .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', String(process.env.MASTRA_TELEMETRY_DISABLED) || '');
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;
