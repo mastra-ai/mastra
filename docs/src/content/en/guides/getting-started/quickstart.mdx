@@ -13,11 +13,11 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt
 
-If you need more control over the setup, see the [manual installation guide](/docs/v1/getting-started/manual-install). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
+If you need more control over the setup, see the [manual installation guide](/docs/getting-started/manual-install). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+* You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 
 ## Initialize Mastra
 
@@ -29,35 +29,35 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 <TabItem value="npm" label="npm">
 
 ```bash
-npm create mastra@beta
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash
-pnpm create mastra@beta
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash
-yarn create mastra@beta
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash
-bun create mastra@beta
+bun create mastra@latest
 ```
 
 :::warning
 
 Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
 
-- `bun add @mastra/server@beta`
+- `bun add @mastra/server@latest`
 - Delete your `node_modules` folder
 - Delete your `bun.lock` file
 - Run `bun install` to reinstall your packages
@@ -75,7 +75,7 @@ This creates a new directory for your project with a `src/mastra` folder contain
 
 :::tip
 
-You can use [flags](/reference/v1/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
+You can use [flags](/reference/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
 
 :::
 
@@ -87,11 +87,11 @@ Try asking about the weather. If your API key is set up correctly, you'll get a 
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
-[Studio](/docs/v1/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your app using the guides below.
+[Studio](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your app using the guides below.
 
 ## Next steps
 
-- Integrate Mastra with your frontend framework: [Next.js](/guides/v1/getting-started/next-js), [React](/guides/v1/getting-started/vite-react), or [Astro](/guides/v1/getting-started/astro)
-- Read more about [Mastra's features](/docs/v1#why-mastra)
-- Build an agent from scratch following one of our [guides](/guides/v1)
+- Integrate Mastra with your frontend framework: [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
+- Read more about [Mastra's features](/docs#why-mastra)
+- Build an agent from scratch following one of our [guides](/guides)
 - Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)

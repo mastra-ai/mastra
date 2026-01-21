@@ -25,12 +25,12 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
 To enable memory in Mastra, install the `@mastra/memory` package along with a storage provider.
 
 ```bash npm2yarn
-npm install @mastra/memory@beta @mastra/libsql@beta
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 ## Storage providers
 
-Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/memory/storage) documentation.
+Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/memory/storage) documentation.
 
 ## Configuring memory
 
@@ -56,7 +56,7 @@ export const memoryAgent = new Agent({
 
 :::info
 
-Visit [Memory Class](/reference/v1/memory/memory-class) for a full list of configuration options.
+Visit [Memory Class](/reference/memory/memory-class) for a full list of configuration options.
 
 :::
 
@@ -80,7 +80,7 @@ export const mastra = new Mastra({
 
 :::info
 
-Visit [libSQL Storage](/reference/v1/storage/libsql) for a full list of configuration options.
+Visit [libSQL Storage](/reference/storage/libsql) for a full list of configuration options.
 
 :::
 
@@ -107,7 +107,7 @@ export const memoryAgent = new Agent({
 ```
 
 :::warning[Mastra Cloud Store limitation]
-Agent-level storage is not supported when using [Mastra Cloud Store](/docs/v1/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+Agent-level storage is not supported when using [Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
 :::
 
 ## Message history
@@ -150,7 +150,7 @@ To learn more about memory see the [Memory](../memory/overview) documentation.
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
 export type UserTier = {
@@ -174,7 +174,7 @@ export const memoryAgent = new Agent({
 
 :::info
 
-Visit [Request Context](/docs/v1/server/request-context) for more information.
+Visit [Request Context](/docs/server/request-context) for more information.
 
 :::
 
@@ -183,4 +183,4 @@ Visit [Request Context](/docs/v1/server/request-context) for more information.
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Storage](../memory/storage)
-- [Request Context](/docs/v1/server/request-context)
+- [Request Context](/docs/server/request-context)

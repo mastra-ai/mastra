@@ -4,13 +4,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Step, DefaultEngineType } from '@mastra/core/workflows';
 import { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import type {
-  Processor,
-  ProcessorStepInput,
-  ProcessorStepOutput,
-  ProcessorStepInputSchema,
-  ProcessorStepOutputSchema,
-} from '@mastra/core/processors';
+import type { Processor, ProcessorStepInputSchema, ProcessorStepOutputSchema } from '@mastra/core/processors';
 
 describe('workflow', () => {
   describe('createStep', () => {
@@ -133,6 +127,7 @@ describe('workflow', () => {
       it('should accept retries and scorers options without structured output', () => {
         const agent = new Agent({
           id: 'retry-agent',
+          description: 'Retry on failure',
           name: 'Retry Agent',
           instructions: 'Retry on failure',
           model: 'gpt-4o',

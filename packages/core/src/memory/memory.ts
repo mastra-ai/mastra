@@ -15,7 +15,7 @@ import { isProcessorWorkflow } from '../processors';
 import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
-  MastraStorage,
+  MastraCompositeStore,
   StorageListMessagesInput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -97,7 +97,7 @@ export abstract class MastraMemory extends MastraBase {
 
   MAX_CONTEXT_TOKENS?: number;
 
-  protected _storage?: MastraStorage;
+  protected _storage?: MastraCompositeStore;
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
@@ -201,7 +201,7 @@ https://mastra.ai/en/docs/memory/overview`,
     return this._storage;
   }
 
-  public setStorage(storage: MastraStorage) {
+  public setStorage(storage: MastraCompositeStore) {
     this._storage = augmentWithInit(storage);
   }
 

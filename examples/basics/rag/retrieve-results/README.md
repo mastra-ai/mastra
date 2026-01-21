@@ -4,7 +4,7 @@ A simple example showing how to retrieve results from pinecone using Mastra and 
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 - Pinecone API key

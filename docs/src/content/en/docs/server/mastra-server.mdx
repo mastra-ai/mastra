@@ -11,7 +11,7 @@ Mastra runs as an HTTP server that exposes your agents, workflows, and other fun
 
 :::info
 
-This page covers the [`server`](/reference/v1/configuration#server-options) configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), visit [Server Adapters](/docs/v1/server/server-adapters).
+This page covers the [`server`](/reference/configuration#server-options) configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), visit [Server Adapters](/docs/server/server-adapters).
 
 :::
 
@@ -44,25 +44,25 @@ export const mastra = new Mastra({
 
 :::info
 
-Visit the [configuration reference](/reference/v1/configuration#server-options) for a full list of available server options.
+Visit the [configuration reference](/reference/configuration#server-options) for a full list of available server options.
 
 :::
 
 ## Server features
 
-- **[Middleware](/docs/v1/server/middleware)**: Intercept requests for authentication, logging, CORS, or injecting request-specific context.
-- **[Custom API Routes](/docs/v1/server/custom-api-routes)**: Extend the server with your own HTTP endpoints that have access to the Mastra instance.
-- **[Request Context](/docs/v1/server/request-context)**: Pass request-specific values to agents, tools, and workflows based on runtime conditions.
-- **[Server Adapters](/docs/v1/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
-- **[Custom Adapters](/docs/v1/server/custom-adapters)**: Build adapters for frameworks not officially supported.
-- **[Mastra Client SDK](/docs/v1/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
-- **[Authentication](/docs/v1/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
+- **[Middleware](/docs/server/middleware)**: Intercept requests for authentication, logging, CORS, or injecting request-specific context.
+- **[Custom API Routes](/docs/server/custom-api-routes)**: Extend the server with your own HTTP endpoints that have access to the Mastra instance.
+- **[Request Context](/docs/server/request-context)**: Pass request-specific values to agents, tools, and workflows based on runtime conditions.
+- **[Server Adapters](/docs/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
+- **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
+- **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
+- **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
 
 ## Stream data redaction
 
 When streaming agent responses, the HTTP layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
 
-This behavior is only configurable by using [server adapters](/docs/v1/server/server-adapters#stream-data-redaction). For server adapters, stream data redaction is enabled by default, too.
+This behavior is only configurable by using [server adapters](/docs/server/server-adapters#stream-data-redaction). For server adapters, stream data redaction is enabled by default, too.
 
 ## TypeScript configuration
 

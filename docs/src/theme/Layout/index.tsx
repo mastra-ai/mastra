@@ -35,23 +35,15 @@ export default function Layout(props: Props): ReactNode {
 
   const location = useLocation();
   const { siteConfig } = useDocusaurusContext();
-
-  const v0CanonicalUrl = useMemo(() => {
-    const cleanPath = location.pathname
-      .replace(/^\/ja(\/|$)/, "/")
-      .replace(/^\/([a-z]+)\/v1(\/|$)/, "/$1$2");
-    return Object.keys(FeatureVersioning).includes(cleanPath)
-      ? null
-      : `${siteConfig.url}${cleanPath}`;
-  }, [location, siteConfig]);
+  const cleanPath = location.pathname.replace(/^\/ja(\/|$)/, "/");
+  const canonicalUrl = `${siteConfig.url}${cleanPath}`;
 
   return (
     <LayoutProvider>
       <PageMetadata title={title} description={description} />
 
       <Head>
-        {v0CanonicalUrl && <link rel="canonical" href={v0CanonicalUrl} />}
-        <meta name="x-docs-origin" content="v1" />
+        <link rel="canonical" href={canonicalUrl} />
       </Head>
 
       <SkipToContent />

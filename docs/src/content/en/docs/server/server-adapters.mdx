@@ -21,9 +21,9 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 :::tip
 
-For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server/mastra-server).
+For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/server/mastra-server).
 
-If you want to use [Studio](/docs/v1/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/v1/cli/mastra#mastra-studio) to only launch the Studio UI.
+If you want to use [Studio](/docs/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
 
 :::
 
@@ -31,12 +31,12 @@ If you want to use [Studio](/docs/v1/getting-started/studio) with your server ad
 
 Mastra currently provides these official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter)
-- [@mastra/hono](/reference/v1/server/hono-adapter)
-- [@mastra/fastify](/reference/v1/server/fastify-adapter)
-- [@mastra/koa](/reference/v1/server/koa-adapter)
+- [@mastra/express](/reference/server/express-adapter)
+- [@mastra/hono](/reference/server/hono-adapter)
+- [@mastra/fastify](/reference/server/fastify-adapter)
+- [@mastra/koa](/reference/server/koa-adapter)
 
-You can build your own adapter, read [custom adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
 ## Installation
 
@@ -46,25 +46,25 @@ Install the adapter for the framework of your choice.
   <TabItem value="express" label="Express">
 
 ```bash
-npm install @mastra/express@beta
+npm install @mastra/express@latest
 ```
   </TabItem>
   <TabItem value="hono" label="Hono">
 
 ```bash
-npm install @mastra/hono@beta
+npm install @mastra/hono@latest
 ```
   </TabItem>
   <TabItem value="fastify" label="Fastify">
 
 ```bash
-npm install @mastra/fastify@beta
+npm install @mastra/fastify@latest
 ```
   </TabItem>
   <TabItem value="koa" label="Koa">
 
 ```bash
-npm install @mastra/koa@beta
+npm install @mastra/koa@latest
 ```
   </TabItem>
 </Tabs>
@@ -95,7 +95,7 @@ app.listen(4111, () => {
 
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) documentation for full configuration options.
+See the [Express Adapter](/reference/server/express-adapter) documentation for full configuration options.
 
 :::
 
@@ -121,7 +121,7 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 
 :::info
 
-See the [Hono Adapter](/reference/v1/server/hono-adapter) documentation for full configuration options.
+See the [Hono Adapter](/reference/server/hono-adapter) documentation for full configuration options.
 
 :::
 
@@ -154,7 +154,7 @@ app.listen({ port }, () => {
 
 :::info
 
-See the [Fastify Adapter](/reference/v1/server/fastify-adapter) documentation for full configuration options.
+See the [Fastify Adapter](/reference/server/fastify-adapter) documentation for full configuration options.
 
 :::
 
@@ -194,7 +194,7 @@ app.listen(port, () => {
 
 :::info
 
-See the [Koa Adapter](/reference/v1/server/koa-adapter) documentation for full configuration options.
+See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
 
 :::
 
@@ -246,7 +246,7 @@ You can add your own routes to the app alongside Mastra's routes.
 
 :::info
 
-Visit "Adding custom routes" for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+Visit "Adding custom routes" for [Express](/reference/server/express-adapter#adding-custom-routes) and [Hono](/reference/server/hono-adapter#adding-custom-routes) for more information.
 
 :::
 
@@ -303,7 +303,7 @@ const server = new MastraServer({
 
 :::info
 
-See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+See [MastraServer](/reference/server/mastra-server) for full configuration options.
 
 :::
 
@@ -334,7 +334,7 @@ const server = new MastraServer({
 
 :::info
 
-See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+See [MastraServer](/reference/server/mastra-server) for full configuration options.
 
 :::
 
@@ -397,14 +397,14 @@ Server adapters register MCP (Model Context Protocol) routes during `registerRou
 
 The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns.
 
-See [MCP](/docs/v1/mcp/overview) for configuration details and how to set up MCP servers.
+See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP servers.
 
 ## Related
 
-- [Hono Adapter](/reference/v1/server/hono-adapter) - Hono-specific setup
-- [Express Adapter](/reference/v1/server/express-adapter) - Express-specific setup
-- [Custom Adapters](/docs/v1/server/custom-adapters) - Building adapters for other frameworks
-- [Server Configuration](/docs/v1/server/mastra-server) - Using `mastra build` instead
-- [Authentication](/docs/v1/server/auth) - Configuring auth for your server
-- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+- [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
+- [Express Adapter](/reference/server/express-adapter) - Express-specific setup
+- [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
+- [Server Configuration](/docs/server/mastra-server) - Using `mastra build` instead
+- [Authentication](/docs/server/auth) - Configuring auth for your server
+- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes

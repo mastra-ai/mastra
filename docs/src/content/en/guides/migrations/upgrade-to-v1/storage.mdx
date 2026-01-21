@@ -30,6 +30,60 @@ UPDATE mastra_scorers SET "requestContext" = "runtimeContext" WHERE "runtimeCont
 ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
 ```
 
+### Duplicate spans migration
+
+If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint cannot be added if duplicates exist.
+
+:::note[Who needs this migration]
+Only if you have existing spans data from Mastra versions prior to v1 and encounter errors about duplicate key violations or constraint creation failures.
+:::
+
+:::important[What breaks without it]
+The storage initialization may fail when trying to add the unique constraint, or you may see errors like "duplicate key value violates unique constraint".
+:::
+
+**Option 1: Use the CLI (Recommended)**
+
+Run the migration command which automatically deduplicates spans and adds the constraint:
+
+```bash
+npx mastra migrate
+```
+
+The CLI bundles your project, connects to your configured storage, and runs the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
+
+**Option 2: Manual SQL (PostgreSQL)**
+
+If you prefer to run the migration manually:
+
+```sql
+-- Remove duplicates, keeping the most complete record
+DELETE FROM mastra_spans a USING mastra_spans b
+WHERE a.ctid < b.ctid
+  AND a."traceId" = b."traceId"
+  AND a."spanId" = b."spanId";
+
+-- Add the unique constraint
+ALTER TABLE mastra_spans ADD CONSTRAINT mastra_spans_trace_span_unique UNIQUE ("traceId", "spanId");
+```
+
+**Option 3: Manual migration (Other databases)**
+
+For ClickHouse, LibSQL, MongoDB, or MSSQL, use the programmatic API:
+
+```typescript
+const storage = mastra.getStorage();
+const observabilityStore = await storage.getStore('observability');
+
+// Check if migration is needed
+const status = await observabilityStore?.checkSpansMigrationStatus();
+console.log(status);
+
+// Run the migration
+const result = await observabilityStore?.migrateSpans();
+console.log(result);
+```
+
 ### JSON columns (TEXT → JSONB)
 
 **PostgreSQL only.** The `metadata` column in `mastra_threads` and `snapshot` column in `mastra_workflow_snapshot` changed from TEXT to JSONB.
@@ -50,19 +104,19 @@ USING snapshot::jsonb;
 
 ## Added
 
-### Storage composition in MastraStorage
+### Storage composition in MastraCompositeStore
 
-`MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+`MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
 ```typescript
-import { MastraStorage } from "@mastra/core/storage";
+import { MastraCompositeStore } from "@mastra/core/storage";
 import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
 // Compose domains from different stores
 const mastra = new Mastra({
-  storage: new MastraStorage({
+  storage: new MastraCompositeStore({
     id: "composite",
     domains: {
       memory: new MemoryLibSQL({ url: "file:./local.db" }),
@@ -73,9 +127,39 @@ const mastra = new Mastra({
 });
 ```
 
-See the [Storage Composition reference](/reference/v1/storage/composite) for more details.
+See the [Storage Composition reference](/reference/storage/composite) for more details.
 
 ## Changed
+
+### `MastraStorage` renamed to `MastraCompositeStore`
+
+The `MastraStorage` class has been renamed to `MastraCompositeStore` to better reflect its role as a composite storage implementation that routes different domains to different underlying stores. This avoids confusion with the general "Mastra Storage" concept (the `storage` property on the Mastra instance).
+
+The old `MastraStorage` name remains available as a deprecated alias for backward compatibility, but will be removed in a future version.
+
+To migrate, update your imports and instantiation:
+
+```diff
+- import { MastraStorage } from "@mastra/core/storage";
++ import { MastraCompositeStore } from "@mastra/core/storage";
+  import { MemoryLibSQL } from "@mastra/libsql";
+  import { WorkflowsPG } from "@mastra/pg";
+
+  export const mastra = new Mastra({
+-   storage: new MastraStorage({
++   storage: new MastraCompositeStore({
+      id: "composite",
+      domains: {
+        memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+        workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      },
+    }),
+  });
+```
+
+:::note
+If you're using a single store implementation (like `PostgresStore` or `LibSQLStore`) directly, no changes are needed. This only affects code that explicitly uses `MastraStorage` for composite storage.
+:::
 
 ### Required `id` property for storage instances
 
@@ -145,7 +229,7 @@ To migrate, rename the method and update pagination parameters. You can now use 
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-get-messages-paginated .
+npx @mastra/codemod@latest v1/storage-get-messages-paginated .
 ```
 
 :::
@@ -257,7 +341,7 @@ await memoryStore?.listThreads({
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-list-threads-by-resource-to-list-threads .
+npx @mastra/codemod@latest v1/storage-list-threads-by-resource-to-list-threads .
 ```
 
 :::
@@ -284,7 +368,7 @@ To migrate, use the workflows stores, rename the method call and update paginati
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-list-workflow-runs .
+npx @mastra/codemod@latest v1/storage-list-workflow-runs .
 ```
 
 :::
@@ -308,7 +392,7 @@ To migrate, use the memory store and rename the method call.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-list-messages-by-id .
+npx @mastra/codemod@latest v1/storage-list-messages-by-id .
 ```
 
 :::
@@ -395,7 +479,7 @@ To migrate, pass the connection string as an object property.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/vector-pg-constructor .
+npx @mastra/codemod@latest v1/vector-pg-constructor .
 ```
 
 :::
@@ -434,7 +518,7 @@ To migrate, rename the parameter.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/storage-postgres-schema-name .
+npx @mastra/codemod@latest v1/storage-postgres-schema-name .
 ```
 
 :::

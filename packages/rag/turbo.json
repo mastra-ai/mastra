@@ -4,14 +4,30 @@
   "tasks": {
     "build:lib": {
       "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
       "outputs": ["dist/**", "!dist/docs/**"]
     },
     "build:docs": {
       "dependsOn": ["build:lib"],
+      "inputs": ["src/**", "package.json", "!**/*.md", "!**/*.test.ts", "!**/*.spec.ts", "!**/__tests__/**"],
       "outputs": ["dist/docs/**"]
     },
     "build": {
       "dependsOn": ["build:lib", "build:docs"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"],
+      "outputs": []
     }
   }
 }

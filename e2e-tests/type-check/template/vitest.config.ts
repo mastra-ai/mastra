@@ -6,6 +6,7 @@ export default defineConfig({
     typecheck: {
       enabled: true,
       include: ['./**/*.test-d.ts'],
+      exclude: ['**/node_modules/**'],
     },
   },
 });

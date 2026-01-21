@@ -1,5 +1,5 @@
 import type { StorageDomains } from '@mastra/core/storage';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
@@ -90,7 +90,7 @@ const isClientConfig = (config: ConvexStoreConfig): config is ConvexStoreConfig 
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class ConvexStore extends MastraStorage {
+export class ConvexStore extends MastraCompositeStore {
   declare stores: StorageDomains;
 
   constructor(config: ConvexStoreConfig) {

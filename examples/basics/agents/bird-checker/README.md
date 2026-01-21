@@ -4,7 +4,7 @@ A simple example agent to determine if an image contains a bird.
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Anthropic API key
 

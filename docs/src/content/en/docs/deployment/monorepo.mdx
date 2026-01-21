@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Deploy in a Monorepo
 
-Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/v1/deployment/mastra-server).
+Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/deployment/mastra-server).
 
 ## Supported monorepos
 
@@ -106,7 +106,7 @@ When your Mastra application imports from other workspace packages, Mastra handl
 - If the package is pre-compiled (e.g., built with `tsc` or `tsdown`), Mastra imports the compiled JavaScript
 - If the package contains uncompiled TypeScript, Mastra transpiles it during the build
 
-For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/v1/configuration#bundlertranspilepackages):
+For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages):
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
@@ -128,7 +128,7 @@ Most providers let you specify the root directory in their dashboard or configur
 
 ### Mastra Cloud
 
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/v1/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
@@ -152,10 +152,10 @@ If Mastra can't resolve a workspace package, ensure:
 
 If you see type errors from uncompiled workspace packages, either:
 - Build the package first (recommended for faster Mastra builds)
-- Add the package to [`transpilePackages`](/reference/v1/configuration#bundlertranspilepackages) in your Mastra config
+- Add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages) in your Mastra config
 
 ## Related
 
-- [Deploy a Mastra Server](/docs/v1/deployment/mastra-server) - Core build and deployment guide
-- [Configuration Reference](/reference/v1/configuration) - `bundler.transpilePackages` and other options
-- [CLI Reference](/reference/v1/cli/mastra) - Build command flags
+- [Deploy a Mastra Server](/docs/deployment/mastra-server) - Core build and deployment guide
+- [Configuration Reference](/reference/configuration) - `bundler.transpilePackages` and other options
+- [CLI Reference](/reference/cli/mastra) - Build command flags

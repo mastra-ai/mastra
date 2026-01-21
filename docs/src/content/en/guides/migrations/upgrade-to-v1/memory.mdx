@@ -121,7 +121,7 @@ To migrate, move `readOnly` from the top level to inside `options`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/memory-readonly-to-options .
+npx @mastra/codemod@latest v1/memory-readonly-to-options .
 ```
 
 :::
@@ -145,7 +145,7 @@ To migrate, rename `query()` to `recall()` and update code that expects the old 
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/memory-query-to-recall .
+npx @mastra/codemod@latest v1/memory-query-to-recall .
 ```
 
 :::
@@ -176,7 +176,7 @@ To migrate, update method name, query parameters, and the vector search paramete
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/memory-vector-search-param .
+npx @mastra/codemod@latest v1/memory-vector-search-param .
 ```
 
 :::
@@ -199,7 +199,7 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/memory-message-v2-type .
+npx @mastra/codemod@latest v1/memory-message-v2-type .
 ```
 
 :::
@@ -301,6 +301,6 @@ To migrate, move processor configuration from Memory to Agent using `inputProces
   });
 ```
 
-Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/v1/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
 
-For more information on using processors with agents, see the [Processors docs](/docs/v1/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/v1/processors/token-limiter-processor#extended-usage-example).
+For more information on using processors with agents, see the [Processors docs](/docs/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/processors/token-limiter-processor#extended-usage-example).
