@@ -497,6 +497,42 @@ export class Agent<
   }
 
   /**
+   * Returns only the user-configured input processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listInputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `inputProcessors` option.
+   */
+  public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (!this.#inputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+  }
+
+  /**
+   * Returns only the user-configured output processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listOutputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `outputProcessors` option.
+   */
+  public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+    if (!this.#outputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
+  }
+
+  /**
    * Returns configured processor workflows for registration with Mastra.
    * This excludes memory-derived processors to avoid triggering memory factory functions.
    * @internal
