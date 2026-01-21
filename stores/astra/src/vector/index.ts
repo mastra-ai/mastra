@@ -14,6 +14,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
   DeleteVectorsParams,
+  CreateMetadataIndexParams,
 } from '@mastra/core/vector';
 import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
@@ -355,5 +356,34 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
         ...(ids && { idsCount: ids.length }),
       },
     });
+  }
+
+  /**
+   * Creates an index on a metadata field for faster filtering.
+   *
+   * Note: The Astra DB TypeScript client does not currently support creating indexes
+   * programmatically. To create metadata indexes for better query performance:
+   *
+   * 1. Using the Astra DB Console:
+   *    - Navigate to your database > Collections > Your Collection
+   *    - Go to the Indexes tab and create an index on "metadata.your_field"
+   *
+   * 2. Using the Data API directly:
+   *    ```bash
+   *    curl -X POST "https://your-db-id-region.apps.astra.datastax.com/api/json/v1/your-keyspace/your-collection" \
+   *      -H "Token: your-token" \
+   *      -H "Content-Type: application/json" \
+   *      -d '{"createIndex": {"name": "metadata_field_idx", "definition": {"column": "metadata.field"}}}'
+   *    ```
+   *
+   * @param params - The parameters for creating the metadata index
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    this.logger?.warn(
+      `Astra DB TypeScript client does not support programmatic index creation. ` +
+        `To create an index on "${params.field}" for collection "${params.indexName}", ` +
+        `use the Astra DB Console (Collections > Indexes) or the Data API directly. ` +
+        `Create an index on the field path "metadata.${params.field}".`,
+    );
   }
 }

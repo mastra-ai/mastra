@@ -12,6 +12,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
   DeleteVectorsParams,
+  CreateMetadataIndexParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -526,5 +527,36 @@ export class CouchbaseVector extends MastraVector {
         error,
       );
     }
+  }
+
+  /**
+   * Creates an index on a metadata field for faster filtering.
+   *
+   * Note: Couchbase vector search uses FTS (Full-Text Search) indexes. To enable
+   * efficient metadata filtering, you need to add field mappings to your FTS index
+   * definition. This cannot be done programmatically without risking changes to
+   * your existing index configuration.
+   *
+   * To manually add metadata field indexing:
+   * 1. Go to your Couchbase Console > Search > Your Index
+   * 2. Edit the index definition
+   * 3. Under type mappings, add a property for your metadata field:
+   *    ```json
+   *    "metadata.your_field": {
+   *      "enabled": true,
+   *      "fields": [{ "name": "your_field", "type": "text", "index": true }]
+   *    }
+   *    ```
+   * 4. Rebuild the index
+   *
+   * @param params - The parameters for creating the metadata index
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    this.logger?.warn(
+      `Couchbase vector search uses FTS indexes which require manual configuration for metadata field indexing. ` +
+        `To enable efficient filtering on "${params.field}", add the field mapping to your FTS index definition ` +
+        `in the Couchbase Console under Search > ${params.indexName} > Edit. ` +
+        `Add "metadata.${params.field}" to the type mappings with appropriate field configuration.`,
+    );
   }
 }
