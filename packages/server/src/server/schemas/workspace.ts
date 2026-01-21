@@ -223,12 +223,21 @@ export const skillReferencePathParams = skillNamePathParams.extend({
 // Skills Query Parameter Schemas
 // =============================================================================
 
+export const listSkillsQuerySchema = z.object({
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
+});
+
+export const getSkillQuerySchema = z.object({
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
+});
+
 export const searchSkillsQuerySchema = z.object({
   query: z.string().describe('Search query text'),
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
   minScore: z.coerce.number().optional().describe('Minimum relevance score threshold'),
   skillNames: z.string().optional().describe('Comma-separated list of skill names to search within'),
   includeReferences: z.coerce.boolean().optional().default(true).describe('Include reference files in search'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 // =============================================================================

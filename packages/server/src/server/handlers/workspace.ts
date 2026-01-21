@@ -36,6 +36,8 @@ import {
   // Skills schemas
   skillNamePathParams,
   skillReferencePathParams,
+  listSkillsQuerySchema,
+  getSkillQuerySchema,
   searchSkillsQuerySchema,
   listSkillsResponseSchema,
   getSkillResponseSchema,
@@ -89,11 +91,12 @@ function getWorkspace(mastra: any): Workspace | undefined {
 }
 
 /**
- * Get the skills instance from Mastra's workspace (legacy helper).
- * Returns undefined if no workspace or skills are configured.
+ * Get skills from a specific workspace by ID.
+ * If no workspaceId is provided, returns skills from the global workspace.
  */
-function getSkills(mastra: any): WorkspaceSkills | undefined {
-  return mastra.getWorkspace?.()?.skills;
+async function getSkillsById(mastra: any, workspaceId?: string): Promise<WorkspaceSkills | undefined> {
+  const workspace = await getWorkspaceById(mastra, workspaceId);
+  return workspace?.skills;
 }
 
 // =============================================================================
@@ -634,13 +637,14 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workspace/skills',
   responseType: 'json',
+  queryParamSchema: listSkillsQuerySchema,
   responseSchema: listSkillsResponseSchema,
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, workspaceId }) => {
     try {
-      const skills = getSkills(mastra);
+      const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
       }
@@ -669,17 +673,18 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   path: '/api/workspace/skills/:skillName',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
+  queryParamSchema: getSkillQuerySchema,
   responseSchema: getSkillResponseSchema,
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName }) => {
+  handler: async ({ mastra, skillName, workspaceId }) => {
     try {
       if (!skillName) {
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      const skills = getSkills(mastra);
+      const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -714,17 +719,18 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   path: '/api/workspace/skills/:skillName/references',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
+  queryParamSchema: getSkillQuerySchema,
   responseSchema: listReferencesResponseSchema,
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName }) => {
+  handler: async ({ mastra, skillName, workspaceId }) => {
     try {
       if (!skillName) {
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      const skills = getSkills(mastra);
+      const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -751,17 +757,18 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   path: '/api/workspace/skills/:skillName/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
+  queryParamSchema: getSkillQuerySchema,
   responseSchema: skillReferenceResponseSchema,
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, referencePath }) => {
+  handler: async ({ mastra, skillName, referencePath, workspaceId }) => {
     try {
       if (!skillName || !referencePath) {
         throw new HTTPException(400, { message: 'Skill name and reference path are required' });
       }
 
-      const skills = getSkills(mastra);
+      const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -794,13 +801,13 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences }) => {
+  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId }) => {
     try {
       if (!query) {
         throw new HTTPException(400, { message: 'Search query is required' });
       }
 
-      const skills = getSkills(mastra);
+      const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         return {
           results: [],

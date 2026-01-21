@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -26,18 +26,21 @@ import {
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
 export default function Workspace() {
-  const [activeTab, setActiveTab] = useState<TabType>('files');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showSearch, setShowSearch] = useState(false);
-  const [currentPath, setCurrentPath] = useState('/');
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+
+  // Get state from URL params
+  const workspaceIdFromUrl = searchParams.get('workspaceId');
+  const pathFromUrl = searchParams.get('path') || '/';
+  const fileFromUrl = searchParams.get('file');
+  const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
 
   // List of all workspaces (global + agent workspaces)
   const { data: workspacesData, isLoading: isLoadingWorkspaces } = useWorkspaces();
@@ -46,10 +49,46 @@ export default function Workspace() {
   // Workspace info (currently always fetches global workspace)
   const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo();
 
-  // Get the selected workspace from the list
-  const selectedWorkspace: WorkspaceItem | undefined = selectedWorkspaceId
-    ? workspaces.find(w => w.id === selectedWorkspaceId)
+  // Get the selected workspace from the list (use URL param or default to first)
+  const selectedWorkspace: WorkspaceItem | undefined = workspaceIdFromUrl
+    ? workspaces.find(w => w.id === workspaceIdFromUrl)
     : workspaces[0];
+
+  // Helper to update URL params while preserving others
+  const updateSearchParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    }
+    setSearchParams(newParams);
+  };
+
+  // State setters that update URL
+  const setSelectedWorkspaceId = (id: string | null) => {
+    // Reset path and file when workspace changes
+    updateSearchParams({ workspaceId: id, path: '/', file: null });
+  };
+
+  const setCurrentPath = (path: string) => {
+    updateSearchParams({ path, file: null });
+  };
+
+  const setSelectedFile = (file: string | null) => {
+    updateSearchParams({ file });
+  };
+
+  const setActiveTab = (tab: TabType) => {
+    updateSearchParams({ tab });
+  };
+
+  // Use URL-derived values
+  const currentPath = pathFromUrl;
+  const selectedFile = fileFromUrl;
+  const activeTab = tabFromUrl;
 
   // Effective workspace ID to use for API calls
   const effectiveWorkspaceId = selectedWorkspace?.id;
@@ -73,8 +112,8 @@ export default function Workspace() {
     workspaceId: effectiveWorkspaceId,
   });
 
-  // Skills
-  const { data: skillsData, isLoading: isLoadingSkills } = useWorkspaceSkills();
+  // Skills - pass workspaceId to get skills from the selected workspace
+  const { data: skillsData, isLoading: isLoadingSkills } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
   const searchSkills = useSearchWorkspaceSkills();
 
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
@@ -183,16 +222,13 @@ export default function Workspace() {
               </button>
 
               {showWorkspaceDropdown && (
-                <div className="absolute z-10 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
+                <div className="absolute z-50 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
                   {workspaces.map(workspace => (
                     <button
                       key={workspace.id}
                       onClick={() => {
                         setSelectedWorkspaceId(workspace.id);
                         setShowWorkspaceDropdown(false);
-                        // Reset state when workspace changes
-                        setCurrentPath('/');
-                        setSelectedFile(null);
                       }}
                       className={`flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-surface3 transition-colors ${
                         selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
