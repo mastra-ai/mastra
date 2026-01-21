@@ -22,6 +22,7 @@ import {
   LogoWithoutText,
   SettingsIcon,
   MastraVersionFooter,
+  DbIcon,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -53,7 +54,11 @@ const mainNavigation: NavSection[] = [
         url: '/scorers',
         icon: <GaugeIcon />,
       },
-
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DbIcon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',

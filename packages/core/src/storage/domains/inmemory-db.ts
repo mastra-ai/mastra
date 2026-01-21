@@ -1,3 +1,4 @@
+import type { Dataset, DatasetItem, DatasetRun, DatasetRunResult } from '../../datasets/types';
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type { StorageAgentType, StorageMessageType, StorageResourceType, StorageWorkflowRun } from '../types';
@@ -18,6 +19,10 @@ export class InMemoryDB {
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();
   readonly agents = new Map<string, StorageAgentType>();
+  readonly datasets = new Map<string, Dataset>();
+  readonly datasetItems = new Map<string, DatasetItem>();
+  readonly datasetRuns = new Map<string, DatasetRun>();
+  readonly datasetRunResults = new Map<string, DatasetRunResult>();
 
   /**
    * Clears all data from all collections.
@@ -31,5 +36,9 @@ export class InMemoryDB {
     this.scores.clear();
     this.traces.clear();
     this.agents.clear();
+    this.datasets.clear();
+    this.datasetItems.clear();
+    this.datasetRuns.clear();
+    this.datasetRunResults.clear();
   }
 }

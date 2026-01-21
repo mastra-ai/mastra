@@ -54,6 +54,21 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  Dataset,
+  DatasetItem,
+  DatasetRun,
+  CreateDatasetPayload,
+  UpdateDatasetPayload,
+  CreateDatasetItemPayload,
+  UpdateDatasetItemPayload,
+  CreateDatasetRunParams,
+  ListDatasetsResponse,
+  ListDatasetItemsResponse,
+  ListDatasetItemsParams,
+  ListDatasetRunsResponse,
+  ListDatasetRunsParams,
+  ListDatasetRunResultsWithInputResponse,
+  ListDatasetRunResultsParams,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -675,6 +690,209 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  // ============================================================================
+  // Dataset Methods
+  // ============================================================================
+
+  /**
+   * List all datasets
+   * @param params - Optional pagination parameters
+   * @returns Promise containing datasets and pagination info
+   */
+  public listDatasets(params?: { page?: number; perPage?: number }): Promise<ListDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/datasets${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get a dataset by ID
+   * @param datasetId - ID of the dataset to retrieve
+   * @returns Promise containing the dataset
+   */
+  public getDataset(datasetId: string): Promise<{ dataset: Dataset }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}`);
+  }
+
+  /**
+   * Create a new dataset
+   * @param payload - Dataset creation payload
+   * @returns Promise containing the created dataset
+   */
+  public createDataset(payload: CreateDatasetPayload): Promise<{ dataset: Dataset }> {
+    return this.request('/api/datasets', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  /**
+   * Update an existing dataset
+   * @param datasetId - ID of the dataset to update
+   * @param payload - Dataset update payload
+   * @returns Promise containing the updated dataset
+   */
+  public updateDataset(datasetId: string, payload: UpdateDatasetPayload): Promise<{ dataset: Dataset }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'PUT',
+      body: payload,
+    });
+  }
+
+  /**
+   * Delete a dataset
+   * @param datasetId - ID of the dataset to delete
+   * @returns Promise containing success status
+   */
+  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * List items in a dataset
+   * @param datasetId - ID of the dataset
+   * @param params - Optional pagination and filter parameters
+   * @returns Promise containing items and pagination info
+   */
+  public listDatasetItems(datasetId: string, params?: ListDatasetItemsParams): Promise<ListDatasetItemsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.asOf) {
+      searchParams.set('asOf', params.asOf);
+    }
+    if (params?.includeArchived !== undefined) {
+      searchParams.set('includeArchived', String(params.includeArchived));
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Add items to a dataset
+   * @param datasetId - ID of the dataset
+   * @param items - Array of items to add
+   * @returns Promise containing the created items
+   */
+  public createDatasetItems(
+    datasetId: string,
+    items: Omit<CreateDatasetItemPayload, 'datasetId'>[],
+  ): Promise<{ items: DatasetItem[] }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items`, {
+      method: 'POST',
+      body: { items },
+    });
+  }
+
+  /**
+   * Update a dataset item
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item to update
+   * @param payload - Fields to update
+   * @returns Promise containing the updated item
+   */
+  public updateDatasetItem(
+    datasetId: string,
+    itemId: string,
+    payload: UpdateDatasetItemPayload,
+  ): Promise<{ item: DatasetItem }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PUT',
+      body: payload,
+    });
+  }
+
+  /**
+   * Archive (soft-delete) a dataset item
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item to archive
+   * @returns Promise containing success status
+   */
+  public archiveDatasetItem(datasetId: string, itemId: string): Promise<{ success: true }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * List runs for a dataset
+   * @param datasetId - ID of the dataset
+   * @param params - Optional pagination and filter parameters
+   * @returns Promise containing runs and pagination info
+   */
+  public listDatasetRuns(datasetId: string, params?: ListDatasetRunsParams): Promise<ListDatasetRunsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/runs${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Create and execute a dataset run against an agent
+   * @param datasetId - ID of the dataset
+   * @param params - Run parameters including agentId
+   * @returns Promise containing the created run
+   */
+  public createDatasetRun(datasetId: string, params: CreateDatasetRunParams): Promise<{ run: DatasetRun }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/runs`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Get a dataset run by ID
+   * @param datasetId - ID of the dataset
+   * @param runId - ID of the run to retrieve
+   * @returns Promise containing the run
+   */
+  public getDatasetRun(datasetId: string, runId: string): Promise<{ run: DatasetRun }> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}`);
+  }
+
+  /**
+   * List results for a dataset run
+   * @param datasetId - ID of the dataset
+   * @param runId - ID of the run
+   * @param params - Optional pagination and filter params
+   * @returns Promise containing results and pagination info
+   */
+  public listDatasetRunResults(
+    datasetId: string,
+    runId: string,
+    params?: ListDatasetRunResultsParams,
+  ): Promise<ListDatasetRunResultsWithInputResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', params.page.toString());
+    if (params?.perPage !== undefined) searchParams.set('perPage', params.perPage.toString());
+    if (params?.status) searchParams.set('status', params.status);
+    const queryString = searchParams.toString();
+
+    return this.request(
+      `/api/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}/results${queryString ? `?${queryString}` : ''}`,
+    );
   }
 
   getTrace(traceId: string): Promise<TraceRecord> {

@@ -23,7 +23,25 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  WorkflowRuns,
+  StorageListMessagesInput,
+  Dataset,
+  DatasetItem,
+  DatasetRun,
+  DatasetRunResult,
+  CreateDatasetPayload,
+  UpdateDatasetPayload,
+  CreateDatasetItemPayload,
+  UpdateDatasetItemPayload,
+  ListDatasetsResponse,
+  ListDatasetItemsResponse,
+  ListDatasetRunsResponse,
+  ListDatasetRunResultsResponse,
+  DatasetRunStatus,
+  DatasetRunResultStatus,
+} from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -699,4 +717,64 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Dataset Types (re-exported from @mastra/core/storage)
+// ============================================================================
+
+export type {
+  Dataset,
+  DatasetItem,
+  DatasetRun,
+  DatasetRunResult,
+  CreateDatasetPayload,
+  UpdateDatasetPayload,
+  CreateDatasetItemPayload,
+  UpdateDatasetItemPayload,
+  ListDatasetsResponse,
+  ListDatasetItemsResponse,
+  ListDatasetRunsResponse,
+  ListDatasetRunResultsResponse,
+  DatasetRunStatus,
+  DatasetRunResultStatus,
+};
+
+export interface ListDatasetItemsParams {
+  page?: number;
+  perPage?: number;
+  asOf?: string;
+  includeArchived?: boolean;
+}
+
+export interface ListDatasetRunsParams {
+  page?: number;
+  perPage?: number;
+  status?: DatasetRunStatus;
+}
+
+export interface ListDatasetRunResultsParams {
+  page?: number;
+  perPage?: number;
+  status?: DatasetRunResultStatus;
+}
+
+// Extended result type that includes item input for UI display
+export type DatasetRunResultWithInput = DatasetRunResult & {
+  itemInput: unknown;
+};
+
+export interface ListDatasetRunResultsWithInputResponse {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  };
+  results: DatasetRunResultWithInput[];
+}
+
+export interface CreateDatasetRunParams {
+  agentId: string;
+  name?: string;
 }

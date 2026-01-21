@@ -3,6 +3,15 @@ import { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import { captureSpanToDataset, captureTraceToDataset, runDataset, startDatasetRunAsync } from '../datasets';
+import type {
+  CaptureToDatasetOptions,
+  DatasetItem,
+  DatasetRun,
+  RunDatasetOptions,
+  RunDatasetResult,
+} from '../datasets/types';
+import type { CaptureSpan } from '../datasets/trace-capture';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
@@ -21,6 +30,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type { DatasetsStorage } from '../storage/domains/datasets/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -3126,5 +3136,250 @@ export class Mastra<
   // This method is only used internally for server hnadlers that require temporary persistence
   public get serverCache() {
     return this.#serverCache;
+  }
+
+  // ============================================================================
+  // Dataset Methods
+  // ============================================================================
+
+  /**
+   * Gets the datasets storage domain if configured.
+   *
+   * @returns The datasets storage interface, or undefined if not available
+   *
+   * @example
+   * ```typescript
+   * const datasetsStore = mastra.getDatasetsStore();
+   * if (datasetsStore) {
+   *   const datasets = await datasetsStore.listDatasets({ page: 1, perPage: 10 });
+   * }
+   * ```
+   */
+  public getDatasetsStore(): DatasetsStorage | undefined {
+    return this.#storage?.stores?.datasets;
+  }
+
+  /**
+   * Captures a single span as a dataset item for evaluation.
+   *
+   * @param options - Configuration for capturing the span
+   * @param options.span - The span data to capture (spanId, traceId, input, output, metadata)
+   * @param options.datasetId - Target dataset ID
+   * @param options.transform - Optional transform function to modify span data before saving
+   * @returns The created dataset item
+   * @throws {MastraError} When datasets storage is not configured
+   *
+   * @example
+   * ```typescript
+   * const item = await mastra.captureSpanToDataset({
+   *   span: { spanId: 'span-1', traceId: 'trace-1', input: 'hello', output: 'world' },
+   *   datasetId: 'my-dataset',
+   * });
+   * ```
+   */
+  public async captureSpanToDataset(options: {
+    span: CaptureSpan;
+    datasetId: string;
+    transform?: CaptureToDatasetOptions['transform'];
+  }): Promise<DatasetItem> {
+    const storage = this.getDatasetsStore();
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
+        details: { status: 500 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return captureSpanToDataset({
+      storage,
+      span: options.span,
+      datasetId: options.datasetId,
+      transform: options.transform,
+    });
+  }
+
+  /**
+   * Captures all matching spans from a trace as dataset items.
+   *
+   * Fetches spans for the given trace, applies optional filtering,
+   * and creates dataset items for each matching span.
+   *
+   * @param traceId - The trace ID to capture spans from
+   * @param options - Capture configuration
+   * @param options.datasetId - Target dataset ID
+   * @param options.spanFilter - Optional filter to select specific spans
+   * @param options.transform - Optional transform function
+   * @returns Array of created dataset items
+   * @throws {MastraError} When datasets or observability storage is not configured
+   * @throws Error if trace is not found
+   *
+   * @example
+   * ```typescript
+   * const items = await mastra.captureTraceToDataset('trace-123', {
+   *   datasetId: 'my-dataset',
+   *   spanFilter: (span) => span.spanType === 'TOOL_CALL',
+   * });
+   * ```
+   */
+  public async captureTraceToDataset(
+    traceId: string,
+    options: Omit<CaptureToDatasetOptions, 'datasetId'> & { datasetId: string },
+  ): Promise<DatasetItem[]> {
+    const storage = this.getDatasetsStore();
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
+        details: { status: 500 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const observabilityStorage = this.#storage?.stores?.observability;
+    if (!observabilityStorage) {
+      const error = new MastraError({
+        id: 'MASTRA_OBSERVABILITY_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Observability storage is not configured. Ensure storage is set up with observability support.',
+        details: { status: 500 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return captureTraceToDataset({
+      storage,
+      observabilityStorage,
+      traceId,
+      captureOptions: options,
+    });
+  }
+
+  /**
+   * Runs a dataset against a target (agent, workflow, or custom function).
+   *
+   * Processes all dataset items, captures outputs, and optionally runs scorers.
+   * Results are stored for later analysis and comparison.
+   *
+   * @param options - Run configuration
+   * @param options.datasetId - Dataset to evaluate
+   * @param options.target - Target to run: agent, workflow, or custom function
+   * @param options.scorerIds - Optional scorer IDs for evaluation
+   * @param options.name - Optional name for this run
+   * @param options.onProgress - Optional progress callback
+   * @param options.concurrency - Concurrency limit (default: 1)
+   * @param options.asOf - Point-in-time query timestamp
+   * @param options.metadata - Custom metadata for the run
+   * @returns Run record and all results
+   * @throws {MastraError} When datasets storage is not configured
+   *
+   * @example
+   * ```typescript
+   * const result = await mastra.runDataset({
+   *   datasetId: 'my-dataset',
+   *   target: { type: 'agent', agentId: 'my-agent' },
+   *   scorerIds: ['accuracy', 'relevance'],
+   *   onProgress: (completed, total) => console.log(`${completed}/${total}`),
+   * });
+   * ```
+   */
+  public async runDataset(
+    options: Omit<RunDatasetOptions, 'storage' | 'getAgent' | 'getWorkflow'>,
+  ): Promise<RunDatasetResult> {
+    const storage = this.getDatasetsStore();
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
+        details: { status: 500 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return runDataset({
+      ...options,
+      storage,
+      getAgent: (id: string) => {
+        try {
+          // Use getAgentById since API returns agent.id, not registration key
+          return this.getAgentById(id as TAgents[keyof TAgents]['id']);
+        } catch {
+          return undefined;
+        }
+      },
+      getWorkflow: (id: string) => {
+        try {
+          return this.getWorkflow(id as keyof TWorkflows);
+        } catch {
+          return undefined;
+        }
+      },
+    });
+  }
+
+  /**
+   * Runs a dataset against a target asynchronously (fire-and-forget pattern).
+   * Creates the run record and returns immediately while processing continues in background.
+   *
+   * @param options - Configuration for the dataset run
+   * @returns The run record (processing continues in background)
+   * @throws {MastraError} When datasets storage is not configured
+   *
+   * @example
+   * ```typescript
+   * const { run } = await mastra.runDatasetAsync({
+   *   datasetId: 'my-dataset',
+   *   target: { type: 'agent', agentId: 'my-agent' },
+   * });
+   * // Returns immediately, check run.status for progress
+   * ```
+   */
+  public async runDatasetAsync(
+    options: Omit<RunDatasetOptions, 'storage' | 'getAgent' | 'getWorkflow'>,
+  ): Promise<{ run: DatasetRun }> {
+    const storage = this.getDatasetsStore();
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
+        details: { status: 500 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return startDatasetRunAsync({
+      ...options,
+      storage,
+      logger: this.#logger,
+      getAgent: (id: string) => {
+        try {
+          return this.getAgentById(id as TAgents[keyof TAgents]['id']);
+        } catch {
+          return undefined;
+        }
+      },
+      getWorkflow: (id: string) => {
+        try {
+          return this.getWorkflow(id as keyof TWorkflows);
+        } catch {
+          return undefined;
+        }
+      },
+    });
   }
 }

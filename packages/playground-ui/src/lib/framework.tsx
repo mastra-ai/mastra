@@ -34,6 +34,12 @@ type LinkComponentPaths = {
   mcpServerLink: (serverId: string) => string;
   mcpServerToolLink: (serverId: string, toolId: string) => string;
   workflowRunLink: (workflowId: string, runId: string) => string;
+
+  datasetsLink: () => string;
+  datasetLink: (datasetId: string) => string;
+  datasetRunLink: (datasetId: string, runId: string) => string;
+
+  traceLink: (traceId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -59,6 +65,10 @@ const LinkComponentContext = createContext<{
     mcpServerLink: () => '',
     mcpServerToolLink: () => '',
     workflowRunLink: () => '',
+    datasetsLink: () => '',
+    datasetLink: () => '',
+    datasetRunLink: () => '',
+    traceLink: () => '',
   },
 });
 

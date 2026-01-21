@@ -48,6 +48,9 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import Datasets from './pages/datasets';
+import Dataset from './pages/datasets/dataset';
+import DatasetRun from './pages/datasets/dataset/run';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 
@@ -68,6 +71,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetsLink: () => `/datasets`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetRunLink: (datasetId: string, runId: string) => `/datasets/${datasetId}/runs/${runId}`,
+  traceLink: (traceId: string) => `/observability?traceId=${traceId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -131,6 +138,17 @@ function App() {
               >
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/datasets" element={<Datasets />} />
+                <Route path="/datasets/:datasetId" element={<Dataset />} />
+                <Route path="/datasets/:datasetId/runs/:runId" element={<DatasetRun />} />
               </Route>
               <Route
                 element={
