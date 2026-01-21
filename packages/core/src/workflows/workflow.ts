@@ -1444,7 +1444,6 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
-      // @ts-ignore
       const mappingStep: any = createStep({
         id:
           stepOptions?.id ||
@@ -1628,7 +1627,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
-      // @ts-ignore
       conditions: steps.map(([cond]) => cond),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
@@ -1679,7 +1677,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
-      // @ts-ignore
       condition,
       loopType: 'dowhile',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -1707,7 +1704,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
-      // @ts-ignore
       condition,
       loopType: 'dountil',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -1872,7 +1868,7 @@ export class Workflow<
           runId: runIdToUse,
           status: 'pending',
           value: {},
-          // @ts-ignore
+          // @ts-expect-error
           context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
           activePaths: [],
           activeStepsPath: {},
@@ -1882,7 +1878,6 @@ export class Workflow<
           waitingPaths: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });
@@ -2077,7 +2072,7 @@ export class Workflow<
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-ignore
+        // @ts-expect-error
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         await suspend(
           {
@@ -2981,7 +2976,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async (event: any) => {
           const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
           // Check if this is a custom event (has 'data' property instead of 'payload')
@@ -3108,7 +3102,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async (event: any) => {
           const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
           // Check if this is a custom event (has 'data' property instead of 'payload')
@@ -3441,7 +3434,7 @@ export class Run<
           steps,
           stepResults,
           resumePayload: resumeDataToUse,
-          // @ts-ignore
+          // @ts-expect-error
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
           label: params.label,
@@ -3777,7 +3770,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,

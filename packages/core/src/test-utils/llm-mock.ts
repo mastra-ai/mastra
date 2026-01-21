@@ -185,31 +185,29 @@ export class MockProvider extends MastraLLMV1 {
     super({ model: mockModel });
   }
 
-  // @ts-ignore
+  // @ts-expect-error
   stream(...args: any): PromiseLike<StreamReturn<any, any, any>> {
-    // @ts-ignore
+    // @ts-expect-error
     const result = super.stream(...args);
 
     return {
       ...result,
-      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
-        // @ts-ignore
+        // @ts-expect-error
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };
   }
 
-  // @ts-ignore
+  // @ts-expect-error
   __streamObject(...args): PromiseLike<StreamObjectResult<any>> {
-    // @ts-ignore
+    // @ts-expect-error
     const result = super.__streamObject(...args);
 
     return {
       ...result,
-      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
-        // @ts-ignore
+        // @ts-expect-error
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };

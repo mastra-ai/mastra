@@ -656,9 +656,8 @@ export class InngestRun<
 
     const writer = writable.getWriter();
     void writer.write({
-      // @ts-ignore
+      // @ts-expect-error
       type: 'start',
-      // @ts-ignore
       payload: { runId: this.runId },
     });
 
@@ -681,7 +680,7 @@ export class InngestRun<
     this.closeStreamAction = async () => {
       await writer.write({
         type: 'finish',
-        // @ts-ignore
+        // @ts-expect-error
         payload: { runId: this.runId },
       });
       unwatch();
@@ -740,7 +739,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,
@@ -843,7 +841,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,
