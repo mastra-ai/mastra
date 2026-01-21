@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { ObservationRenderer } from './observation-renderer';
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -9,6 +10,7 @@ export interface OmMarkerData {
   tokensObserved?: number;
   tokensToObserve?: number;
   observationTokens?: number;
+  observations?: string;
   durationMs?: number;
   error?: string;
   recordId?: string;
@@ -80,6 +82,7 @@ export const ObservationMarkerBadge = ({
   if (isEnd) {
     const tokensObserved = omData.tokensObserved;
     const observationTokens = omData.observationTokens;
+    const observations = omData.observations;
     const durationMs = omData.durationMs;
     const compressionRatio = tokensObserved && observationTokens && observationTokens > 0 
       ? Math.round(tokensObserved / observationTokens) 
@@ -99,29 +102,28 @@ export const ObservationMarkerBadge = ({
           </span>
         </button>
         {isExpanded && (
-          <div className="mt-1 ml-6 p-2 rounded-md bg-green-500/5 text-green-700 text-xs space-y-0.5 border border-green-500/10 max-w-[200px]">
-            {tokensObserved && (
-              <div className="flex justify-between gap-4">
-                <span className="text-green-600">Input:</span>
-                <span>{formatTokens(tokensObserved)} tokens</span>
-              </div>
-            )}
-            {observationTokens && (
-              <div className="flex justify-between gap-4">
-                <span className="text-green-600">Output:</span>
-                <span>{formatTokens(observationTokens)} tokens</span>
-              </div>
-            )}
-            {compressionRatio && compressionRatio > 1 && (
-              <div className="flex justify-between gap-4">
-                <span className="text-green-600">Compression:</span>
-                <span>{compressionRatio}x</span>
-              </div>
-            )}
-            {durationMs && (
-              <div className="flex justify-between gap-4">
-                <span className="text-green-600">Duration:</span>
-                <span>{(durationMs / 1000).toFixed(2)}s</span>
+          <div className="mt-1 ml-6 p-2 rounded-md bg-green-500/5 text-green-700 text-xs space-y-1.5 border border-green-500/10 max-w-md">
+            <div className="flex gap-4 text-[11px]">
+              {tokensObserved && (
+                <span><span className="text-green-600">Input:</span> {formatTokens(tokensObserved)}</span>
+              )}
+              {observationTokens && (
+                <span><span className="text-green-600">Output:</span> {formatTokens(observationTokens)}</span>
+              )}
+              {compressionRatio && compressionRatio > 1 && (
+                <span><span className="text-green-600">Compression:</span> {compressionRatio}x</span>
+              )}
+              {durationMs && (
+                <span><span className="text-green-600">Duration:</span> {(durationMs / 1000).toFixed(2)}s</span>
+              )}
+            </div>
+            {observations && (
+              <div className="mt-1 pt-1 border-t border-green-500/10">
+                <ObservationRenderer 
+                  observations={observations} 
+                  maxHeight="200px"
+                  className="text-green-800"
+                />
               </div>
             )}
           </div>

@@ -1115,6 +1115,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     startedAt: string;
     tokensObserved: number;
     observationTokens: number;
+    observations?: string;
     recordId: string;
     threadId: string;
   }): DataOmObservationEndPart {
@@ -1129,6 +1130,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         durationMs,
         tokensObserved: params.tokensObserved,
         observationTokens: params.observationTokens,
+        observations: params.observations,
         recordId: params.recordId,
         threadId: params.threadId,
       },
@@ -2808,6 +2810,7 @@ ${formattedMessages}
           startedAt,
           tokensObserved: tokensToObserve,
           observationTokens: cycleObservationTokens,
+          observations: result.observations,
           recordId: record.id,
           threadId,
         });
@@ -3428,7 +3431,7 @@ ${formattedMessages}
       // ════════════════════════════════════════════════════════════════════════
       for (const obsResult of observationResults) {
         if (!obsResult) continue;
-        const { threadId, threadMessages } = obsResult;
+        const { threadId, threadMessages, result } = obsResult;
         const lastMessage = threadMessages[threadMessages.length - 1];
         if (lastMessage?.id) {
           const tokensObserved = threadTokensToObserve.get(threadId) ?? this.tokenCounter.countMessages(threadMessages);
@@ -3437,6 +3440,7 @@ ${formattedMessages}
             startedAt: observationStartedAt,
             tokensObserved,
             observationTokens: cycleObservationTokens,
+            observations: result.observations,
             recordId: record.id,
             threadId,
           });

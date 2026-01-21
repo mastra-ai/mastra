@@ -255,16 +255,9 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             };
           }
 
-          // Handle data-om-* parts by converting to tool-call format
+          // Keep data-om-* parts as-is - they'll be converted by convertOmPartsInMastraMessage later
           if (part.type?.startsWith('data-om-')) {
-            const toolName = part.type.replace('data-', '');
-            return {
-              type: 'tool-call',
-              toolCallId: `${toolName}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-              toolName,
-              args: part.data || {},
-              result: { status: 'complete', omData: part.data },
-            };
+            return part;
           }
         })
         .filter(Boolean);

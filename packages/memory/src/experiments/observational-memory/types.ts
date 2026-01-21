@@ -267,6 +267,9 @@ export interface DataOmObservationEndPart {
     /** Resulting observation tokens after compression */
     observationTokens: number;
 
+    /** The actual observations generated in this cycle */
+    observations?: string;
+
     /** The OM record ID */
     recordId: string;
 
