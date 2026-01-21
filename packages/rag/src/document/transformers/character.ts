@@ -259,6 +259,28 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           ' ',
           '',
         ];
+      case Language.PHP:
+        return [
+          '\\nnamespace ',
+          '\\nuse ',
+          '\\nclass ',
+          '\\ninterface ',
+          '\\ntrait ',
+          '\\nfunction ',
+          '\\npublic ',
+          '\\nprivate ',
+          '\\nprotected ',
+          '\\nif ',
+          '\\nforeach ',
+          '\\nfor ',
+          '\\nwhile ',
+          '\\nswitch ',
+          '\\ncase ',
+          '\\n\\n',
+          '\\n',
+          ' ',
+          '',
+        ];
       // ... (add other language cases following the same pattern)
       default:
         throw new Error(`Language ${language} is not supported! Please choose from ${Object.values(Language)}`);
