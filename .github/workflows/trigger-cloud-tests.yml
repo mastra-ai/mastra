@@ -1,5 +1,7 @@
 name: Trigger Cloud Integration Tests
 
+permissions: {}
+
 on:
   workflow_dispatch:
   push:
