@@ -15,7 +15,7 @@ import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { getPackageName, slash } from '../build/utils';
+import { slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
