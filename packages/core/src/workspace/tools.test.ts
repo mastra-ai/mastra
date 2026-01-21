@@ -249,7 +249,7 @@ describe('createWorkspaceTools', () => {
   // Filesystem Tools
   // ===========================================================================
   describe('workspace_read_file', () => {
-    it('should read file content', async () => {
+    it('should read file content with line numbers by default', async () => {
       const files = new Map<string, string>([['/test.txt', 'Hello World']]);
       const mockFs = createMockFilesystem(files);
       const workspace = new Workspace({ filesystem: mockFs });
@@ -257,9 +257,41 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools.workspace_read_file.execute({ path: '/test.txt' });
 
+      expect(result.content).toBe('     1→Hello World');
+      expect(result.size).toBe(11);
+      expect(result.path).toBe('/test.txt');
+    });
+
+    it('should read file content without line numbers when showLineNumbers is false', async () => {
+      const files = new Map<string, string>([['/test.txt', 'Hello World']]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_read_file.execute({ path: '/test.txt', showLineNumbers: false });
+
       expect(result.content).toBe('Hello World');
       expect(result.size).toBe(11);
       expect(result.path).toBe('/test.txt');
+    });
+
+    it('should read file with offset and limit', async () => {
+      const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
+      const files = new Map<string, string>([['/test.txt', content]]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_read_file.execute({
+        path: '/test.txt',
+        offset: 2,
+        limit: 2,
+        showLineNumbers: false,
+      });
+
+      expect(result.content).toBe('Line 2\nLine 3');
+      expect(result.lines).toEqual({ start: 2, end: 3 });
+      expect(result.totalLines).toBe(5);
     });
 
     it('should handle buffer content as base64', async () => {
@@ -306,6 +338,77 @@ describe('createWorkspaceTools', () => {
       });
 
       expect(mockFs.writeFile).toHaveBeenCalledWith('/new.txt', 'content', { overwrite: false });
+    });
+  });
+
+  describe('workspace_edit_file', () => {
+    it('should replace unique string in file', async () => {
+      const files = new Map<string, string>([['/test.txt', 'Hello World']]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_edit_file.execute({
+        path: '/test.txt',
+        old_string: 'World',
+        new_string: 'Universe',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.replacements).toBe(1);
+      expect(mockFs.writeFile).toHaveBeenCalledWith('/test.txt', 'Hello Universe', { overwrite: true });
+    });
+
+    it('should fail when old_string not found', async () => {
+      const files = new Map<string, string>([['/test.txt', 'Hello World']]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_edit_file.execute({
+        path: '/test.txt',
+        old_string: 'foo',
+        new_string: 'bar',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.replacements).toBe(0);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should fail when old_string not unique without replace_all', async () => {
+      const files = new Map<string, string>([['/test.txt', 'hello hello hello']]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_edit_file.execute({
+        path: '/test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.replacements).toBe(0);
+      expect(result.error).toContain('3 times');
+    });
+
+    it('should replace all occurrences with replace_all', async () => {
+      const files = new Map<string, string>([['/test.txt', 'hello hello hello']]);
+      const mockFs = createMockFilesystem(files);
+      const workspace = new Workspace({ filesystem: mockFs });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools.workspace_edit_file.execute({
+        path: '/test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+        replace_all: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.replacements).toBe(3);
+      expect(mockFs.writeFile).toHaveBeenCalledWith('/test.txt', 'hi hi hi', { overwrite: true });
     });
   });
 

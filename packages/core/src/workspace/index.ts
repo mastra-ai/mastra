@@ -166,18 +166,31 @@ export {
 export {
   BM25Index,
   tokenize,
-  findLineRange,
-  extractLines,
-  charIndexToLineNumber,
-  charRangeToLineRange,
   DEFAULT_STOPWORDS,
   type BM25Config,
   type BM25Document,
   type BM25SearchResult,
   type BM25IndexData,
   type TokenizeOptions,
-  type LineRange,
 } from './bm25';
+
+// =============================================================================
+// Line Utilities
+// =============================================================================
+
+export {
+  extractLines,
+  extractLinesWithLimit,
+  formatWithLineNumbers,
+  findLineRange,
+  charIndexToLineNumber,
+  charRangeToLineRange,
+  countOccurrences,
+  replaceString,
+  StringNotFoundError,
+  StringNotUniqueError,
+  type LineRange,
+} from './line-utils';
 
 // =============================================================================
 // Skills (types, schemas, and implementation)

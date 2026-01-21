@@ -7,6 +7,13 @@
 
 import { z } from 'zod';
 import { createTool } from '../tools';
+import {
+  extractLinesWithLimit,
+  formatWithLineNumbers,
+  replaceString,
+  StringNotFoundError,
+  StringNotUniqueError,
+} from './line-utils';
 import type { Workspace } from './workspace';
 
 /**
@@ -27,7 +34,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     // Read tools are always available
     tools.workspace_read_file = createTool({
       id: 'workspace_read_file',
-      description: 'Read the contents of a file from the workspace filesystem',
+      description:
+        'Read the contents of a file from the workspace filesystem. Supports reading specific line ranges using offset/limit parameters.',
       // Require approval when fsApproval is 'all'
       requireApproval: fsApproval === 'all',
       inputSchema: z.object({
@@ -36,21 +44,66 @@ export function createWorkspaceTools(workspace: Workspace) {
           .enum(['utf-8', 'utf8', 'base64', 'hex', 'binary'])
           .optional()
           .describe('The encoding to use when reading the file. Defaults to utf-8 for text files.'),
+        offset: z
+          .number()
+          .optional()
+          .describe('Line number to start reading from (1-indexed). If omitted, starts from line 1.'),
+        limit: z
+          .number()
+          .optional()
+          .describe('Maximum number of lines to read. If omitted, reads to the end of the file.'),
+        showLineNumbers: z
+          .boolean()
+          .optional()
+          .default(true)
+          .describe('Whether to prefix each line with its line number (default: true)'),
       }),
       outputSchema: z.object({
-        content: z.string().describe('The file contents'),
+        content: z.string().describe('The file contents (with optional line number prefixes)'),
         size: z.number().describe('The file size in bytes'),
         path: z.string().describe('The full path to the file'),
+        lines: z
+          .object({
+            start: z.number().describe('First line number returned'),
+            end: z.number().describe('Last line number returned'),
+          })
+          .optional()
+          .describe('Line range information (when offset/limit used)'),
+        totalLines: z.number().optional().describe('Total number of lines in the file'),
       }),
-      execute: async ({ path, encoding }) => {
-        const content = await workspace.readFile(path, {
+      execute: async ({ path, encoding, offset, limit, showLineNumbers }) => {
+        const fullContent = await workspace.readFile(path, {
           encoding: (encoding as BufferEncoding) ?? 'utf-8',
         });
         const stat = await workspace.filesystem!.stat(path);
+
+        // If content is binary (Buffer), return as base64 without line processing
+        if (typeof fullContent !== 'string') {
+          return {
+            content: fullContent.toString('base64'),
+            size: stat.size,
+            path: stat.path,
+          };
+        }
+
+        // Extract lines if offset or limit specified
+        const hasLineRange = offset !== undefined || limit !== undefined;
+        const result = extractLinesWithLimit(fullContent, offset, limit);
+
+        // Format with line numbers if requested (default: true)
+        const shouldShowLineNumbers = showLineNumbers !== false;
+        const formattedContent = shouldShowLineNumbers
+          ? formatWithLineNumbers(result.content, result.lines.start)
+          : result.content;
+
         return {
-          content: typeof content === 'string' ? content : content.toString('base64'),
+          content: formattedContent,
           size: stat.size,
           path: stat.path,
+          ...(hasLineRange && {
+            lines: result.lines,
+            totalLines: result.totalLines,
+          }),
         };
       },
     });
@@ -83,6 +136,75 @@ export function createWorkspaceTools(workspace: Workspace) {
             path,
             size: Buffer.byteLength(content, 'utf-8'),
           };
+        },
+      });
+
+      tools.workspace_edit_file = createTool({
+        id: 'workspace_edit_file',
+        description:
+          'Edit a file by replacing specific text. The old_string must match exactly and be unique in the file (unless using replace_all). You should read the file first to ensure you have the exact text to replace.',
+        // Require approval when fsApproval is 'all' or 'write'
+        requireApproval: fsApproval === 'all' || fsApproval === 'write',
+        inputSchema: z.object({
+          path: z.string().describe('The path to the file to edit'),
+          old_string: z.string().describe('The exact text to find and replace. Must be unique in the file.'),
+          new_string: z.string().describe('The text to replace old_string with'),
+          replace_all: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe('If true, replace all occurrences. If false (default), old_string must be unique.'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          path: z.string().describe('The path to the edited file'),
+          replacements: z.number().describe('Number of replacements made'),
+          error: z.string().optional().describe('Error message if the edit failed'),
+        }),
+        execute: async ({ path, old_string, new_string, replace_all }) => {
+          try {
+            // Read the current file content
+            const content = await workspace.readFile(path, { encoding: 'utf-8' });
+
+            if (typeof content !== 'string') {
+              return {
+                success: false,
+                path,
+                replacements: 0,
+                error: 'Cannot edit binary files. Use workspace_write_file instead.',
+              };
+            }
+
+            // Perform the replacement with validation
+            const result = replaceString(content, old_string, new_string, replace_all);
+
+            // Write the modified content back
+            await workspace.writeFile(path, result.content, { overwrite: true });
+
+            return {
+              success: true,
+              path,
+              replacements: result.replacements,
+            };
+          } catch (error) {
+            if (error instanceof StringNotFoundError) {
+              return {
+                success: false,
+                path,
+                replacements: 0,
+                error: error.message,
+              };
+            }
+            if (error instanceof StringNotUniqueError) {
+              return {
+                success: false,
+                path,
+                replacements: 0,
+                error: error.message,
+              };
+            }
+            throw error;
+          }
         },
       });
     }
@@ -434,6 +556,7 @@ export const WORKSPACE_TOOL_NAMES = {
   // Filesystem tools
   READ_FILE: 'workspace_read_file',
   WRITE_FILE: 'workspace_write_file',
+  EDIT_FILE: 'workspace_edit_file',
   LIST_FILES: 'workspace_list_files',
   DELETE_FILE: 'workspace_delete_file',
   FILE_EXISTS: 'workspace_file_exists',
