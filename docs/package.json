@@ -62,6 +62,7 @@
     "@docusaurus/types": "^3.9.1",
     "@tailwindcss/postcss": "^4.0.7",
     "@types/node": "22.13.17",
+    "baseline-browser-mapping": "^2.9.12",
     "postcss": "^8.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwind-merge": "^3.0.1",

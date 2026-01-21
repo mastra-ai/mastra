@@ -79,9 +79,9 @@ jobs:
           if [[ "$BRANCH_NAME" == "main" ]]; then
             echo "tag=beta" >> $GITHUB_OUTPUT
           elif [[ "$BRANCH_NAME" == "0.x" ]]; then
-            echo "tag=alpha" >> $GITHUB_OUTPUT
+            echo "tag=v0" >> $GITHUB_OUTPUT
           else
-            echo "tag=alpha" >> $GITHUB_OUTPUT
+            echo "tag=v0" >> $GITHUB_OUTPUT
           fi
 
       - name: Publish packages
@@ -181,6 +181,10 @@ jobs:
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
         run: node .github/scripts/publish-alpha-tags.js alpha
+
+      - name: Updated beta versions
+        if: ${{ !inputs.dry_run }}
+        run: node .github/scripts/publish-alpha-tags.js beta
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}

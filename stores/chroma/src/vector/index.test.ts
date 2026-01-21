@@ -1,6 +1,4 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import type { QueryResult, IndexStats } from '@mastra/core/vector';
-import { Search } from 'chromadb';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
 import { ChromaVector } from './';
@@ -32,267 +30,7 @@ describe('ChromaVector Integration Tests', () => {
     }
   }, 5000);
 
-  describe('Index Management', () => {
-    it('should create and list indexes', async () => {
-      const indexes = await vectorDB.listIndexes();
-      expect(indexes).toContain(testIndexName);
-    });
-
-    it('should describe index correctly', async () => {
-      const stats: IndexStats = await vectorDB.describeIndex({ indexName: testIndexName });
-      expect(stats.dimension).toBe(dimension);
-      expect(stats.count).toBe(0);
-      expect(stats.metric).toBe('cosine');
-    });
-
-    it('should delete index', async () => {
-      await vectorDB.deleteIndex({ indexName: testIndexName });
-      const indexes = await vectorDB.listIndexes();
-      expect(indexes).not.toContain(testIndexName);
-    });
-
-    it('should create index with different metrics', async () => {
-      const metricsToTest: Array<'cosine' | 'euclidean' | 'dotproduct'> = ['euclidean', 'dotproduct'];
-
-      for (const metric of metricsToTest) {
-        const testIndex = `test-index-${metric}`;
-        await vectorDB.createIndex({ indexName: testIndex, dimension, metric });
-
-        const stats = await vectorDB.describeIndex({ indexName: testIndex });
-        expect(stats.metric).toBe(metric);
-
-        await vectorDB.deleteIndex({ indexName: testIndex });
-      }
-    });
-  });
-
-  describe('Basic Vector Operations', () => {
-    const testVectors = [
-      [1.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 1.0],
-    ];
-    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-    const testIds = ['vec1', 'vec2', 'vec3'];
-
-    it('should upsert vectors with generated ids', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
-      expect(ids).toHaveLength(testVectors.length);
-      ids.forEach(id => expect(typeof id).toBe('string'));
-
-      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
-      expect(stats.count).toBe(testVectors.length);
-    });
-
-    it('should upsert vectors with provided ids and metadata', async () => {
-      await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata, ids: testIds });
-
-      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
-      expect(stats.count).toBe(testVectors.length);
-
-      // Query each vector to verify metadata
-      for (let i = 0; i < testVectors.length; i++) {
-        const results = await vectorDB.query({ indexName: testIndexName, queryVector: testVectors?.[i]!, topK: 1 });
-        expect(results?.[0]?.id).toBe(testIds[i]);
-        expect(results?.[0]?.metadata).toEqual(testMetadata[i]);
-      }
-    });
-
-    it('should update existing vectors', async () => {
-      // Initial upsert
-      await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata, ids: testIds });
-
-      // Update first vector
-      const updatedVector = [[0.5, 0.5, 0.0]];
-      const updatedMetadata = [{ label: 'updated-x-axis' }];
-      await vectorDB.upsert({
-        indexName: testIndexName,
-        vectors: updatedVector,
-        metadata: updatedMetadata,
-        ids: [testIds?.[0]!],
-      });
-
-      // Verify update
-      const results = await vectorDB.query({ indexName: testIndexName, queryVector: updatedVector?.[0]!, topK: 1 });
-      expect(results?.[0]?.id).toBe(testIds[0]);
-      expect(results?.[0]?.metadata).toEqual(updatedMetadata[0]);
-    });
-
-    it('should update the vector by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
-      expect(ids).toHaveLength(3);
-
-      const idToBeUpdated = ids[0] as string;
-      const newVector = [1, 2, 3];
-      const newMetaData = {
-        test: 'updates',
-      };
-
-      const update = {
-        vector: newVector,
-        metadata: newMetaData,
-      };
-
-      await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
-
-      const results: QueryResult[] = await vectorDB.query({
-        indexName: testIndexName,
-        queryVector: newVector,
-        topK: 2,
-        includeVector: true,
-      });
-      expect(results[0]?.id).toBe(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(newVector);
-      expect(results[0]?.metadata).toEqual(newMetaData);
-    });
-
-    it('should only update the metadata by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
-      expect(ids).toHaveLength(3);
-
-      const idToBeUpdated = ids[0] as string;
-      const newMetaData = {
-        test: 'updates',
-      };
-
-      const update = {
-        metadata: newMetaData,
-      };
-
-      await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
-
-      const results: QueryResult[] = await vectorDB.query({
-        indexName: testIndexName,
-        queryVector: testVectors[0] as number[],
-        topK: 2,
-        includeVector: true,
-      });
-      expect(results[0]?.id).toBe(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(testVectors[0]);
-      expect(results[0]?.metadata).toEqual(newMetaData);
-    });
-
-    it('should only update vector embeddings by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
-      expect(ids).toHaveLength(3);
-
-      const idToBeUpdated = ids[0] as string;
-      const newVector = [1, 2, 3];
-
-      const update = {
-        vector: newVector,
-      };
-
-      await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
-
-      const results: QueryResult[] = await vectorDB.query({
-        indexName: testIndexName,
-        queryVector: newVector,
-        topK: 2,
-        includeVector: true,
-      });
-      expect(results[0]?.id).toBe(idToBeUpdated);
-      expect(results[0]?.vector).toEqual(newVector);
-    });
-
-    it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateVector({ indexName: testIndexName, id: 'id', update: {} })).rejects.toThrow(
-        'No updates provided',
-      );
-    });
-
-    it('should delete the vector by id', async () => {
-      const ids = await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors });
-      expect(ids).toHaveLength(3);
-      const idToBeDeleted = ids[0] as string;
-
-      await vectorDB.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
-
-      const results: QueryResult[] = await vectorDB.query({
-        indexName: testIndexName,
-        queryVector: [1.0, 0.0, 0.0],
-        topK: 2,
-      });
-
-      expect(results).toHaveLength(2);
-      expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
-    });
-  });
-
-  describe('Query Operations', () => {
-    const testVectors = [
-      [1.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 1.0],
-    ];
-    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-    const testIds = ['vec1', 'vec2', 'vec3'];
-
-    beforeEach(async () => {
-      await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata, ids: testIds });
-    });
-
-    describe('Basic Queries', () => {
-      it('should perform vector search with topK', async () => {
-        const queryVector = [1.0, 0.1, 0.1];
-        const topK = 2;
-
-        const results: QueryResult[] = await vectorDB.query({ indexName: testIndexName, queryVector, topK });
-
-        expect(results).toHaveLength(topK);
-        expect(results?.[0]?.id).toBe(testIds[0]); // Should match x-axis vector most closely
-      });
-    });
-
-    describe('Filter Queries', () => {
-      it('should filter query results', async () => {
-        const queryVector = [1.0, 1.0, 1.0];
-        const filter = { label: 'x-axis' };
-
-        const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 3, filter });
-
-        expect(results).toHaveLength(1);
-        expect(results?.[0]?.metadata?.label).toBe('x-axis');
-      });
-    });
-
-    describe('Vector Inclusion', () => {
-      it('should include vector in query results', async () => {
-        const queryVector = [1.0, 0.1, 0.1];
-        const topK = 1;
-
-        const results = await vectorDB.query({
-          indexName: testIndexName,
-          queryVector,
-          topK,
-          includeVector: true,
-        });
-
-        expect(results).toHaveLength(topK);
-        expect(results?.[0]?.vector).toEqual(testVectors[0]);
-      });
-    });
-  });
-
   describe('Error Handling', () => {
-    const testIndexName = 'test_index_error';
-    beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-    });
-
-    afterAll(async () => {
-      await vectorDB.deleteIndex({ indexName: testIndexName });
-    });
-
-    it('should handle non-existent index queries', async () => {
-      await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
-    });
-
-    it('should handle invalid dimension vectors', async () => {
-      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
-      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
-    });
-
     it('should handle duplicate index creation gracefully', async () => {
       const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
       const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
@@ -346,174 +84,6 @@ describe('ChromaVector Integration Tests', () => {
         // Cleanup
         await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
-    });
-  });
-
-  describe('Filter Validation in Queries', () => {
-    it('rejects queries with null values', async () => {
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {
-            field: null,
-          },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {
-            other: { $eq: null },
-          },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates array operator values', async () => {
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {
-            tags: { $in: null } as any,
-          },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates numeric values for comparison operators', async () => {
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {
-            price: { $gt: 'not-a-number' },
-          },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates value types', async () => {
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: { date: { $gt: 'not-a-date' } },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: { number: { $lt: 'not-a-number' } },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('validates array operators', async () => {
-      const invalidValues = [123, 'string', true, { key: 'value' }, null];
-      for (const op of ['$in', '$nin']) {
-        for (const val of invalidValues) {
-          await expect(
-            vectorDB.query({
-              indexName: testIndexName,
-              queryVector: [1, 0, 0],
-              filter: { field: { [op]: val } },
-            }),
-          ).rejects.toThrow();
-        }
-      }
-    });
-
-    it('rejects invalid array operator values', async () => {
-      // Test non-undefined values
-      const invalidValues = [123, 'string', true, { key: 'value' }, null];
-      for (const op of ['$in', '$nin']) {
-        for (const val of invalidValues) {
-          await expect(
-            vectorDB.query({
-              indexName: testIndexName,
-              queryVector: [1, 0, 0],
-              filter: { field: { [op]: val } },
-            }),
-          ).rejects.toThrow();
-        }
-      }
-    });
-
-    it('validates comparison operators', async () => {
-      // Basic equality can accept any non-undefined value
-      for (const op of ['$eq', '$ne']) {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName,
-            queryVector: [1, 0, 0],
-            filter: { field: { [op]: undefined } },
-          }),
-        ).rejects.toThrow();
-      }
-
-      // Numeric comparisons require numbers
-      const numOps = ['$gt', '$gte', '$lt', '$lte'];
-      const invalidNumericValues = ['not-a-number', true, [], {}, null, undefined];
-      for (const op of numOps) {
-        for (const val of invalidNumericValues) {
-          await expect(
-            vectorDB.query({
-              indexName: testIndexName,
-              queryVector: [1, 0, 0],
-              filter: { field: { [op]: val } },
-            }),
-          ).rejects.toThrow();
-        }
-      }
-    });
-
-    it('validates multiple invalid values', async () => {
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {
-            field1: { $in: 'not-array' } as any,
-            field2: { $exists: 'not-boolean' } as any,
-            field3: { $gt: 'not-number' } as any,
-          },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('handles empty object filters', async () => {
-      // Test empty object at top level
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: { field: { $eq: {} } },
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('handles empty/undefined filters by returning all results', async () => {
-      const noFilterCases = [{ field: {} }, { field: undefined }, { field: { $in: undefined } }];
-
-      for (const filter of noFilterCases) {
-        await expect(vectorDB.query({ indexName: testIndexName, queryVector: [1, 0, 0], filter })).rejects.toThrow();
-      }
-    });
-    it('handles empty object filters', async () => {
-      // Test empty object at top level
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName,
-          queryVector: [1, 0, 0],
-          filter: {},
-        }),
-      ).rejects.toThrow();
     });
   });
 
@@ -575,461 +145,6 @@ describe('ChromaVector Integration Tests', () => {
       }
     });
 
-    describe('Basic Comparison Operators', () => {
-      it('filters with $eq operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { category: { $eq: 'electronics' } },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.category).toBe('electronics');
-        });
-      });
-
-      it('filters with implicit $eq', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { category: 'electronics' }, // implicit $eq
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.category).toBe('electronics');
-        });
-      });
-      it('filters with $gt operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $gt: 500 } },
-        });
-        expect(results.length).toBe(1);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeGreaterThan(500);
-        });
-      });
-
-      it('filters with $gte operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $gte: 500 } },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
-        });
-      });
-
-      it('filters with $lt operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $lt: 100 } },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeLessThan(100);
-        });
-      });
-
-      it('filters with $lte operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $lte: 500 } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(500);
-        });
-      });
-
-      it('filters with $gte, $lt, $lte operators', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $gte: 25, $lte: 500 } },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeLessThanOrEqual(500);
-          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(25);
-        });
-      });
-
-      it('filters with $ne operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { category: { $ne: 'electronics' } },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(result.metadata?.category).not.toBe('electronics');
-        });
-      });
-
-      it('filters with boolean values', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { inStock: true }, // test both implicit
-        });
-        expect(results.length).toBe(3);
-        results.forEach(result => {
-          expect(result.metadata?.inStock).toBe(true);
-        });
-      });
-
-      it('filters with multiple fields', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { category: 'electronics', price: 1000 },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.category === 'electronics' && result.metadata?.price === 1000).toBe(true);
-        });
-      });
-    });
-
-    describe('Array Operators', () => {
-      it('filters with $in operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { category: { $in: ['electronics', 'books'] } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(['electronics', 'books']).toContain(result.metadata?.category);
-        });
-      });
-
-      it('should filter with $in operator for numbers', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { price: { $in: [50, 75, 1000] } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect([50, 75, 1000]).toContain(result.metadata?.price);
-        });
-      });
-
-      it('filters with $in operator for booleans', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { inStock: { $in: [true] } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.inStock).toBe(true);
-        });
-      });
-    });
-
-    describe('Logical Operators', () => {
-      it('filters with $and operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $and: [{ category: 'electronics' }, { price: { $gt: 500 } }] },
-        });
-        expect(results.length).toBe(1);
-        expect(results[0]?.metadata?.category).toBe('electronics');
-        expect(Number(results[0]?.metadata?.price)).toBeGreaterThan(500);
-      });
-
-      it('should filter with $and operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { inStock: true }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.category).toBe('electronics');
-          expect(Number(result.metadata?.price)).toBeGreaterThan(700);
-          expect(result.metadata?.inStock).toBe(true);
-        });
-      });
-
-      it('filters with $or operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $or: [{ price: { $gt: 900 } }, { rating: { $gt: 4.8 } }] },
-        });
-        expect(results.length).toBe(2);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price) > 900 || Number(result.metadata?.rating) > 4.8).toBe(true);
-        });
-      });
-
-      it('should filter with $or operator', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $or: [{ price: { $gt: 900 } }, { category: { $in: ['electronics', 'books'] } }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          const condition1 = Number(result.metadata?.price) > 900;
-          const condition2 = ['electronics', 'books'].includes(result.metadata?.category);
-          expect(condition1 || condition2).toBe(true);
-        });
-      });
-
-      it('should handle nested logical operators', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $and: [
-              {
-                $or: [{ category: 'electronics' }, { category: 'books' }],
-              },
-              { price: { $lt: 100 } },
-              { inStock: true },
-            ],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(['electronics', 'books']).toContain(result.metadata?.category);
-          expect(Number(result.metadata?.price)).toBeLessThan(100);
-          expect(result.metadata?.inStock).toBe(true);
-        });
-      });
-
-      it('uses implicit $eq within $or', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $or: [{ category: 'electronics' }, { price: { $gt: 100 } }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-      });
-
-      it('accepts single conditions in logical operators', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $and: [{ category: 'electronics' }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-
-        const results2 = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $or: [{ price: { $gt: 900 } }] },
-        });
-        expect(results2.length).toBeGreaterThan(0);
-      });
-    });
-
-    describe('Complex Filter Combinations', () => {
-      it('combines multiple operators and conditions', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $and: [
-              { price: { $gt: 20 } },
-              { inStock: true },
-              {
-                $or: [{ category: { $in: ['books'] } }, { rating: { $gt: 4.5 } }],
-              },
-            ],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeGreaterThan(20);
-          expect(result.metadata?.inStock).toBe(true);
-          expect(result.metadata?.category === 'books' || Number(result.metadata?.rating) > 4.5).toBe(true);
-        });
-      });
-
-      it('handles complex nested conditions', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $or: [
-              {
-                $and: [{ category: 'electronics' }, { price: { $gt: 700 } }],
-              },
-              {
-                $and: [{ category: 'books' }, { price: { $lt: 20 } }],
-              },
-            ],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          if (result.metadata?.category === 'electronics') {
-            expect(Number(result.metadata?.price)).toBeGreaterThan(700);
-          } else {
-            expect(Number(result.metadata?.price)).toBeLessThan(20);
-          }
-        });
-      });
-
-      it('should combine comparison and array operators', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $and: [{ price: { $gte: 500 } }, { rating: { $gt: 4.5 } }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price)).toBeGreaterThanOrEqual(500);
-          expect(Number(result.metadata?.rating)).toBeGreaterThan(4.5);
-        });
-      });
-
-      it('should handle multiple conditions on same field', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $and: [{ price: { $gte: 30 } }, { price: { $lte: 800 } }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          const price = Number(result.metadata?.price);
-          expect(price).toBeGreaterThanOrEqual(30);
-          expect(price).toBeLessThanOrEqual(800);
-        });
-      });
-
-      it('should handle deeply nested logical operators', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $or: [
-              {
-                $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { rating: { $gt: 4.5 } }],
-              },
-              {
-                $and: [{ category: 'books' }, { price: { $lt: 50 } }, { rating: { $gt: 4.0 } }],
-              },
-            ],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          const isExpensiveElectronics =
-            result.metadata?.category === 'electronics' &&
-            Number(result.metadata?.price) > 700 &&
-            Number(result.metadata?.rating) > 4.5;
-
-          const isCheapBook =
-            result.metadata?.category === 'books' &&
-            Number(result.metadata?.price) < 50 &&
-            Number(result.metadata?.rating) > 4.0;
-
-          expect(isExpensiveElectronics || isCheapBook).toBe(true);
-        });
-      });
-    });
-
-    describe('Date and Numeric Edge Cases', () => {
-      beforeAll(async () => {
-        const vectors = [
-          [0.1, 0.1, 0.1],
-          [0.2, 0.2, 0.2],
-        ];
-
-        const metadata = [
-          {
-            zero: 0,
-            negativeZero: -0,
-            infinity: Infinity,
-            negativeInfinity: -Infinity,
-            decimal: 0.1,
-            negativeDecimal: -0.1,
-            currentDate: new Date().toISOString(),
-            epochDate: new Date(0).toISOString(),
-            futureDate: new Date('2100-01-01').toISOString(),
-          },
-          {
-            maxInt: Number.MAX_SAFE_INTEGER,
-            minInt: Number.MIN_SAFE_INTEGER,
-            maxFloat: Number.MAX_VALUE,
-            minFloat: Number.MIN_VALUE,
-            pastDate: new Date('1900-01-01').toISOString(),
-            currentDate: new Date().toISOString(),
-          },
-        ];
-
-        await vectorDB.upsert({
-          indexName: testIndexName2,
-          vectors,
-          metadata,
-        });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      });
-
-      it('handles special numeric values', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { $or: [{ zero: 0 }, { negativeZero: 0 }] },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          const value = result.metadata?.zero ?? result.metadata?.negativeZero;
-          expect(value).toBe(0);
-        });
-      });
-
-      it('handles extreme numeric values', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $or: [{ maxInt: { $gte: Number.MAX_SAFE_INTEGER } }, { minInt: { $lte: Number.MIN_SAFE_INTEGER } }],
-          },
-        });
-        expect(results.length).toBe(1);
-      });
-
-      it('should handle numeric comparisons with decimals', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            rating: { $gt: 4.5 },
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(Number(result.metadata?.rating)).toBeGreaterThan(4.5);
-        });
-      });
-
-      it('should handle boolean values', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: { inStock: { $eq: false } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.inStock).toBe(false);
-        });
-      });
-    });
-
     describe('Additional Validation Tests', () => {
       it('should throw error as date is not supported', async () => {
         await expect(
@@ -1044,123 +159,6 @@ describe('ChromaVector Integration Tests', () => {
             },
           }),
         ).rejects.toThrow();
-      });
-      it('should throw error as empty array in $in operator is not supported', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: {
-              category: { $in: [] },
-            },
-          }),
-        ).rejects.toThrow();
-      });
-      it('should reject non-numeric values in numeric comparisons', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: {
-              price: { $gt: '500' }, // string instead of number
-            },
-          }),
-        ).rejects.toThrow();
-      });
-
-      it('should reject mixed types in $in operator', async () => {
-        await expect(
-          vectorDB.query({
-            indexName: testIndexName2,
-            queryVector: [1, 0, 0],
-            filter: {
-              field: { $in: ['string', 123] }, // mixed string and number
-            },
-          }),
-        ).rejects.toThrow();
-      });
-      it('should handle undefined filter', async () => {
-        const results1 = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: undefined,
-        });
-        const results2 = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-        });
-        expect(results1).toEqual(results2);
-        expect(results1.length).toBeGreaterThan(0);
-      });
-
-      it('should handle null filter', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: null,
-        });
-        const results2 = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-        });
-        expect(results).toEqual(results2);
-        expect(results.length).toBeGreaterThan(0);
-      });
-    });
-
-    describe('Additional Edge Cases', () => {
-      it('should handle exact boundary conditions', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $and: [{ price: { $gte: 25 } }, { price: { $lte: 1000 } }],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.some(r => r.metadata?.price === 25)).toBe(true);
-        expect(results.some(r => r.metadata?.price === 1000)).toBe(true);
-      });
-    });
-
-    describe('Additional Complex Logical Combinations', () => {
-      it('should handle deeply nested $or conditions', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $or: [
-              {
-                $and: [{ category: 'electronics' }, { $or: [{ price: { $gt: 900 } }, { rating: { $gt: 4.8 } }] }],
-              },
-              {
-                $and: [{ category: 'books' }, { $or: [{ price: { $lt: 30 } }, { rating: { $gt: 4.5 } }] }],
-              },
-            ],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          if (result.metadata?.category === 'electronics') {
-            expect(Number(result.metadata?.price) > 900 || Number(result.metadata?.rating) > 4.8).toBe(true);
-          } else if (result.metadata?.category === 'books') {
-            expect(Number(result.metadata?.price) < 30 || Number(result.metadata?.rating) > 4.5).toBe(true);
-          }
-        });
-      });
-
-      it('should handle multiple field comparisons with same value', async () => {
-        const results = await vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0],
-          filter: {
-            $or: [{ price: { $gt: 500 } }, { rating: { $gt: 4.5 } }],
-          },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(Number(result.metadata?.price) > 500 || Number(result.metadata?.rating) > 4.5).toBe(true);
-        });
       });
     });
 
@@ -1454,7 +452,7 @@ describe('ChromaVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName3,
             queryVector: [1, 0, 0],
-            // @ts-ignore
+            // @ts-expect-error
             documentFilter: {},
           }),
         ).rejects.toThrow();
@@ -1546,7 +544,7 @@ describe('ChromaVector Integration Tests', () => {
 
       // Test querying with pagination
       const pageSize = 20;
-      const pages: QueryResult[][] = [];
+      const pages = [];
       for (let i = 0; i < batchSize; i += pageSize) {
         const page = await vectorDB.query({
           indexName: perfTestIndex,
@@ -1562,24 +560,31 @@ describe('ChromaVector Integration Tests', () => {
   });
 });
 
-// Metadata filtering tests for Memory system
-describe('Chroma Metadata Filtering', () => {
-  const chromaVector = new ChromaVector({ id: 'chroma-metadata-filter-test' });
+// Shared vector store test suite
+const chromaVector = new ChromaVector({ id: 'chroma-shared-test' });
 
-  createVectorTestSuite({
-    vector: chromaVector,
-    createIndex: async (indexName: string) => {
-      // Using dimension 1536 as required by the metadata filtering test vectors
-      await chromaVector.createIndex({ indexName, dimension: 1536 });
-    },
-    deleteIndex: async (indexName: string) => {
-      await chromaVector.deleteIndex({ indexName });
-    },
-    waitForIndexing: async () => {
-      // Chroma may need a short wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    },
-  });
+createVectorTestSuite({
+  vector: chromaVector,
+  createIndex: async (indexName, options) => {
+    await chromaVector.createIndex({ indexName, dimension: 1536, metric: options?.metric });
+  },
+  deleteIndex: async (indexName: string) => {
+    await chromaVector.deleteIndex({ indexName });
+  },
+  waitForIndexing: async () => {
+    // Chroma may need a short wait for indexing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  },
+  // ChromaDB limitations - configure which filter operators are supported
+  supportsArrayMetadata: false, // Only primitive types (string, number, boolean)
+  supportsNullValues: false, // Chroma doesn't support null in filters
+  supportsExistsOperator: false, // Chroma doesn't support $exists
+  supportsRegex: false, // Chroma doesn't support $regex
+  supportsContains: false, // Chroma uses documentFilter for text search, not metadata $contains
+  supportsNotOperator: false, // Chroma doesn't support $not
+  supportsNorOperator: false, // Chroma doesn't support $nor
+  supportsEmptyLogicalOperators: false, // Chroma throws validation errors on empty $and/$or
+  supportsAdvancedNotSyntax: false, // Chroma doesn't support mixed $and with field conditions at root
 });
 
 // ChromaCloudVector fork functionality tests (requires CHROMA_API_KEY)
@@ -1609,7 +614,7 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
   });
 
   afterEach(async () => {
-    // Clean up test indexes
+    // Cleanup after tests
     try {
       await cloudVector.deleteIndex({ indexName: testIndexName });
     } catch {
@@ -1622,57 +627,62 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Fork Tests', () 
     }
   });
 
-  it('should fork an index successfully', async () => {
-    // Create initial index with some data
-    await cloudVector.createIndex({ indexName: testIndexName, dimension });
+  describe('fork', () => {
+    it('should fork an index successfully', async () => {
+      // Create source index with data
+      await cloudVector.createIndex({
+        indexName: testIndexName,
+        dimension,
+      });
 
-    const testVectors = [
-      [1.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 1.0],
-    ];
-    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-    const testIds = ['vec1', 'vec2', 'vec3'];
+      const vectors = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+      ];
+      const metadata = [{ type: 'test1' }, { type: 'test2' }, { type: 'test3' }];
 
-    await cloudVector.upsert({
-      indexName: testIndexName,
-      vectors: testVectors,
-      ids: testIds,
-      metadata: testMetadata,
+      await cloudVector.upsert({
+        indexName: testIndexName,
+        vectors,
+        metadata,
+      });
+
+      // Wait for data to be indexed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Fork the index
+      await cloudVector.forkIndex({
+        sourceIndexName: testIndexName,
+        destinationIndexName: forkedIndexName,
+      });
+
+      // Verify forked index exists
+      const indexes = await cloudVector.listIndexes();
+      expect(indexes).toContain(forkedIndexName);
+
+      // Query forked index to verify data
+      const results = await cloudVector.query({
+        indexName: forkedIndexName,
+        queryVector: [1.0, 0.0, 0.0],
+        topK: 1,
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.metadata?.type).toBe('test1');
+    }, 10000);
+
+    it('should throw error when forking non-existent index', async () => {
+      await expect(
+        cloudVector.forkIndex({
+          sourceIndexName: 'non-existent-index',
+          destinationIndexName: forkedIndexName,
+        }),
+      ).rejects.toThrow();
     });
-
-    // Fork the index
-    await cloudVector.forkIndex({
-      indexName: testIndexName,
-      newIndexName: forkedIndexName,
-    });
-
-    // Verify both indexes exist and have the same data
-    let originalStats = await cloudVector.describeIndex({ indexName: testIndexName });
-    let forkedStats = await cloudVector.describeIndex({ indexName: forkedIndexName });
-
-    expect(originalStats.count).toBe(3);
-    expect(forkedStats.count).toBe(3);
-
-    await cloudVector.deleteVector({ indexName: forkedIndexName, id: 'vec1' });
-
-    originalStats = await cloudVector.describeIndex({ indexName: testIndexName });
-    forkedStats = await cloudVector.describeIndex({ indexName: forkedIndexName });
-
-    expect(originalStats.count).toBe(3);
-    expect(forkedStats.count).toBe(2);
-  });
-
-  it('should throw error when forking non-existent index', async () => {
-    await expect(
-      cloudVector.forkIndex({
-        indexName: 'non-existent-index',
-        newIndexName: forkedIndexName,
-      }),
-    ).rejects.toThrow();
   });
 });
 
+// ChromaCloudVector search API tests (requires CHROMA_API_KEY)
 describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests', () => {
   let cloudVector: ChromaVector;
   const testIndexName = 'search-test-index';
@@ -1680,20 +690,42 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests
 
   beforeEach(async () => {
     cloudVector = new ChromaVector({
-      id: 'chroma-cloud-vector-test',
+      id: 'chroma-cloud-vector-search-test',
       apiKey: process.env.CHROMA_API_KEY,
     });
 
-    // Clean up any existing test indexes
+    // Clean up any existing test index
     try {
       await cloudVector.deleteIndex({ indexName: testIndexName });
     } catch {
       // Ignore errors if index doesn't exist
     }
-  });
+
+    // Create test index with data
+    await cloudVector.createIndex({
+      indexName: testIndexName,
+      dimension,
+    });
+
+    const vectors = [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0],
+    ];
+    const metadata = [{ category: 'x' }, { category: 'y' }, { category: 'z' }];
+
+    await cloudVector.upsert({
+      indexName: testIndexName,
+      vectors,
+      metadata,
+    });
+
+    // Wait for indexing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }, 15000);
 
   afterEach(async () => {
-    // Clean up test indexes
+    // Cleanup after tests
     try {
       await cloudVector.deleteIndex({ indexName: testIndexName });
     } catch {
@@ -1702,36 +734,73 @@ describe.skipIf(!process.env.CHROMA_API_KEY)('ChromaCloudVector Search API Tests
   });
 
   it('should search an index successfully', async () => {
-    // Create initial index with some data
-    await cloudVector.createIndex({ indexName: testIndexName, dimension });
-
-    const testVectors = [
-      [1.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 1.0],
-    ];
-    const testMetadata = [{ label: 'x-axis' }, { label: 'y-axis' }, { label: 'z-axis' }];
-    const testIds = ['vec1', 'vec2', 'vec3'];
-
-    await cloudVector.upsert({
+    const results = await cloudVector.hybridSearch({
       indexName: testIndexName,
-      vectors: testVectors,
-      ids: testIds,
-      metadata: testMetadata,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 2,
+      },
     });
 
-    const search = new Search({
-      where: { label: 'y-axis' },
-      rank: { $knn: { query: [0.1, 0.2, 0.3] } },
-      limit: 10,
-    });
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(2);
+    // Verify structure of results
+    expect(results[0]).toHaveProperty('id');
+    expect(results[0]).toHaveProperty('score');
+    expect(results[0]).toHaveProperty('metadata');
+  }, 10000);
 
-    const result = await cloudVector.hybridSearch({
+  it('should search with where clause for metadata filtering', async () => {
+    const results = await cloudVector.hybridSearch({
       indexName: testIndexName,
-      search,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 10,
+        where: { category: 'x' },
+      },
     });
 
-    expect(result.length).toBe(1);
-    expect(result[0]?.id).toBe('vec2');
-  });
+    expect(results).toBeDefined();
+    expect(results.length).toBe(1);
+    expect(results[0]?.metadata?.category).toBe('x');
+  }, 10000);
+
+  it('should search with knn parameter for vector similarity', async () => {
+    const results = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search: {
+        query_embedding: [1.0, 0.0, 0.0],
+        n_results: 3,
+        knn: {
+          embedding: [1.0, 0.0, 0.0],
+          n_neighbors: 2,
+        },
+      },
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+  }, 10000);
+
+  it('should search with combined where clause and knn parameters', async () => {
+    const results = await cloudVector.hybridSearch({
+      indexName: testIndexName,
+      search: {
+        query_embedding: [0.0, 1.0, 0.0],
+        n_results: 10,
+        where: { $or: [{ category: 'x' }, { category: 'y' }] },
+        knn: {
+          embedding: [0.0, 1.0, 0.0],
+          n_neighbors: 2,
+        },
+      },
+    });
+
+    expect(results).toBeDefined();
+    expect(results.length).toBeGreaterThan(0);
+    results.forEach(result => {
+      expect(['x', 'y']).toContain(result.metadata?.category);
+    });
+  }, 10000);
 });

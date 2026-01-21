@@ -99,8 +99,280 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
+    // Check if unique index already exists - if so, skip migration check
+    // This avoids running expensive queries on every init after migration is complete
+    const uniqueIndexExists = await this.spansUniqueIndexExists();
+    if (!uniqueIndexExists) {
+      // Check for duplicates before attempting to create unique index
+      const duplicateInfo = await this.checkForDuplicateSpans();
+      if (duplicateInfo.hasDuplicates) {
+        // Duplicates exist - throw error requiring manual migration
+        const errorMessage =
+          `\n` +
+          `===========================================================================\n` +
+          `MIGRATION REQUIRED: Duplicate spans detected in ${TABLE_SPANS} collection\n` +
+          `===========================================================================\n` +
+          `\n` +
+          `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations.\n` +
+          `\n` +
+          `The spans collection requires a unique index on (traceId, spanId), but your\n` +
+          `database contains duplicate entries that must be resolved first.\n` +
+          `\n` +
+          `To fix this, run the manual migration command:\n` +
+          `\n` +
+          `  npx mastra migrate\n` +
+          `\n` +
+          `This command will:\n` +
+          `  1. Remove duplicate spans (keeping the most complete/recent version)\n` +
+          `  2. Add the required unique index\n` +
+          `\n` +
+          `Note: This migration may take some time for large collections.\n` +
+          `===========================================================================\n`;
+
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'MIGRATION_REQUIRED', 'DUPLICATE_SPANS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: errorMessage,
+        });
+      }
+    }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Checks if the unique index on (spanId, traceId) already exists on the spans collection.
+   * Used to skip deduplication when the index already exists (migration already complete).
+   */
+  private async spansUniqueIndexExists(): Promise<boolean> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+      const indexes = await collection.indexes();
+      // Look for unique index on spanId_1_traceId_1
+      return indexes.some(idx => idx.unique === true && idx.key?.spanId === 1 && idx.key?.traceId === 1);
+    } catch {
+      // If we can't check indexes (e.g., collection doesn't exist), assume index doesn't exist
+      return false;
+    }
+  }
+
+  /**
+   * Checks for duplicate (traceId, spanId) combinations in the spans collection.
+   * Returns information about duplicates for logging/CLI purposes.
+   */
+  private async checkForDuplicateSpans(): Promise<{
+    hasDuplicates: boolean;
+    duplicateCount: number;
+  }> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Count duplicate (traceId, spanId) combinations
+      const result = await collection
+        .aggregate([
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              count: { $sum: 1 },
+            },
+          },
+          { $match: { count: { $gt: 1 } } },
+          { $count: 'duplicateCount' },
+        ])
+        .toArray();
+
+      const duplicateCount = result[0]?.duplicateCount ?? 0;
+      return {
+        hasDuplicates: duplicateCount > 0,
+        duplicateCount,
+      };
+    } catch (error) {
+      // If collection doesn't exist or other error, assume no duplicates
+      this.logger?.debug?.(`Could not check for duplicates: ${error}`);
+      return { hasDuplicates: false, duplicateCount: 0 };
+    }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique index.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    // Check if already migrated
+    const indexExists = await this.spansUniqueIndexExists();
+    if (indexExists) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. Unique index exists on ${TABLE_SPANS} collection.`,
+      };
+    }
+
+    // Check for duplicates
+    const duplicateInfo = await this.checkForDuplicateSpans();
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
+      );
+
+      // Run deduplication
+      await this.deduplicateSpans();
+    } else {
+      this.logger?.info?.(`No duplicate spans found.`);
+    }
+
+    // Create indexes (including the unique index)
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and added unique index to ${TABLE_SPANS} collection.`
+        : `Migration complete. Added unique index to ${TABLE_SPANS} collection.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans collection.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const indexExists = await this.spansUniqueIndexExists();
+
+    if (indexExists) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: TABLE_SPANS,
+      };
+    }
+
+    const duplicateInfo = await this.checkForDuplicateSpans();
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: TABLE_SPANS,
+    };
+  }
+
+  /**
+   * Deduplicates spans with the same (traceId, spanId) combination.
+   * This is needed for databases that existed before the unique constraint was added.
+   *
+   * Priority for keeping spans:
+   * 1. Completed spans (endedAt IS NOT NULL) over incomplete spans
+   * 2. Most recent updatedAt
+   * 3. Most recent createdAt (as tiebreaker)
+   *
+   * Note: This prioritizes migration completion over perfect data preservation.
+   * Old trace data may be lost, which is acceptable for this use case.
+   */
+  private async deduplicateSpans(): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      // Quick check: are there any duplicates at all? Use limit 1 for speed on large collections.
+      const duplicateCheck = await collection
+        .aggregate([
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              count: { $sum: 1 },
+            },
+          },
+          { $match: { count: { $gt: 1 } } },
+          { $limit: 1 },
+        ])
+        .toArray();
+
+      if (duplicateCheck.length === 0) {
+        this.logger?.debug?.('No duplicate spans found');
+        return;
+      }
+
+      this.logger?.info?.('Duplicate spans detected, starting deduplication...');
+
+      // Find IDs to delete using aggregation - only collects ObjectIds, not full documents.
+      // This avoids OOM issues on large collections with many duplicates.
+      // Priority: completed spans (endedAt NOT NULL) > most recent updatedAt > most recent createdAt
+      const idsToDelete = await collection
+        .aggregate([
+          // Sort by priority (affects which document $first picks within each group)
+          {
+            $sort: {
+              // Completed spans first (endedAt exists and is not null)
+              endedAt: -1,
+              updatedAt: -1,
+              createdAt: -1,
+            },
+          },
+          // Group by (traceId, spanId), keeping the first (best) _id and all _ids
+          {
+            $group: {
+              _id: { traceId: '$traceId', spanId: '$spanId' },
+              keepId: { $first: '$_id' }, // The best one to keep (after sort)
+              allIds: { $push: '$_id' }, // All ObjectIds (just 12 bytes each, not full docs)
+              count: { $sum: 1 },
+            },
+          },
+          // Only consider groups with duplicates
+          { $match: { count: { $gt: 1 } } },
+          // Get IDs to delete (allIds minus keepId)
+          {
+            $project: {
+              idsToDelete: {
+                $filter: {
+                  input: '$allIds',
+                  cond: { $ne: ['$$this', '$keepId'] },
+                },
+              },
+            },
+          },
+          // Unwind to get flat list of IDs
+          { $unwind: '$idsToDelete' },
+          // Just output the ID
+          { $project: { _id: '$idsToDelete' } },
+        ])
+        .toArray();
+
+      if (idsToDelete.length === 0) {
+        this.logger?.debug?.('No duplicates to delete after aggregation');
+        return;
+      }
+
+      // Delete all duplicates in one operation
+      const deleteResult = await collection.deleteMany({
+        _id: { $in: idsToDelete.map(d => d._id) },
+      });
+
+      this.logger?.info?.(`Deduplication complete: removed ${deleteResult.deletedCount} duplicate spans`);
+    } catch (error) {
+      this.logger?.warn?.('Failed to deduplicate spans:', error);
+      // Don't throw - deduplication is best-effort to allow migration to continue
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -437,7 +709,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         ];
 
         // Get count using aggregation
-        const countResult = await collection.aggregate([...pipeline, { $count: 'total' }]).toArray();
+        // allowDiskUse enables aggregation to write to temporary files if memory limit (100MB) is exceeded
+        const countResult = await collection
+          .aggregate([...pipeline, { $count: 'total' }], { allowDiskUse: true })
+          .toArray();
         const count = countResult[0]?.total || 0;
 
         if (count === 0) {
@@ -478,7 +753,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             { $project: { _errorSpans: 0 } },
           ];
         }
-        const spans = await collection.aggregate(aggregationPipeline).toArray();
+        const spans = await collection.aggregate(aggregationPipeline, { allowDiskUse: true }).toArray();
 
         return {
           pagination: {
@@ -516,18 +791,21 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         // Add a helper field to sort NULLs first for DESC, last for ASC
         const nullSortValue = sortDirection === -1 ? 0 : 1; // DESC: NULLs first (0), ASC: NULLs last (1)
         spans = await collection
-          .aggregate([
-            { $match: mongoFilter },
-            {
-              $addFields: {
-                _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+          .aggregate(
+            [
+              { $match: mongoFilter },
+              {
+                $addFields: {
+                  _endedAtNull: { $cond: [{ $eq: ['$endedAt', null] }, nullSortValue, sortDirection === -1 ? 1 : 0] },
+                },
               },
-            },
-            { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
-            { $skip: page * perPage },
-            { $limit: perPage },
-            { $project: { _endedAtNull: 0 } },
-          ])
+              { $sort: { _endedAtNull: 1, [sortField]: sortDirection } },
+              { $skip: page * perPage },
+              { $limit: perPage },
+              { $project: { _endedAtNull: 0 } },
+            ],
+            { allowDiskUse: true },
+          )
           .toArray();
       } else {
         // For startedAt (never null), use simple find()

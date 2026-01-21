@@ -5,11 +5,11 @@ description: "Overview of breaking changes when upgrading to Mastra v1."
 
 # Upgrade to Mastra v1
 
-:::info[First update to latest 0.x version]
-Before upgrading to v1, make sure you've updated to the latest 0.x version of Mastra. Follow the [upgrade to latest 0.x guide](https://mastra.ai/guides/migrations/upgrade-to-latest-0x) first, then return here to complete the v1 migration.
+:::info[Update to latest 0.x version]
+Before upgrading to v1, make sure you've updated to the latest 0.x version of Mastra. Follow the [upgrade to latest 0.x guide](https://mastra.ai/guides/v0/migrations/upgrade-to-latest-0x) first, then return here to complete the v1 migration.
 :::
 
-Mastra v1 is coming in January 2026. We recommend starting any new projects with the beta, or upgrading your existing project today to get ahead.
+Mastra v1 was released in January 2026. We recommend starting any new projects with Mastra v1, or upgrading your existing project to continue receiving updates and support.
 
 This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
 
@@ -19,17 +19,17 @@ Need help with the migration? Join our [Discord community](https://discord.gg/BT
 
 ## Migration Strategy
 
-### Update all Mastra packages to `beta` tag
+### Update all Mastra packages to `latest` tag
 
 Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility (all `@mastra/*` packages and `mastra`).
 
 Here's how you update the most commonly used packages:
 
 ```shell
-npm install @mastra/core@beta @mastra/loggers@beta @mastra/memory@beta mastra@beta
+npm install @mastra/core@latest @mastra/loggers@latest @mastra/memory@latest mastra@latest
 ```
 
-Install any other Mastra package with the `@beta` tag and you'll get the latest beta version available. Be sure to update all Mastra packages (especially if you're in a monorepo) to avoid version mismatches.
+Install any other Mastra package with the `@latest` tag and you'll get the latest v1 version available. Be sure to update all Mastra packages (especially if you're in a monorepo) to avoid version mismatches.
 
 ### Update Node.js version
 
@@ -44,34 +44,34 @@ Work through the [migration checklist](#migration-checklist) below to update you
 We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. If you want, you can run all v1 codemods at once:
 
 ```sh
-npx @mastra/codemod@beta v1
+npx @mastra/codemod@latest v1
 ```
 
 :::
 
 :::note[Database Migration Required]
 
-If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/v1/migrations/upgrade-to-v1/storage#database-migration) for details.
+If you're using PostgreSQL or LibSQL storage, you'll need to run a database migration. See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#database-migration) for details.
 
 :::
 
 ## Breaking Changes by Area
 
-- **[Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
-- **[Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
-- **[Tools](/guides/v1/migrations/upgrade-to-v1/tools)** - CreateTool execute signature changed to separate input and context.
-- **[Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)** - Function name changes and legacy features removed.
-- **[Memory](/guides/v1/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
-- **[Storage](/guides/v1/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
-- **[Vectors](/guides/v1/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
-- **[RAG](/guides/v1/migrations/upgrade-to-v1/rag)** - Parameter naming updated for clarity.
-- **[MCP](/guides/v1/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
-- **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
-- **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
-- **[CLI](/guides/v1/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
-- **[Deployment](/guides/v1/migrations/upgrade-to-v1/deployment)** - CloudflareDeployer configuration updated to use standard wrangler.json property names.
-- **[Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
-- **[Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
+- **[Mastra Class](/guides/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
+- **[Agent Class](/guides/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
+- **[Tools](/guides/migrations/upgrade-to-v1/tools)** - CreateTool execute signature changed to separate input and context.
+- **[Workflows](/guides/migrations/upgrade-to-v1/workflows)** - Function name changes and legacy features removed.
+- **[Memory](/guides/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
+- **[Storage](/guides/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
+- **[Vectors](/guides/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
+- **[RAG](/guides/migrations/upgrade-to-v1/rag)** - Parameter naming updated for clarity.
+- **[MCP](/guides/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
+- **[Tracing](/guides/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
+- **[Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
+- **[CLI](/guides/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Deployment](/guides/migrations/upgrade-to-v1/deployment)** - CloudflareDeployer configuration updated to use standard wrangler.json property names.
+- **[Client SDKs](/guides/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
+- **[Voice Packages](/guides/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
 
 ## Migration Checklist
 
@@ -84,37 +84,37 @@ We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/p
 If you want, you can run all v1 codemods at once:
 
 ```sh
-npx @mastra/codemod@beta v1
+npx @mastra/codemod@latest v1
 ```
 
 :::
 
 ### High Impact Changes
 
-- Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/v1/migrations/upgrade-to-v1/tools)
-- Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)
-- Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
-- Install `@mastra/observability` and wrap configuration with `new Observability()` - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
-- Migrate from `telemetry:` to `observability:` configuration (if upgrading from 0.x OTEL) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+- Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
+- Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra)
+- Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Install `@mastra/observability` and wrap configuration with `new Observability()` - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
+- Migrate from `telemetry:` to `observability:` configuration (if upgrading from 0.x OTEL) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
 
 ### Medium Impact Changes
 
-- Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent), [Tools](/guides/v1/migrations/upgrade-to-v1/tools), [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
-- Update storage methods from `get*` to `list*` pattern - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
-- Replace direct property access with getter methods - [Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra), [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
-- Update memory scope if relying on default `thread` scope - [Memory](/guides/v1/migrations/upgrade-to-v1/memory)
-- Update vector store calls to use named arguments - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
-- Remove `format` parameter from agent methods - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
-- Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
-- Rename configuration property `processors` to `spanOutputProcessors` (if using custom processors) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+- Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/guides/migrations/upgrade-to-v1/agent), [Tools](/guides/migrations/upgrade-to-v1/tools), [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update storage methods from `get*` to `list*` pattern - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Replace direct property access with getter methods - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra), [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update memory scope if relying on default `thread` scope - [Memory](/guides/migrations/upgrade-to-v1/memory)
+- Update vector store calls to use named arguments - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Remove `format` parameter from agent methods - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Rename configuration property `processors` to `spanOutputProcessors` (if using custom processors) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
 
 ### Low Impact Changes
 
-- Rename `keepSeparator` to `separatorPosition` in chunk options - [RAG](/guides/v1/migrations/upgrade-to-v1/rag)
-- Rename `createRunAsync` to `createRun` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
-- Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)
-- Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)
-- Remove deprecated CLI flags - [CLI](/guides/v1/migrations/upgrade-to-v1/cli)
-- Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)
-- Replace `runCount` with `retryCount` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
-- Update custom exporter method `exportEvent` to `exportTracingEvent` (if using custom exporters) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+- Rename `keepSeparator` to `separatorPosition` in chunk options - [RAG](/guides/migrations/upgrade-to-v1/rag)
+- Rename `createRunAsync` to `createRun` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/migrations/upgrade-to-v1/voice)
+- Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)
+- Remove deprecated CLI flags - [CLI](/guides/migrations/upgrade-to-v1/cli)
+- Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/migrations/upgrade-to-v1/client)
+- Replace `runCount` with `retryCount` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update custom exporter method `exportEvent` to `exportTracingEvent` (if using custom exporters) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
