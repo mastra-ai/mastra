@@ -2,6 +2,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
+  CreateMetadataIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
   DescribeIndexParams,
@@ -662,6 +663,87 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
             ...(filter && { filter: JSON.stringify(filter) }),
             ...(ids && { idsCount: ids.length }),
           },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * For OpenSearch, this adds a field mapping to the metadata object
+   * with the appropriate type for efficient filtering.
+   *
+   * @param params - Parameters including indexName and field to index
+   *
+   * @example
+   * ```ts
+   * await openSearchVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field, type = 'string' } = params;
+
+    // Validate field name
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+      throw new MastraError({
+        id: createVectorErrorId('OPENSEARCH', 'CREATE_METADATA_INDEX', 'INVALID_FIELD'),
+        text: `Invalid metadata field name: "${field}". Field names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, field },
+      });
+    }
+
+    // Map generic types to OpenSearch field types
+    const typeMap = {
+      string: 'keyword',
+      number: 'float',
+      boolean: 'boolean',
+    } as const;
+
+    const osType = typeMap[type as keyof typeof typeMap] || 'keyword';
+
+    try {
+      // Add field mapping to the metadata object
+      await this.client.indices.putMapping({
+        index: indexName,
+        body: {
+          properties: {
+            metadata: {
+              properties: {
+                [field]: { type: osType as 'keyword' | 'float' | 'boolean' },
+              },
+            },
+          },
+        },
+      });
+
+      this.logger?.info(`Created metadata field mapping for "${field}" on index "${indexName}"`, {
+        indexName,
+        field,
+        type: osType,
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString() || '';
+      // If mapping already exists with same type, treat as success
+      if (message.includes('mapper') && message.includes('different type')) {
+        this.logger?.warn(
+          `Metadata field "${field}" already has a different mapping on index "${indexName}". Skipping.`,
+        );
+        return;
+      }
+
+      throw new MastraError(
+        {
+          id: createVectorErrorId('OPENSEARCH', 'CREATE_METADATA_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, field },
         },
         error,
       );

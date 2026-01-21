@@ -6,6 +6,7 @@ import type {
   QueryResult,
   QueryVectorParams,
   CreateIndexParams,
+  CreateMetadataIndexParams,
   UpsertVectorParams,
   DescribeIndexParams,
   DeleteIndexParams,
@@ -501,6 +502,72 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
       this.instance = null;
       this.initialized = false;
       this.initPromise = null; // Reset initPromise to allow re-initialization
+    }
+  }
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * For DuckDB, this creates an index on the JSON field extraction
+   * from the metadata column.
+   *
+   * @param params - Parameters including indexName (table) and field to index
+   *
+   * @example
+   * ```ts
+   * await duckdbVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field } = params;
+
+    // Validate field name
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+      throw new Error(
+        `Invalid metadata field name: "${field}". Field names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+      );
+    }
+
+    await this.initialize();
+
+    const tableName = `vectors_${indexName}`;
+    const metadataIndexName = `idx_${indexName}_metadata_${field}`;
+
+    try {
+      // Check if index already exists
+      const checkResult = await this.runQuery<{ count: number }>(
+        `SELECT COUNT(*) as count FROM duckdb_indexes() WHERE index_name = ?`,
+        [metadataIndexName],
+      );
+
+      if (checkResult[0]?.count && checkResult[0].count > 0) {
+        this.logger?.debug(`Metadata index "${metadataIndexName}" already exists, skipping creation`);
+        return;
+      }
+
+      // Create index on JSON extraction - DuckDB uses json_extract_string
+      await this.runStatement(
+        `CREATE INDEX IF NOT EXISTS ${metadataIndexName} ON ${tableName} (json_extract_string(metadata, '$.${field}'))`,
+      );
+
+      this.logger?.info(`Created metadata index "${metadataIndexName}" on field "${field}"`, {
+        indexName,
+        field,
+        metadataIndexName,
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString() || '';
+      // If table doesn't exist yet, just log and return
+      if (message.includes('does not exist') || message.includes('not found')) {
+        this.logger?.debug(
+          `Table "${tableName}" does not exist yet. Metadata index will be created when table is created.`,
+        );
+        return;
+      }
+      throw error;
     }
   }
 }

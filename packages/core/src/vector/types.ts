@@ -156,3 +156,24 @@ export interface DeleteVectorsParams<Filter = VectorFilter> {
    */
   filter?: Filter;
 }
+
+/**
+ * Parameters for creating a metadata index on a vector table.
+ * Metadata indexes improve query performance when filtering by metadata fields.
+ */
+export interface CreateMetadataIndexParams {
+  /**
+   * The name of the vector index (table) to create the metadata index on.
+   */
+  indexName: string;
+  /**
+   * The metadata field to index (e.g., 'thread_id', 'user_id').
+   */
+  field: string;
+  /**
+   * The type of the field being indexed.
+   * Used by some vector stores to optimize the index.
+   * @default 'string'
+   */
+  type?: 'string' | 'number' | 'boolean';
+}
