@@ -65,3 +65,69 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+## Authentication
+
+When authentication is configured on your Mastra server, custom API routes require authentication by default. To make a route publicly accessible, set `requiresAuth: false`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+    apiRoutes: [
+      // Protected route (default behavior)
+      registerApiRoute("/protected-data", {
+        method: "GET",
+        handler: async (c) => {
+          // Access authenticated user from request context
+          const user = c.get("requestContext").get("user");
+          return c.json({ message: "Authenticated user", user });
+        },
+      }),
+
+      // Public route (no authentication required)
+      registerApiRoute("/webhooks/github", {
+        method: "POST",
+        requiresAuth: false, // Explicitly opt out of authentication
+        handler: async (c) => {
+          const payload = await c.req.json();
+          // Process webhook without authentication
+          return c.json({ received: true });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Authentication behavior
+
+- **No auth configured**: All routes (built-in and custom) are public
+- **Auth configured**:
+  - Built-in Mastra routes (`/api/agents/*`, `/api/workflows/*`, etc.) require authentication
+  - Custom routes require authentication by default
+  - Custom routes can opt out with `requiresAuth: false`
+
+### Accessing user information
+
+When a request is authenticated, the user object is available in the request context:
+
+```typescript
+registerApiRoute("/user-profile", {
+  method: "GET",
+  handler: async (c) => {
+    const requestContext = c.get("requestContext");
+    const user = requestContext.get("user");
+
+    return c.json({ user });
+  },
+})
+```
+
+For more information about authentication providers, see the [Auth documentation](/docs/server/auth).
