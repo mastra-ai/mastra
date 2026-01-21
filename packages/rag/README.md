@@ -24,3 +24,5 @@ const doc = new MDocument({
 ```
 
 [Documentation](https://mastra.ai/reference/rag/document)
+
+<!-- Test change Wed Jan 21 09:09:03 CET 2026 -->
