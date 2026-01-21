@@ -270,6 +270,12 @@ export interface DataOmObservationEndPart {
     /** The actual observations generated in this cycle */
     observations?: string;
 
+    /** Current task extracted by the Observer */
+    currentTask?: string;
+
+    /** Suggested response extracted by the Observer */
+    suggestedResponse?: string;
+
     /** The OM record ID */
     recordId: string;
 

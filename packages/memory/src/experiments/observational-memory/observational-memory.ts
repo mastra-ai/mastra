@@ -1116,6 +1116,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     tokensObserved: number;
     observationTokens: number;
     observations?: string;
+    currentTask?: string;
+    suggestedResponse?: string;
     recordId: string;
     threadId: string;
   }): DataOmObservationEndPart {
@@ -1131,6 +1133,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         tokensObserved: params.tokensObserved,
         observationTokens: params.observationTokens,
         observations: params.observations,
+        currentTask: params.currentTask,
+        suggestedResponse: params.suggestedResponse,
         recordId: params.recordId,
         threadId: params.threadId,
       },
@@ -2811,6 +2815,8 @@ ${formattedMessages}
           tokensObserved: tokensToObserve,
           observationTokens: cycleObservationTokens,
           observations: result.observations,
+          currentTask: result.currentTask,
+          suggestedResponse: result.suggestedContinuation,
           recordId: record.id,
           threadId,
         });
@@ -3441,6 +3447,8 @@ ${formattedMessages}
             tokensObserved,
             observationTokens: cycleObservationTokens,
             observations: result.observations,
+            currentTask: result.currentTask,
+            suggestedResponse: result.suggestedContinuation,
             recordId: record.id,
             threadId,
           });

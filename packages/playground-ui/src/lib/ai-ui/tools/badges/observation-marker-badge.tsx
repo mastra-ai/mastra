@@ -11,6 +11,8 @@ export interface OmMarkerData {
   tokensToObserve?: number;
   observationTokens?: number;
   observations?: string;
+  currentTask?: string;
+  suggestedResponse?: string;
   durationMs?: number;
   error?: string;
   recordId?: string;
@@ -83,6 +85,8 @@ export const ObservationMarkerBadge = ({
     const tokensObserved = omData.tokensObserved;
     const observationTokens = omData.observationTokens;
     const observations = omData.observations;
+    const currentTask = omData.currentTask;
+    const suggestedResponse = omData.suggestedResponse;
     const durationMs = omData.durationMs;
     const compressionRatio = tokensObserved && observationTokens && observationTokens > 0 
       ? Math.round(tokensObserved / observationTokens) 
@@ -124,6 +128,26 @@ export const ObservationMarkerBadge = ({
                   maxHeight="200px"
                   className="text-green-800"
                 />
+              </div>
+            )}
+            {currentTask && (
+              <div className="mt-2 pt-2 border-t border-green-500/10">
+                <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
+                  Current Task
+                </div>
+                <div className="text-[11px] text-green-800 whitespace-pre-wrap">
+                  {currentTask}
+                </div>
+              </div>
+            )}
+            {suggestedResponse && (
+              <div className="mt-2 pt-2 border-t border-green-500/10">
+                <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
+                  Suggested Response
+                </div>
+                <div className="text-[11px] text-green-800/80 italic whitespace-pre-wrap">
+                  {suggestedResponse}
+                </div>
               </div>
             )}
           </div>
