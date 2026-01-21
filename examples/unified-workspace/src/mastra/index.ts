@@ -1,13 +1,14 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import {
-  developerAgent,
-  docsAgent,
-  supportAgent,
-  researchAgent,
-  editorAgent,
-  automationAgent,
-  scriptRunnerAgent,
+  // developerAgent,
+  // docsAgent,
+  // supportAgent,
+  // researchAgent,
+  // editorAgent,
+  // automationAgent,
+  // scriptRunnerAgent,
+  cloudRunnerAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
 
@@ -41,18 +42,20 @@ const storage = new LibSQLStore({
  * - editorAgent: safeWriteWorkspace (safety: requireReadBeforeWrite)
  * - automationAgent: supervisedSandboxWorkspace (safety: requireSandboxApproval: 'all')
  * - scriptRunnerAgent: commandApprovalWorkspace (safety: requireSandboxApproval: 'commands')
+ * - cloudRunnerAgent: cloudSandboxWorkspace (ComputeSDK cloud sandbox)
  */
 export const mastra = new Mastra({
   agents: {
-    developerAgent,
-    docsAgent,
-    supportAgent,
-    researchAgent,
-    editorAgent,
-    automationAgent,
-    scriptRunnerAgent,
+    // developerAgent,
+    // docsAgent,
+    // supportAgent,
+    // researchAgent,
+    // editorAgent,
+    // automationAgent,
+    // scriptRunnerAgent,
+    cloudRunnerAgent,
   },
-  workspace: globalWorkspace,
+  // workspace: globalWorkspace,
   storage,
 });
 
