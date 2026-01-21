@@ -7,6 +7,8 @@ import type {
   CancelWorkflowRunResult,
 } from './types';
 
+export { useStreamWorkflow } from './use-stream-workflow';
+
 /**
  * Hook for creating workflow runs.
  * Returns a mutation for creating a new workflow run.
