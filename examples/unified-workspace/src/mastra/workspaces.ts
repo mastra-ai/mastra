@@ -71,6 +71,12 @@ export const globalWorkspace = new Workspace({
   skillsPaths: ['/skills'],
   // Auto-initialize on construction (needed for mastra dev)
   autoInit: true,
+  // Explicitly disable safety for full access (demo/development purposes)
+  // This overrides the secure-by-default settings
+  safety: {
+    requireReadBeforeWrite: false,
+    requireSandboxApproval: 'none',
+  },
 });
 
 /**
@@ -103,6 +109,11 @@ export const docsAgentWorkspace = new Workspace({
   skillsPaths: ['/skills', '/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
+  // Full access for documentation agent
+  safety: {
+    requireReadBeforeWrite: false,
+    requireSandboxApproval: 'none',
+  },
 });
 
 /**
@@ -130,6 +141,11 @@ export const isolatedDocsWorkspace = new Workspace({
   skillsPaths: ['/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
+  // Full access for support agent
+  safety: {
+    requireReadBeforeWrite: false,
+    requireSandboxApproval: 'none',
+  },
 });
 
 /**
