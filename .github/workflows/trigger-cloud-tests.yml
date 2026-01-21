@@ -18,4 +18,4 @@ jobs:
           token: ${{ secrets.MASTRA_CLOUD_PAT }}
           repository: mastra-ai/mastra-cloud
           event-type: test-mastra-branch
-          client-payload: '{"branch": "${{ github.ref_name }}"}'
+          client-payload: '{"branch": "${{ github.ref_name }}", "sha": "${{ github.sha }}"}'
