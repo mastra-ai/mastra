@@ -1,6 +1,6 @@
-import { type Column } from './types';
+import { type EntryListColumn } from './types';
 
-export function getColumnTemplate(columns?: Column[]): string {
+export function getColumnTemplate(columns?: EntryListColumn[]): string {
   if (!columns || columns.length === 0) {
     return '';
   }

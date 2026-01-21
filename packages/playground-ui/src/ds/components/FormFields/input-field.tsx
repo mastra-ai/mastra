@@ -21,6 +21,7 @@ export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 
   error?: boolean;
   errorMsg?: string;
   size?: FormElementSize;
+  layout?: 'vertical' | 'horizontal';
 };
 
 const inputFieldSizeClasses = {
@@ -42,6 +43,7 @@ export function InputField({
   error,
   errorMsg,
   size = 'lg',
+  layout = 'vertical',
   ...props
 }: InputFieldProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -53,47 +55,53 @@ export function InputField({
       className={cn(
         'grid gap-2',
         {
-          'grid-rows-[auto_1fr]': !labelIsHidden && !helpMsg,
-          'grid-rows-[auto_1fr_auto]': !labelIsHidden && helpMsg,
+          'grid-cols-[auto_1fr]': layout === 'horizontal',
         },
         className,
       )}
     >
       <LabelWrapper>
-        <label htmlFor={`input-${name}`} className={cn('text-ui-sm text-neutral3 flex justify-between items-center')}>
+        <label
+          htmlFor={`input-${name}`}
+          className={cn('text-ui-sm text-neutral3 flex justify-between items-center', {
+            'text-ui-md': layout === 'horizontal',
+          })}
+        >
           {label}
           {required && <i className="text-neutral2 text-xs">(required)</i>}
         </label>
       </LabelWrapper>
-      <input
-        id={`input-${name}`}
-        name={name}
-        value={value}
-        className={cn(
-          'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none bg-transparent w-full',
-          formElementRadius,
-          formElementFocus,
-          inputFieldSizeClasses[size],
-          'placeholder:text-neutral3 placeholder:text-ui-sm',
-          {
-            'cursor-not-allowed opacity-50': disabled,
-            'border-red-800 focus:border-border1': error || errorMsg,
-          },
-        )}
-        data-testid={testId}
-        {...props}
-      />
-      {helpMsg && <p className="text-neutral3 text-ui-sm">{helpMsg}</p>}
-      {errorMsg && (
-        <p
+      <div className="flex flex-col gap-1">
+        <input
+          id={`input-${name}`}
+          name={name}
+          value={value}
           className={cn(
-            'text-ui-sm text-neutral4 flex items-center gap-2',
-            '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
+            'flex grow items-center cursor-pointer text-ui-md text-neutral5 border border-border1 leading-none bg-transparent w-full',
+            formElementRadius,
+            formElementFocus,
+            inputFieldSizeClasses[size],
+            'placeholder:text-neutral3 placeholder:text-ui-sm',
+            {
+              'cursor-not-allowed opacity-50': disabled,
+              'border-red-800 focus:border-border1': error || errorMsg,
+            },
           )}
-        >
-          <TriangleAlertIcon /> {errorMsg}
-        </p>
-      )}
+          data-testid={testId}
+          {...props}
+        />
+        {helpMsg && <p className="text-neutral3 text-ui-sm">{helpMsg}</p>}
+        {errorMsg && (
+          <p
+            className={cn(
+              'text-ui-sm text-neutral4 flex items-center gap-2',
+              '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
+            )}
+          >
+            <TriangleAlertIcon /> {errorMsg}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

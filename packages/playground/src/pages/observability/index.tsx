@@ -6,7 +6,8 @@ import {
   TracesList,
   tracesListColumns,
   PageHeader,
-  EntityOptions,
+  type EntityOptions,
+  type SpanTypeOptions,
   TracesTools,
   TraceDialog,
   parseError,
@@ -20,14 +21,21 @@ import {
   useAgents,
   useWorkflows,
   useScorers,
+  StatusOptions,
 } from '@mastra/playground-ui';
-import { EntityType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 
 import { Link, useNavigate, useSearchParams } from 'react-router';
+
+enum TraceStatus {
+  SUCCESS = 'success',
+  ERROR = 'error',
+  RUNNING = 'running',
+}
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -38,6 +46,9 @@ export default function Observability() {
     label: 'All',
     type: 'all' as const,
   });
+  const [selectedType, setSelectedType] = useState<SpanType | 'all'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<TraceStatus | 'all'>('all');
+  const [selectedRunId, setSelectedRunId] = useState<string>('');
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -76,6 +87,15 @@ export default function Observability() {
           end: selectedDateTo,
         },
       }),
+      ...(selectedType !== 'all' && {
+        spanType: selectedType,
+      }),
+      ...(selectedStatus !== 'all' && {
+        status: selectedStatus as TraceStatus,
+      }),
+      ...(selectedRunId && {
+        runId: selectedRunId,
+      }),
     },
   });
 
@@ -104,6 +124,19 @@ export default function Observability() {
     ...workflowOptions,
   ];
 
+  const spanTypeOptions: SpanTypeOptions[] = [
+    { value: 'all', label: 'All' },
+    { value: SpanType.AGENT_RUN, label: 'Agent Run' },
+    { value: SpanType.WORKFLOW_RUN, label: 'Workflow Run' },
+  ];
+
+  const statusOptions: StatusOptions[] = [
+    { value: 'all', label: 'All' },
+    { value: TraceStatus.SUCCESS, label: 'Success' },
+    { value: TraceStatus.ERROR, label: 'Error' },
+    { value: TraceStatus.RUNNING, label: 'Running' },
+  ];
+
   useEffect(() => {
     if (entityOptions) {
       const entityName = searchParams.get('entity');
@@ -114,12 +147,22 @@ export default function Observability() {
     }
   }, [searchParams, selectedEntityOption, entityOptions]);
 
+  useEffect(() => {
+    const runId = searchParams.get('runId');
+    if (runId && !selectedRunId) {
+      setSelectedRunId(runId);
+    }
+  }, [searchParams, selectedRunId]);
+
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all', traceId: '' });
+    setSearchParams({ entity: 'all' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
+    setSelectedType('all');
+    setSelectedStatus('all');
+    setSelectedRunId('');
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -128,6 +171,19 @@ export default function Observability() {
     }
 
     setSelectedDateTo(value);
+  };
+
+  const handleSpanTypeChange = (type: SpanType | 'all') => {
+    setSelectedType(type);
+  };
+
+  const handleStatusChange = (status: any | 'all') => {
+    setSelectedStatus(status);
+  };
+
+  const handleRunIdChange = (runId: string) => {
+    handleReset();
+    setSelectedRunId(runId);
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
@@ -144,7 +200,13 @@ export default function Observability() {
 
   const error = isTracesError ? parseError(TracesError) : undefined;
 
-  const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
+  const filtersApplied =
+    selectedEntityOption?.value !== 'all' ||
+    selectedDateFrom ||
+    selectedDateTo ||
+    selectedStatus !== 'all' ||
+    selectedType !== 'all' ||
+    !!selectedRunId;
 
   const toNextTrace = getToNextEntryFn({
     entries: traces.map(item => ({ id: item.traceId })),
@@ -187,13 +249,21 @@ export default function Observability() {
             />
 
             <TracesTools
-              onEntityChange={handleSelectedEntityChange}
-              onReset={handleReset}
               selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onDateChange={handleDataChange}
+              selectedType={selectedType}
+              selectedStatus={selectedStatus}
+              selectedRunId={selectedRunId}
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
+              onEntityChange={handleSelectedEntityChange}
+              onDateChange={handleDataChange}
+              onTypeChange={handleSpanTypeChange}
+              onStatusChange={handleStatusChange}
+              onRunIdChange={handleRunIdChange}
+              onReset={handleReset}
+              entityOptions={entityOptions}
+              spanTypeOptions={spanTypeOptions}
+              statusOptions={statusOptions}
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
             />
 

@@ -6,6 +6,7 @@ import { HeaderTitle, Header, MainContentLayout, useAgent, Skeleton } from '@mas
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+
   return (
     <MainContentLayout>
       {isAgentLoading ? (

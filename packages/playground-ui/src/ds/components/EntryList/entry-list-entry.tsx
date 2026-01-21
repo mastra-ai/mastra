@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { getColumnTemplate } from './shared';
-import { type Column } from './types';
+import { type EntryListColumn } from './types';
 import { transitions } from '@/ds/primitives/transitions';
 import { focusRing } from '@/ds/primitives/transitions';
 
@@ -9,7 +9,7 @@ export type EntryListEntryProps = {
   isSelected?: boolean;
   children?: React.ReactNode;
   onClick?: (itemId: string) => void;
-  columns?: Column[];
+  columns?: EntryListColumn[];
   isLoading?: boolean;
 };
 

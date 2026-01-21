@@ -43,14 +43,17 @@ export function SelectField({
       )}
     >
       {label && (
-        <label className={cn('text-ui-sm text-neutral3 flex justify-between items-center shrink-0')}>
+        <label
+          htmlFor={`select-${name}`}
+          className={cn('text-ui-md text-neutral3 flex justify-between items-center shrink-0 ')}
+        >
           {label}
           {required && <i className="text-neutral2">(required)</i>}
         </label>
       )}
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger
-          id="select-dataset"
+          id={`select-${name}`}
           size={size}
           className={cn('w-full border border-border1 min-w-20 gap-2', formElementRadius, formElementFocus)}
         >
