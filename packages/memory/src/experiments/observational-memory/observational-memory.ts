@@ -2756,7 +2756,10 @@ ${formattedMessages}
         totalTokenCount += this.tokenCounter.countObservations(patternsString);
       }
 
-      omDebug(`[OM] Storing observations: ${totalTokenCount} tokens (including patterns)`);
+      // Calculate tokens generated in THIS cycle only (for UI marker)
+      const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
+
+      omDebug(`[OM] Storing observations: ${totalTokenCount} tokens total, ${cycleObservationTokens} tokens this cycle`);
 
       // Use the max message timestamp as cursor instead of current time
       // This ensures historical data (like LongMemEval fixtures) works correctly
@@ -2804,7 +2807,7 @@ ${formattedMessages}
           cycleId,
           startedAt,
           tokensObserved: tokensToObserve,
-          observationTokens: totalTokenCount,
+          observationTokens: cycleObservationTokens,
           recordId: record.id,
           threadId,
         });
@@ -3328,11 +3331,15 @@ ${formattedMessages}
       // Start with existing patterns from the record
       let currentObservations = existingObservations;
       let allPatterns: Record<string, string[]> = { ...(existingPatterns ?? {}) };
+      let cycleObservationTokens = 0; // Track total new observation tokens generated in this cycle
 
       for (const obsResult of observationResults) {
         if (!obsResult) continue;
 
         const { threadId, threadMessages, result } = obsResult;
+        
+        // Track tokens generated for this thread
+        cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
         // Wrap with thread tag and append (in thread order for consistency)
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
@@ -3429,7 +3436,7 @@ ${formattedMessages}
             cycleId,
             startedAt: observationStartedAt,
             tokensObserved,
-            observationTokens: totalTokenCount,
+            observationTokens: cycleObservationTokens,
             recordId: record.id,
             threadId,
           });
