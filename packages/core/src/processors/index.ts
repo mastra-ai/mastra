@@ -8,9 +8,23 @@ import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
+import type { DataChunkType } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
+
+/**
+ * Writer interface for processors to emit custom data chunks to the stream.
+ * This enables real-time streaming of processor-specific data (e.g., observation markers).
+ */
+export interface ProcessorStreamWriter {
+  /**
+   * Emit a custom data chunk to the stream.
+   * The chunk type must start with 'data-' prefix.
+   * @param data - The data chunk to emit
+   */
+  custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T): Promise<void>;
+}
 
 /**
  * Base context shared by all processor methods
@@ -31,6 +45,12 @@ export interface ProcessorContext<TTripwireMetadata = unknown> {
    * Use this to implement retry limits within your processor.
    */
   retryCount: number;
+  /**
+   * Optional stream writer for emitting custom data chunks.
+   * Available when the agent is streaming and outputWriter is provided.
+   * Use writer.custom() to emit data-* chunks that will be streamed to the client.
+   */
+  writer?: ProcessorStreamWriter;
 }
 
 /**

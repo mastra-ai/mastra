@@ -19,14 +19,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Get OM status to check if enabled
+  // Get OM status to check if enabled (polls when observing/reflecting)
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
     resourceId,
     threadId,
   });
 
-  // Get OM record and history
+  // Check if OM is actively observing/reflecting
+  const isOMActive = statusData?.observationalMemory?.isObserving || statusData?.observationalMemory?.isReflecting || false;
+
+  // Get OM record and history (polls when active)
   const {
     data: omData,
     isLoading: isOMLoading,
@@ -36,6 +39,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     resourceId,
     threadId,
     enabled: Boolean(statusData?.observationalMemory?.enabled),
+    isActive: isOMActive,
   });
 
   const isLoading = isStatusLoading || isOMLoading;

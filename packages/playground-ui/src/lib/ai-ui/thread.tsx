@@ -27,12 +27,22 @@ export interface ThreadProps {
   hasModelList?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ 
+  agentName, 
+  agentId, 
+  hasMemory, 
+  hasModelList,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} hasModelList={hasModelList} />;
+    return (
+      <AssistantMessage 
+        {...props} 
+        hasModelList={hasModelList}
+      />
+    );
   };
 
   return (

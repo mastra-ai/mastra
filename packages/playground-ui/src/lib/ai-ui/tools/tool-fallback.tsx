@@ -5,12 +5,18 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
+  // Handle OM observation markers - they don't need WorkflowRunProvider
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />;
+  }
+  
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
@@ -19,6 +25,11 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
+  // Handle OM observation markers first - render as ObservationMarkerBadge
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
+
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event

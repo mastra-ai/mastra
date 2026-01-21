@@ -73,6 +73,114 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   return Promise.all(promises);
 };
 
+/**
+ * Converts a data-om-* part to dynamic-tool format so toAssistantUIMessage can transform it.
+ * The ToolFallback component will detect the om-observation-* prefix and render ObservationMarkerBadge.
+ * 
+ * Input: { type: 'data-om-observation-start', data: {...} }
+ * Output: { type: 'dynamic-tool', toolCallId, toolName: 'om-observation-start', input: {...}, output: {...}, state: 'output-available' }
+ */
+const OM_TOOL_NAME = 'mastra-memory-om-observation';
+
+/**
+ * Combines data-om-* parts in a message into single tool calls by cycleId.
+ * - start marker creates a tool call in 'input-available' (loading) state
+ * - end/failed marker with same cycleId updates it to 'output-available' (complete) state
+ * If both start and end exist for the same cycleId, only the final state is kept.
+ * The tool call is placed at the position of the START marker to preserve order.
+ * 
+ * Note: cycleId is unique per observation cycle, while recordId is constant for the entire
+ * memory record. Using cycleId ensures each observation cycle gets its own UI element.
+ */
+const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessage => {
+  if (!message || !Array.isArray(message.parts)) {
+    return message;
+  }
+
+  // First pass: collect all OM parts grouped by cycleId
+  const omPartsByCycleId = new Map<string, { start?: any; end?: any; failed?: any }>();
+
+  for (const part of message.parts) {
+    if (part.type === 'data-om-observation-start') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.start = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-observation-end') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.end = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-observation-failed') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.failed = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    }
+  }
+
+  // Second pass: build new parts array, replacing start markers with merged tool calls
+  // and removing end/failed markers (they're merged into the start position)
+  const convertedParts: any[] = [];
+  const processedCycleIds = new Set<string>();
+
+  for (const part of message.parts) {
+    const cycleId = (part as any).data?.cycleId;
+    
+    if (part.type === 'data-om-observation-start' && cycleId && !processedCycleIds.has(cycleId)) {
+      // Replace start marker with merged tool call
+      const parts = omPartsByCycleId.get(cycleId)!;
+      const startData = parts.start?.data || {};
+      const endData = parts.end?.data || {};
+      const failedData = parts.failed?.data || {};
+      
+      const isFailed = !!parts.failed;
+      const isComplete = !!parts.end;
+      const isLoading = !isFailed && !isComplete;
+      
+      const mergedData = {
+        ...startData,
+        ...(isComplete ? endData : {}),
+        ...(isFailed ? failedData : {}),
+        _state: isFailed ? 'failed' : isComplete ? 'complete' : 'loading',
+      };
+
+      convertedParts.push({
+        type: 'dynamic-tool',
+        toolCallId: `om-observation-${cycleId}`,
+        toolName: OM_TOOL_NAME,
+        input: mergedData,
+        output: isLoading ? undefined : { 
+          status: isFailed ? 'failed' : 'complete',
+          omData: mergedData,
+        },
+        state: isLoading ? 'input-available' : 'output-available',
+      });
+      
+      processedCycleIds.add(cycleId);
+    } else if (part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') {
+      // Skip end/failed markers - they're merged into the start position
+      continue;
+    } else {
+      // Keep non-OM parts as-is
+      convertedParts.push(part);
+    }
+  }
+
+
+
+  return {
+    ...message,
+    parts: convertedParts,
+  };
+};
+
 const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
   // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
@@ -144,6 +252,18 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             return {
               type: 'text',
               text: part.text,
+            };
+          }
+
+          // Handle data-om-* parts by converting to tool-call format
+          if (part.type?.startsWith('data-om-')) {
+            const toolName = part.type.replace('data-', '');
+            return {
+              type: 'tool-call',
+              toolCallId: `${toolName}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              toolName,
+              args: part.data || {},
+              result: { status: 'complete', omData: part.data },
             };
           }
         })
@@ -722,7 +842,11 @@ export function MastraRuntimeProvider({
 
   const { adapters, isReady } = useAdapters(agentId);
 
-  const vnextmessages = messages.map(toAssistantUIMessage);
+  // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
+  const vnextmessages = messages.map(msg => {
+    const converted = convertOmPartsInMastraMessage(msg);
+    return toAssistantUIMessage(converted);
+  });
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,

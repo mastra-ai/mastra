@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 
 import type { MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/react';
@@ -129,17 +130,20 @@ export const useCloneThread = () => {
 /**
  * Hook to fetch Observational Memory data for an agent
  * Returns the current OM record and history for a given resource/thread
+ * Polls more frequently when observing/reflecting is in progress
  */
 export const useObservationalMemory = ({
   agentId,
   resourceId,
   threadId,
   enabled = true,
+  isActive = false,
 }: {
   agentId: string;
   resourceId?: string;
   threadId?: string;
   enabled?: boolean;
+  isActive?: boolean;
 }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
@@ -156,30 +160,35 @@ export const useObservationalMemory = ({
       });
     },
     enabled: enabled && Boolean(agentId) && (Boolean(resourceId) || Boolean(threadId)),
-    staleTime: 30 * 1000, // 30 seconds - OM data changes less frequently
+    staleTime: isActive ? 1000 : 30 * 1000, // 1 second when active, 30 seconds otherwise
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
+    refetchInterval: isActive ? 2000 : false, // Poll every 2 seconds when active
   });
 };
 
 /**
  * Hook to get OM-aware memory status
  * Extends useMemory with OM-specific status information
+ * Polls more frequently when observing/reflecting is in progress
  */
 export const useMemoryWithOMStatus = ({
   agentId,
   resourceId,
   threadId,
+  pollWhenActive = true,
 }: {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
+  pollWhenActive?: boolean;
 }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
+  const [isActive, setIsActive] = useState(false);
 
-  return useQuery<GetMemoryStatusResponse | null>({
+  const query = useQuery<GetMemoryStatusResponse | null>({
     queryKey: ['memory-status', agentId, resourceId, threadId],
     queryFn: () =>
       agentId
@@ -190,9 +199,18 @@ export const useMemoryWithOMStatus = ({
           })
         : null,
     enabled: Boolean(agentId),
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: isActive && pollWhenActive ? 1000 : 30 * 1000, // 1 second when active, 30 seconds otherwise
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
+    refetchInterval: isActive && pollWhenActive ? 2000 : false, // Poll every 2 seconds when active
   });
+
+  // Update isActive state when data changes
+  useEffect(() => {
+    const newIsActive = query.data?.observationalMemory?.isObserving || query.data?.observationalMemory?.isReflecting || false;
+    setIsActive(newIsActive);
+  }, [query.data?.observationalMemory?.isObserving, query.data?.observationalMemory?.isReflecting]);
+
+  return query;
 };

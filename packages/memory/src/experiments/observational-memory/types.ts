@@ -222,6 +222,9 @@ export interface ObservationMarkerConfig {
 export interface DataOmObservationStartPart {
   type: 'data-om-observation-start';
   data: {
+    /** Unique ID for this observation cycle - shared between start/end/failed markers */
+    cycleId: string;
+
     /** When observation started */
     startedAt: string;
 
@@ -249,6 +252,9 @@ export interface DataOmObservationStartPart {
 export interface DataOmObservationEndPart {
   type: 'data-om-observation-end';
   data: {
+    /** Unique ID for this observation cycle - shared between start/end/failed markers */
+    cycleId: string;
+
     /** When observation completed */
     completedAt: string;
 
@@ -276,6 +282,9 @@ export interface DataOmObservationEndPart {
 export interface DataOmObservationFailedPart {
   type: 'data-om-observation-failed';
   data: {
+    /** Unique ID for this observation cycle - shared between start/end/failed markers */
+    cycleId: string;
+
     /** When observation failed */
     failedAt: string;
 

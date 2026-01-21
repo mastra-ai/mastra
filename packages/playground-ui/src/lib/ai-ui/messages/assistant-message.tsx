@@ -13,6 +13,7 @@ import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provide
  */
 interface ContentItem {
   type: string;
+  data?: unknown;
   metadata?: {
     mode?: string;
     completionResult?: unknown;
@@ -23,7 +24,9 @@ export interface AssistantMessageProps {
   hasModelList?: boolean;
 }
 
-export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
+export const AssistantMessage = ({ 
+  hasModelList, 
+}: AssistantMessageProps) => {
   const data = useMessage();
   const messageId = data.id;
 

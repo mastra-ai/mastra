@@ -18,6 +18,7 @@ import type {
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
+  ProcessorStreamWriter,
   ProcessorWorkflow,
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
@@ -143,6 +144,7 @@ export class ProcessorRunner {
     input: ProcessorStepOutput,
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
+    writer?: ProcessorStreamWriter,
   ): Promise<ProcessorStepOutput> {
     // Create a run and start the workflow
     const run = await workflow.createRun();
@@ -150,6 +152,7 @@ export class ProcessorRunner {
       inputData: input,
       tracingContext,
       requestContext,
+      outputWriter: writer ? (chunk => writer.custom(chunk)) : undefined,
     });
 
     // Check for tripwire status - this means a processor in the workflow called abort()
@@ -204,6 +207,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
     retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -223,6 +227,7 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
         );
         continue;
       }
@@ -270,6 +275,7 @@ export class ProcessorRunner {
         tracingContext: { currentSpan: processorSpan },
         requestContext,
         retryCount,
+        writer,
       });
 
       // Stop recording and get mutations for this processor
@@ -948,6 +954,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
     retryCount?: number;
+    writer?: ProcessorStreamWriter;
   }): Promise<MessageList> {
     const {
       steps,
@@ -959,6 +966,7 @@ export class ProcessorRunner {
       tracingContext,
       requestContext,
       retryCount = 0,
+      writer,
     } = args;
 
     // Run through all output processors that have processOutputStep
@@ -986,6 +994,7 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
         );
         continue;
       }
@@ -1042,6 +1051,7 @@ export class ProcessorRunner {
           tracingContext: { currentSpan: processorSpan },
           requestContext,
           retryCount,
+          writer,
         });
 
         // Stop recording and get mutations for this processor

@@ -8,6 +8,7 @@ import type {
   ProcessInputStepArgs,
   ProcessOutputResultArgs,
   ProcessOutputStepArgs,
+  ProcessorStreamWriter,
 } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -1086,6 +1087,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Create a start marker for when observation begins.
    */
   private createObservationStartMarker(params: {
+    cycleId: string;
     tokensToObserve: number;
     recordId: string;
     threadId: string;
@@ -1094,6 +1096,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return {
       type: 'data-om-observation-start',
       data: {
+        cycleId: params.cycleId,
         startedAt: new Date().toISOString(),
         tokensToObserve: params.tokensToObserve,
         recordId: params.recordId,
@@ -1108,6 +1111,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Create an end marker for when observation completes successfully.
    */
   private createObservationEndMarker(params: {
+    cycleId: string;
     startedAt: string;
     tokensObserved: number;
     observationTokens: number;
@@ -1120,6 +1124,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return {
       type: 'data-om-observation-end',
       data: {
+        cycleId: params.cycleId,
         completedAt,
         durationMs,
         tokensObserved: params.tokensObserved,
@@ -1134,6 +1139,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Create a failed marker for when observation fails.
    */
   private createObservationFailedMarker(params: {
+    cycleId: string;
     startedAt: string;
     tokensAttempted: number;
     error: string;
@@ -1146,6 +1152,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return {
       type: 'data-om-observation-failed',
       data: {
+        cycleId: params.cycleId,
         failedAt,
         durationMs,
         tokensAttempted: params.tokensAttempted,
@@ -1539,7 +1546,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const prompt = buildMultiThreadObserverPrompt(observationsWithPatterns, messagesByThread, threadOrder);
 
     omDebug(`[OM] Calling multi-thread Observer for ${threadOrder.length} threads`);
-    console.log('[OM DEBUG] Observer providerOptions:', JSON.stringify(this.observerConfig.providerOptions, null, 2));
 
     // Flatten all messages for context dump
     const allMessages: MastraDBMessage[] = [];
@@ -2389,7 +2395,10 @@ ${formattedMessages}
    * This replaces MessageHistory's message saving when OM is enabled.
    */
   async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, finishReason, stepNumber, state } = args;
+    const { messageList, requestContext, finishReason, stepNumber, state, writer } = args;
+    
+    console.log('[OM processOutputStep DEBUG] writer received in args:', !!writer);
+    console.log('[OM processOutputStep DEBUG] args keys:', Object.keys(args));
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
@@ -2521,9 +2530,9 @@ ${formattedMessages}
 
         if (freshUnobservedMessages.length > 0) {
           if (this.scope === 'resource' && resourceId) {
-            await this.doResourceScopedObservation(freshRecord, threadId, resourceId, freshUnobservedMessages);
+            await this.doResourceScopedObservation(freshRecord, threadId, resourceId, freshUnobservedMessages, writer);
           } else {
-            await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages);
+            await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
           }
         }
       });
@@ -2655,6 +2664,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     threadId: string,
     unobservedMessages: MastraDBMessage[],
+    writer?: ProcessorStreamWriter,
   ): Promise<void> {
     // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
 
@@ -2676,6 +2686,10 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setObservingFlag(record.id, true);
 
+    // Generate unique cycle ID for this observation cycle
+    // This ties together the start/end/failed markers
+    const cycleId = crypto.randomUUID();
+
     // Insert START marker before observation
     const tokensToObserve = this.tokenCounter.countMessages(unobservedMessages);
     const lastMessage = unobservedMessages[unobservedMessages.length - 1];
@@ -2683,12 +2697,20 @@ ${formattedMessages}
     
     if (lastMessage?.id) {
       const startMarker = this.createObservationStartMarker({
+        cycleId,
         tokensToObserve,
         recordId: record.id,
         threadId,
         threadIds: [threadId],
       });
       this.insertObservationMarker(lastMessage, startMarker);
+      
+      // Stream the start marker to the UI for real-time feedback
+      if (writer) {
+        writer.custom(startMarker).catch(() => {
+          // Ignore errors from streaming - observation should continue
+        });
+      }
     }
 
     try {
@@ -2779,6 +2801,7 @@ ${formattedMessages}
       // ════════════════════════════════════════════════════════════════════════
       if (lastMessage?.id) {
         const endMarker = this.createObservationEndMarker({
+          cycleId,
           startedAt,
           tokensObserved: tokensToObserve,
           observationTokens: totalTokenCount,
@@ -2786,6 +2809,13 @@ ${formattedMessages}
           threadId,
         });
         this.insertObservationMarker(lastMessage, endMarker);
+        
+        // Stream the end marker to the UI for real-time feedback
+        if (writer) {
+          writer.custom(endMarker).catch(() => {
+            // Ignore errors from streaming - observation should continue
+          });
+        }
       }
 
       // Emit debug event for observation complete
@@ -2810,6 +2840,7 @@ ${formattedMessages}
       // Insert FAILED marker on error
       if (lastMessage?.id) {
         const failedMarker = this.createObservationFailedMarker({
+          cycleId,
           startedAt,
           tokensAttempted: tokensToObserve,
           error: error instanceof Error ? error.message : String(error),
@@ -2817,6 +2848,13 @@ ${formattedMessages}
           threadId,
         });
         this.insertObservationMarker(lastMessage, failedMarker);
+        
+        // Stream the failed marker to the UI for real-time feedback
+        if (writer) {
+          writer.custom(failedMarker).catch(() => {
+            // Ignore errors from streaming - observation should continue
+          });
+        }
       }
       throw error;
     } finally {
@@ -2840,6 +2878,7 @@ ${formattedMessages}
     currentThreadId: string,
     resourceId: string,
     currentThreadMessages: MastraDBMessage[],
+    writer?: ProcessorStreamWriter,
   ): Promise<void> {
     omDebug(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
 
@@ -3025,6 +3064,10 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setObservingFlag(record.id, true);
 
+    // Generate unique cycle ID for this observation cycle
+    // This ties together the start/end/failed markers across all threads
+    const cycleId = crypto.randomUUID();
+
     // Declare variables outside try block so they're accessible in catch
     const threadsWithMessages = new Map<string, MastraDBMessage[]>();
     const threadTokensToObserve = new Map<string, number>();
@@ -3087,12 +3130,20 @@ ${formattedMessages}
         
         if (lastMessage?.id) {
           const startMarker = this.createObservationStartMarker({
+            cycleId,
             tokensToObserve,
             recordId: record.id,
             threadId,
             threadIds: allThreadIds,
           });
           this.insertObservationMarker(lastMessage, startMarker);
+          
+          // Stream the start marker to the UI for real-time feedback
+          if (writer) {
+            writer.custom(startMarker).catch(() => {
+              // Ignore errors from streaming - observation should continue
+            });
+          }
         }
       }
 
@@ -3375,6 +3426,7 @@ ${formattedMessages}
         if (lastMessage?.id) {
           const tokensObserved = threadTokensToObserve.get(threadId) ?? this.tokenCounter.countMessages(threadMessages);
           const endMarker = this.createObservationEndMarker({
+            cycleId,
             startedAt: observationStartedAt,
             tokensObserved,
             observationTokens: totalTokenCount,
@@ -3382,6 +3434,13 @@ ${formattedMessages}
             threadId,
           });
           this.insertObservationMarker(lastMessage, endMarker);
+          
+          // Stream the end marker to the UI for real-time feedback
+          if (writer) {
+            writer.custom(endMarker).catch(() => {
+              // Ignore errors from streaming - observation should continue
+            });
+          }
         }
       }
 
@@ -3406,6 +3465,7 @@ ${formattedMessages}
         if (lastMessage?.id) {
           const tokensAttempted = threadTokensToObserve.get(threadId) ?? 0;
           const failedMarker = this.createObservationFailedMarker({
+            cycleId,
             startedAt: observationStartedAt,
             tokensAttempted,
             error: error instanceof Error ? error.message : String(error),
@@ -3413,6 +3473,13 @@ ${formattedMessages}
             threadId,
           });
           this.insertObservationMarker(lastMessage, failedMarker);
+          
+          // Stream the failed marker to the UI for real-time feedback
+          if (writer) {
+            writer.custom(failedMarker).catch(() => {
+              // Ignore errors from streaming - observation should continue
+            });
+          }
         }
       }
       throw error;
