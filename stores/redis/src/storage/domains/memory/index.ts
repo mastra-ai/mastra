@@ -12,13 +12,14 @@ import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
+  jsonValueEquals,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   ThreadOrderBy,
   ThreadSortDirection,
   StorageCloneThreadInput,
@@ -81,29 +82,48 @@ export class StoreMemoryRedis extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreadsByResourceId(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    return this.listThreads(args);
+  }
 
-    if (page < 0) {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    try {
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('REDIS', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('REDIS', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('REDIS', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
       );
     }
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const allThreads: StorageThreadType[] = [];
+      let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.db.scanKeys(pattern);
 
@@ -125,14 +145,27 @@ export class StoreMemoryRedis extends MemoryStorage {
           continue;
         }
         const thread = JSON.parse(data) as StorageThreadType;
-        if (thread && thread.resourceId === resourceId) {
-          allThreads.push({
-            ...thread,
-            createdAt: ensureDate(thread.createdAt)!,
-            updatedAt: ensureDate(thread.updatedAt)!,
-            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          });
+
+        if (filter?.resourceId && thread.resourceId !== filter.resourceId) {
+          continue;
         }
+
+        if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+          const threadMetadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata;
+          const matches = Object.entries(filter.metadata).every(([key, value]) =>
+            jsonValueEquals(threadMetadata?.[key], value),
+          );
+          if (!matches) {
+            continue;
+          }
+        }
+
+        allThreads.push({
+          ...thread,
+          createdAt: ensureDate(thread.createdAt)!,
+          updatedAt: ensureDate(thread.updatedAt)!,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        });
       }
 
       const sortedThreads = this.sortThreads(allThreads, field, direction);
@@ -151,11 +184,12 @@ export class StoreMemoryRedis extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('REDIS', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('REDIS', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
             perPage,
           },
