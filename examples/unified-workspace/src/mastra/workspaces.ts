@@ -313,5 +313,6 @@ export const testAgentWorkspace = new Workspace({
     basePath: join(PROJECT_ROOT, 'agent-files'),
   }),
   bm25: true,
+  autoIndexPaths: ['/'],
   autoInit: true,
 });
