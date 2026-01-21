@@ -5,6 +5,7 @@
  */
 
 import {
+  LIST_WORKSPACES_ROUTE,
   WORKSPACE_INFO_ROUTE,
   WORKSPACE_FS_ROUTES,
   WORKSPACE_SEARCH_ROUTES,
@@ -13,6 +14,9 @@ import {
 import type { ServerRoute } from '.';
 
 export const WORKSPACE_ROUTES: ServerRoute<any, any, any>[] = [
+  // List all workspaces route (at /api/workspaces - plural)
+  LIST_WORKSPACES_ROUTE,
+
   // Info route (must come first to avoid /api/workspace being matched by parameterized routes)
   WORKSPACE_INFO_ROUTE,
 

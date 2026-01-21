@@ -94,14 +94,19 @@ const skillsRequest = async <T>(baseUrl: string, path: string, options?: Request
 /**
  * Hook to list all discovered skills via workspace
  */
-export const useWorkspaceSkills = () => {
+export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills'],
+    queryKey: ['workspace', 'skills', options?.workspaceId],
     queryFn: async (): Promise<ListSkillsResponse> => {
-      return skillsRequest(baseUrl, '/api/workspace/skills');
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
+      return skillsRequest(baseUrl, `/api/workspace/skills${query ? `?${query}` : ''}`);
     },
   });
 };
@@ -109,14 +114,22 @@ export const useWorkspaceSkills = () => {
 /**
  * Hook to get a specific skill's full details via workspace
  */
-export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boolean }) => {
+export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boolean; workspaceId?: string }) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillName],
+    queryKey: ['workspace', 'skills', skillName, options?.workspaceId],
     queryFn: async (): Promise<Skill> => {
-      return skillsRequest(baseUrl, `/api/workspace/skills/${encodeURIComponent(skillName)}`);
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
+      return skillsRequest(
+        baseUrl,
+        `/api/workspace/skills/${encodeURIComponent(skillName)}${query ? `?${query}` : ''}`,
+      );
     },
     enabled: options?.enabled !== false && !!skillName,
   });
@@ -125,14 +138,25 @@ export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boole
 /**
  * Hook to list references for a skill via workspace
  */
-export const useWorkspaceSkillReferences = (skillName: string, options?: { enabled?: boolean }) => {
+export const useWorkspaceSkillReferences = (
+  skillName: string,
+  options?: { enabled?: boolean; workspaceId?: string },
+) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillName, 'references'],
+    queryKey: ['workspace', 'skills', skillName, 'references', options?.workspaceId],
     queryFn: async (): Promise<ListReferencesResponse> => {
-      return skillsRequest(baseUrl, `/api/workspace/skills/${encodeURIComponent(skillName)}/references`);
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
+      return skillsRequest(
+        baseUrl,
+        `/api/workspace/skills/${encodeURIComponent(skillName)}/references${query ? `?${query}` : ''}`,
+      );
     },
     enabled: options?.enabled !== false && !!skillName,
   });
@@ -144,17 +168,22 @@ export const useWorkspaceSkillReferences = (skillName: string, options?: { enabl
 export const useWorkspaceSkillReference = (
   skillName: string,
   referencePath: string,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; workspaceId?: string },
 ) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillName, 'references', referencePath],
+    queryKey: ['workspace', 'skills', skillName, 'references', referencePath, options?.workspaceId],
     queryFn: async (): Promise<GetReferenceResponse> => {
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
       return skillsRequest(
         baseUrl,
-        `/api/workspace/skills/${encodeURIComponent(skillName)}/references/${encodeURIComponent(referencePath)}`,
+        `/api/workspace/skills/${encodeURIComponent(skillName)}/references/${encodeURIComponent(referencePath)}${query ? `?${query}` : ''}`,
       );
     },
     enabled: options?.enabled !== false && !!skillName && !!referencePath,
@@ -167,6 +196,7 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
+  workspaceId?: string;
 }
 
 /**
@@ -187,6 +217,9 @@ export const useSearchWorkspaceSkills = () => {
       }
       if (params.includeReferences !== undefined) {
         searchParams.set('includeReferences', String(params.includeReferences));
+      }
+      if (params.workspaceId) {
+        searchParams.set('workspaceId', params.workspaceId);
       }
 
       return skillsRequest(baseUrl, `/api/workspace/skills/search?${searchParams.toString()}`);
