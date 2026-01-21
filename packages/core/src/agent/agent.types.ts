@@ -233,6 +233,71 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
+
+  /**
+   * Enable routing agent orchestration.
+   * When enabled, a routing agent decides which primitive (agent/workflow/tool) handles each step.
+   * Requires sub-agents, workflows, or tools to be configured on the agent.
+   * Memory is required when routing is enabled.
+   *
+   * @example
+   * ```typescript
+   * await agent.generate('Research and write a report', {
+   *   routing: true,
+   *   maxSteps: 10,
+   * });
+   *
+   * // With configuration
+   * await agent.generate('Complete this task', {
+   *   routing: {
+   *     verboseIntrospection: true,
+   *     additionalInstructions: 'Prefer the coder agent for implementation.',
+   *   },
+   * });
+   * ```
+   */
+  routing?: boolean | NetworkRoutingConfig;
+
+  /**
+   * Enable validation/completion checking.
+   * When configured, the agent loops until validation passes or maxSteps is reached.
+   * Uses MastraScorers that return 0 (not complete) or 1 (complete).
+   * Memory is required when validation is enabled.
+   *
+   * @example
+   * ```typescript
+   * import { createScorer } from '@mastra/core/evals';
+   *
+   * const testsScorer = createScorer({
+   *   id: 'tests',
+   *   description: 'Run tests',
+   * }).generateScore(async () => {
+   *   const result = await exec('npm test');
+   *   return result.exitCode === 0 ? 1 : 0;
+   * });
+   *
+   * await agent.generate('Fix the failing tests', {
+   *   validation: {
+   *     scorers: [testsScorer],
+   *     strategy: 'all',
+   *   },
+   *   maxSteps: 10,
+   * });
+   * ```
+   */
+  validation?: CompletionConfig;
+
+  /**
+   * Callback fired after each iteration completes.
+   * Only relevant when routing or validation is enabled.
+   */
+  onIterationComplete?: (context: {
+    iteration: number;
+    primitiveId: string;
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
+    result: string;
+    isComplete: boolean;
+  }) => void | Promise<void>;
 };
 
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &

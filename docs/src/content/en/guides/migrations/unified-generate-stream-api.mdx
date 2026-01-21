@@ -1,0 +1,226 @@
+---
+title: "Unified generate() / stream() API | Migration Guide"
+description: "Learn about the unified API where routing and validation are options on generate() and stream()."
+---
+
+# Unified `generate()` / `stream()` API
+
+## Summary
+
+This document proposes unifying `agent.generate()`, `agent.stream()`, and `agent.network()` into a single conceptual API where `generate()` and `stream()` differ only in delivery mechanism, and network orchestration behaviors are opt-in configuration options.
+
+## Current State
+
+Today, Mastra has three distinct methods:
+
+| Method | Purpose | Returns |
+|--------|---------|---------|
+| `generate()` | Single execution, waits for full response | `FullOutput` |
+| `stream()` | Single execution, streams chunks | `MastraModelOutput` |
+| `network()` | Multi-step orchestration with routing agent | `MastraAgentNetworkStream` |
+
+The `network()` method has two key behaviors that distinguish it:
+1. **Routing agent**: Decides which primitive (agent/workflow/tool) handles each step
+2. **Validation loop**: Checks if the task is complete, loops until satisfied
+
+## Proposed Design
+
+### Core Insight
+
+`generate()` and `stream()` are the same operation with different delivery. The "network" behaviors (routing, validation) should be opt-in configuration on these same methods.
+
+### Unified Options Type
+
+```typescript
+export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
+  /**
+   * Enable routing agent orchestration.
+   * When true, a routing agent decides which primitive handles each step.
+   * Requires sub-agents, workflows, or tools to be configured on the agent.
+   */
+  routing?: boolean | NetworkRoutingConfig;
+
+  /**
+   * Enable validation/completion checking.
+   * When configured, the agent loops until validation passes or maxSteps is reached.
+   */
+  validation?: CompletionConfig;
+
+  /**
+   * Callback fired after each iteration (only relevant when routing or validation is enabled).
+   */
+  onIterationComplete?: (context: {
+    iteration: number;
+    primitiveId: string;
+    primitiveType: 'agent' | 'workflow' | 'tool' | 'none';
+    result: string;
+    isComplete: boolean;
+  }) => void | Promise<void>;
+
+  // ... existing options
+};
+```
+
+### Behavior Matrix
+
+| `routing` | `validation` | Behavior |
+|-----------|--------------|----------|
+| ❌ | ❌ | Single execution (current default) |
+| ❌ | ✅ | Agent loops on itself until validated |
+| ✅ | ❌ | Routing agent delegates once per primitive |
+| ✅ | ✅ | Full orchestration: route → execute → validate → repeat |
+
+### Example Usage
+
+```typescript
+// Simple execution (unchanged)
+const result = await agent.generate('What is 2+2?');
+
+// Streaming (unchanged)
+for await (const chunk of agent.stream('Tell me a story')) {
+  console.log(chunk);
+}
+
+// With validation loop (new!)
+const result = await agent.generate('Fix all the bugs', {
+  validation: {
+    scorers: [testsPassScorer],
+    strategy: 'all',
+  },
+  maxSteps: 10,
+});
+
+// With routing agent (new!)
+const result = await agent.stream('Research AI and write a report', {
+  routing: true,
+  maxSteps: 5,
+});
+
+// Full orchestration (replaces network())
+const result = await agent.generate('Complete this complex task', {
+  routing: {
+    verboseIntrospection: true,
+    additionalInstructions: 'Prefer the coder agent for implementation.',
+  },
+  validation: {
+    scorers: [testsPassScorer, buildSuccessScorer],
+    strategy: 'all',
+  },
+  maxSteps: 20,
+  memory: { thread: 'user-123', resource: 'my-app' },
+});
+```
+
+## Implementation Plan
+
+### Phase 1: Extend Types
+
+1. Add `routing` and `validation` to `AgentExecutionOptionsBase`
+2. Add `onIterationComplete` to `AgentExecutionOptionsBase`
+3. Update type exports
+
+**Files to modify:**
+- `packages/core/src/agent/agent.types.ts`
+
+### Phase 2: Modify generate() and stream()
+
+1. Check if `routing` or `validation` is configured
+2. If either is present:
+   - Validate memory is available (required for orchestration)
+   - Call `networkLoop()` instead of `#execute()`
+   - For `generate()`: await the full result
+   - For `stream()`: return the stream
+3. If neither is present: current behavior (call `#execute()`)
+
+**Files to modify:**
+- `packages/core/src/agent/agent.ts`
+
+### Phase 3: Deprecate network()
+
+1. Add `@deprecated` JSDoc annotation to `network()`
+2. Update implementation to call the unified path
+3. Keep method for backwards compatibility
+
+**Files to modify:**
+- `packages/core/src/agent/agent.ts`
+
+### Phase 4: Update Documentation
+
+1. Update agent reference docs
+2. Create migration guide from `network()` to unified API
+3. Update examples
+
+**Files to modify:**
+- `docs/src/content/en/reference/agents/agent.mdx`
+- `docs/src/content/en/guides/migrations/agentnetwork.mdx`
+
+## Return Types
+
+### Current Complexity
+
+- `generate()` returns `FullOutput`
+- `stream()` returns `MastraModelOutput`
+- `network()` returns `MastraAgentNetworkStream`
+
+### Proposed Approach
+
+When `routing` or `validation` is enabled:
+- `generate()` returns `FullOutput` (awaits the stream internally)
+- `stream()` returns `MastraModelOutput` (wraps the network stream)
+
+This maintains backwards compatibility while enabling new behaviors.
+
+### Alternative: Overloaded Return Types
+
+```typescript
+// When routing/validation is NOT enabled
+async generate(messages, options): Promise<FullOutput>;
+
+// When routing/validation IS enabled
+async generate(messages, options: { routing: true } | { validation: CompletionConfig }): Promise<FullOutput>;
+```
+
+The return type could vary based on options, but this adds complexity. The simpler approach is to normalize to the same return type.
+
+## Memory Requirement
+
+When `routing` or `validation` is enabled, memory MUST be configured. The implementation should:
+
+1. Check if memory is available
+2. Throw a clear error if not:
+
+```typescript
+if ((options.routing || options.validation) && !this.#memory) {
+  throw new MastraError({
+    id: 'AGENT_ORCHESTRATION_MEMORY_REQUIRED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: 'Memory is required when using routing or validation. Configure memory on the agent.',
+  });
+}
+```
+
+## Backwards Compatibility
+
+- `generate()` and `stream()` without new options: unchanged behavior
+- `network()`: deprecated but still works, internally uses new unified path
+- `resumeNetwork()`, `approveNetworkToolCall()`, `declineNetworkToolCall()`: continue to work
+
+## Open Questions
+
+1. **Should `routing: true` require sub-agents/workflows?**
+   - Yes, routing without primitives to route to is meaningless
+   - Throw error if routing enabled but no sub-agents/workflows configured
+
+2. **Should validation without routing loop on the same agent?**
+   - Yes, the agent can retry its own execution until validation passes
+   - Useful for self-correcting tasks
+
+3. **Naming: `validation` vs `completion`?**
+   - Current network uses `completion`
+   - `validation` is more intuitive
+   - Could support both as aliases
+
+## Timeline
+
+This is a non-breaking change that adds functionality. The `network()` deprecation is soft - it continues to work indefinitely.
