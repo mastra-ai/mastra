@@ -157,6 +157,7 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
 
+  mastra?.addVector(vector);
   await storage.init()
   mastra?.setStorage(storage)
 } else if (mastra?.storage) {
