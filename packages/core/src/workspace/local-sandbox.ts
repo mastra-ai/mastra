@@ -22,6 +22,7 @@ import type {
   CommandResult,
   InstallPackageOptions,
   InstallPackageResult,
+  SharedSandboxOptions,
 } from './sandbox';
 import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
 
@@ -149,11 +150,11 @@ export class LocalSandbox implements WorkspaceSandbox {
     await this.stop();
   }
 
-  async isReady(): Promise<boolean> {
+  async isReady(_options?: SharedSandboxOptions): Promise<boolean> {
     return this._status === 'running';
   }
 
-  async getInfo(): Promise<SandboxInfo> {
+  async getInfo(_options?: SharedSandboxOptions): Promise<SandboxInfo> {
     return {
       id: this.id,
       name: this.name,

@@ -8,7 +8,8 @@ import {
   // editorAgent,
   // automationAgent,
   // scriptRunnerAgent,
-  cloudRunnerAgent,
+  // computesdkAgent,
+  e2bAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
 
@@ -42,7 +43,8 @@ const storage = new LibSQLStore({
  * - editorAgent: safeWriteWorkspace (safety: requireReadBeforeWrite)
  * - automationAgent: supervisedSandboxWorkspace (safety: requireSandboxApproval: 'all')
  * - scriptRunnerAgent: commandApprovalWorkspace (safety: requireSandboxApproval: 'commands')
- * - cloudRunnerAgent: cloudSandboxWorkspace (ComputeSDK cloud sandbox)
+ * - computesdkAgent: computesdkWorkspace (ComputeSDK unified sandbox API)
+ * - e2bAgent: e2bWorkspace (E2B direct integration)
  */
 export const mastra = new Mastra({
   agents: {
@@ -53,7 +55,8 @@ export const mastra = new Mastra({
     // editorAgent,
     // automationAgent,
     // scriptRunnerAgent,
-    cloudRunnerAgent,
+    // computesdkAgent,
+    e2bAgent,
   },
   // workspace: globalWorkspace,
   storage,

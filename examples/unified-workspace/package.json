@@ -7,6 +7,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
+    "@e2b/code-interpreter": "^2.3.3",
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",

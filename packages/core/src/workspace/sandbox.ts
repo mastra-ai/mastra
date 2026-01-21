@@ -13,22 +13,101 @@
  * - Docker: Container-based execution
  * - Local: Development-only local execution
  *
- * @example
+ * @example Static sandbox ID
  * ```typescript
  * import { Workspace } from '@mastra/core';
- * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+ * import { E2BSandbox } from '@mastra/workspace-sandbox-e2b';
  *
  * const workspace = new Workspace({
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ *   sandbox: new E2BSandbox({ id: 'my-sandbox' }),
+ * });
+ * ```
+ *
+ * @example Dynamic sandbox ID based on thread/resource context
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { E2BSandbox } from '@mastra/workspace-sandbox-e2b';
+ *
+ * // Each thread/resource combination gets its own isolated sandbox
+ * const workspace = new Workspace({
+ *   sandbox: new E2BSandbox({
+ *     id: (ctx) => `${ctx.resourceId}-${ctx.threadId}`,
+ *     timeout: 60_000,
+ *   }),
  * });
  * ```
  */
+
+import type { MastraUnion } from '../action';
+import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
+import type { AgentToolExecutionContext } from '../tools/types';
 
 // =============================================================================
 // Core Types
 // =============================================================================
 
 export type SandboxRuntime = 'python' | 'node' | 'bash' | 'shell' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
+
+/**
+ * Context passed to sandbox ID resolver functions.
+ * Contains the identifiers needed to create dynamic, per-thread/per-resource sandbox IDs.
+ */
+export interface SandboxIdContext {
+  /** Thread ID for conversation/session context */
+  threadId?: string;
+  /** Resource ID for user/resource context */
+  resourceId?: string;
+  /** Full request context for additional data */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Sandbox ID can be static or dynamically resolved from context.
+ *
+ * @example Static ID
+ * ```typescript
+ * id: 'my-sandbox'
+ * ```
+ *
+ * @example Dynamic ID from thread context
+ * ```typescript
+ * id: (ctx) => `sandbox-${ctx.threadId}`
+ * ```
+ *
+ * @example Dynamic ID from resource and thread
+ * ```typescript
+ * id: (ctx) => `${ctx.resourceId}-${ctx.threadId}`
+ * ```
+ */
+export type SandboxIdResolver = string | ((ctx: SandboxIdContext) => string);
+
+/**
+ * Helper function for sandbox implementations to resolve dynamic IDs.
+ * Call this at execution time with the options received from executeCode/executeCommand.
+ *
+ * @example
+ * ```typescript
+ * class E2BSandbox implements WorkspaceSandbox {
+ *   private idConfig: SandboxIdResolver;
+ *
+ *   async executeCode(code: string, options?: ExecuteCodeOptions) {
+ *     const sandboxId = resolveSandboxId(this.idConfig, options);
+ *     // Use sandboxId to get/create the sandbox instance...
+ *   }
+ * }
+ * ```
+ */
+export function resolveSandboxId(idConfig: SandboxIdResolver, options?: SharedSandboxOptions): string {
+  if (typeof idConfig === 'function') {
+    return idConfig({
+      threadId: options?.agent?.threadId,
+      resourceId: options?.agent?.resourceId,
+      requestContext: options?.requestContext,
+    });
+  }
+  return idConfig;
+}
 
 export interface ExecutionResult {
   /** Whether execution completed successfully (exitCode === 0) */
@@ -78,7 +157,7 @@ export interface StreamingExecutionResult {
 // Execution Options
 // =============================================================================
 
-export interface ExecuteCodeOptions {
+export interface ExecuteCodeOptions extends SharedSandboxOptions {
   /** Runtime to use (default: infer from code or use sandbox default) */
   runtime?: SandboxRuntime;
   /** Timeout in milliseconds */
@@ -91,7 +170,7 @@ export interface ExecuteCodeOptions {
   stream?: boolean;
 }
 
-export interface ExecuteCommandOptions {
+export interface ExecuteCommandOptions extends SharedSandboxOptions {
   /** Timeout in milliseconds */
   timeout?: number;
   /** Environment variables */
@@ -104,7 +183,7 @@ export interface ExecuteCommandOptions {
   shell?: string | boolean;
 }
 
-export interface InstallPackageOptions {
+export interface InstallPackageOptions extends SharedSandboxOptions {
   /** Package manager to use */
   packageManager?: 'npm' | 'pip' | 'cargo' | 'go' | 'yarn' | 'pnpm' | 'auto';
   /** Install as dev dependency */
@@ -129,6 +208,31 @@ export interface InstallPackageResult {
   /** Execution time in milliseconds */
   executionTimeMs: number;
 }
+
+export interface SharedSandboxOptions {
+  /** Request context for dynamic resource resolution */
+  requestContext?: RequestContext;
+  /** Tracing context for observability */
+  tracingContext?: TracingContext;
+  /** Mastra instance for accessing core functionality */
+  mastra?: MastraUnion;
+  /** Abort signal for cancellation */
+  abortSignal?: AbortSignal;
+  /** Agent execution context (contains threadId, resourceId, toolCallId, messages, etc.) */
+  agent?: AgentToolExecutionContext<unknown, unknown>;
+}
+
+export interface SandboxStartOptions extends SharedSandboxOptions {}
+
+export interface SandboxStopOptions extends SharedSandboxOptions {}
+
+export interface SandboxDestroyOptions extends SharedSandboxOptions {}
+
+export interface WriteOptions extends SharedSandboxOptions {}
+
+export interface ReadOptions extends SharedSandboxOptions {}
+
+export interface ListOptions extends SharedSandboxOptions {}
 
 // =============================================================================
 // Sandbox Interface
@@ -220,17 +324,17 @@ export interface WorkspaceSandbox {
    * Write a file to the sandbox's filesystem.
    * This is the sandbox's internal FS, not the workspace FS.
    */
-  writeFile?(path: string, content: string | Buffer): Promise<void>;
+  writeFile?(path: string, content: string | Buffer, options?: WriteOptions): Promise<void>;
 
   /**
    * Read a file from the sandbox's filesystem.
    */
-  readFile?(path: string): Promise<string>;
+  readFile?(path: string, options?: ReadOptions): Promise<string>;
 
   /**
    * List files in the sandbox's filesystem.
    */
-  listFiles?(path: string): Promise<string[]>;
+  listFiles?(path: string, options?: ListOptions): Promise<string[]>;
 
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -240,27 +344,36 @@ export interface WorkspaceSandbox {
    * Start/initialize the sandbox.
    * For cloud providers, this typically spins up a sandbox instance.
    */
-  start(): Promise<void>;
+  start(options?: SandboxStartOptions): Promise<void>;
 
   /**
    * Stop the sandbox, keeping state for potential restart.
    */
-  stop?(): Promise<void>;
+  stop?(options?: SandboxStopOptions): Promise<void>;
 
   /**
    * Destroy the sandbox and clean up all resources.
    */
-  destroy(): Promise<void>;
+  destroy(options?: SandboxDestroyOptions): Promise<void>;
 
   /**
    * Check if the sandbox is ready for commands.
+   * For dynamic ID sandboxes, pass options to check a specific instance.
    */
-  isReady(): Promise<boolean>;
+  isReady(options?: SharedSandboxOptions): Promise<boolean>;
 
   /**
    * Get sandbox information/metadata.
+   * For dynamic ID sandboxes, pass options to get info for a specific instance.
    */
-  getInfo(): Promise<SandboxInfo>;
+  getInfo(options?: SharedSandboxOptions): Promise<SandboxInfo>;
+
+  /**
+   * Get status for a specific sandbox instance (for dynamic ID sandboxes).
+   * Returns the status of the sandbox resolved from the options context.
+   * If not implemented, falls back to the aggregate `status` getter.
+   */
+  getStatus?(options?: SharedSandboxOptions): SandboxStatus;
 }
 
 // =============================================================================

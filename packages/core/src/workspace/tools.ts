@@ -7,7 +7,27 @@
 
 import { z } from 'zod';
 import { createTool } from '../tools';
+import type { ToolExecutionContext } from '../tools/types';
 import type { Workspace } from './workspace';
+
+/**
+ * Extract sandbox options from tool execution context.
+ * Passes through useful context for sandbox operations including:
+ * - agent context (contains threadId, resourceId, toolCallId, etc.)
+ * - tracingContext for observability
+ * - mastra instance for core functionality access
+ * - abortSignal for cancellation
+ * - requestContext for additional dynamic resolution
+ */
+function getSandboxOptions(context?: ToolExecutionContext) {
+  return {
+    requestContext: context?.requestContext,
+    tracingContext: context?.tracingContext,
+    mastra: context?.mastra,
+    abortSignal: context?.abortSignal,
+    agent: context?.agent,
+  };
+}
 
 /**
  * Creates workspace tools that will be auto-injected into agents.
@@ -39,11 +59,12 @@ export function createWorkspaceTools(workspace: Workspace) {
         size: z.number().describe('The file size in bytes'),
         path: z.string().describe('The full path to the file'),
       }),
-      execute: async ({ path, encoding }) => {
+      execute: async ({ path, encoding }, context) => {
         const content = await workspace.readFile(path, {
           encoding: (encoding as BufferEncoding) ?? 'utf-8',
+          ...getSandboxOptions(context),
         });
-        const stat = await workspace.filesystem!.stat(path);
+        const stat = await workspace.filesystem!.stat(path, { ...getSandboxOptions(context) });
         return {
           content: typeof content === 'string' ? content : content.toString('base64'),
           size: stat.size,
@@ -71,8 +92,8 @@ export function createWorkspaceTools(workspace: Workspace) {
           path: z.string().describe('The path where the file was written'),
           size: z.number().describe('The size of the written content in bytes'),
         }),
-        execute: async ({ path, content, overwrite }) => {
-          await workspace.writeFile(path, content, { overwrite });
+        execute: async ({ path, content, overwrite }, context) => {
+          await workspace.writeFile(path, content, { overwrite, ...getSandboxOptions(context) });
           return {
             success: true,
             path,
@@ -101,10 +122,11 @@ export function createWorkspaceTools(workspace: Workspace) {
         path: z.string().describe('The directory that was listed'),
         count: z.number().describe('Total number of entries'),
       }),
-      execute: async ({ path = '/', recursive, extension }) => {
+      execute: async ({ path = '/', recursive, extension }, context) => {
         const entries = await workspace.readdir(path, {
           recursive,
           extension: extension ? [extension] : undefined,
+          ...getSandboxOptions(context),
         });
         return {
           entries: entries.map(e => ({
@@ -131,8 +153,8 @@ export function createWorkspaceTools(workspace: Workspace) {
           success: z.boolean(),
           path: z.string(),
         }),
-        execute: async ({ path, force }) => {
-          await workspace.filesystem!.deleteFile(path, { force });
+        execute: async ({ path, force }, context) => {
+          await workspace.filesystem!.deleteFile(path, { force, ...getSandboxOptions(context) });
           return { success: true, path };
         },
       });
@@ -148,12 +170,12 @@ export function createWorkspaceTools(workspace: Workspace) {
         exists: z.boolean().describe('Whether the path exists'),
         type: z.enum(['file', 'directory', 'none']).describe('The type of the path if it exists'),
       }),
-      execute: async ({ path }) => {
-        const exists = await workspace.exists(path);
+      execute: async ({ path }, context) => {
+        const exists = await workspace.exists(path, { ...getSandboxOptions(context) });
         if (!exists) {
           return { exists: false, type: 'none' as const };
         }
-        const isFile = await workspace.filesystem!.isFile(path);
+        const isFile = await workspace.filesystem!.isFile(path, { ...getSandboxOptions(context) });
         return {
           exists: true,
           type: isFile ? ('file' as const) : ('directory' as const),
@@ -178,8 +200,8 @@ export function createWorkspaceTools(workspace: Workspace) {
           success: z.boolean(),
           path: z.string(),
         }),
-        execute: async ({ path, recursive }) => {
-          await workspace.filesystem!.mkdir(path, { recursive });
+        execute: async ({ path, recursive }, context) => {
+          await workspace.filesystem!.mkdir(path, { recursive, ...getSandboxOptions(context) });
           return { success: true, path };
         },
       });
@@ -311,10 +333,11 @@ export function createWorkspaceTools(workspace: Workspace) {
         exitCode: z.number().describe('Exit code (0 = success)'),
         executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
       }),
-      execute: async ({ code, runtime, timeout }) => {
+      execute: async ({ code, runtime, timeout }, context) => {
         const result = await workspace.executeCode(code, {
           runtime: runtime ?? undefined,
           timeout: timeout ?? 30000,
+          ...getSandboxOptions(context),
         });
         return {
           success: result.success,
@@ -350,10 +373,11 @@ export function createWorkspaceTools(workspace: Workspace) {
         exitCode: z.number().describe('Exit code (0 = success)'),
         executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
       }),
-      execute: async ({ command, args, timeout, cwd }) => {
+      execute: async ({ command, args, timeout, cwd }, context) => {
         const result = await workspace.executeCommand(command, args ?? [], {
           timeout: timeout ?? 30000,
           cwd: cwd ?? undefined,
+          ...getSandboxOptions(context),
         });
         return {
           success: result.success,
@@ -386,7 +410,7 @@ export function createWorkspaceTools(workspace: Workspace) {
         errorMessage: z.string().optional(),
         executionTimeMs: z.number(),
       }),
-      execute: async ({ packageName, packageManager, version }) => {
+      execute: async ({ packageName, packageManager, version }, context) => {
         if (!workspace.sandbox!.installPackage) {
           return {
             success: false,
@@ -395,7 +419,11 @@ export function createWorkspaceTools(workspace: Workspace) {
             executionTimeMs: 0,
           };
         }
-        const result = await workspace.sandbox!.installPackage(packageName, { packageManager, version });
+        const result = await workspace.sandbox!.installPackage(packageName, {
+          packageManager,
+          version,
+          ...getSandboxOptions(context),
+        });
         return {
           success: result.success,
           packageName: result.packageName,

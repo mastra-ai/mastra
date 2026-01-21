@@ -44,6 +44,7 @@ import type {
   ReadOptions,
   WriteOptions,
   ListOptions,
+  ExistsOptions,
 } from './filesystem';
 import type {
   WorkspaceSandbox,
@@ -631,11 +632,11 @@ export class Workspace {
    * Check if a path exists.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
-  async exists(path: string): Promise<boolean> {
+  async exists(path: string, options?: ExistsOptions): Promise<boolean> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
-    return this._fs.exists(path);
+    return this._fs.exists(path, options);
   }
 
   // ---------------------------------------------------------------------------

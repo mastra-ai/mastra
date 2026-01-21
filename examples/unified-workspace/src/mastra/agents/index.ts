@@ -5,4 +5,5 @@ export { researchAgent } from './research-agent';
 export { editorAgent } from './editor-agent';
 export { automationAgent } from './automation-agent';
 export { scriptRunnerAgent } from './script-runner-agent';
-export { cloudRunnerAgent } from './cloud-runner-agent';
+// export { computesdkAgent } from './computesdk-agent';
+export { e2bAgent } from './e2b-agent';

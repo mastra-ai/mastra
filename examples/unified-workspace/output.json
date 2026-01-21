@@ -1,0 +1,3634 @@
+{
+  "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+  "usage": {
+    "inputTokens": 3636,
+    "outputTokens": 82,
+    "totalTokens": 3718,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 2048
+  },
+  "steps": [
+    {
+      "stepType": "initial",
+      "sources": [],
+      "files": [],
+      "toolCalls": [
+        {
+          "type": "tool-call",
+          "runId": "804182bc-a913-4aaf-af3e-6f628f44b248",
+          "from": "AGENT",
+          "payload": {
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+              }
+            }
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "type": "tool-result",
+          "runId": "804182bc-a913-4aaf-af3e-6f628f44b248",
+          "from": "AGENT",
+          "payload": {
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "toolName": "workspace_execute_code",
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 126
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+              }
+            }
+          }
+        }
+      ],
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+          "toolName": "workspace_execute_code",
+          "input": {
+            "code": "print(1824 * 2763)",
+            "runtime": "python"
+          },
+          "providerOptions": {
+            "openai": {
+              "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+            }
+          }
+        },
+        {
+          "type": "tool-result",
+          "input": {
+            "code": "print(1824 * 2763)",
+            "runtime": "python"
+          },
+          "output": {
+            "type": "json",
+            "value": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 126
+            }
+          },
+          "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+          "toolName": "workspace_execute_code"
+        }
+      ],
+      "text": "",
+      "reasoningText": "",
+      "reasoning": [],
+      "staticToolCalls": [],
+      "dynamicToolCalls": [],
+      "staticToolResults": [],
+      "dynamicToolResults": [],
+      "finishReason": "tool-calls",
+      "usage": {
+        "inputTokens": 1784,
+        "outputTokens": 37,
+        "totalTokens": 1821,
+        "reasoningTokens": 0,
+        "cachedInputTokens": 1024
+      },
+      "warnings": [],
+      "request": {
+        "body": {
+          "model": "gpt-5.1",
+          "input": [
+            {
+              "role": "developer",
+              "content": "You are a cloud code execution assistant using E2B sandboxes.\n\nYour job is to help run code securely in isolated E2B cloud sandboxes.\n\nKey capabilities:\n1. Execute Python code for data analysis and scripting\n2. Execute JavaScript/TypeScript code for Node.js tasks\n3. Run bash commands for system operations\n4. Install packages in the sandbox environment\n5. Read and write files in the cloud sandbox filesystem\n\nBenefits of E2B sandboxes:\n- Code runs in isolated cloud environments\n- Fast startup times\n- Support for Python and JavaScript/TypeScript\n- Secure execution of untrusted code\n- Unified filesystem - files written are visible to code and vice versa\n\nWhen running code:\n1. Choose the appropriate runtime (python, node, or bash)\n2. Use execute_code for running code snippets\n3. Use execute_command for shell commands\n4. Use workspace file tools to read/write files in the sandbox\n5. Report output and any errors clearly\n\nUse workspace sandbox tools to execute code in the cloud."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c0069712087af988190a4ca9ae84ec285c6"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":168}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c006971208a623c8190995b2e29653a956c"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120ab225c8190808c05a670819c6e"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":139}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120ae4a348190b0b79cee6816420a"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120d4c7b08190902b4856a7c599d6"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":182}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120d65bb48190a558dfd0cd0a9f5a"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120e320c88190affc6429173fd9ef"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":161}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120e4749881909f78bac080e6aa08"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c0069712118a07c8190ab58e722263f326a"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":144}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c006971211ba6448190823b08f21300a7bb"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "workspace_read_file",
+              "description": "Read the contents of a file from the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to read (e.g., \"/data/config.json\")"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                    "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_write_file",
+              "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The content to write to the file"
+                  },
+                  "overwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to overwrite the file if it already exists"
+                  }
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_list_files",
+              "description": "List files and directories in the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "default": "/",
+                    "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to list files recursively"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+                  }
+                },
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_delete_file",
+              "description": "Delete a file from the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to delete"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to ignore errors if the file does not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_file_exists",
+              "description": "Check if a file or directory exists in the workspace",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to check"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_mkdir",
+              "description": "Create a directory in the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path of the directory to create"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to create parent directories if they do not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_execute_code",
+              "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "The code to execute"
+                  },
+                  "runtime": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["node", "python", "bash", "shell", "ruby"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "node",
+                    "description": "The runtime to use for execution"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  }
+                },
+                "required": ["code"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_execute_command",
+              "description": "Execute a shell command in the workspace sandbox.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string",
+                    "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+                  },
+                  "args": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": [],
+                    "description": "Arguments to pass to the command"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  },
+                  "cwd": {
+                    "type": ["string", "null"],
+                    "description": "Working directory for the command"
+                  }
+                },
+                "required": ["command"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_install_package",
+              "description": "Install a package in the workspace sandbox environment",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "packageName": {
+                    "type": "string",
+                    "description": "The name of the package to install"
+                  },
+                  "packageManager": {
+                    "type": "string",
+                    "enum": ["npm", "pip", "yarn", "pnpm"],
+                    "default": "npm",
+                    "description": "The package manager to use"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Specific version to install"
+                  }
+                },
+                "required": ["packageName"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        }
+      },
+      "response": {
+        "id": "resp_0ef57da2b9a1f25c006971212c90d481908610371103eacac9",
+        "timestamp": "2026-01-21T18:55:40.000Z",
+        "modelId": "gpt-5.1-2025-11-13",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9c1906f60bafdfdb-YVR",
+          "connection": "keep-alive",
+          "content-encoding": "br",
+          "content-type": "application/json",
+          "date": "Wed, 21 Jan 2026 18:55:43 GMT",
+          "openai-organization": "user-ojge28qgr5ewfv1j99qehc7m",
+          "openai-processing-ms": "3297",
+          "openai-project": "proj_qQIVlTguyC8mOkRjdm0oSCLE",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "transfer-encoding": "chunked",
+          "x-content-type-options": "nosniff",
+          "x-envoy-upstream-service-time": "3300",
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "2000000",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c3409c335c384c5387d24606272e669d",
+          "set-cookie": "_cfuvid=qe4jgOPkdGESes_0BXtWYqhfQB4Nwc_F6GtO4WxO0HI-1769021743861-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None"
+        },
+        "body": {
+          "id": "resp_0ef57da2b9a1f25c006971212c90d481908610371103eacac9",
+          "object": "response",
+          "created_at": 1769021740,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1769021743,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-5.1-2025-11-13",
+          "output": [
+            {
+              "id": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"code\":\"print(1824 * 2763)\",\"runtime\":\"python\"}",
+              "call_id": "call_WMx18PBPeaa4rGKTpDeClfzw",
+              "name": "workspace_execute_code"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": "none",
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Read the contents of a file from the workspace filesystem",
+              "name": "workspace_read_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to read (e.g., \"/data/config.json\")"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                    "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+              "name": "workspace_write_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The content to write to the file"
+                  },
+                  "overwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to overwrite the file if it already exists"
+                  }
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "List files and directories in the workspace filesystem",
+              "name": "workspace_list_files",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "default": "/",
+                    "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to list files recursively"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Delete a file from the workspace filesystem",
+              "name": "workspace_delete_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to delete"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to ignore errors if the file does not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Check if a file or directory exists in the workspace",
+              "name": "workspace_file_exists",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to check"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Create a directory in the workspace filesystem",
+              "name": "workspace_mkdir",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path of the directory to create"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to create parent directories if they do not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+              "name": "workspace_execute_code",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "The code to execute"
+                  },
+                  "runtime": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["node", "python", "bash", "shell", "ruby"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "node",
+                    "description": "The runtime to use for execution"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  }
+                },
+                "required": ["code"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Execute a shell command in the workspace sandbox.",
+              "name": "workspace_execute_command",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string",
+                    "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+                  },
+                  "args": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": [],
+                    "description": "Arguments to pass to the command"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  },
+                  "cwd": {
+                    "type": ["string", "null"],
+                    "description": "Working directory for the command"
+                  }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Install a package in the workspace sandbox environment",
+              "name": "workspace_install_package",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "packageName": {
+                    "type": "string",
+                    "description": "The name of the package to install"
+                  },
+                  "packageManager": {
+                    "type": "string",
+                    "enum": ["npm", "pip", "yarn", "pnpm"],
+                    "default": "npm",
+                    "description": "The package manager to use"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Specific version to install"
+                  }
+                },
+                "required": ["packageName"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 1784,
+            "input_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "output_tokens": 37,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 1821
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "modelMetadata": {
+          "modelId": "gpt-5.1",
+          "modelVersion": "v2",
+          "modelProvider": "openai"
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "tool-call",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "toolName": "workspace_execute_code",
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                },
+                "providerOptions": {
+                  "openai": {
+                    "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": [
+              {
+                "type": "tool-result",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "toolName": "workspace_execute_code",
+                "output": {
+                  "type": "json",
+                  "value": {
+                    "success": true,
+                    "stdout": "5039712\n",
+                    "stderr": "",
+                    "exitCode": 0,
+                    "executionTimeMs": 126
+                  }
+                },
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                }
+              }
+            ]
+          }
+        ],
+        "uiMessages": [
+          {
+            "id": "b9b1f8be-3a94-458b-a271-f54d4e0f474f",
+            "role": "assistant",
+            "metadata": {
+              "createdAt": "2026-01-21T18:55:43.942Z",
+              "threadId": "test-thread-id-1234",
+              "resourceId": "test-resource-id-1234"
+            },
+            "parts": [
+              {
+                "type": "tool-workspace_execute_code",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                },
+                "output": {
+                  "success": true,
+                  "stdout": "5039712\n",
+                  "stderr": "",
+                  "exitCode": 0,
+                  "executionTimeMs": 126
+                },
+                "state": "output-available",
+                "callProviderMetadata": {
+                  "openai": {
+                    "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "providerMetadata": {
+        "openai": {
+          "responseId": "resp_0ef57da2b9a1f25c006971212c90d481908610371103eacac9",
+          "serviceTier": "default"
+        }
+      }
+    },
+    {
+      "stepType": "tool-result",
+      "sources": [],
+      "files": [],
+      "toolCalls": [],
+      "toolResults": [],
+      "content": [
+        {
+          "type": "text",
+          "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+          "providerOptions": {
+            "openai": {
+              "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+            }
+          }
+        }
+      ],
+      "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+      "reasoningText": "",
+      "reasoning": [],
+      "staticToolCalls": [],
+      "dynamicToolCalls": [],
+      "staticToolResults": [],
+      "dynamicToolResults": [],
+      "finishReason": "stop",
+      "usage": {
+        "inputTokens": 1852,
+        "outputTokens": 45,
+        "totalTokens": 1897,
+        "reasoningTokens": 0,
+        "cachedInputTokens": 1024
+      },
+      "warnings": [],
+      "request": {
+        "body": {
+          "model": "gpt-5.1",
+          "input": [
+            {
+              "role": "developer",
+              "content": "You are a cloud code execution assistant using E2B sandboxes.\n\nYour job is to help run code securely in isolated E2B cloud sandboxes.\n\nKey capabilities:\n1. Execute Python code for data analysis and scripting\n2. Execute JavaScript/TypeScript code for Node.js tasks\n3. Run bash commands for system operations\n4. Install packages in the sandbox environment\n5. Read and write files in the cloud sandbox filesystem\n\nBenefits of E2B sandboxes:\n- Code runs in isolated cloud environments\n- Fast startup times\n- Support for Python and JavaScript/TypeScript\n- Secure execution of untrusted code\n- Unified filesystem - files written are visible to code and vice versa\n\nWhen running code:\n1. Choose the appropriate runtime (python, node, or bash)\n2. Use execute_code for running code snippets\n3. Use execute_command for shell commands\n4. Use workspace file tools to read/write files in the sandbox\n5. Report output and any errors clearly\n\nUse workspace sandbox tools to execute code in the cloud."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c0069712087af988190a4ca9ae84ec285c6"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":168}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c006971208a623c8190995b2e29653a956c"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120ab225c8190808c05a670819c6e"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":139}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120ae4a348190b0b79cee6816420a"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120d4c7b08190902b4856a7c599d6"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":182}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120d65bb48190a558dfd0cd0a9f5a"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c00697120e320c88190affc6429173fd9ef"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":161}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c00697120e4749881909f78bac080e6aa08"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c0069712118a07c8190ab58e722263f326a"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":144}"
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0ef57da2b9a1f25c006971211ba6448190823b08f21300a7bb"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_WMx18PBPeaa4rGKTpDeClfzw",
+              "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":126}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "workspace_read_file",
+              "description": "Read the contents of a file from the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to read (e.g., \"/data/config.json\")"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                    "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_write_file",
+              "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The content to write to the file"
+                  },
+                  "overwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to overwrite the file if it already exists"
+                  }
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_list_files",
+              "description": "List files and directories in the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "default": "/",
+                    "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to list files recursively"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+                  }
+                },
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_delete_file",
+              "description": "Delete a file from the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to delete"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to ignore errors if the file does not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_file_exists",
+              "description": "Check if a file or directory exists in the workspace",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to check"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_mkdir",
+              "description": "Create a directory in the workspace filesystem",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path of the directory to create"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to create parent directories if they do not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_execute_code",
+              "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "The code to execute"
+                  },
+                  "runtime": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["node", "python", "bash", "shell", "ruby"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "node",
+                    "description": "The runtime to use for execution"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  }
+                },
+                "required": ["code"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_execute_command",
+              "description": "Execute a shell command in the workspace sandbox.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string",
+                    "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+                  },
+                  "args": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": [],
+                    "description": "Arguments to pass to the command"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  },
+                  "cwd": {
+                    "type": ["string", "null"],
+                    "description": "Working directory for the command"
+                  }
+                },
+                "required": ["command"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "workspace_install_package",
+              "description": "Install a package in the workspace sandbox environment",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "packageName": {
+                    "type": "string",
+                    "description": "The name of the package to install"
+                  },
+                  "packageManager": {
+                    "type": "string",
+                    "enum": ["npm", "pip", "yarn", "pnpm"],
+                    "default": "npm",
+                    "description": "The package manager to use"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Specific version to install"
+                  }
+                },
+                "required": ["packageName"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        }
+      },
+      "response": {
+        "id": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+        "timestamp": "2026-01-21T18:55:44.000Z",
+        "modelId": "gpt-5.1-2025-11-13",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9c19070c2b76dfdb-YVR",
+          "connection": "keep-alive",
+          "content-encoding": "br",
+          "content-type": "application/json",
+          "date": "Wed, 21 Jan 2026 18:55:45 GMT",
+          "openai-organization": "user-ojge28qgr5ewfv1j99qehc7m",
+          "openai-processing-ms": "1452",
+          "openai-project": "proj_qQIVlTguyC8mOkRjdm0oSCLE",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "transfer-encoding": "chunked",
+          "x-content-type-options": "nosniff",
+          "x-envoy-upstream-service-time": "1462",
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "2000000",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_a9a5bf80d75348ac9d2886b8884e48c6",
+          "set-cookie": "_cfuvid=E4r9kHXkK7vxFvUnf5C_nXmd7kSVywzkZFPWVXyRe3I-1769021745567-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None"
+        },
+        "body": {
+          "id": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+          "object": "response",
+          "created_at": 1769021744,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1769021745,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-5.1-2025-11-13",
+          "output": [
+            {
+              "id": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": "none",
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Read the contents of a file from the workspace filesystem",
+              "name": "workspace_read_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to read (e.g., \"/data/config.json\")"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                    "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+              "name": "workspace_write_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The content to write to the file"
+                  },
+                  "overwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to overwrite the file if it already exists"
+                  }
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "List files and directories in the workspace filesystem",
+              "name": "workspace_list_files",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "default": "/",
+                    "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to list files recursively"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Delete a file from the workspace filesystem",
+              "name": "workspace_delete_file",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to the file to delete"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to ignore errors if the file does not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Check if a file or directory exists in the workspace",
+              "name": "workspace_file_exists",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path to check"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Create a directory in the workspace filesystem",
+              "name": "workspace_mkdir",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The path of the directory to create"
+                  },
+                  "recursive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to create parent directories if they do not exist"
+                  }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+              "name": "workspace_execute_code",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "The code to execute"
+                  },
+                  "runtime": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["node", "python", "bash", "shell", "ruby"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "node",
+                    "description": "The runtime to use for execution"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  }
+                },
+                "required": ["code"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Execute a shell command in the workspace sandbox.",
+              "name": "workspace_execute_command",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string",
+                    "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+                  },
+                  "args": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": [],
+                    "description": "Arguments to pass to the command"
+                  },
+                  "timeout": {
+                    "type": ["number", "null"],
+                    "default": 30000,
+                    "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+                  },
+                  "cwd": {
+                    "type": ["string", "null"],
+                    "description": "Working directory for the command"
+                  }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Install a package in the workspace sandbox environment",
+              "name": "workspace_install_package",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "packageName": {
+                    "type": "string",
+                    "description": "The name of the package to install"
+                  },
+                  "packageManager": {
+                    "type": "string",
+                    "enum": ["npm", "pip", "yarn", "pnpm"],
+                    "default": "npm",
+                    "description": "The package manager to use"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Specific version to install"
+                  }
+                },
+                "required": ["packageName"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 1852,
+            "input_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "output_tokens": 45,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 1897
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "modelMetadata": {
+          "modelId": "gpt-5.1",
+          "modelVersion": "v2",
+          "modelProvider": "openai"
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "tool-call",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "toolName": "workspace_execute_code",
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                },
+                "providerOptions": {
+                  "openai": {
+                    "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "content": [
+              {
+                "type": "tool-result",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "toolName": "workspace_execute_code",
+                "output": {
+                  "type": "json",
+                  "value": {
+                    "success": true,
+                    "stdout": "5039712\n",
+                    "stderr": "",
+                    "exitCode": 0,
+                    "executionTimeMs": 126
+                  }
+                },
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                }
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+                "providerOptions": {
+                  "openai": {
+                    "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "uiMessages": [
+          {
+            "id": "b9b1f8be-3a94-458b-a271-f54d4e0f474f",
+            "role": "assistant",
+            "metadata": {
+              "createdAt": "2026-01-21T18:55:45.508Z",
+              "threadId": "test-thread-id-1234",
+              "resourceId": "test-resource-id-1234"
+            },
+            "parts": [
+              {
+                "type": "tool-workspace_execute_code",
+                "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+                "input": {
+                  "code": "print(1824 * 2763)",
+                  "runtime": "python"
+                },
+                "output": {
+                  "success": true,
+                  "stdout": "5039712\n",
+                  "stderr": "",
+                  "exitCode": 0,
+                  "executionTimeMs": 126
+                },
+                "state": "output-available",
+                "callProviderMetadata": {
+                  "openai": {
+                    "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+                  }
+                }
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "providerMetadata": {
+        "openai": {
+          "responseId": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+          "serviceTier": "default"
+        }
+      }
+    }
+  ],
+  "finishReason": "stop",
+  "warnings": [],
+  "providerMetadata": {
+    "openai": {
+      "responseId": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+      "serviceTier": "default"
+    }
+  },
+  "request": {
+    "body": {
+      "model": "gpt-5.1",
+      "input": [
+        {
+          "role": "developer",
+          "content": "You are a cloud code execution assistant using E2B sandboxes.\n\nYour job is to help run code securely in isolated E2B cloud sandboxes.\n\nKey capabilities:\n1. Execute Python code for data analysis and scripting\n2. Execute JavaScript/TypeScript code for Node.js tasks\n3. Run bash commands for system operations\n4. Install packages in the sandbox environment\n5. Read and write files in the cloud sandbox filesystem\n\nBenefits of E2B sandboxes:\n- Code runs in isolated cloud environments\n- Fast startup times\n- Support for Python and JavaScript/TypeScript\n- Secure execution of untrusted code\n- Unified filesystem - files written are visible to code and vice versa\n\nWhen running code:\n1. Choose the appropriate runtime (python, node, or bash)\n2. Use execute_code for running code snippets\n3. Use execute_command for shell commands\n4. Use workspace file tools to read/write files in the sandbox\n5. Report output and any errors clearly\n\nUse workspace sandbox tools to execute code in the cloud."
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c0069712087af988190a4ca9ae84ec285c6"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":168}"
+        },
+        {
+          "type": "item_reference",
+          "id": "msg_0ef57da2b9a1f25c006971208a623c8190995b2e29653a956c"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c00697120ab225c8190808c05a670819c6e"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":139}"
+        },
+        {
+          "type": "item_reference",
+          "id": "msg_0ef57da2b9a1f25c00697120ae4a348190b0b79cee6816420a"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c00697120d4c7b08190902b4856a7c599d6"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":182}"
+        },
+        {
+          "type": "item_reference",
+          "id": "msg_0ef57da2b9a1f25c00697120d65bb48190a558dfd0cd0a9f5a"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c00697120e320c88190affc6429173fd9ef"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":161}"
+        },
+        {
+          "type": "item_reference",
+          "id": "msg_0ef57da2b9a1f25c00697120e4749881909f78bac080e6aa08"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c0069712118a07c8190ab58e722263f326a"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":144}"
+        },
+        {
+          "type": "item_reference",
+          "id": "msg_0ef57da2b9a1f25c006971211ba6448190823b08f21300a7bb"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+            }
+          ]
+        },
+        {
+          "type": "item_reference",
+          "id": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_WMx18PBPeaa4rGKTpDeClfzw",
+          "output": "{\"success\":true,\"stdout\":\"5039712\\n\",\"stderr\":\"\",\"exitCode\":0,\"executionTimeMs\":126}"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "name": "workspace_read_file",
+          "description": "Read the contents of a file from the workspace filesystem",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to read (e.g., \"/data/config.json\")"
+              },
+              "encoding": {
+                "type": "string",
+                "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_write_file",
+          "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+              },
+              "content": {
+                "type": "string",
+                "description": "The content to write to the file"
+              },
+              "overwrite": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to overwrite the file if it already exists"
+              }
+            },
+            "required": ["path", "content"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_list_files",
+          "description": "List files and directories in the workspace filesystem",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "default": "/",
+                "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+              },
+              "recursive": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether to list files recursively"
+              },
+              "extension": {
+                "type": "string",
+                "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+              }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_delete_file",
+          "description": "Delete a file from the workspace filesystem",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to delete"
+              },
+              "force": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether to ignore errors if the file does not exist"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_file_exists",
+          "description": "Check if a file or directory exists in the workspace",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to check"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_mkdir",
+          "description": "Create a directory in the workspace filesystem",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path of the directory to create"
+              },
+              "recursive": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to create parent directories if they do not exist"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_execute_code",
+          "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "The code to execute"
+              },
+              "runtime": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["node", "python", "bash", "shell", "ruby"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "node",
+                "description": "The runtime to use for execution"
+              },
+              "timeout": {
+                "type": ["number", "null"],
+                "default": 30000,
+                "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_execute_command",
+          "description": "Execute a shell command in the workspace sandbox.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+              },
+              "args": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": [],
+                "description": "Arguments to pass to the command"
+              },
+              "timeout": {
+                "type": ["number", "null"],
+                "default": 30000,
+                "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+              },
+              "cwd": {
+                "type": ["string", "null"],
+                "description": "Working directory for the command"
+              }
+            },
+            "required": ["command"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "name": "workspace_install_package",
+          "description": "Install a package in the workspace sandbox environment",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "packageName": {
+                "type": "string",
+                "description": "The name of the package to install"
+              },
+              "packageManager": {
+                "type": "string",
+                "enum": ["npm", "pip", "yarn", "pnpm"],
+                "default": "npm",
+                "description": "The package manager to use"
+              },
+              "version": {
+                "type": "string",
+                "description": "Specific version to install"
+              }
+            },
+            "required": ["packageName"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "strict": false
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  },
+  "reasoning": [],
+  "toolCalls": [
+    {
+      "type": "tool-call",
+      "runId": "804182bc-a913-4aaf-af3e-6f628f44b248",
+      "from": "AGENT",
+      "payload": {
+        "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+        "toolName": "workspace_execute_code",
+        "args": {
+          "code": "print(1824 * 2763)",
+          "runtime": "python"
+        },
+        "providerMetadata": {
+          "openai": {
+            "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+          }
+        }
+      }
+    }
+  ],
+  "toolResults": [
+    {
+      "type": "tool-result",
+      "runId": "804182bc-a913-4aaf-af3e-6f628f44b248",
+      "from": "AGENT",
+      "payload": {
+        "args": {
+          "code": "print(1824 * 2763)",
+          "runtime": "python"
+        },
+        "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+        "toolName": "workspace_execute_code",
+        "result": {
+          "success": true,
+          "stdout": "5039712\n",
+          "stderr": "",
+          "exitCode": 0,
+          "executionTimeMs": 126
+        },
+        "providerMetadata": {
+          "openai": {
+            "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+          }
+        }
+      }
+    }
+  ],
+  "sources": [],
+  "files": [],
+  "response": {
+    "id": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+    "timestamp": "2026-01-21T18:55:44.000Z",
+    "modelId": "gpt-5.1-2025-11-13",
+    "headers": {
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9c19070c2b76dfdb-YVR",
+      "connection": "keep-alive",
+      "content-encoding": "br",
+      "content-type": "application/json",
+      "date": "Wed, 21 Jan 2026 18:55:45 GMT",
+      "openai-organization": "user-ojge28qgr5ewfv1j99qehc7m",
+      "openai-processing-ms": "1452",
+      "openai-project": "proj_qQIVlTguyC8mOkRjdm0oSCLE",
+      "openai-version": "2020-10-01",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "x-content-type-options": "nosniff",
+      "x-envoy-upstream-service-time": "1462",
+      "x-ratelimit-limit-requests": "5000",
+      "x-ratelimit-limit-tokens": "2000000",
+      "x-ratelimit-remaining-requests": "4999",
+      "x-ratelimit-remaining-tokens": "2000000",
+      "x-ratelimit-reset-requests": "12ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_a9a5bf80d75348ac9d2886b8884e48c6",
+      "set-cookie": "_cfuvid=E4r9kHXkK7vxFvUnf5C_nXmd7kSVywzkZFPWVXyRe3I-1769021745567-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None"
+    },
+    "body": {
+      "id": "resp_0ef57da2b9a1f25c00697121301e648190a8ddd2c34387cafb",
+      "object": "response",
+      "created_at": 1769021744,
+      "status": "completed",
+      "background": false,
+      "billing": {
+        "payer": "developer"
+      },
+      "completed_at": 1769021745,
+      "error": null,
+      "frequency_penalty": 0,
+      "incomplete_details": null,
+      "instructions": null,
+      "max_output_tokens": null,
+      "max_tool_calls": null,
+      "model": "gpt-5.1-2025-11-13",
+      "output": [
+        {
+          "id": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f",
+          "type": "message",
+          "status": "completed",
+          "content": [
+            {
+              "type": "output_text",
+              "annotations": [],
+              "logprobs": [],
+              "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+            }
+          ],
+          "role": "assistant"
+        }
+      ],
+      "parallel_tool_calls": true,
+      "presence_penalty": 0,
+      "previous_response_id": null,
+      "prompt_cache_key": null,
+      "prompt_cache_retention": null,
+      "reasoning": {
+        "effort": "none",
+        "summary": null
+      },
+      "safety_identifier": null,
+      "service_tier": "default",
+      "store": true,
+      "temperature": 1,
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "medium"
+      },
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "type": "function",
+          "description": "Read the contents of a file from the workspace filesystem",
+          "name": "workspace_read_file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to read (e.g., \"/data/config.json\")"
+              },
+              "encoding": {
+                "type": "string",
+                "enum": ["utf-8", "utf8", "base64", "hex", "binary"],
+                "description": "The encoding to use when reading the file. Defaults to utf-8 for text files."
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+          "name": "workspace_write_file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+              },
+              "content": {
+                "type": "string",
+                "description": "The content to write to the file"
+              },
+              "overwrite": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to overwrite the file if it already exists"
+              }
+            },
+            "required": ["path", "content"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "List files and directories in the workspace filesystem",
+          "name": "workspace_list_files",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "default": "/",
+                "description": "The directory path to list (e.g., \"/\" or \"/data\")"
+              },
+              "recursive": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether to list files recursively"
+              },
+              "extension": {
+                "type": "string",
+                "description": "Filter by file extension (e.g., \".json\", \".txt\")"
+              }
+            },
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Delete a file from the workspace filesystem",
+          "name": "workspace_delete_file",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to delete"
+              },
+              "force": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether to ignore errors if the file does not exist"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Check if a file or directory exists in the workspace",
+          "name": "workspace_file_exists",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to check"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Create a directory in the workspace filesystem",
+          "name": "workspace_mkdir",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path of the directory to create"
+              },
+              "recursive": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to create parent directories if they do not exist"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.",
+          "name": "workspace_execute_code",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "The code to execute"
+              },
+              "runtime": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["node", "python", "bash", "shell", "ruby"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "node",
+                "description": "The runtime to use for execution"
+              },
+              "timeout": {
+                "type": ["number", "null"],
+                "default": 30000,
+                "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Execute a shell command in the workspace sandbox.",
+          "name": "workspace_execute_command",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The command to execute (e.g., \"ls\", \"npm\", \"python\")"
+              },
+              "args": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": [],
+                "description": "Arguments to pass to the command"
+              },
+              "timeout": {
+                "type": ["number", "null"],
+                "default": 30000,
+                "description": "Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute."
+              },
+              "cwd": {
+                "type": ["string", "null"],
+                "description": "Working directory for the command"
+              }
+            },
+            "required": ["command"],
+            "additionalProperties": false
+          },
+          "strict": false
+        },
+        {
+          "type": "function",
+          "description": "Install a package in the workspace sandbox environment",
+          "name": "workspace_install_package",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "packageName": {
+                "type": "string",
+                "description": "The name of the package to install"
+              },
+              "packageManager": {
+                "type": "string",
+                "enum": ["npm", "pip", "yarn", "pnpm"],
+                "default": "npm",
+                "description": "The package manager to use"
+              },
+              "version": {
+                "type": "string",
+                "description": "Specific version to install"
+              }
+            },
+            "required": ["packageName"],
+            "additionalProperties": false
+          },
+          "strict": false
+        }
+      ],
+      "top_logprobs": 0,
+      "top_p": 1,
+      "truncation": "disabled",
+      "usage": {
+        "input_tokens": 1852,
+        "input_tokens_details": {
+          "cached_tokens": 1024
+        },
+        "output_tokens": 45,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 1897
+      },
+      "user": null,
+      "metadata": {}
+    },
+    "modelMetadata": {
+      "modelId": "gpt-5.1",
+      "modelVersion": "v2",
+      "modelProvider": "openai"
+    },
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool-call",
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "toolName": "workspace_execute_code",
+            "input": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "providerOptions": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "toolName": "workspace_execute_code",
+            "output": {
+              "type": "json",
+              "value": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 126
+              }
+            },
+            "input": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerOptions": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "uiMessages": [
+      {
+        "id": "b9b1f8be-3a94-458b-a271-f54d4e0f474f",
+        "role": "assistant",
+        "metadata": {
+          "createdAt": "2026-01-21T18:55:45.508Z",
+          "threadId": "test-thread-id-1234",
+          "resourceId": "test-resource-id-1234"
+        },
+        "parts": [
+          {
+            "type": "tool-workspace_execute_code",
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "input": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "output": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 126
+            },
+            "state": "output-available",
+            "callProviderMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "totalUsage": {
+    "inputTokens": 3636,
+    "outputTokens": 82,
+    "totalTokens": 3718,
+    "reasoningTokens": 0,
+    "cachedInputTokens": 2048
+  },
+  "runId": "804182bc-a913-4aaf-af3e-6f628f44b248",
+  "messages": [
+    {
+      "id": "59ae7c53-fec0-4354-a1d8-1c0d7bd514d6",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:52:54.261Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "290068aa-bdbb-465b-96e8-c26ee4aa01b8",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 168
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c0069712087af988190a4ca9ae84ec285c6"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I ran this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c006971208a623c8190995b2e29653a956c"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 168
+            }
+          }
+        ],
+        "content": "I ran this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:52:59.050Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "0936debe-0a01-4605-8dca-3a5ae0cdb9f0",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:53:29.965Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "3f135c0a-afa5-43fc-a9f0-fdc38ffab21c",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 139
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120ab225c8190808c05a670819c6e"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120ae4a348190b0b79cee6816420a"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 139
+            }
+          }
+        ],
+        "content": "I executed this in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:53:35.004Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "94e5749f-dce9-4129-aa62-f68c08307d77",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:54:11.078Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "afba5de5-04fb-4ce1-a87a-6d3aaec9e0c4",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 182
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120d4c7b08190902b4856a7c599d6"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120d65bb48190a558dfd0cd0a9f5a"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 182
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:54:15.030Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "78435cba-ecff-4f74-8e5c-0d456ef805a8",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:54:25.785Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "14d5da9f-52fd-4eac-9ac6-4ac324066598",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 161
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120e320c88190affc6429173fd9ef"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120e4749881909f78bac080e6aa08"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 161
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:54:29.163Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "b4b0d175-48e1-4d01-a84d-a643a15575bf",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:55:19.309Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "441f8107-f2fa-4e09-82fd-8830cdf4a236",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 144
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c0069712118a07c8190ab58e722263f326a"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c006971211ba6448190823b08f21300a7bb"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 144
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:55:24.572Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "3087cb9b-5cc9-42a3-bab5-8225c0430702",
+      "role": "user",
+      "createdAt": "2026-01-21T18:55:39.909Z",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "b9b1f8be-3a94-458b-a271-f54d4e0f474f",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 126
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c006971212d76948190b33ddb03a868e245"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c0069712130b58c81908f1fe3a4038b657f"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_WMx18PBPeaa4rGKTpDeClfzw",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 126
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "createdAt": "2026-01-21T18:55:45.513Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    }
+  ],
+  "rememberedMessages": [
+    {
+      "id": "59ae7c53-fec0-4354-a1d8-1c0d7bd514d6",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:52:54.261Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "290068aa-bdbb-465b-96e8-c26ee4aa01b8",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 168
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c0069712087af988190a4ca9ae84ec285c6"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I ran this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c006971208a623c8190995b2e29653a956c"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_QeI9JMweZZLa2dk5OI5WwFrQ",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 168
+            }
+          }
+        ],
+        "content": "I ran this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:52:59.050Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "0936debe-0a01-4605-8dca-3a5ae0cdb9f0",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:53:29.965Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "3f135c0a-afa5-43fc-a9f0-fdc38ffab21c",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 139
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120ab225c8190808c05a670819c6e"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120ae4a348190b0b79cee6816420a"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_Czap0Z0c1UrC4Us1EviJAS8k",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 139
+            }
+          }
+        ],
+        "content": "I executed this in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:53:35.004Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "94e5749f-dce9-4129-aa62-f68c08307d77",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:54:11.078Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "afba5de5-04fb-4ce1-a87a-6d3aaec9e0c4",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 182
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120d4c7b08190902b4856a7c599d6"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120d65bb48190a558dfd0cd0a9f5a"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_QAaTwfEaeLqQtOZSkjhxBl8k",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 182
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:54:15.030Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "78435cba-ecff-4f74-8e5c-0d456ef805a8",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:54:25.785Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "14d5da9f-52fd-4eac-9ac6-4ac324066598",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 161
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c00697120e320c88190affc6429173fd9ef"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c00697120e4749881909f78bac080e6aa08"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_dkZd3GQ4hmTa9FRIC0bpMa78",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 161
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:54:29.163Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "b4b0d175-48e1-4d01-a84d-a643a15575bf",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "What is 1824 * 2763? Execute some code to find out the exact answer."
+          }
+        ],
+        "content": "What is 1824 * 2763? Execute some code to find out the exact answer."
+      },
+      "role": "user",
+      "createdAt": "2026-01-21T18:55:19.309Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    },
+    {
+      "id": "441f8107-f2fa-4e09-82fd-8830cdf4a236",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+              "toolName": "workspace_execute_code",
+              "args": {
+                "code": "print(1824 * 2763)",
+                "runtime": "python"
+              },
+              "result": {
+                "success": true,
+                "stdout": "5039712\n",
+                "stderr": "",
+                "exitCode": 0,
+                "executionTimeMs": 144
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0ef57da2b9a1f25c0069712118a07c8190ab58e722263f326a"
+              }
+            }
+          },
+          {
+            "type": "step-start"
+          },
+          {
+            "type": "text",
+            "text": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_0ef57da2b9a1f25c006971211ba6448190823b08f21300a7bb"
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_GtD7ikBykdjbvn4U1o9TQ5AJ",
+            "toolName": "workspace_execute_code",
+            "args": {
+              "code": "print(1824 * 2763)",
+              "runtime": "python"
+            },
+            "result": {
+              "success": true,
+              "stdout": "5039712\n",
+              "stderr": "",
+              "exitCode": 0,
+              "executionTimeMs": 144
+            }
+          }
+        ],
+        "content": "I executed this code in a Python sandbox:\n\n```python\nprint(1824 * 2763)\n```\n\nThe exact answer is:\n\n1824 × 2763 = 5,039,712"
+      },
+      "role": "assistant",
+      "createdAt": "2026-01-21T18:55:24.572Z",
+      "threadId": "test-thread-id-1234",
+      "resourceId": "test-resource-id-1234"
+    }
+  ]
+}

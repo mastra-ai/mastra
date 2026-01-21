@@ -19,9 +19,31 @@
  * ```
  */
 
+import type { MastraUnion } from '../action';
+import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
+import type { AgentToolExecutionContext } from '../tools/types';
+
 // =============================================================================
 // Core Types
 // =============================================================================
+
+/**
+ * Shared options for all filesystem operations.
+ * Provides context for dynamic resource resolution and observability.
+ */
+export interface SharedFilesystemOptions {
+  /** Request context for dynamic resource resolution (e.g., threadId for sandbox mapping) */
+  requestContext?: RequestContext;
+  /** Tracing context for observability */
+  tracingContext?: TracingContext;
+  /** Mastra instance for accessing core functionality */
+  mastra?: MastraUnion;
+  /** Abort signal for cancellation */
+  abortSignal?: AbortSignal;
+  /** Agent execution context (contains threadId, resourceId, toolCallId, messages, etc.) */
+  agent?: AgentToolExecutionContext<unknown, unknown>;
+}
 
 export type FileContent = string | Buffer | Uint8Array;
 
@@ -48,12 +70,12 @@ export interface FileEntry {
   size?: number;
 }
 
-export interface ReadOptions {
+export interface ReadOptions extends SharedFilesystemOptions {
   /** Encoding for text files. If not specified, returns Buffer */
   encoding?: BufferEncoding;
 }
 
-export interface WriteOptions {
+export interface WriteOptions extends SharedFilesystemOptions {
   /** Create parent directories if they don't exist */
   recursive?: boolean;
   /** Overwrite existing file (default: true) */
@@ -62,7 +84,7 @@ export interface WriteOptions {
   mimeType?: string;
 }
 
-export interface ListOptions {
+export interface ListOptions extends SharedFilesystemOptions {
   /** Include files in subdirectories */
   recursive?: boolean;
   /** Filter by file extension (e.g., '.ts', '.py') */
@@ -71,19 +93,30 @@ export interface ListOptions {
   maxDepth?: number;
 }
 
-export interface RemoveOptions {
+export interface RemoveOptions extends SharedFilesystemOptions {
   /** Remove directories and their contents */
   recursive?: boolean;
   /** Don't throw if path doesn't exist */
   force?: boolean;
 }
 
-export interface CopyOptions {
+export interface CopyOptions extends SharedFilesystemOptions {
   /** Overwrite existing files */
   overwrite?: boolean;
   /** Copy directories recursively */
   recursive?: boolean;
 }
+
+export interface MkdirOptions extends SharedFilesystemOptions {
+  /** Create parent directories if they don't exist */
+  recursive?: boolean;
+}
+
+export interface StatOptions extends SharedFilesystemOptions {}
+
+export interface ExistsOptions extends SharedFilesystemOptions {}
+
+export interface PathCheckOptions extends SharedFilesystemOptions {}
 
 export interface WatchEvent {
   type: 'create' | 'modify' | 'delete';
@@ -182,7 +215,7 @@ export interface WorkspaceFilesystem {
    * Create a directory.
    * @throws {FileExistsError} if path already exists as a file
    */
-  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  mkdir(path: string, options?: MkdirOptions): Promise<void>;
 
   /**
    * Remove a directory.
@@ -205,23 +238,23 @@ export interface WorkspaceFilesystem {
   /**
    * Check if a path exists.
    */
-  exists(path: string): Promise<boolean>;
+  exists(path: string, options?: ExistsOptions): Promise<boolean>;
 
   /**
    * Get file/directory metadata.
    * @throws {FileNotFoundError} if path doesn't exist
    */
-  stat(path: string): Promise<FileStat>;
+  stat(path: string, options?: StatOptions): Promise<FileStat>;
 
   /**
    * Check if path is a file.
    */
-  isFile(path: string): Promise<boolean>;
+  isFile(path: string, options?: PathCheckOptions): Promise<boolean>;
 
   /**
    * Check if path is a directory.
    */
-  isDirectory(path: string): Promise<boolean>;
+  isDirectory(path: string, options?: PathCheckOptions): Promise<boolean>;
 
   // ---------------------------------------------------------------------------
   // Watch Operations (optional)

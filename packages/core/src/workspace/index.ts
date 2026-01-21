@@ -67,6 +67,7 @@ export type {
   WorkspaceFilesystem,
   WorkspaceState,
   WorkspaceFilesystemAudit,
+  SharedFilesystemOptions,
   FileContent,
   FileStat,
   FileEntry,
@@ -75,6 +76,10 @@ export type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  MkdirOptions,
+  StatOptions,
+  ExistsOptions,
+  PathCheckOptions,
   WatchEvent,
   WatchCallback,
   WatchOptions,
@@ -113,22 +118,28 @@ export type {
   CommandResult,
   CodeResult,
   StreamingExecutionResult,
+  SharedSandboxOptions,
+  SandboxIdContext,
+  SandboxIdResolver,
   ExecuteCodeOptions,
   ExecuteCommandOptions,
   InstallPackageOptions,
+  InstallPackageResult,
+  SandboxStartOptions,
+  SandboxStopOptions,
+  SandboxDestroyOptions,
   SandboxStatus,
   SandboxInfo,
 } from './sandbox';
 
 export {
+  resolveSandboxId,
   SandboxError,
   SandboxExecutionError,
   SandboxTimeoutError,
   SandboxNotReadyError,
   UnsupportedRuntimeError,
 } from './sandbox';
-
-export type { InstallPackageResult } from './sandbox';
 
 // =============================================================================
 // Built-in Providers
