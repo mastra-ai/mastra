@@ -44,6 +44,7 @@
   ],
   "dependencies": {
     "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-tooltip": "^1.2.7",
     "hast-util-to-jsx-runtime": "^2.3.6",
@@ -59,7 +60,6 @@
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.11.47",
-    "@mastra/core": "workspace:*",
     "@storybook/react-vite": "^9.1.16",
     "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^19.1.13",
