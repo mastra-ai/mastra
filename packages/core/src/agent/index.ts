@@ -5,6 +5,9 @@ export * from './types';
 export * from './agent';
 export * from './utils';
 
+// Durable agent exports
+export { DurableAgent, type DurableAgentConfig, type DurableAgentStreamOptions } from './durable';
+
 export type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
