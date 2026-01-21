@@ -14,7 +14,7 @@ const sandbox = await compute.sandbox.findOrCreate({
 const workspaceSandbox = new ComputeSDKSandbox({
   name: 'unified-workspace-sandbox',
   namespace: 'mastra-examples',
-  timeout: 60000,
+  timeout: 60_000,
   runtimes: ['node', 'python', 'bash'],
   sandbox,
 });
