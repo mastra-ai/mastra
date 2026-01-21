@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ModelRouterLanguageModel } from './router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import * as gatewaysModule from './gateways/index';
+import { ModelRouterLanguageModel } from './router';
 
 /**
  * Test for GitHub Issue #12152: Mistral OCR with Mastra errors
