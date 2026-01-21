@@ -66,11 +66,18 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
   const basePath = '';
 
+  const telemetryDisabled = process.env.MASTRA_TELEMETRY_DISABLED || '';
+  const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
+  const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
+
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
     .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
     .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
-    .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http');
+    .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
+    .replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, `'${telemetryDisabled}'`)
+    .replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`)
+    .replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;
