@@ -1,186 +1,173 @@
 import path from "path";
 import fs from "fs/promises";
 
-function extractFrontMatter(content: string) {
-  const frontMatterRegex = /^---\n([\s\S]*?)\n---/;
-  const match = content.match(frontMatterRegex);
-  if (!match) return {};
+const DOCS_DIR = path.join(process.cwd(), "src", "content", "en");
+const OUTPUT_DIR = path.join(process.cwd(), "static");
+const OUTPUT_FILENAME = "llms.txt";
+const PREFIX_BLOCK = `# Mastra
 
-  const frontMatterStr = match[1];
-  const result: Record<string, string> = {};
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
-  const fields = ["title", "description"];
-  fields.forEach((field) => {
-    const match = frontMatterStr.match(new RegExp(`${field}:\\s*([^\n]+)`));
-    if (match) {
-      result[field] = match[1].trim().replace(/['"]|\\'/g, "");
-    }
-  });
+Some of its highlights include: Model routing, agents, workflows, human-in-the-loop, context management, and MCP.
 
-  return result;
+The documentation is organized into key sections:
+
+- [**Docs**](https://mastra.ai/docs): Core documentation covering concepts, features, and implementation details
+- [**Models**](https://mastra.ai/models): Mastra provides a unified interface for working with LLMs across multiple providers
+- [**Guides**](https://mastra.ai/guides): Step-by-step tutorials for building specific applications
+- [**Reference**](https://mastra.ai/reference): API reference documentation
+
+Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.`;
+
+const SIDEBAR_LOCATIONS = [
+  {
+    id: "Docs",
+    path: path.join(DOCS_DIR, "docs", "sidebars.js"),
+  },
+  {
+    id: "Models",
+    path: path.join(DOCS_DIR, "models", "sidebars.js"),
+  },
+  {
+    id: "Guides",
+    path: path.join(DOCS_DIR, "guides", "sidebars.js"),
+  },
+  {
+    id: "Reference",
+    path: path.join(DOCS_DIR, "reference", "sidebars.js"),
+  },
+];
+
+type SidebarDoc = {
+  type: "doc";
+  id: string;
+  label: string;
+  key?: string;
+  customProps?: Record<string, unknown>;
+};
+
+type SidebarCategory = {
+  type: "category";
+  label: string;
+  collapsed?: boolean;
+  customProps?: Record<string, unknown>;
+  items: SidebarItem[];
+};
+
+type SidebarItem = string | SidebarDoc | SidebarCategory;
+
+type SidebarsConfig = {
+  [key: string]: SidebarItem[];
+};
+
+/**
+ * Get the base URL for a documentation section
+ */
+function getBaseUrl(sectionId: string): string {
+  const baseUrls: Record<string, string> = {
+    Docs: "https://mastra.ai/docs",
+    Models: "https://mastra.ai/models",
+    Guides: "https://mastra.ai/guides",
+    Reference: "https://mastra.ai/reference",
+  };
+  return baseUrls[sectionId] || "https://mastra.ai";
 }
 
-function pathToUrl(filePath: string): string {
-  // Convert docs file path to URL
-  const cleanPath = filePath
-    .replaceAll("\\", "/")
-    .replace(/^docs\//, "")
-    .replace(/\/index\.md$|\.md$/, "");
-  return `https://mastra.ai/${cleanPath}`;
+/**
+ * Get the label for a sidebar item
+ */
+function getItemLabel(item: SidebarItem): string {
+  if (typeof item === "string") {
+    // For string items like "index", capitalize first letter
+    if (item === "index") return "Overview";
+    return item.charAt(0).toUpperCase() + item.slice(1);
+  }
+  if (item.type === "doc") {
+    return item.label;
+  }
+  if (item.type === "category") {
+    return item.label;
+  }
+  return "";
 }
 
-async function concatenateMDDocs(sourceDir: string) {
-  console.log(`Starting documentation generation from: ${sourceDir}`);
+/**
+ * Get the doc ID for a sidebar item (for URL generation)
+ */
+function getDocId(item: SidebarItem): string | null {
+  if (typeof item === "string") {
+    return item;
+  }
+  if (item.type === "doc") {
+    return item.id;
+  }
+  return null;
+}
 
-  // Validate source directory exists
-  try {
-    const stats = await fs.stat(sourceDir);
-    if (!stats.isDirectory()) {
-      throw new Error(`Source path ${sourceDir} is not a directory`);
+/**
+ * Generate markdown list for sidebar items recursively
+ */
+function generateMarkdownList(
+  items: SidebarItem[],
+  baseUrl: string,
+  depth: number = 0,
+): string {
+  const indent = "  ".repeat(depth);
+  let output = "";
+
+  for (const item of items) {
+    const label = getItemLabel(item);
+    const docId = getDocId(item);
+
+    if (typeof item === "string" || item.type === "doc") {
+      // It's a doc item - create a link
+      const url = docId === "index" ? baseUrl : `${baseUrl}/${docId}`;
+      output += `${indent}- [${label}](${url})\n`;
+    } else if (item.type === "category") {
+      // It's a category - create a label and recurse
+      output += `${indent}- ${label}\n`;
+      output += generateMarkdownList(item.items, baseUrl, depth + 1);
     }
-  } catch (error) {
-    console.error(
-      `Error accessing source directory: ${error instanceof Error ? error?.message : error}`,
-    );
-    process.exit(1);
   }
 
-  const outputDir = path.join(process.cwd(), "static");
-  // Ensure output directory exists
-  try {
-    await fs.mkdir(outputDir, { recursive: true });
-  } catch (error) {
-    console.error(
-      `Error creating output directory: ${error instanceof Error ? error?.message : error}`,
-    );
-    process.exit(1);
-  }
+  return output;
+}
 
-  const mdFiles: Array<{
-    path: string;
-    content: string;
-    title: string;
-    description?: string;
-  }> = [];
+/**
+ * Parse a sidebars.js file and extract the sidebar items using dynamic import
+ */
+async function parseSidebarFile(filePath: string): Promise<SidebarItem[]> {
+  // Convert to file:// URL for dynamic import
+  const fileUrl = `file://${filePath}`;
+  const module = await import(fileUrl);
+  const sidebars = module.default as SidebarsConfig;
 
-  async function processDirectory(dirPath: string) {
+  const sidebarKey = Object.keys(sidebars)[0];
+  return sidebars[sidebarKey];
+}
+
+async function buildLlmsTxt(): Promise<void> {
+  let output = PREFIX_BLOCK + "\n\n";
+
+  for (const sidebar of SIDEBAR_LOCATIONS) {
     try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
+      const items = await parseSidebarFile(sidebar.path);
+      const baseUrl = getBaseUrl(sidebar.id);
 
-        if (entry.isDirectory()) {
-          if (!entry.name.startsWith(".") && entry.name !== "node_modules") {
-            await processDirectory(fullPath);
-          }
-          continue;
-        }
-
-        if (!entry.name.endsWith(".md") && !entry.name.endsWith(".mdx"))
-          continue;
-
-        try {
-          const content = await fs.readFile(fullPath, "utf-8");
-          const relativePath = path
-            .relative(sourceDir, fullPath)
-            .replaceAll("\\", "/");
-          const frontMatter = extractFrontMatter(content);
-
-          mdFiles.push({
-            path: relativePath,
-            content,
-            title: frontMatter.title || path.basename(relativePath, ".md"),
-            description: frontMatter.description,
-          });
-        } catch (error) {
-          console.error(
-            `Error processing file ${fullPath}: ${error instanceof Error ? error?.message : error}`,
-          );
-          // Continue processing other files
-        }
-      }
+      output += `## ${sidebar.id}\n\n`;
+      output += generateMarkdownList(items, baseUrl);
     } catch (error) {
-      console.error(
-        `Error reading directory ${dirPath}: ${error instanceof Error ? error?.message : error}`,
-      );
-      throw error;
+      console.error(`Error processing ${sidebar.id}:`, error);
     }
   }
 
-  try {
-    await processDirectory(sourceDir);
+  await fs.mkdir(OUTPUT_DIR, { recursive: true });
 
-    if (mdFiles.length === 0) {
-      console.warn("No MD files found in the specified directory");
-      return;
-    }
+  const outputPath = path.join(OUTPUT_DIR, OUTPUT_FILENAME);
+  await fs.writeFile(outputPath, output, "utf-8");
 
-    // Group files by parent directory
-    const groupedFiles = mdFiles.reduce(
-      (groups, file) => {
-        const firstDir = file.path.split("/")[0];
-
-        if (!groups[firstDir]) {
-          groups[firstDir] = [];
-        }
-        groups[firstDir].push(file);
-        return groups;
-      },
-      {} as Record<string, typeof mdFiles>,
-    );
-
-    const indexContent = [
-      "# Mastra\n",
-      "> Mastra is an open-source TypeScript agent framework designed to provide the essential primitives for building AI applications. " +
-        "It enables developers to create AI agents with memory and tool-calling capabilities, implement deterministic LLM workflows, and leverage RAG for knowledge integration. " +
-        "With features like model routing, workflow graphs, and automated evals, Mastra provides a complete toolkit for developing, testing, and deploying AI applications.\n\n" +
-        "This documentation covers everything from getting started to advanced features, APIs, and best practices for working with Mastra's agent-based architecture.\n\n" +
-        "The documentation is organized into key sections:\n" +
-        "- **docs**: Core documentation covering concepts, features, and implementation details\n" +
-        "- **examples**: Practical examples and use cases demonstrating Mastra's capabilities\n" +
-        "- **guides**: Step-by-step tutorials for building specific applications\n" +
-        "- **reference**: API reference documentation\n\n" +
-        "Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.\n",
-    ];
-
-    for (const [section, files] of Object.entries(groupedFiles)) {
-      indexContent.push(`\n## ${section}`);
-      for (const file of files) {
-        const url = pathToUrl(file.path);
-        indexContent.push(
-          `- [${file.title}](${url})${file.description ? ": " + file.description : ""}`,
-        );
-      }
-    }
-
-    try {
-      await fs.writeFile(
-        path.join(outputDir, "llms.txt"),
-        indexContent.join("\n"),
-        "utf-8",
-      );
-      console.log("Generated llms.txt at static/llms.txt");
-    } catch (error) {
-      console.error(
-        `Error writing llms.txt: ${error instanceof Error ? error?.message : error}`,
-      );
-      throw error;
-    }
-  } catch (error) {
-    console.error(
-      "Fatal error during documentation generation:",
-      error instanceof Error ? error?.message : error,
-    );
-    process.exit(1);
-  }
+  console.log(`Generated ${outputPath}`);
 }
 
-const docsDir = path.join(process.cwd(), "src/content/en/docs");
-
-concatenateMDDocs(docsDir).catch((error) => {
-  console.error(
-    "Unhandled error:",
-    error instanceof Error ? error?.message : error,
-  );
-  process.exit(1);
-});
+// Run the script
+buildLlmsTxt().catch(console.error);

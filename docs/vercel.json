@@ -26,11 +26,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/workflows/agents-and-tools",
-      "destination": "/docs/workflows/overview",
-      "permanent": true
-    },
-    {
       "source": "/docs/getting-started/installation",
       "destination": "/guides/getting-started/quickstart",
       "permanent": true

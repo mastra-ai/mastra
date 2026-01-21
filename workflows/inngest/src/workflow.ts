@@ -190,7 +190,7 @@ export class InngestWorkflow<
       { cron: this.cronConfig?.cron ?? '' },
       async () => {
         const run = await this.createRun();
-        // @ts-ignore
+        // @ts-expect-error
         const result = await run.start({
           inputData: this.cronConfig?.inputData,
           initialState: this.cronConfig?.initialState,

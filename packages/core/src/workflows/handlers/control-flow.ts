@@ -199,7 +199,6 @@ export async function executeParallel(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[entry.steps[index]!.step.id] = result.output;
         }
 
@@ -498,7 +497,6 @@ export async function executeConditional(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[stepsToRun[index]!.step.id] = result.output;
         }
 
@@ -1027,7 +1025,6 @@ export async function executeForeach(
     ...stepInfo,
     status: 'success',
     output: results,
-    //@ts-ignore
     endedAt: Date.now(),
   } as StepSuccess<any, any, any, any>;
 }
