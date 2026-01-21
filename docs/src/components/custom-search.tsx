@@ -242,12 +242,12 @@ export const CustomSearch: FC<SearchProps> = ({
   // Handler for empty state item selection
   const handleEmptyStateSelect = (index: number) => {
     const emptyStateLinks = [
-      "/docs/getting-started/quickstart",
+      "/guides/getting-started/quickstart",
       "/docs/agents/overview",
       "/docs/workflows/overview",
-      "/docs/server-db/local-dev-playground",
+      "/docs/getting-started/studio",
       "/docs/streaming/overview",
-      "/docs/tools-mcp/mcp-overview",
+      "/docs/mcp/overview",
       "/docs/memory/overview",
       "/docs/evals/overview",
       "/docs/rag/overview",
