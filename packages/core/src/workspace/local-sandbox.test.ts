@@ -13,7 +13,8 @@ describe('LocalSandbox', () => {
   beforeEach(async () => {
     // Create a unique temp directory for each test
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-sandbox-test-'));
-    sandbox = new LocalSandbox({ workingDirectory: tempDir });
+    // Use inheritEnv: true for tests so PATH and other essential vars are available
+    sandbox = new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true });
   });
 
   afterEach(async () => {
@@ -395,7 +396,7 @@ echo "Hello, $NAME!"
   describe('working directory', () => {
     it('should create working directory on start', async () => {
       const newDir = path.join(tempDir, 'new-sandbox-dir');
-      const newSandbox = new LocalSandbox({ workingDirectory: newDir });
+      const newSandbox = new LocalSandbox({ workingDirectory: newDir, inheritEnv: true });
 
       await newSandbox.start();
 
@@ -434,6 +435,7 @@ echo "Hello, $NAME!"
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         env: { CONFIGURED_VAR: 'configured-value' },
+        inheritEnv: true,
       });
 
       await envSandbox.start();
@@ -452,6 +454,7 @@ echo "Hello, $NAME!"
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         env: { OVERRIDE_VAR: 'original' },
+        inheritEnv: true,
       });
 
       await envSandbox.start();
@@ -465,6 +468,65 @@ echo "Hello, $NAME!"
       expect(result.stdout.trim()).toBe('overridden');
 
       await envSandbox.destroy();
+    });
+
+    it('should default to inheritEnv: false', () => {
+      const defaultSandbox = new LocalSandbox({ workingDirectory: tempDir });
+      expect(defaultSandbox.inheritEnv).toBe(false);
+    });
+
+    it('should not inherit process.env when inheritEnv: false', async () => {
+      // Set a test env var in the current process
+      const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
+      process.env[testVarName] = 'should-not-be-inherited';
+
+      try {
+        const isolatedSandbox = new LocalSandbox({
+          workingDirectory: tempDir,
+          inheritEnv: false,
+          // Provide PATH so node can be found
+          env: { PATH: process.env.PATH! },
+        });
+
+        await isolatedSandbox.start();
+
+        const result = await isolatedSandbox.executeCode(`console.log(process.env.${testVarName} || 'undefined')`, {
+          runtime: 'node',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('undefined');
+
+        await isolatedSandbox.destroy();
+      } finally {
+        delete process.env[testVarName];
+      }
+    });
+
+    it('should inherit process.env when inheritEnv: true', async () => {
+      // Set a test env var in the current process
+      const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
+      process.env[testVarName] = 'should-be-inherited';
+
+      try {
+        const inheritingSandbox = new LocalSandbox({
+          workingDirectory: tempDir,
+          inheritEnv: true,
+        });
+
+        await inheritingSandbox.start();
+
+        const result = await inheritingSandbox.executeCode(`console.log(process.env.${testVarName} || 'undefined')`, {
+          runtime: 'node',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('should-be-inherited');
+
+        await inheritingSandbox.destroy();
+      } finally {
+        delete process.env[testVarName];
+      }
     });
   });
 
@@ -495,6 +557,7 @@ echo "Hello, $NAME!"
       const customSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         scriptDirectory: scriptDir,
+        inheritEnv: true,
       });
 
       await customSandbox.start();
@@ -510,6 +573,7 @@ echo "Hello, $NAME!"
       const customSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         scriptDirectory: scriptDir,
+        inheritEnv: true,
       });
 
       await customSandbox.start();
@@ -526,6 +590,7 @@ echo "Hello, $NAME!"
       const customSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         scriptDirectory: scriptDir,
+        inheritEnv: true,
       });
 
       await customSandbox.start();

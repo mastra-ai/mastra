@@ -44,6 +44,14 @@ export interface LocalSandboxOptions {
   scriptDirectory?: string;
   /** Environment variables to set */
   env?: Record<string, string>;
+  /**
+   * Whether to inherit the host's environment variables.
+   * When true, process.env is included in the execution environment.
+   * When false (default), only explicitly set env variables are available.
+   * This is more secure as it prevents leaking sensitive environment variables.
+   * @default false
+   */
+  inheritEnv?: boolean;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /** Supported runtimes (default: auto-detect) */
@@ -78,6 +86,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   private readonly _workingDirectory: string;
   private readonly _scriptDirectory?: string;
   private readonly env: Record<string, string>;
+  private readonly _inheritEnv: boolean;
   private readonly timeout: number;
   private detectedRuntimes: SandboxRuntime[] = [];
   private configuredRuntimes?: SandboxRuntime[];
@@ -97,17 +106,36 @@ export class LocalSandbox implements WorkspaceSandbox {
     return this._scriptDirectory ?? os.tmpdir();
   }
 
+  /**
+   * Whether the sandbox inherits the host's environment variables.
+   */
+  get inheritEnv(): boolean {
+    return this._inheritEnv;
+  }
+
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
     this._workingDirectory = options.workingDirectory ?? process.cwd();
     this._scriptDirectory = options.scriptDirectory;
     this.env = options.env ?? {};
+    this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
     this.configuredRuntimes = options.runtimes;
   }
 
   private generateId(): string {
     return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Build the environment object for execution.
+   * Conditionally includes process.env based on inheritEnv setting.
+   */
+  private buildEnv(additionalEnv?: Record<string, string>): Record<string, string> {
+    if (this._inheritEnv) {
+      return { ...process.env, ...this.env, ...additionalEnv } as Record<string, string>;
+    }
+    return { ...this.env, ...additionalEnv };
   }
 
   get status(): SandboxStatus {
@@ -298,7 +326,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       const { stdout, stderr } = await execFile('node', [file], {
         cwd: this.workingDirectory,
         timeout,
-        env: { ...process.env, ...this.env, ...env },
+        env: this.buildEnv(env),
       });
       return { success: true, stdout, stderr, exitCode: 0 };
     } catch (error: unknown) {
@@ -325,7 +353,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       const { stdout, stderr } = await execFile('python3', [file], {
         cwd: this.workingDirectory,
         timeout,
-        env: { ...process.env, ...this.env, ...env },
+        env: this.buildEnv(env),
       });
       return { success: true, stdout, stderr, exitCode: 0 };
     } catch (error: unknown) {
@@ -353,7 +381,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       const { stdout, stderr } = await execFile('bash', [file], {
         cwd: this.workingDirectory,
         timeout,
-        env: { ...process.env, ...this.env, ...env },
+        env: this.buildEnv(env),
       });
       return { success: true, stdout, stderr, exitCode: 0 };
     } catch (error: unknown) {
@@ -380,7 +408,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       const { stdout, stderr } = await execFile('ruby', [file], {
         cwd: this.workingDirectory,
         timeout,
-        env: { ...process.env, ...this.env, ...env },
+        env: this.buildEnv(env),
       });
       return { success: true, stdout, stderr, exitCode: 0 };
     } catch (error: unknown) {
@@ -411,7 +439,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       const { stdout, stderr } = await execFile(command, args, {
         cwd,
         timeout,
-        env: { ...process.env, ...this.env, ...options.env },
+        env: this.buildEnv(options.env),
       });
 
       return {
@@ -476,7 +504,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       await execFile(command, args, {
         cwd: this.workingDirectory,
         timeout: options.timeout ?? 120000,
-        env: { ...process.env, ...this.env },
+        env: this.buildEnv(),
       });
 
       return {

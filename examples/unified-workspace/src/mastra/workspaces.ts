@@ -57,9 +57,11 @@ export const globalWorkspace = new Workspace({
   }),
   // Enable sandbox for code execution
   // scriptDirectory enables __dirname to resolve within workspace
+  // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   // Enable BM25 search for skills and files
   bm25: true,
@@ -89,9 +91,11 @@ export const docsAgentWorkspace = new Workspace({
   }),
   // Enable sandbox for code execution
   // scriptDirectory enables __dirname to resolve within workspace
+  // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   // Enable BM25 search
   bm25: true,
@@ -115,9 +119,11 @@ export const isolatedDocsWorkspace = new Workspace({
   }),
   // Enable sandbox for code execution
   // scriptDirectory enables __dirname to resolve within workspace
+  // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   // Only agent-specific skills, no global skills
@@ -164,6 +170,7 @@ export const safeWriteWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
@@ -189,6 +196,7 @@ export const supervisedSandboxWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
@@ -214,6 +222,7 @@ export const commandApprovalWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
@@ -240,6 +249,7 @@ export const fsWriteApprovalWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
@@ -266,6 +276,7 @@ export const fsAllApprovalWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
+    inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
