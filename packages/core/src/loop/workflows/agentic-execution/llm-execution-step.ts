@@ -665,10 +665,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           _internal: _internal!,
           model: currentStep.model,
         });
+
+        // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
+        // This allows providers like Mistral to expose their native URL support for PDFs
+        // See: https://github.com/mastra-ai/mastra/issues/12152
+        let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+        const modelSupportedUrls = currentStep.model?.supportedUrls;
+        if (modelSupportedUrls) {
+          if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+            resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+          } else {
+            resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
+          }
+        }
+
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: resolvedSupportedUrls,
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
