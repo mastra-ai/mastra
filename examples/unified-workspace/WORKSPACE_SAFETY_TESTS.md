@@ -1421,6 +1421,8 @@ After running tests, clean up any created files:
 ```bash
 cd examples/unified-workspace
 rm -f test-output.txt test-new-file.txt test-dev-output.txt brand-new-file.txt different-file.txt
+rm -f test-edit.txt test-duplicates.txt test-multiline.txt test-fs-approval.txt test-all-approval.txt
+rm -rf test-approval-dir
 git checkout README.md
 ```
 
@@ -1445,7 +1447,10 @@ git checkout README.md
 | Edge Cases: Skills                           | 2 tests      |
 | Edge Cases: Search                           | 2 tests      |
 | Edge Cases: Approval Flow                    | 2 tests      |
-| **Total**                                    | **58 tests** |
+| Line-Range Reading                           | 6 tests      |
+| Edit File Tool                               | 8 tests      |
+| Skill Line-Range                             | 5 tests      |
+| **Total**                                    | **77 tests** |
 
 ---
 
@@ -1471,8 +1476,8 @@ For sandbox tools, check if `requireApproval: true` is set:
 
 For filesystem tools:
 
-- `requireFilesystemApproval: 'all'` → read_file, write_file, list_files, file_exists, delete_file, mkdir, search, index all need approval
-- `requireFilesystemApproval: 'write'` → only write_file, delete_file, mkdir, index need approval (read operations are allowed)
+- `requireFilesystemApproval: 'all'` → read_file, write_file, edit_file, list_files, file_exists, delete_file, mkdir, search, index all need approval
+- `requireFilesystemApproval: 'write'` → only write_file, edit_file, delete_file, mkdir, index need approval (read operations are allowed)
 
 ### Common Issues
 
@@ -1481,3 +1486,579 @@ For filesystem tools:
 2. **Approval dialog not appearing**: Ensure the workspace has a sandbox configured and the safety setting is correct.
 
 3. **Skills not found**: Verify the skillsPaths in the workspace configuration and that SKILL.md files exist in those paths.
+
+---
+
+## 16. Line-Range Reading Tests
+
+These tests verify the `offset`, `limit`, and `showLineNumbers` parameters for `workspace_read_file`.
+
+### 16.1 Happy Path: Read with Line Numbers (Default)
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read the first 5 lines of /README.md
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` with `limit: 5`
+- File content is returned with line number prefixes
+- Format: `     1→Line content here`
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_read_file",
+  "args": { "path": "/README.md", "limit": 5 }
+}
+```
+
+**Expected Output Format:**
+
+```
+     1→# README
+     2→
+     3→This is the workspace...
+     4→...
+     5→...
+```
+
+---
+
+### 16.2 Happy Path: Read with Offset and Limit
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read lines 10-20 of /README.md (start at line 10, read 11 lines)
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` with `offset: 10, limit: 11`
+- Returns lines 10-20 with line numbers
+- Response includes `lines: { start: 10, end: 20 }` and `totalLines`
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_read_file",
+  "args": { "path": "/README.md", "offset": 10, "limit": 11 }
+}
+```
+
+---
+
+### 16.3 Happy Path: Read Without Line Numbers
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read the first 3 lines of /README.md but without line numbers
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` with `limit: 3, showLineNumbers: false`
+- Raw content returned without line number prefixes
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_read_file",
+  "args": { "path": "/README.md", "limit": 3, "showLineNumbers": false }
+}
+```
+
+---
+
+### 16.4 Happy Path: Read from Offset to End
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read /README.md starting from line 50 to the end
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` with `offset: 50` (no limit)
+- Returns all content from line 50 to end of file
+- Line numbers start at 50
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_read_file",
+  "args": { "path": "/README.md", "offset": 50 }
+}
+```
+
+---
+
+### 16.5 Edge Case: Offset Beyond File Length
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Read /README.md starting from line 99999
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_read_file` with `offset: 99999`
+- Returns empty content (offset is beyond file)
+- No error thrown, just empty result
+
+---
+
+### 16.6 Happy Path: Read Specific Line Range for Code Review
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+I found an issue on line 15. Read lines 10-20 of /package.json so I can see the context
+```
+
+**Expected Behavior:**
+
+- Agent reads the specific line range with context
+- Returns `lines` object showing the actual range read
+- Returns `totalLines` for reference
+
+---
+
+## 17. Edit File Tool Tests
+
+These tests verify the `workspace_edit_file` tool with old_string/new_string replacement.
+
+### 17.1 Happy Path: Replace Unique String
+
+**Agent:** Developer Agent (or any agent with write access)
+
+**Pre-condition:** Create a test file first:
+
+```bash
+echo "Hello World\nThis is a test file\nGoodbye World" > examples/unified-workspace/test-edit.txt
+```
+
+**Prompt:**
+
+```
+In /test-edit.txt, replace "Hello World" with "Greetings Earth"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` tool
+- Replacement succeeds (string is unique)
+- Returns success with replacements: 1
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_edit_file",
+  "args": {
+    "path": "/test-edit.txt",
+    "old_string": "Hello World",
+    "new_string": "Greetings Earth"
+  }
+}
+```
+
+---
+
+### 17.2 Failure Path: String Not Found
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Use the test file from 17.1
+
+**Prompt:**
+
+```
+In /test-edit.txt, replace "NONEXISTENT STRING xyz123" with "replacement"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` tool
+- Tool returns error: string not found
+- Agent reports the error to user
+
+**Expected Error:**
+
+```json
+{
+  "success": false,
+  "message": "String not found in file: \"NONEXISTENT STRING xyz123\""
+}
+```
+
+---
+
+### 17.3 Failure Path: String Not Unique
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Create a file with duplicate strings:
+
+```bash
+echo "hello hello hello\nworld" > examples/unified-workspace/test-duplicates.txt
+```
+
+**Prompt:**
+
+```
+In /test-duplicates.txt, replace "hello" with "hi"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` tool
+- Tool returns error: string found multiple times
+- Error suggests using `replace_all: true`
+
+**Expected Error:**
+
+```json
+{
+  "success": false,
+  "message": "String found 3 times in file (must be unique, or use replace_all)"
+}
+```
+
+---
+
+### 17.4 Happy Path: Replace All Occurrences
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Use the duplicates file from 17.3
+
+**Prompt:**
+
+```
+In /test-duplicates.txt, replace ALL occurrences of "hello" with "hi"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` with `replace_all: true`
+- All 3 occurrences replaced
+- Returns success with replacements: 3
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_edit_file",
+  "args": {
+    "path": "/test-duplicates.txt",
+    "old_string": "hello",
+    "new_string": "hi",
+    "replace_all": true
+  }
+}
+```
+
+---
+
+### 17.5 Happy Path: Multi-Line Replacement
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Create a file with multi-line content:
+
+```bash
+cat > examples/unified-workspace/test-multiline.txt << 'EOF'
+function old() {
+  return "old";
+}
+EOF
+```
+
+**Prompt:**
+
+```
+In /test-multiline.txt, replace the function "old" with a function "new" that returns "new"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` with multi-line old_string and new_string
+- Correctly replaces the entire function block
+
+**Expected Tool Call (example):**
+
+```json
+{
+  "tool": "workspace_edit_file",
+  "args": {
+    "path": "/test-multiline.txt",
+    "old_string": "function old() {\n  return \"old\";\n}",
+    "new_string": "function new() {\n  return \"new\";\n}"
+  }
+}
+```
+
+---
+
+### 17.6 Approval Path: Edit File with FS Write Approval
+
+**Agent:** FS Write Approval Agent
+
+**Prompt:**
+
+```
+In /README.md, replace "# README" with "# Project README"
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_edit_file`
+2. **Approval dialog appears** (edit is a write operation)
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_edit_file
+Args: { "path": "/README.md", "old_string": "# README", "new_string": "# Project README" }
+[Approve] [Decline]
+```
+
+---
+
+### 17.7 Failure Path: Edit Non-Existent File
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+In /nonexistent-file-xyz.txt, replace "foo" with "bar"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` tool
+- Tool returns error: file not found
+
+**Expected Error:**
+
+```json
+{
+  "success": false,
+  "message": "File not found: /nonexistent-file-xyz.txt"
+}
+```
+
+---
+
+### 17.8 Edge Case: Replace with Empty String (Delete)
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Use test-edit.txt
+
+**Prompt:**
+
+```
+In /test-edit.txt, remove the line "This is a test file" (replace it with nothing)
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_edit_file` with `new_string: ""`
+- The matching text is deleted from the file
+- Returns success
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_edit_file",
+  "args": {
+    "path": "/test-edit.txt",
+    "old_string": "This is a test file\n",
+    "new_string": ""
+  }
+}
+```
+
+---
+
+## 18. Skill Line-Range Tests
+
+These tests verify line-range reading in skill tools (`skill-read-reference`, `skill-read-script`).
+
+### 18.1 Happy Path: Read Reference with Line Range
+
+**Agent:** Developer Agent or Documentation Agent
+
+**Pre-condition:** Ensure a skill with reference files exists (e.g., code-review skill)
+
+**Prompt:**
+
+```
+Activate the code-review skill, then read lines 1-10 of its main reference file
+```
+
+**Expected Behavior:**
+
+1. Agent activates skill
+2. Agent uses `skill-read-reference` with `startLine: 1, endLine: 10`
+3. Returns content for lines 1-10 with `lines` and `totalLines` metadata
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "skill-read-reference",
+  "args": {
+    "skillName": "code-review",
+    "referencePath": "main.md",
+    "startLine": 1,
+    "endLine": 10
+  }
+}
+```
+
+---
+
+### 18.2 Happy Path: Read Script with Line Range
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Skill with script files
+
+**Prompt:**
+
+```
+Activate the code-review skill and read lines 5-15 of one of its scripts
+```
+
+**Expected Behavior:**
+
+- Agent uses `skill-read-script` with line range
+- Returns partial content with line metadata
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "skill-read-script",
+  "args": {
+    "skillName": "code-review",
+    "scriptPath": "validate.js",
+    "startLine": 5,
+    "endLine": 15
+  }
+}
+```
+
+---
+
+### 18.3 Happy Path: Read Reference Without Line Range
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Activate the code-review skill and read the entire main reference file
+```
+
+**Expected Behavior:**
+
+- Agent uses `skill-read-reference` without startLine/endLine
+- Returns full content with `lines: { start: 1, end: N }` and `totalLines: N`
+
+---
+
+### 18.4 Edge Case: Line Range Beyond File
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Activate the code-review skill and read lines 9999-10000 of its main reference
+```
+
+**Expected Behavior:**
+
+- Agent uses `skill-read-reference` with out-of-bounds range
+- Returns empty or partial content (no error)
+- `lines` object reflects actual lines read
+
+---
+
+### 18.5 Happy Path: Use Line Range for Large File Navigation
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+The code-review skill has a large reference file. First, read lines 1-20 to see the table of contents, then read lines 50-70 to see a specific section
+```
+
+**Expected Behavior:**
+
+1. First call: `skill-read-reference` with `startLine: 1, endLine: 20`
+2. Second call: `skill-read-reference` with `startLine: 50, endLine: 70`
+3. Both return appropriate line ranges
+
+---
+
+## Line-Range and Edit File Test Matrix
+
+### Model Comparison: gpt-4o-mini vs gpt-4o
+
+| Test Case | Agent     | Expected Result              | gpt-4o-mini | gpt-4o   |
+| --------- | --------- | ---------------------------- | ----------- | -------- |
+| 16.1      | Developer | Read with line numbers       | [ ] Pass    | [ ] Pass |
+| 16.2      | Developer | Offset and limit work        | [ ] Pass    | [ ] Pass |
+| 16.3      | Developer | Read without line numbers    | [ ] Pass    | [ ] Pass |
+| 16.5      | Developer | Offset beyond file length    | [ ] Pass    | [ ] Pass |
+| 17.1      | Developer | Replace unique string        | [ ] Pass    | [ ] Pass |
+| 17.2      | Developer | String not found error       | [ ] Pass    | [ ] Pass |
+| 17.3      | Developer | String not unique error      | [ ] Pass    | [ ] Pass |
+| 17.4      | Developer | Replace all occurrences      | [ ] Pass    | [ ] Pass |
+| 17.5      | Developer | Multi-line replacement       | [ ] Pass    | [ ] Pass |
+| 17.6      | FS Write  | Edit needs approval          | [ ] Pass    | [ ] Pass |
+| 17.7      | Developer | Edit non-existent file error | [ ] Pass    | [ ] Pass |
+| 18.1      | Developer | Skill reference line range   | [ ] Pass    | [ ] Pass |
+| 18.2      | Developer | Skill script line range      | [ ] Pass    | [ ] Pass |
+| 18.4      | Developer | Skill line range beyond file | [ ] Pass    | [ ] Pass |
+
+---
+
+## Cleanup After Line-Range and Edit Tests
+
+```bash
+cd examples/unified-workspace
+rm -f test-edit.txt test-duplicates.txt test-multiline.txt
+```
