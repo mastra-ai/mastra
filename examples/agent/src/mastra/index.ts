@@ -100,6 +100,7 @@ const config = {
         provider: 'GoogleOAuth',
       },
       rbac: {
+        organizationId: process.env.WORKOS_ORGANIZATION_ID, // Required for RBAC to lookup memberships
         roleMapping: {
           admin: ['*'], // Full access
           member: ['agents:read', 'agents:execute', 'workflows:read', 'workflows:execute'],
