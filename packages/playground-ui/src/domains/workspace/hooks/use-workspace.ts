@@ -22,6 +22,20 @@ export interface WorkspaceInfo {
   capabilities?: WorkspaceCapabilities;
 }
 
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  status: string;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+  capabilities: WorkspaceCapabilities;
+}
+
+export interface WorkspacesListResponse {
+  workspaces: WorkspaceItem[];
+}
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
@@ -110,20 +124,42 @@ export const useWorkspaceInfo = () => {
 };
 
 // =============================================================================
-// Filesystem Hooks
+// List All Workspaces Hook
 // =============================================================================
 
-export const useWorkspaceFiles = (path: string, options?: { enabled?: boolean; recursive?: boolean }) => {
+export const useWorkspaces = () => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'files', path, options?.recursive],
+    queryKey: ['workspaces'],
+    queryFn: async (): Promise<WorkspacesListResponse> => {
+      return workspaceRequest(baseUrl, '/api/workspaces');
+    },
+  });
+};
+
+// =============================================================================
+// Filesystem Hooks
+// =============================================================================
+
+export const useWorkspaceFiles = (
+  path: string,
+  options?: { enabled?: boolean; recursive?: boolean; workspaceId?: string },
+) => {
+  const client = useMastraClient();
+  const baseUrl = getBaseUrl(client);
+
+  return useQuery({
+    queryKey: ['workspace', 'files', path, options?.recursive, options?.workspaceId],
     queryFn: async (): Promise<FileListResponse> => {
       const searchParams = new URLSearchParams();
       searchParams.set('path', path);
       if (options?.recursive) {
         searchParams.set('recursive', 'true');
+      }
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
       }
       return workspaceRequest(baseUrl, `/api/workspace/fs/list?${searchParams.toString()}`);
     },
@@ -131,17 +167,23 @@ export const useWorkspaceFiles = (path: string, options?: { enabled?: boolean; r
   });
 };
 
-export const useWorkspaceFile = (path: string, options?: { enabled?: boolean; encoding?: string }) => {
+export const useWorkspaceFile = (
+  path: string,
+  options?: { enabled?: boolean; encoding?: string; workspaceId?: string },
+) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'file', path],
+    queryKey: ['workspace', 'file', path, options?.workspaceId],
     queryFn: async (): Promise<FileReadResponse> => {
       const searchParams = new URLSearchParams();
       searchParams.set('path', path);
       if (options?.encoding) {
         searchParams.set('encoding', options.encoding);
+      }
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
       }
       return workspaceRequest(baseUrl, `/api/workspace/fs/read?${searchParams.toString()}`);
     },
@@ -149,15 +191,18 @@ export const useWorkspaceFile = (path: string, options?: { enabled?: boolean; en
   });
 };
 
-export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean }) => {
+export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean; workspaceId?: string }) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'stat', path],
+    queryKey: ['workspace', 'stat', path, options?.workspaceId],
     queryFn: async (): Promise<FileStatResponse> => {
       const searchParams = new URLSearchParams();
       searchParams.set('path', path);
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
       return workspaceRequest(baseUrl, `/api/workspace/fs/stat?${searchParams.toString()}`);
     },
     enabled: options?.enabled !== false && !!path,
@@ -169,6 +214,7 @@ export interface WriteFileParams {
   content: string;
   encoding?: 'utf-8' | 'base64';
   recursive?: boolean;
+  workspaceId?: string;
 }
 
 export const useWriteWorkspaceFile = () => {
@@ -185,6 +231,7 @@ export const useWriteWorkspaceFile = () => {
           content: params.content,
           encoding: params.encoding || 'utf-8',
           recursive: params.recursive ?? true,
+          workspaceId: params.workspaceId,
         }),
       });
     },
@@ -201,6 +248,7 @@ export interface WriteFileFromFileParams {
   path: string;
   file: File;
   recursive?: boolean;
+  workspaceId?: string;
 }
 
 export const useWriteWorkspaceFileFromFile = () => {
@@ -221,6 +269,7 @@ export const useWriteWorkspaceFileFromFile = () => {
           content: base64,
           encoding: 'base64',
           recursive: params.recursive ?? true,
+          workspaceId: params.workspaceId,
         }),
       });
     },
@@ -242,11 +291,13 @@ export const useDeleteWorkspaceFile = () => {
       path: string;
       recursive?: boolean;
       force?: boolean;
+      workspaceId?: string;
     }): Promise<{ success: boolean; path: string }> => {
       const searchParams = new URLSearchParams();
       searchParams.set('path', params.path);
       if (params.recursive) searchParams.set('recursive', 'true');
       if (params.force) searchParams.set('force', 'true');
+      if (params.workspaceId) searchParams.set('workspaceId', params.workspaceId);
 
       return workspaceRequest(baseUrl, `/api/workspace/fs/delete?${searchParams.toString()}`, {
         method: 'DELETE',
@@ -266,7 +317,11 @@ export const useCreateWorkspaceDirectory = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: { path: string; recursive?: boolean }): Promise<{ success: boolean; path: string }> => {
+    mutationFn: async (params: {
+      path: string;
+      recursive?: boolean;
+      workspaceId?: string;
+    }): Promise<{ success: boolean; path: string }> => {
       return workspaceRequest(baseUrl, '/api/workspace/fs/mkdir', {
         method: 'POST',
         body: JSON.stringify(params),

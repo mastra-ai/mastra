@@ -7,3 +7,4 @@ export { automationAgent } from './automation-agent';
 export { scriptRunnerAgent } from './script-runner-agent';
 export { fsWriteApprovalAgent } from './fs-write-approval-agent';
 export { fsAllApprovalAgent } from './fs-all-approval-agent';
+export { testAgent } from './test-agent';

@@ -24,21 +24,25 @@ export const fsPathParams = z.object({
 export const fsReadQuerySchema = z.object({
   path: z.string().describe('Path to the file to read'),
   encoding: z.string().optional().describe('Encoding for text files (default: utf-8)'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 export const fsListQuerySchema = z.object({
   path: z.string().describe('Path to the directory to list'),
   recursive: z.coerce.boolean().optional().describe('Include subdirectories'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 export const fsStatQuerySchema = z.object({
   path: z.string().describe('Path to get info about'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 export const fsDeleteQuerySchema = z.object({
   path: z.string().describe('Path to delete'),
   recursive: z.coerce.boolean().optional().describe('Delete directories recursively'),
   force: z.coerce.boolean().optional().describe("Don't error if path doesn't exist"),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 // =============================================================================
@@ -50,11 +54,13 @@ export const fsWriteBodySchema = z.object({
   content: z.string().describe('Content to write (text or base64-encoded binary)'),
   encoding: z.enum(['utf-8', 'base64']).optional().default('utf-8').describe('Content encoding'),
   recursive: z.coerce.boolean().optional().describe('Create parent directories if needed'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 export const fsMkdirBodySchema = z.object({
   path: z.string().describe('Directory path to create'),
   recursive: z.coerce.boolean().optional().describe('Create parent directories if needed'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 // =============================================================================
@@ -178,6 +184,27 @@ export const workspaceInfoResponseSchema = z.object({
       hasSkills: z.boolean(),
     })
     .optional(),
+});
+
+const workspaceItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.string(),
+  source: z.enum(['mastra', 'agent']),
+  agentId: z.string().optional(),
+  agentName: z.string().optional(),
+  capabilities: z.object({
+    hasFilesystem: z.boolean(),
+    hasSandbox: z.boolean(),
+    canBM25: z.boolean(),
+    canVector: z.boolean(),
+    canHybrid: z.boolean(),
+    hasSkills: z.boolean(),
+  }),
+});
+
+export const listWorkspacesResponseSchema = z.object({
+  workspaces: z.array(workspaceItemSchema),
 });
 
 // =============================================================================

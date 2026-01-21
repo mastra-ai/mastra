@@ -9,6 +9,7 @@ import {
   DocsIcon,
   PageHeader,
   useWorkspaceInfo,
+  useWorkspaces,
   useWorkspaceFiles,
   useWorkspaceSkills,
   useSearchWorkspace,
@@ -22,10 +23,11 @@ import {
   SearchSkillsPanel,
   WorkspaceNotConfigured,
   useWorkspaceFile,
+  type WorkspaceItem,
 } from '@mastra/playground-ui';
 
 import { Link } from 'react-router';
-import { Folder, FileText, Wand2, Search } from 'lucide-react';
+import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
@@ -34,25 +36,41 @@ export default function Workspace() {
   const [showSearch, setShowSearch] = useState(false);
   const [currentPath, setCurrentPath] = useState('/');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
 
-  // Workspace info
+  // List of all workspaces (global + agent workspaces)
+  const { data: workspacesData, isLoading: isLoadingWorkspaces } = useWorkspaces();
+  const workspaces = workspacesData?.workspaces ?? [];
+
+  // Workspace info (currently always fetches global workspace)
   const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo();
 
-  // Files
+  // Get the selected workspace from the list
+  const selectedWorkspace: WorkspaceItem | undefined = selectedWorkspaceId
+    ? workspaces.find(w => w.id === selectedWorkspaceId)
+    : workspaces[0];
+
+  // Effective workspace ID to use for API calls
+  const effectiveWorkspaceId = selectedWorkspace?.id;
+
+  // Files - pass workspaceId to get files from the selected workspace
   const {
     data: filesData,
     isLoading: isLoadingFiles,
     refetch: refetchFiles,
   } = useWorkspaceFiles(currentPath, {
     enabled: workspaceInfo?.isWorkspaceConfigured && workspaceInfo?.capabilities?.hasFilesystem,
+    workspaceId: effectiveWorkspaceId,
   });
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
   const searchWorkspace = useSearchWorkspace();
 
-  // Selected file content
+  // Selected file content - pass workspaceId
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
     enabled: !!selectedFile,
+    workspaceId: effectiveWorkspaceId,
   });
 
   // Skills
@@ -141,6 +159,93 @@ export default function Workspace() {
             icon={<Folder />}
           />
 
+          {/* Workspace Selector - shown when multiple workspaces exist */}
+          {workspaces.length > 1 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                className="flex items-center gap-2 px-3 py-2 text-sm border border-border1 rounded-lg bg-surface2 hover:bg-surface3 transition-colors w-full max-w-md"
+              >
+                {selectedWorkspace?.source === 'agent' ? (
+                  <Bot className="h-4 w-4 text-accent1" />
+                ) : (
+                  <Server className="h-4 w-4 text-icon4" />
+                )}
+                <span className="flex-1 text-left truncate">
+                  {selectedWorkspace?.name ?? 'Select workspace'}
+                  {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
+                    <span className="text-icon4 ml-1">({selectedWorkspace.agentName})</span>
+                  )}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 text-icon4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {showWorkspaceDropdown && (
+                <div className="absolute z-10 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
+                  {workspaces.map(workspace => (
+                    <button
+                      key={workspace.id}
+                      onClick={() => {
+                        setSelectedWorkspaceId(workspace.id);
+                        setShowWorkspaceDropdown(false);
+                        // Reset state when workspace changes
+                        setCurrentPath('/');
+                        setSelectedFile(null);
+                      }}
+                      className={`flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-surface3 transition-colors ${
+                        selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
+                      }`}
+                    >
+                      {workspace.source === 'agent' ? (
+                        <Bot className="h-4 w-4 text-accent1 flex-shrink-0" />
+                      ) : (
+                        <Server className="h-4 w-4 text-icon4 flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-icon6 truncate">{workspace.name}</div>
+                        <div className="text-xs text-icon4 truncate">
+                          {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
+                          {' · '}
+                          {workspace.status}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        {workspace.capabilities.hasFilesystem && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">FS</span>
+                        )}
+                        {workspace.capabilities.hasSandbox && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Sandbox</span>
+                        )}
+                        {workspace.capabilities.hasSkills && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Skills</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Single workspace info badge - shown when only one workspace */}
+          {workspaces.length === 1 && selectedWorkspace && (
+            <div className="flex items-center gap-2 text-sm text-icon4">
+              {selectedWorkspace.source === 'agent' ? (
+                <Bot className="h-4 w-4 text-accent1" />
+              ) : (
+                <Server className="h-4 w-4" />
+              )}
+              <span>{selectedWorkspace.name}</span>
+              {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
+                <span className="text-icon3">({selectedWorkspace.agentName})</span>
+              )}
+              <span className="text-icon3">·</span>
+              <span className="text-icon3">{selectedWorkspace.status}</span>
+            </div>
+          )}
+
           {/* Search Panel */}
           {showSearch && (
             <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
@@ -220,8 +325,10 @@ export default function Workspace() {
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
-                    onCreateDirectory={path => createDirectory.mutate({ path })}
-                    onDelete={path => deleteFile.mutate({ path, recursive: true, force: true })}
+                    onCreateDirectory={path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })}
+                    onDelete={path =>
+                      deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
+                    }
                   />
                   {selectedFile && (
                     <FileViewer

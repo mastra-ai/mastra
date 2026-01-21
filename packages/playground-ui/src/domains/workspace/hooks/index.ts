@@ -2,6 +2,8 @@
 export {
   type WorkspaceCapabilities,
   type WorkspaceInfo,
+  type WorkspaceItem,
+  type WorkspacesListResponse,
   type FileEntry,
   type FileReadResponse,
   type FileListResponse,
@@ -12,6 +14,7 @@ export {
   type SearchResult,
   type SearchResponse,
   useWorkspaceInfo,
+  useWorkspaces,
   useWorkspaceFiles,
   useWorkspaceFile,
   useWorkspaceFileStat,
