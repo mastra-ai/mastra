@@ -10,6 +10,7 @@ export interface SkillsTableProps {
   isLoading: boolean;
   isSkillsConfigured?: boolean;
   basePath?: string;
+  workspaceId?: string;
 }
 
 const columns = [
@@ -53,6 +54,7 @@ export function SkillsTable({
   isLoading,
   isSkillsConfigured = true,
   basePath = '/workspace/skills',
+  workspaceId,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
@@ -83,7 +85,10 @@ export function SkillsTable({
                   key={skill.name}
                   entry={entry}
                   columns={columns}
-                  onClick={() => navigate(`${basePath}/${encodeURIComponent(skill.name)}`)}
+                  onClick={() => {
+                    const url = `${basePath}/${encodeURIComponent(skill.name)}${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`;
+                    navigate(url);
+                  }}
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-1.5 rounded bg-surface5">

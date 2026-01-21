@@ -385,6 +385,7 @@ export default function Workspace() {
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
                 basePath="/workspace/skills"
+                workspaceId={effectiveWorkspaceId}
               />
             )}
 

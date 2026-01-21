@@ -138,14 +138,25 @@ export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boole
 /**
  * Hook to list references for a skill via workspace
  */
-export const useWorkspaceSkillReferences = (skillName: string, options?: { enabled?: boolean }) => {
+export const useWorkspaceSkillReferences = (
+  skillName: string,
+  options?: { enabled?: boolean; workspaceId?: string },
+) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillName, 'references'],
+    queryKey: ['workspace', 'skills', skillName, 'references', options?.workspaceId],
     queryFn: async (): Promise<ListReferencesResponse> => {
-      return skillsRequest(baseUrl, `/api/workspace/skills/${encodeURIComponent(skillName)}/references`);
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
+      return skillsRequest(
+        baseUrl,
+        `/api/workspace/skills/${encodeURIComponent(skillName)}/references${query ? `?${query}` : ''}`,
+      );
     },
     enabled: options?.enabled !== false && !!skillName,
   });
@@ -157,17 +168,22 @@ export const useWorkspaceSkillReferences = (skillName: string, options?: { enabl
 export const useWorkspaceSkillReference = (
   skillName: string,
   referencePath: string,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; workspaceId?: string },
 ) => {
   const client = useMastraClient();
   const baseUrl = getBaseUrl(client);
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillName, 'references', referencePath],
+    queryKey: ['workspace', 'skills', skillName, 'references', referencePath, options?.workspaceId],
     queryFn: async (): Promise<GetReferenceResponse> => {
+      const searchParams = new URLSearchParams();
+      if (options?.workspaceId) {
+        searchParams.set('workspaceId', options.workspaceId);
+      }
+      const query = searchParams.toString();
       return skillsRequest(
         baseUrl,
-        `/api/workspace/skills/${encodeURIComponent(skillName)}/references/${encodeURIComponent(referencePath)}`,
+        `/api/workspace/skills/${encodeURIComponent(skillName)}/references/${encodeURIComponent(referencePath)}${query ? `?${query}` : ''}`,
       );
     },
     enabled: options?.enabled !== false && !!skillName && !!referencePath,
