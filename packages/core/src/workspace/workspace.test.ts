@@ -412,6 +412,271 @@ describe('Workspace', () => {
       await expect(workspace.search('query')).rejects.toThrow(SearchNotAvailableError);
       await expect(workspace.rebuildIndex()).rejects.toThrow(SearchNotAvailableError);
     });
+
+    it('should support search with topK and minScore options', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+      });
+
+      await workspace.indexMany([
+        { path: '/doc1.txt', content: 'machine learning is great' },
+        { path: '/doc2.txt', content: 'machine learning algorithms' },
+        { path: '/doc3.txt', content: 'deep learning neural networks' },
+      ]);
+
+      const resultsTopK = await workspace.search('learning', { topK: 2 });
+      expect(resultsTopK.length).toBe(2);
+
+      const resultsAll = await workspace.search('learning');
+      expect(resultsAll.length).toBe(3);
+    });
+
+    it('should return lineRange in search results', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+      });
+
+      const content = `Line 1 introduction
+Line 2 has machine learning
+Line 3 conclusion`;
+
+      await workspace.index('/doc.txt', content);
+
+      const results = await workspace.search('machine');
+      expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
+    });
+
+    it('should support metadata in indexed documents', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+      });
+
+      await workspace.index('/doc.txt', 'Test content', { metadata: { category: 'test', priority: 1 } });
+
+      const results = await workspace.search('test');
+      expect(results[0]?.metadata?.category).toBe('test');
+      expect(results[0]?.metadata?.priority).toBe(1);
+    });
+  });
+
+  // ===========================================================================
+  // Vector Search Operations
+  // ===========================================================================
+  describe('vector search operations', () => {
+    let mockVectorStore: any;
+    let mockEmbedder: any;
+
+    beforeEach(() => {
+      mockEmbedder = vi.fn(async (text: string) => {
+        // Simple mock: convert text to predictable embedding
+        const hash = text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return [hash % 100, (hash * 2) % 100, (hash * 3) % 100];
+      });
+
+      mockVectorStore = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+    });
+
+    it('should have canVector=true when vector configured', () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      expect(workspace.canVector).toBe(true);
+      expect(workspace.canBM25).toBe(false);
+      expect(workspace.canHybrid).toBe(false);
+    });
+
+    it('should index and search with vector', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Hello world');
+
+      expect(mockEmbedder).toHaveBeenCalledWith('Hello world');
+      expect(mockVectorStore.upsert).toHaveBeenCalled();
+
+      mockVectorStore.query.mockResolvedValue([
+        { id: '/doc1.txt', score: 0.95, metadata: { id: '/doc1.txt', text: 'Hello world' } },
+      ]);
+
+      const results = await workspace.search('hello');
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('/doc1.txt');
+      expect(results[0]?.score).toBe(0.95);
+    });
+
+    it('should support filter in vector search', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Test content');
+
+      mockVectorStore.query.mockResolvedValue([]);
+
+      await workspace.search('test', { filter: { category: 'docs' } });
+
+      expect(mockVectorStore.query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filter: { category: 'docs' },
+        }),
+      );
+    });
+
+    it('should unindex from vector store', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Test content');
+      await workspace.unindex('/doc1.txt');
+
+      expect(mockVectorStore.deleteVector).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: '/doc1.txt',
+        }),
+      );
+    });
+  });
+
+  // ===========================================================================
+  // Hybrid Search Operations
+  // ===========================================================================
+  describe('hybrid search operations', () => {
+    let mockVectorStore: any;
+    let mockEmbedder: any;
+
+    beforeEach(() => {
+      mockEmbedder = vi.fn(async (text: string) => {
+        const hash = text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return [hash % 100, (hash * 2) % 100, (hash * 3) % 100];
+      });
+
+      mockVectorStore = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+    });
+
+    it('should have canHybrid=true when both BM25 and vector configured', () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      expect(workspace.canBM25).toBe(true);
+      expect(workspace.canVector).toBe(true);
+      expect(workspace.canHybrid).toBe(true);
+    });
+
+    it('should use hybrid search by default when both configured', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Hello world');
+
+      mockVectorStore.query.mockResolvedValue([
+        { id: '/doc1.txt', score: 0.8, metadata: { id: '/doc1.txt', text: 'Hello world' } },
+      ]);
+
+      const results = await workspace.search('hello');
+
+      // Should have both BM25 and vector scores
+      expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+      expect(results[0]?.scoreDetails?.vector).toBeDefined();
+    });
+
+    it('should support explicit mode selection', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Hello world');
+
+      // Force BM25 only
+      const bm25Results = await workspace.search('hello', { mode: 'bm25' });
+      expect(bm25Results[0]?.scoreDetails?.bm25).toBeDefined();
+      expect(bm25Results[0]?.scoreDetails?.vector).toBeUndefined();
+
+      // Force vector only
+      mockVectorStore.query.mockResolvedValue([
+        { id: '/doc1.txt', score: 0.9, metadata: { id: '/doc1.txt', text: 'Hello world' } },
+      ]);
+
+      const vectorResults = await workspace.search('hello', { mode: 'vector' });
+      expect(vectorResults[0]?.scoreDetails?.vector).toBeDefined();
+      expect(vectorResults[0]?.scoreDetails?.bm25).toBeUndefined();
+    });
+
+    it('should support custom vectorWeight in hybrid search', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc1.txt', 'Hello world');
+
+      mockVectorStore.query.mockResolvedValue([
+        { id: '/doc1.txt', score: 0.8, metadata: { id: '/doc1.txt', text: 'Hello world' } },
+      ]);
+
+      // With vectorWeight 0.7: combined = 0.7 * 0.8 + 0.3 * 1.0 = 0.86
+      const results = await workspace.search('hello', { vectorWeight: 0.7 });
+      expect(results[0]?.score).toBeCloseTo(0.86, 1);
+    });
+
+    it('should merge results from both search methods', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        bm25: true,
+        vectorStore: mockVectorStore,
+        embedder: mockEmbedder,
+      });
+
+      // BM25 will find doc1
+      await workspace.index('/doc1.txt', 'Hello world');
+      // Vector will also find doc2
+      await workspace.index('/doc2.txt', 'Different content');
+
+      mockVectorStore.query.mockResolvedValue([
+        { id: '/doc1.txt', score: 0.9, metadata: { id: '/doc1.txt', text: 'Hello world' } },
+        { id: '/doc2.txt', score: 0.7, metadata: { id: '/doc2.txt', text: 'Different content' } },
+      ]);
+
+      const results = await workspace.search('hello', { mode: 'hybrid' });
+
+      // Should have results from both sources
+      const ids = results.map(r => r.id);
+      expect(ids).toContain('/doc1.txt');
+    });
   });
 
   // ===========================================================================

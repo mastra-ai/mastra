@@ -1450,7 +1450,9 @@ git checkout README.md
 | Line-Range Reading                           | 6 tests      |
 | Edit File Tool                               | 8 tests      |
 | Skill Line-Range                             | 5 tests      |
-| **Total**                                    | **77 tests** |
+| BM25 Search                                  | 8 tests      |
+| Vector/Hybrid Search (config required)       | 3 tests      |
+| **Total**                                    | **88 tests** |
 
 ---
 
@@ -2062,3 +2064,331 @@ The code-review skill has a large reference file. First, read lines 1-20 to see 
 cd examples/unified-workspace
 rm -f test-edit.txt test-duplicates.txt test-multiline.txt
 ```
+
+---
+
+## 19. BM25 Search Tests
+
+These tests verify the BM25 keyword search functionality via `workspace_search` and `workspace_index` tools.
+
+**Note:** All workspaces in this example have `bm25: true` configured, enabling keyword search.
+
+### 19.1 Happy Path: Search Indexed Content
+
+**Agent:** Developer Agent
+
+**Pre-condition:** Content is auto-indexed from `autoIndexPaths` on workspace init.
+
+**Prompt:**
+
+```
+Search the workspace for "password reset"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` tool
+- Returns results from the indexed FAQ content
+- Results include `score`, `lineRange`, and `content` preview
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_search",
+  "args": { "query": "password reset" }
+}
+```
+
+---
+
+### 19.2 Happy Path: Search with TopK Limit
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search for "API" in the workspace and return only the top 3 results
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` with `topK: 3`
+- Returns at most 3 results
+- Results are ranked by relevance score
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_search",
+  "args": { "query": "API", "topK": 3 }
+}
+```
+
+---
+
+### 19.3 Happy Path: Index New Content
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Index this content for search: "Machine learning is a subset of AI" at path /ml-note.txt
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_index` tool
+- Content is added to the BM25 index
+- Subsequent searches for "machine learning" will find this content
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_index",
+  "args": { "path": "/ml-note.txt", "content": "Machine learning is a subset of AI" }
+}
+```
+
+---
+
+### 19.4 Happy Path: Search After Indexing
+
+**Agent:** Developer Agent
+
+**Prompt (after 19.3):**
+
+```
+Now search for "machine learning"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search`
+- Results include the newly indexed `/ml-note.txt`
+- Shows that dynamic indexing works
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_search",
+  "args": { "query": "machine learning" }
+}
+```
+
+---
+
+### 19.5 Happy Path: Search Returns Line Range
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search for "billing" in the workspace
+```
+
+**Expected Behavior:**
+
+- Results include `lineRange` showing which lines contain the match
+- Useful for navigating to the exact location in a file
+
+**Expected Output (example):**
+
+```json
+{
+  "results": [
+    {
+      "id": "/.mastra-knowledge/knowledge/support/default/billing-cycle",
+      "score": 2.5,
+      "lineRange": { "start": 1, "end": 3 },
+      "content": "..."
+    }
+  ]
+}
+```
+
+---
+
+### 19.6 Edge Case: Empty Search Results
+
+**Agent:** Developer Agent
+
+**Prompt:**
+
+```
+Search the workspace for "xyznonexistent12345abc"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search`
+- Returns empty results array
+- No error thrown
+
+**Expected Response:**
+
+```
+No results found for "xyznonexistent12345abc"
+```
+
+---
+
+### 19.7 Approval Path: Index with FS Write Approval
+
+**Agent:** FS Write Approval Agent
+
+**Prompt:**
+
+```
+Index this content: "Test content for approval" at path /test-index.txt
+```
+
+**Expected Behavior:**
+
+1. Agent calls `workspace_index`
+2. **Approval dialog appears** (indexing is a write operation)
+3. User must approve/decline
+
+**Expected UI:**
+
+```
+[Approval Required]
+Tool: workspace_index
+Args: { "path": "/test-index.txt", "content": "Test content for approval" }
+[Approve] [Decline]
+```
+
+---
+
+### 19.8 Happy Path: Search Without Approval (FS Write Approval)
+
+**Agent:** FS Write Approval Agent
+
+**Prompt:**
+
+```
+Search the workspace for "support"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` tool
+- **No approval dialog** (search is a read operation)
+- Returns results
+
+---
+
+## 20. Vector and Hybrid Search Tests (Configuration Required)
+
+**Note:** Vector search requires additional configuration not included in the default example:
+
+```typescript
+import { createOpenAI } from '@ai-sdk/openai';
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const vectorWorkspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './data' }),
+  bm25: true,
+  vectorStore: yourVectorStore, // e.g., Chroma, Pinecone, etc.
+  embedder: async text => {
+    const { embedding } = await embed({
+      model: openai.embedding('text-embedding-3-small'),
+      value: text,
+    });
+    return embedding;
+  },
+});
+```
+
+### 20.1 Vector Search (Requires Configuration)
+
+**Pre-condition:** Workspace configured with `vectorStore` and `embedder`.
+
+**Prompt:**
+
+```
+Search for documents semantically similar to "how do I change my subscription"
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` with `mode: 'vector'`
+- Returns semantically similar results (not just keyword matches)
+- Results include similarity scores
+
+---
+
+### 20.2 Hybrid Search (Requires Configuration)
+
+**Pre-condition:** Workspace configured with both `bm25: true` AND `vectorStore` + `embedder`.
+
+**Prompt:**
+
+```
+Search for "password" using hybrid search with 70% vector weight
+```
+
+**Expected Behavior:**
+
+- Agent uses `workspace_search` with `mode: 'hybrid', vectorWeight: 0.7`
+- Combines keyword matching (30%) with semantic similarity (70%)
+- Results include `scoreDetails` showing both scores
+
+**Expected Tool Call:**
+
+```json
+{
+  "tool": "workspace_search",
+  "args": { "query": "password", "mode": "hybrid", "vectorWeight": 0.7 }
+}
+```
+
+---
+
+### 20.3 Mode Selection (Requires Configuration)
+
+**Pre-condition:** Workspace configured with both BM25 and vector.
+
+**Prompt:**
+
+```
+First, search for "authentication" using BM25 only. Then search again using vector only.
+```
+
+**Expected Behavior:**
+
+1. First search: `mode: 'bm25'` - keyword matching only
+2. Second search: `mode: 'vector'` - semantic similarity only
+3. Different results demonstrating the difference between modes
+
+---
+
+## Search Test Matrix
+
+### BM25 Search: gpt-4o-mini vs gpt-4o
+
+| Test Case | Agent            | Expected Result         | gpt-4o-mini | gpt-4o   |
+| --------- | ---------------- | ----------------------- | ----------- | -------- |
+| 19.1      | Developer        | Search returns results  | [ ] Pass    | [ ] Pass |
+| 19.2      | Developer        | TopK limit respected    | [ ] Pass    | [ ] Pass |
+| 19.3      | Developer        | Index new content       | [ ] Pass    | [ ] Pass |
+| 19.4      | Developer        | Search finds indexed    | [ ] Pass    | [ ] Pass |
+| 19.5      | Developer        | LineRange in results    | [ ] Pass    | [ ] Pass |
+| 19.6      | Developer        | Empty results handled   | [ ] Pass    | [ ] Pass |
+| 19.7      | FS Write Approve | Index needs approval    | [ ] Pass    | [ ] Pass |
+| 19.8      | FS Write Approve | Search without approval | [ ] Pass    | [ ] Pass |
+
+### Vector/Hybrid Search (Configuration Required)
+
+| Test Case | Agent     | Expected Result      | gpt-4o-mini | gpt-4o   |
+| --------- | --------- | -------------------- | ----------- | -------- |
+| 20.1      | Developer | Vector search works  | [ ] Pass    | [ ] Pass |
+| 20.2      | Developer | Hybrid search works  | [ ] Pass    | [ ] Pass |
+| 20.3      | Developer | Mode selection works | [ ] Pass    | [ ] Pass |
