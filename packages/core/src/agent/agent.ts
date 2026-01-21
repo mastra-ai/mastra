@@ -272,7 +272,7 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
-    // @ts-ignore Flag for agent network messages
+    // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
@@ -2136,6 +2136,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
+          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2146,6 +2147,7 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
+              // @ts-expect-error - zod types mismatch between v3 and v4
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
@@ -2157,7 +2159,7 @@ export class Agent<
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          // @ts-ignore
+          // @ts-expect-error
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;

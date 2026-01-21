@@ -17,12 +17,11 @@ By including curated documentation and code maps directly in our npm packages, w
 
 ### What We Have
 
-| Asset             | Location                    | Purpose                              |
-| ----------------- | --------------------------- | ------------------------------------ |
-| MDX Documentation | `docs/src/content/en/`      | Website docs                         |
-| `llms.txt`        | `docs/public/llms.txt`      | Index of all docs with links         |
-| `llms-full.txt`   | `docs/public/llms-full.txt` | Full concatenated docs (~107K lines) |
-| MCP Docs Server   | `@mastra/mcp-docs-server`   | MCP-based doc access (website)       |
+| Asset             | Location                  | Purpose                        |
+| ----------------- | ------------------------- | ------------------------------ |
+| MDX Documentation | `docs/src/content/en/`    | Website docs                   |
+| `llms.txt`        | `docs/static/llms.txt`    | Index of all docs with links   |
+| MCP Docs Server   | `@mastra/mcp-docs-server` | MCP-based doc access (website) |
 
 ### What Gets Published to npm
 

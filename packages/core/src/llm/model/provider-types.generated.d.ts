@@ -23,9 +23,11 @@ export type ProviderModelsMap = {
     'kimi-k2-turbo-preview',
   ];
   readonly firmware: readonly [
-    'claude-haiku-4-5-20251001',
+    'cerebras-gpt-oss-120b',
+    'cerebras-zai-glm-4.7',
+    'claude-haiku-4-5',
     'claude-opus-4-5',
-    'claude-sonnet-4-5-20250929',
+    'claude-sonnet-4-5',
     'deepseek-chat',
     'deepseek-coder',
     'deepseek-reasoner',
@@ -61,19 +63,35 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
   ];
   readonly 'ollama-cloud': readonly [
-    'cogito-2.1:671b-cloud',
-    'deepseek-v3.1:671b-cloud',
-    'gemini-3-pro-preview:latest',
-    'glm-4.6:cloud',
+    'cogito-2.1:671b',
+    'deepseek-v3.1:671b',
+    'deepseek-v3.2',
+    'devstral-2:123b',
+    'devstral-small-2:24b',
+    'gemini-3-flash-preview',
+    'gemini-3-pro-preview',
+    'gemma3:12b',
+    'gemma3:27b',
+    'gemma3:4b',
+    'glm-4.6',
+    'glm-4.7',
     'glm-4.7:cloud',
-    'gpt-oss:120b-cloud',
-    'gpt-oss:20b-cloud',
-    'kimi-k2-thinking:cloud',
-    'kimi-k2:1t-cloud',
-    'minimax-m2:cloud',
-    'qwen3-coder:480b-cloud',
-    'qwen3-vl-235b-cloud',
-    'qwen3-vl-235b-instruct-cloud',
+    'gpt-oss:120b',
+    'gpt-oss:20b',
+    'kimi-k2-thinking',
+    'kimi-k2:1t',
+    'minimax-m2',
+    'minimax-m2.1',
+    'ministral-3:14b',
+    'ministral-3:3b',
+    'ministral-3:8b',
+    'mistral-large-3:675b',
+    'nemotron-3-nano:30b',
+    'qwen3-coder:480b',
+    'qwen3-next:80b',
+    'qwen3-vl:235b',
+    'qwen3-vl:235b-instruct',
+    'rnj-1:8b',
   ];
   readonly xiaomi: readonly ['mimo-v2-flash'];
   readonly alibaba: readonly [
@@ -658,33 +676,6 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.6',
     'zai-org/glm-4.6v',
     'zai-org/glm-4.7',
-  ];
-  readonly venice: readonly [
-    'claude-opus-45',
-    'claude-sonnet-45',
-    'deepseek-v3.2',
-    'gemini-3-flash-preview',
-    'gemini-3-pro-preview',
-    'google-gemma-3-27b-it',
-    'grok-41-fast',
-    'grok-code-fast-1',
-    'hermes-3-llama-3.1-405b',
-    'kimi-k2-thinking',
-    'llama-3.2-3b',
-    'llama-3.3-70b',
-    'minimax-m21',
-    'mistral-31-24b',
-    'openai-gpt-52',
-    'openai-gpt-52-codex',
-    'openai-gpt-oss-120b',
-    'qwen3-235b-a22b-instruct-2507',
-    'qwen3-235b-a22b-thinking-2507',
-    'qwen3-4b',
-    'qwen3-coder-480b-a35b-instruct',
-    'qwen3-next-80b',
-    'qwen3-vl-235b-a22b',
-    'venice-uncensored',
-    'zai-org-glm-4.7',
   ];
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
@@ -1501,6 +1492,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6v-flash-free',
     'z-ai/glm-4.7',
   ];
+  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
   readonly ovhcloud: readonly [
     'deepseek-r1-distill-llama-70b',
     'gpt-oss-120b',
@@ -1581,6 +1573,7 @@ export type ProviderModelsMap = {
     'glm-4.6v',
     'glm-4.6v-flash',
     'glm-4.7',
+    'glm-4.7-flash',
   ];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
@@ -1876,7 +1869,8 @@ export type ProviderModelsMap = {
     'xai/grok-4.1-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.6', 'zai-glm-4.7'];
+  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',

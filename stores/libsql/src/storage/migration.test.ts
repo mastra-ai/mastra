@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
+import { MastraError } from '@mastra/core/error';
 import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,
@@ -271,6 +272,201 @@ describe('LibSQL Spans Table Migration', () => {
     expect(newSpan.entityType).toBe('workflow');
     expect(newSpan.entityId).toBe('workflow-123');
     expect(newSpan.environment).toBe('production');
+  });
+
+  it('should deduplicate spans with same (spanId, traceId) during migration and create unique index', async () => {
+    // Step 1: Create table with OLD schema (no unique constraint)
+    const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'TEXT'
+            : colDef.type === 'jsonb'
+              ? 'TEXT'
+              : colDef.type === 'timestamp'
+                ? 'TEXT'
+                : colDef.type === 'boolean'
+                  ? 'INTEGER'
+                  : 'TEXT';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+        return `"${colName}" ${sqlType} ${nullable}`.trim();
+      })
+      .join(', ');
+
+    await client.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+    // Step 2: Insert duplicate data - same (spanId, traceId) with different data
+    // First row: incomplete span (no endedAt), older timestamps
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1',
+        null,
+        'Incomplete Span (older)',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 1 }),
+        null,
+        null,
+        JSON.stringify({ input: 'first' }),
+        null,
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        null, // Not completed
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:00.000Z',
+      ],
+    });
+
+    // Second row: completed span (has endedAt), newer timestamps - this should be kept
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1', // Same spanId!
+        null,
+        'Completed Span (newer)',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 2 }),
+        null,
+        null,
+        JSON.stringify({ input: 'second' }),
+        JSON.stringify({ output: 'result' }),
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z', // Completed
+        '2024-01-01T00:00:01.000Z',
+        '2024-01-01T00:00:02.000Z',
+      ],
+    });
+
+    // Third row: another duplicate, completed but older - should be removed
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1', // Same spanId!
+        null,
+        'Old Completed Span',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 0 }),
+        null,
+        null,
+        JSON.stringify({ input: 'oldest' }),
+        JSON.stringify({ output: 'old' }),
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:00.500Z', // Completed but older
+        '2023-12-31T00:00:00.000Z', // Older created
+        '2023-12-31T00:00:00.000Z', // Older updated
+      ],
+    });
+
+    // Add a non-duplicate span
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'unique-span-1',
+        null,
+        'Unique Span',
+        'tool_call',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z',
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z',
+      ],
+    });
+
+    // Verify we have duplicates before migration
+    const countBefore = await client.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+    expect(Number(countBefore.rows[0]?.count)).toBe(4);
+
+    const duplicatesBefore = await client.execute(`
+      SELECT "spanId", "traceId", COUNT(*) as cnt
+      FROM "${TABLE_SPANS}"
+      GROUP BY "spanId", "traceId"
+      HAVING COUNT(*) > 1
+    `);
+    expect(duplicatesBefore.rows.length).toBe(1); // One duplicate group
+
+    // Step 3: Run migration via migrateSpans() - this is what `npx mastra migrate` does
+    // Note: createTable would throw MIGRATION_REQUIRED error when duplicates exist
+    const result = await dbOps.migrateSpans();
+    expect(result.success).toBe(true);
+    expect(result.duplicatesRemoved).toBeGreaterThan(0);
+
+    // Step 4: Verify duplicates were removed
+    const countAfter = await client.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+    expect(Number(countAfter.rows[0]?.count)).toBe(2); // Only 2 unique rows remain
+
+    const duplicatesAfter = await client.execute(`
+      SELECT "spanId", "traceId", COUNT(*) as cnt
+      FROM "${TABLE_SPANS}"
+      GROUP BY "spanId", "traceId"
+      HAVING COUNT(*) > 1
+    `);
+    expect(duplicatesAfter.rows.length).toBe(0); // No more duplicates
+
+    // Step 5: Verify the "best" record was kept (completed, most recently updated)
+    const keptSpan = await client.execute({
+      sql: `SELECT * FROM "${TABLE_SPANS}" WHERE "spanId" = ?`,
+      args: ['dup-span-1'],
+    });
+    expect(keptSpan.rows.length).toBe(1);
+    const span = keptSpan.rows[0] as any;
+    expect(span.name).toBe('Completed Span (newer)'); // The newest completed one was kept
+    expect(span.endedAt).not.toBeNull();
+    expect(JSON.parse(span.attributes)).toEqual({ version: 2 });
+
+    // Step 6: Verify unique index was created
+    const indexes = await client.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+    const uniqueIndex = indexes.rows.find(
+      (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+    );
+    expect(uniqueIndex).toBeDefined();
+
+    // Step 7: Verify unique constraint is enforced - inserting duplicate should fail
+    await expect(
+      client.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'dup-trace-1',
+          'dup-span-1', // Already exists!
+          null,
+          'Should Fail',
+          'agent_run',
+          0,
+          new Date().toISOString(),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      }),
+    ).rejects.toThrow(/UNIQUE constraint failed/);
   });
 
   it('should allow querying old data via storage API after migration', async () => {
@@ -597,5 +793,199 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
       expect(result.rows.length).toBe(1);
       expect(result.rows[0]?.status).toBe('running');
     });
+  });
+});
+
+/**
+ * LibSQL-specific tests that verify init() throws MastraError when
+ * migration is required (duplicates exist without unique index).
+ * This ensures users are forced to run manual migration before the app can start.
+ */
+describe('LibSQL Migration Required Error', () => {
+  /**
+   * Helper to create the spans table with OLD schema (no unique index)
+   */
+  function getOldColumns(): string {
+    return Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'TEXT'
+            : colDef.type === 'jsonb'
+              ? 'TEXT'
+              : colDef.type === 'timestamp'
+                ? 'TEXT'
+                : colDef.type === 'boolean'
+                  ? 'INTEGER'
+                  : 'TEXT';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+        return `"${colName}" ${sqlType} ${nullable}`.trim();
+      })
+      .join(', ');
+  }
+
+  it('should throw MastraError when init() finds duplicate spans without unique index', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create table with OLD schema (no unique index)
+      const oldColumns = getOldColumns();
+      await testClient.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1',
+          null,
+          'First duplicate',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          null,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:00.000Z',
+        ],
+      });
+
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1', // Same spanId - creates a duplicate
+          null,
+          'Second duplicate',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+        ],
+      });
+
+      // Verify duplicates exist
+      const countResult = await testClient.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+      expect(Number(countResult.rows[0]?.count)).toBe(2);
+
+      // Create store and try to init - should throw MastraError
+      const store = new LibSQLStore({
+        id: 'throw-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      // init() should throw MastraError - capture it from a single call
+      let caughtError: unknown;
+      try {
+        await store.init();
+      } catch (error) {
+        caughtError = error;
+      }
+
+      // Verify error has correct type and ID
+      expect(caughtError).toBeInstanceOf(MastraError);
+      expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+      expect((caughtError as MastraError).id).toContain('DUPLICATE_SPANS');
+    } finally {
+      testClient.close();
+    }
+  });
+
+  it('should NOT throw when no duplicates exist (auto-migration succeeds)', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create table with OLD schema (no unique index)
+      const oldColumns = getOldColumns();
+      await testClient.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+      // Insert unique spans (no duplicates)
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1',
+          null,
+          'Unique span 1',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:00.000Z',
+        ],
+      });
+
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-2', // Different spanId - unique
+          null,
+          'Unique span 2',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:02.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+        ],
+      });
+
+      // Create store and init - should NOT throw (auto-migration succeeds)
+      const store = new LibSQLStore({
+        id: 'auto-migrate-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index was added
+      const indexes = await testClient.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+      const uniqueIndex = indexes.rows.find(
+        (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+      );
+      expect(uniqueIndex).toBeDefined();
+    } finally {
+      testClient.close();
+    }
+  });
+
+  it('should NOT throw when unique index already exists (fresh install)', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create store and init - should create table with unique index (fresh install)
+      const store = new LibSQLStore({
+        id: 'fresh-install-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index exists
+      const indexes = await testClient.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+      const uniqueIndex = indexes.rows.find(
+        (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+      );
+      expect(uniqueIndex).toBeDefined();
+    } finally {
+      testClient.close();
+    }
   });
 });

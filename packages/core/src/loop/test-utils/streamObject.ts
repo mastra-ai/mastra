@@ -367,7 +367,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           pipeTextStreamToResponse({
             response: mockResponse,
-            // @ts-ignore
+            // @ts-expect-error
             textStream: result.textStream,
           });
 

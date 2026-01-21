@@ -46,6 +46,35 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     await this.#db.deleteData({ tableName: TABLE_SPANS });
   }
 
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    return this.#db.migrateSpans();
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    return this.#db.checkSpansMigrationStatus();
+  }
+
   public override get tracingStrategy(): {
     preferred: TracingStorageStrategy;
     supported: TracingStorageStrategy[];

@@ -1,18 +1,18 @@
-import { ModelSettings } from './types';
+import { type ModelSettings } from './types';
 import { useMastraClient } from '@/mastra-client-context';
-import { UIMessage } from '@ai-sdk/react';
-import { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
+import { type UIMessage } from '@ai-sdk/react';
+import { type ExtendedMastraUIMessage, type MastraUIMessage } from '../lib/ai-sdk';
 import { MastraClient } from '@mastra/client-js';
-import { CoreUserMessage } from '@mastra/core/llm';
-import { RequestContext } from '@mastra/core/request-context';
-import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { type CoreUserMessage } from '@mastra/core/llm';
+import { type RequestContext } from '@mastra/core/request-context';
+import { type ChunkType, type NetworkChunkType } from '@mastra/core/stream';
 import { useRef, useState } from 'react';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 import { v4 as uuid } from '@lukeed/uuid';
-import { TracingOptions } from '@mastra/core/observability';
+import { type TracingOptions } from '@mastra/core/observability';
 
 export interface MastraChatProps {
   agentId: string;

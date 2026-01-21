@@ -34,7 +34,7 @@ Review your Supabase Row Level Security (RLS) settings to ensure proper data acc
 Before you can use the `MastraAuthSupabase` class you have to install the `@mastra/auth-supabase` package.
 
 ```bash
-npm install @mastra/auth-supabase@beta
+npm install @mastra/auth-supabase@latest
 ```
 
 ## Usage example
@@ -57,7 +57,7 @@ export const mastra = new Mastra({
 
 The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-Visit [MastraAuthSupabase](/reference/v1/auth/supabase) for all available configuration options.
+Visit [MastraAuthSupabase](/reference/auth/supabase) for all available configuration options.
 
 :::
 
@@ -107,7 +107,7 @@ export const mastraClient = new MastraClient({
 
 The access token must be prefixed with `Bearer` in the Authorization header.
 
-Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
 :::
 

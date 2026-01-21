@@ -539,6 +539,39 @@ describe('MDocument', () => {
       expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
     });
 
+    it('chunkRecursive - PHP language support', async () => {
+      const phpCode = `
+              namespace App\\Controllers;
+
+              use App\\Models\\User;
+
+              class UserController {
+                public function index() {
+                  return User::all();
+                }
+
+                private function validate($data) {
+                  if (empty($data)) {
+                    return false;
+                  }
+                  return true;
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(phpCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PHP,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class'))).toBe(true);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
     it('should throw error for unsupported language', async () => {
       const doc = MDocument.fromText('tsCode', { meta: 'data' });
 

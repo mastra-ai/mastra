@@ -31,7 +31,7 @@ const downloadAndSummarizePdfStep = createStep({
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl } = inputData;
 
-    const result = await pdfFetcherTool.execute(
+    const result = await pdfFetcherTool.execute!(
       { pdfUrl },
       {
         mastra,
@@ -68,7 +68,7 @@ const generateQuestionsFromSummaryStep = createStep({
     }
 
     try {
-      const result = await generateQuestionsFromTextTool.execute(
+      const result = await generateQuestionsFromTextTool.execute!(
         { extractedText: summary }, // Use summary as the text input
         {
           mastra,
