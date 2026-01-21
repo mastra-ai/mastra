@@ -12,6 +12,7 @@ import type {
   UpdateVectorParams,
   IndexStats,
   DeleteVectorsParams,
+  CreateMetadataIndexParams,
 } from '@mastra/core/vector';
 import Cloudflare from 'cloudflare';
 
@@ -232,12 +233,13 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     }
   }
 
-  async createMetadataIndex(indexName: string, propertyName: string, indexType: 'string' | 'number' | 'boolean') {
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field, type = 'string' } = params;
     try {
       await this.client.vectorize.indexes.metadataIndex.create(indexName, {
         account_id: this.accountId,
-        propertyName,
-        indexType,
+        propertyName: field,
+        indexType: type,
       });
     } catch (error) {
       throw new MastraError(
@@ -245,7 +247,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
           id: createVectorErrorId('VECTORIZE', 'CREATE_METADATA_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, propertyName, indexType },
+          details: { indexName, field, type },
         },
         error,
       );
