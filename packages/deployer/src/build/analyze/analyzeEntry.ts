@@ -2,9 +2,9 @@ import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
-import resolveFrom from 'resolve-from';
+import { resolveModule } from 'local-pkg';
 import { readJSON } from 'fs-extra/esm';
 import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
@@ -166,8 +166,10 @@ async function captureDependenciesToOptimize(
       }
 
       try {
-        // Absolute path to the dependency
-        const resolvedPath = resolveFrom(projectRoot, dep);
+        // Absolute path to the dependency using ESM-compatible resolution
+        const resolvedPath = resolveModule(dep, {
+          paths: [pathToFileURL(projectRoot).href],
+        });
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
