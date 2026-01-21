@@ -343,6 +343,7 @@ export interface SearchWorkspaceParams {
   topK?: number;
   mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
+  workspaceId?: string;
 }
 
 export const useSearchWorkspace = () => {
@@ -356,6 +357,7 @@ export const useSearchWorkspace = () => {
       if (params.topK !== undefined) searchParams.set('topK', String(params.topK));
       if (params.mode) searchParams.set('mode', params.mode);
       if (params.minScore !== undefined) searchParams.set('minScore', String(params.minScore));
+      if (params.workspaceId) searchParams.set('workspaceId', params.workspaceId);
 
       return workspaceRequest(baseUrl, `/api/workspace/search?${searchParams.toString()}`);
     },

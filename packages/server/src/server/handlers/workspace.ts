@@ -495,13 +495,13 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
   summary: 'Search workspace content',
   description: 'Searches across indexed workspace content using BM25, vector, or hybrid search',
   tags: ['Workspace'],
-  handler: async ({ mastra, query, topK, mode, minScore }) => {
+  handler: async ({ mastra, query, topK, mode, minScore, workspaceId }) => {
     try {
       if (!query) {
         throw new HTTPException(400, { message: 'Search query is required' });
       }
 
-      const workspace = getWorkspace(mastra);
+      const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
         return {
           results: [],

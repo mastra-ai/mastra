@@ -119,6 +119,7 @@ export const searchQuerySchema = z.object({
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
   mode: z.enum(['bm25', 'vector', 'hybrid']).optional().describe('Search mode'),
   minScore: z.coerce.number().optional().describe('Minimum relevance score threshold'),
+  workspaceId: z.string().optional().describe('Workspace ID (defaults to global workspace)'),
 });
 
 export const searchResultSchema = z.object({

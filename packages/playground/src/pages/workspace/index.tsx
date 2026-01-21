@@ -292,7 +292,7 @@ export default function Workspace() {
                     Search Files
                   </h3>
                   <SearchWorkspacePanel
-                    onSearch={params => searchWorkspace.mutate(params)}
+                    onSearch={params => searchWorkspace.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
                     isSearching={searchWorkspace.isPending}
                     searchResults={searchWorkspace.data}
                     canBM25={canBM25}
@@ -309,7 +309,7 @@ export default function Workspace() {
                     Search Skills
                   </h3>
                   <SearchSkillsPanel
-                    onSearch={params => searchSkills.mutate(params)}
+                    onSearch={params => searchSkills.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
                     results={searchSkills.data?.results ?? []}
                     isSearching={searchSkills.isPending}
                   />
