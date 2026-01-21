@@ -33,6 +33,8 @@ export type ServerContext = {
   tools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
+  /** Raw request object for accessing headers, cookies, etc. */
+  rawRequest?: Request;
 };
 
 /**

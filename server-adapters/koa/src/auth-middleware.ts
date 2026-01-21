@@ -9,7 +9,8 @@ import type { Context, Middleware, Next } from 'koa';
 
 export const authenticationMiddleware: Middleware = async (ctx: Context, next: Next) => {
   const mastra = ctx.state.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = ctx.state.customRouteAuthConfig;
 
   if (!authConfig) {
@@ -84,7 +85,8 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
 
 export const authorizationMiddleware: Middleware = async (ctx: Context, next: Next) => {
   const mastra = ctx.state.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = ctx.state.customRouteAuthConfig;
 
   if (!authConfig) {

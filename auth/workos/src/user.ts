@@ -47,17 +47,25 @@ export class WorkOSUserProvider implements IUserProvider<WorkOSUser> {
    */
   async getCurrentUser(request: Request): Promise<WorkOSUser | null> {
     try {
+      console.log('[WorkOSUserProvider.getCurrentUser] Checking session from request cookies');
+      console.log('[WorkOSUserProvider.getCurrentUser] Cookie header:', request.headers.get('cookie'));
+
       // Validate session and extract user from AuthKit
       const { auth } = await this.authService.withAuth(request);
 
+      console.log('[WorkOSUserProvider.getCurrentUser] Auth result:', auth ? 'has auth' : 'no auth');
+
       if (!auth?.user) {
+        console.log('[WorkOSUserProvider.getCurrentUser] No user in auth');
         return null;
       }
 
+      console.log('[WorkOSUserProvider.getCurrentUser] User found:', auth.user.email);
       // Map WorkOS API user to WorkOSUser format
       return this.mapToWorkOSUser(auth.user);
-    } catch {
+    } catch (error) {
       // Session invalid or expired
+      console.error('[WorkOSUserProvider.getCurrentUser] Error:', error);
       return null;
     }
   }

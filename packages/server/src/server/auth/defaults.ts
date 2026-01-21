@@ -1,24 +1,18 @@
 import type { MastraAuthConfig } from '@mastra/core/server';
 
 // Default configuration that can be extended by clients
+// TODO: Wire up RBAC provider to authorization middleware for granular permission checks.
+// Currently allows all authenticated users. See auth-middleware.ts in server adapters.
 export const defaultAuthConfig: MastraAuthConfig = {
   protected: ['/api/*'],
-  public: ['/api'],
+  public: ['/api', '/api/auth/*', '/api/system/*'],
   // Simple rule system
   rules: [
-    // Admin users can do anything
+    // Allow all authenticated users (quick fix - RBAC should be used for granular control)
     {
       condition: user => {
-        if (typeof user === 'object' && user !== null) {
-          if ('isAdmin' in user) {
-            return !!user.isAdmin;
-          }
-
-          if ('role' in user) {
-            return user.role === 'admin';
-          }
-        }
-        return false;
+        // Any authenticated user is allowed
+        return typeof user === 'object' && user !== null;
       },
       allow: true,
     },

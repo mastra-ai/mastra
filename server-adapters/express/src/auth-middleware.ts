@@ -9,7 +9,8 @@ import type { NextFunction, Request, Response } from 'express';
 
 export const authenticationMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   const mastra = res.locals.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = res.locals.customRouteAuthConfig;
 
   if (!authConfig) {
@@ -78,7 +79,8 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
 
 export const authorizationMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   const mastra = res.locals.mastra;
-  const authConfig = mastra.getServer()?.auth;
+  // Cast to any for EE provider compatibility - runtime checks handle type safety
+  const authConfig = mastra.getServer()?.auth as any;
   const customRouteAuthConfig = res.locals.customRouteAuthConfig;
 
   if (!authConfig) {

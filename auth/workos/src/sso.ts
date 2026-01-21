@@ -97,13 +97,32 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
    * @throws {Error} If code exchange fails
    */
   async handleCallback(code: string, state?: string): Promise<SSOCallbackResult<EEUser>> {
+    console.log(
+      '[WorkOSSSOProvider.handleCallback] Starting callback with code:',
+      code?.slice(0, 10) + '...',
+      'state:',
+      state,
+    );
+
+    // AuthKit library requires WORKOS_REDIRECT_URI env var - set it from config
+    if (this.config.redirectUri && !process.env.WORKOS_REDIRECT_URI) {
+      process.env.WORKOS_REDIRECT_URI = this.config.redirectUri;
+    }
+
     // Use AuthService's handleCallback for session creation
     // This handles token exchange, session creation, and cookie setting
-    const result = await this.authService.handleCallback(
-      new Request('http://localhost'), // Dummy request (not used by handleCallback)
-      new Response(), // Dummy response to collect headers
-      { code, state: state || '' },
-    );
+    let result;
+    try {
+      result = await this.authService.handleCallback(
+        new Request('http://localhost'), // Dummy request (not used by handleCallback)
+        new Response(), // Dummy response to collect headers
+        { code, state: state || '' },
+      );
+      console.log('[WorkOSSSOProvider.handleCallback] AuthService callback succeeded');
+    } catch (error) {
+      console.error('[WorkOSSSOProvider.handleCallback] AuthService callback failed:', error);
+      throw error;
+    }
 
     // Map WorkOS user to EEUser format
     const baseUser = mapWorkOSUserToEEUser(result.authResponse.user);
@@ -129,24 +148,26 @@ export class WorkOSSSOProvider implements ISSOProvider<EEUser> {
     const sessionCookie = result.headers?.['Set-Cookie'] || result.headers?.['set-cookie'];
     const cookies: Record<string, string> = {};
 
+    console.log('[WorkOSSSOProvider.handleCallback] Raw session cookie:', sessionCookie);
+
     if (sessionCookie) {
-      // Convert array of Set-Cookie headers to cookie object
+      // Store full cookie strings (including attributes like Path, HttpOnly, etc.)
       const cookieArray = Array.isArray(sessionCookie) ? sessionCookie : [sessionCookie];
-      cookieArray.forEach(cookie => {
+      cookieArray.forEach((cookie, index) => {
+        // Extract cookie name for the key
         const [nameValue] = cookie.split(';');
         if (nameValue) {
-          // Split on first = only to preserve = characters in values (e.g., base64/encrypted cookies)
           const firstEqualIdx = nameValue.indexOf('=');
           if (firstEqualIdx > 0) {
-            const name = nameValue.slice(0, firstEqualIdx);
-            const value = nameValue.slice(firstEqualIdx + 1);
-            if (name && value) {
-              cookies[name.trim()] = value.trim();
-            }
+            const name = nameValue.slice(0, firstEqualIdx).trim();
+            // Store the FULL cookie string, not just the value
+            cookies[name || `cookie_${index}`] = cookie;
           }
         }
       });
     }
+
+    console.log('[WorkOSSSOProvider.handleCallback] Processed cookies:', Object.keys(cookies));
 
     return {
       user,

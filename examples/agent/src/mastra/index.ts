@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { MastraAuthWorkosEE } from '@mastra/auth-workos';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -90,6 +91,22 @@ const config = {
     sourcemap: true,
   },
   server: {
+    auth: new MastraAuthWorkosEE({
+      apiKey: process.env.WORKOS_API_KEY!,
+      clientId: process.env.WORKOS_CLIENT_ID!,
+      redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/sso/callback',
+      cookiePassword: process.env.WORKOS_COOKIE_PASSWORD || 'dev-cookie-password-must-be-32-chars!',
+      sso: {
+        provider: 'GoogleOAuth',
+      },
+      rbac: {
+        roleMapping: {
+          admin: ['*'], // Full access
+          member: ['agents:read', 'agents:execute', 'workflows:read', 'workflows:execute'],
+          viewer: ['agents:read', 'workflows:read'],
+        },
+      },
+    }),
     build: {
       swaggerUI: true,
     },
