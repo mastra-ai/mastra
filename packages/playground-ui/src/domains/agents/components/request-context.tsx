@@ -121,7 +121,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
           very similar things, request context allows you to combine them into one agent.
         </Txt>
 
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/runtime-variables" target="_blank">
+        <Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
           <Icon>
             <ExternalLink />
           </Icon>
