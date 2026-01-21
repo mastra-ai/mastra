@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-expect-error
 import PDFParser from 'pdf2json';
 
 // Simple function to extract text from PDF using pure JavaScript

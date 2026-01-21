@@ -4,7 +4,7 @@ A simple example showing how to do metadata extraction with RAG using Mastra, Op
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 
 ## Getting Started

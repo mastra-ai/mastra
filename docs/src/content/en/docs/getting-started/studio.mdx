@@ -1,6 +1,6 @@
 ---
 title: "Studio | Getting Started"
-description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
+description: Learn how to use Mastra Studio, the interactive development environment for building and testing your agents locally.
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -14,7 +14,7 @@ Studio provides an interactive UI for building and testing your agents, along wi
 
 As your project evolves, Studio's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
 
-To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](/docs/v1/mastra-cloud/setup) to collaborate with your team.
+To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](/docs/mastra-cloud/setup) to collaborate with your team.
 
 <YouTube id="ojGu6Bi4wYk" />
 
@@ -61,7 +61,7 @@ The Studio UI provides an interactive development environment for you to test yo
 
 ### Agents
 
-Chat with your agent directly, dynamically switch [models](/models/v1), and tweak settings like temperature and top-p to understand how they affect the output.
+Chat with your agent directly, dynamically switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
@@ -101,23 +101,23 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/v1/server/mastra-server), allowing you to develop and test against it with full parity.
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/server/mastra-server), allowing you to develop and test against it with full parity.
 
 You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request and response schemas.
 
 To explore the API interactively, visit the Swagger UI at http://localhost:4111/swagger-ui. Here, you can discover endpoints and test them directly from your browser.
 
 :::info
-The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/v1/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/v1/configuration#serverbuild) to `true` respectively.
+The OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set [`server.build.openAPIDocs`](/reference/configuration#serverbuild) and [`server.build.swaggerUI`](/reference/configuration#serverbuild) to `true` respectively.
 :::
 
 ## Configuration
 
-By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/v1/configuration#serverhost), [`port`](/reference/v1/configuration#serverport), and [`studioBase`](/reference/v1/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
+By default, Studio runs at http://localhost:4111. You can change the [`host`](/reference/configuration#serverhost), [`port`](/reference/configuration#serverport), and [`studioBase`](/reference/configuration#serverstudiobase) in the Mastra server configuration. This allows you to customize where and how Studio is hosted.
 
-Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/v1/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/v1/configuration#serverhttps) to learn more.
+Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
 
 ## Next steps
 
-- Learn more about Mastra's suggested [project structure](/docs/v1/getting-started/project-structure).
-- Integrate Mastra with your frontend framework of choice - [Next.js](/guides/v1/getting-started/next-js), [React](/guides/v1/getting-started/vite-react), or [Astro](/guides/v1/getting-started/astro).
+- Learn more about Mastra's suggested [project structure](/docs/getting-started/project-structure).
+- Integrate Mastra with your frontend framework of choice - [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro).

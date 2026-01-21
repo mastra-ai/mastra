@@ -53,8 +53,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API reference**: Generated from code comments and exported types
 - **Package READMEs**: Each package/integration has its own README.md
 - **Development guide**: `DEVELOPMENT.md` - Setup and contribution instructions
-- **Playground guidelines**: `packages/playground/CLAUDE.md` - Development standards for the playground application
-- **Playground UI guidelines**: `packages/playground-ui/CLAUDE.md` - Component and frontend standards for the playground UI package
 
 ### Documentation Guidelines
 
@@ -115,6 +113,10 @@ Follow `.cursor/rules/writing-documentation.mdc`:
 - Don't use "your needs", "production-ready", "makes it easy"
 - Focus on technical details rather than benefits
 - Write for engineers, not marketing
+
+### Changeset Writing
+
+Changelogs are authored via changesets in the `.changeset/` folder. Follow the `.claude/commands/changeset.md` guidelines for creating changesets.
 
 ### Monorepo Management
 

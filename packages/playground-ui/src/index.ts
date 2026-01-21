@@ -1,49 +1,94 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
-export * from './components/dynamic-form/index';
-export * from './components/ui/containers';
-export * from './components/ui/elements';
-export * from './components/threads';
-export * from './components/ui/entity-header';
+export * from './ds/components/Threads';
 export * from './types';
+
+// DS Components - Existing
+export * from './ds/components/Alert';
+export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
-export * from './ds/components/Button/index';
 export * from './ds/components/Breadcrumb/index';
+export * from './ds/components/Button/index';
+export * from './ds/components/CodeEditor/index';
+export * from './ds/components/EmptyState/index';
+export * from './ds/components/Entity/index';
 export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 export * from './ds/components/Table/index';
 export * from './ds/components/Txt/index';
-export * from './ds/components/Entity/index';
-export * from './ds/components/EmptyState/index';
+
+// DS Components - Migrated Primitives
+export * from './ds/components/AlertDialog';
+export * from './ds/components/Checkbox';
+export * from './ds/components/Collapsible';
+export * from './ds/components/Combobox';
+export * from './ds/components/CopyButton';
+export * from './ds/components/Dialog';
+export * from './ds/components/Entry';
+export * from './ds/components/EntityHeader';
+export * from './ds/components/Input';
+export * from './ds/components/Kbd';
+export * from './ds/components/Label';
+export * from './ds/components/MarkdownRenderer';
+export * from './ds/components/Popover';
+export * from './ds/components/RadioGroup';
+export * from './ds/components/ScrollArea';
+export * from './ds/components/Searchbar';
+export * from './ds/components/Select';
+export * from './ds/components/Skeleton';
+export * from './ds/components/Slider';
+export * from './ds/components/Spinner';
+export * from './ds/components/Switch';
+export * from './ds/components/Tooltip';
+
+// DS Components - Migrated Containers
+export * from './ds/components/ButtonsGroup';
+export * from './ds/components/MainContent';
+export * from './ds/components/Sections';
+
+// DS Components - Migrated Complex Elements
+export * from './ds/components/CombinedButtons';
+export * from './ds/components/DateTimePicker';
+export * from './ds/components/EntryList';
+export * from './ds/components/FormFields';
+export * from './ds/components/KeyValueList';
+export * from './ds/components/MainSidebar';
+export * from './ds/components/Notification';
+export * from './ds/components/PageHeader';
+export * from './ds/components/Section';
+export * from './ds/components/SelectElement';
+export * from './ds/components/SideDialog';
+export * from './ds/components/Steps';
+export * from './ds/components/Tabs';
+export * from './ds/components/Text';
+
+// Form utilities (AutoForm)
+export * from './lib/form';
+
+// DS Icons
 export * from './ds/icons/index';
-export * from './ds/components/Alert';
+
+// Other exports
 export * from './domains/voice/hooks/use-speech-recognition';
-export * from './components/ui/radio-group';
-export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
 export * from './domains/memory/hooks';
-
 export * from './store/playground-store';
 export * from './lib/framework';
-export { MemorySearch } from './components/assistant-ui/memory-search';
-export * from './components/ui/alert-dialog';
-export * from './components/ui/searchbar';
-export * from './components/ui/tooltip';
-export * from './components/ui/kbd';
-export * from './components/ui/collapsible';
-export * from './components/ui/combobox';
-export * from './components/ui/skeleton';
+export { MemorySearch } from './lib/ai-ui/memory-search';
 export * from './domains/conversation/index';
 export * from './lib/errors';
-export * from './components/assistant-ui/tools/tool-fallback';
+export { cn } from './lib/utils';
+export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './lib/mastra-platform';

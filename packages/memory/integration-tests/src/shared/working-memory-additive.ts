@@ -44,7 +44,10 @@ async function agentGenerate(
   isV5: boolean,
 ) {
   if (isV5) {
-    return agent.generate(prompt, options);
+    // Transform deprecated threadId/resourceId to memory format for v5+
+    return agent.generate(prompt, {
+      memory: { thread: options.threadId, resource: options.resourceId },
+    });
   } else {
     return agent.generateLegacy(prompt, options);
   }
@@ -104,7 +107,7 @@ You only need to include the fields that have new information - existing data is
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -209,7 +212,7 @@ You only need to include fields that have changed - existing data is automatical
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -377,7 +380,7 @@ Schema structure reminder:
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 

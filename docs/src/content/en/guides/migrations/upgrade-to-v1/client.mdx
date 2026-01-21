@@ -9,6 +9,103 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
+### `messages` is now identical to `@mastra/core/agent` syntax
+
+The `messages` argument is now the first argument of the `generate`, `stream` and `network` method calls, similar to the NodeJS version in `@mastra/core/agent`.
+
+To migrate, move `messages` to the first argument of the method call:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+-  await agent.generate({
+-    messages: [...]
++  await agent.generate([...], {
+  });
+
+-  await agent.stream({
+-    messages: [...]
++  await agent.stream([...], {
+  });
+
+-  await agent.network({
+-    messages: [...]
++  await agent.network([...], {
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-msg-function-args .
+```
+
+:::
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from agent method calls. Use the `memory` option instead, which provides a cleaner API for memory configuration. This applies to both `@mastra/client-js` and `@mastra/react` packages.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+**Using `@mastra/client-js`:**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+  await agent.generate([...], {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+
++  await agent.stream([...], {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+**Using `@mastra/react` `useChat` hook:**
+
+The `useChat` hook internally passes the memory option when you provide a `threadId`. No changes are needed in your component code if you're using the hook's built-in memory handling. However, if you were manually passing options to `sendMessage`, update them accordingly:
+
+```diff
+  const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+  await sendMessage({
+    message: 'Hello',
+    mode: 'stream',
+-   threadId: 'thread-123',
++   threadId: 'thread-123', // Still works - internally converted to memory option
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.generate([...], {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```
+
 ### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
@@ -33,7 +130,7 @@ To migrate, update type imports to use the new naming pattern.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-sdk-types .
+npx @mastra/codemod@latest v1/client-sdk-types .
 ```
 
 :::
@@ -59,7 +156,7 @@ To migrate, update pagination parameters in all client SDK method calls. Example
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-offset-limit .
+npx @mastra/codemod@latest v1/client-offset-limit .
 ```
 
 :::
@@ -80,7 +177,7 @@ To migrate, update the method call with the new parameter structure. Check the u
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-get-memory-thread .
+npx @mastra/codemod@latest v1/client-get-memory-thread .
 ```
 
 :::
@@ -149,7 +246,7 @@ To migrate, use `toAISdkStream()` instead.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/client-to-ai-sdk-format .
+npx @mastra/codemod@latest v1/client-to-ai-sdk-format .
 ```
 
 :::

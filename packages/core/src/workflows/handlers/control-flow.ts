@@ -82,15 +82,19 @@ export async function executeParallel(
     perStep,
   } = params;
 
-  const parallelSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_PARALLEL,
-    name: `parallel: '${entry.steps.length} branches'`,
-    input: engine.getStepOutput(stepResults, prevStep),
-    attributes: {
-      branchCount: entry.steps.length,
-      parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
+  const parallelSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_PARALLEL,
+      name: `parallel: '${entry.steps.length} branches'`,
+      input: engine.getStepOutput(stepResults, prevStep),
+      attributes: {
+        branchCount: entry.steps.length,
+        parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
@@ -154,6 +158,7 @@ export async function executeParallel(
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
+          tracingIds: executionContext.tracingIds,
         },
         tracingContext: {
           currentSpan: parallelSpan,
@@ -194,7 +199,6 @@ export async function executeParallel(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[entry.steps[index]!.step.id] = result.output;
         }
 
@@ -204,10 +208,16 @@ export async function executeParallel(
   }
 
   if (execResults.status === 'failed') {
-    parallelSpan?.error({ error: execResults.error });
+    await engine.errorChildSpan({
+      span: parallelSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.error`,
+      errorOptions: { error: execResults.error },
+    });
   } else {
-    parallelSpan?.end({
-      output: execResults.output || execResults,
+    await engine.endChildSpan({
+      span: parallelSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.end`,
+      endOptions: { output: execResults.output || execResults },
     });
   }
 
@@ -269,28 +279,36 @@ export async function executeConditional(
     perStep,
   } = params;
 
-  const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_CONDITIONAL,
-    name: `conditional: '${entry.conditions.length} conditions'`,
-    input: prevOutput,
-    attributes: {
-      conditionCount: entry.conditions.length,
+  const conditionalSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_CONDITIONAL,
+      name: `conditional: '${entry.conditions.length} conditions'`,
+      input: prevOutput,
+      attributes: {
+        conditionCount: entry.conditions.length,
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   let execResults: any;
   const truthyIndexes = (
     await Promise.all(
       entry.conditions.map(async (cond, index) => {
-        const evalSpan = conditionalSpan?.createChildSpan({
-          type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
-          name: `condition '${index}'`,
-          input: prevOutput,
-          attributes: {
-            conditionIndex: index,
+        const evalSpan = await engine.createChildSpan({
+          parentSpan: conditionalSpan,
+          operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.eval.${index}.span.start`,
+          options: {
+            type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
+            name: `condition '${index}'`,
+            input: prevOutput,
+            attributes: {
+              conditionIndex: index,
+            },
           },
-          tracingPolicy: engine.options?.tracingPolicy,
+          executionContext,
         });
 
         const operationId = `workflow.${workflowId}.conditional.${index}`;
@@ -336,10 +354,14 @@ export async function executeConditional(
         try {
           const result = await engine.evaluateCondition(cond, index, context, operationId);
 
-          evalSpan?.end({
-            output: result !== null,
-            attributes: {
-              result: result !== null,
+          await engine.endChildSpan({
+            span: evalSpan,
+            operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.eval.${index}.span.end`,
+            endOptions: {
+              output: result !== null,
+              attributes: {
+                result: result !== null,
+              },
             },
           });
 
@@ -358,10 +380,14 @@ export async function executeConditional(
           engine.getLogger()?.trackException(mastraError);
           engine.getLogger()?.error('Error evaluating condition: ' + errorInstance.stack);
 
-          evalSpan?.error({
-            error: mastraError,
-            attributes: {
-              result: false,
+          await engine.errorChildSpan({
+            span: evalSpan,
+            operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.eval.${index}.span.error`,
+            errorOptions: {
+              error: mastraError,
+              attributes: {
+                result: false,
+              },
             },
           });
 
@@ -427,6 +453,7 @@ export async function executeConditional(
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           state: executionContext.state,
+          tracingIds: executionContext.tracingIds,
         },
         tracingContext: {
           currentSpan: conditionalSpan,
@@ -470,7 +497,6 @@ export async function executeConditional(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[stepsToRun[index]!.step.id] = result.output;
         }
 
@@ -480,10 +506,16 @@ export async function executeConditional(
   }
 
   if (execResults.status === 'failed') {
-    conditionalSpan?.error({ error: execResults.error });
+    await engine.errorChildSpan({
+      span: conditionalSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.error`,
+      errorOptions: { error: execResults.error },
+    });
   } else {
-    conditionalSpan?.end({
-      output: execResults.output || execResults,
+    await engine.endChildSpan({
+      span: conditionalSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.end`,
+      endOptions: { output: execResults.output || execResults },
     });
   }
 
@@ -549,14 +581,18 @@ export async function executeLoop(
 
   const { step, condition } = entry;
 
-  const loopSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_LOOP,
-    name: `loop: '${entry.loopType}'`,
-    input: prevOutput,
-    attributes: {
-      loopType: entry.loopType,
+  const loopSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_LOOP,
+      name: `loop: '${entry.loopType}'`,
+      input: prevOutput,
+      attributes: {
+        loopType: entry.loopType,
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   let isTrue = true;
@@ -608,22 +644,30 @@ export async function executeLoop(
     }
 
     if (result.status !== 'success') {
-      loopSpan?.end({
-        attributes: {
-          totalIterations: iteration,
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration,
+          },
         },
       });
       return result;
     }
 
-    const evalSpan = loopSpan?.createChildSpan({
-      type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
-      name: `condition: '${entry.loopType}'`,
-      input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
-      attributes: {
-        conditionIndex: iteration,
+    const evalSpan = await engine.createChildSpan({
+      parentSpan: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.span.start`,
+      options: {
+        type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
+        name: `condition: '${entry.loopType}'`,
+        input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
+        attributes: {
+          conditionIndex: iteration,
+        },
       },
-      tracingPolicy: engine.options?.tracingPolicy,
+      executionContext,
     });
 
     isTrue = await condition(
@@ -667,17 +711,25 @@ export async function executeLoop(
         },
       ),
     );
-    evalSpan?.end({
-      output: isTrue,
+    await engine.endChildSpan({
+      span: evalSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.span.end`,
+      endOptions: {
+        output: isTrue,
+      },
     });
 
     iteration++;
   } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
-  loopSpan?.end({
-    output: result.output,
-    attributes: {
-      totalIterations: iteration,
+  await engine.endChildSpan({
+    span: loopSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end`,
+    endOptions: {
+      output: result.output,
+      attributes: {
+        totalIterations: iteration,
+      },
     },
   });
 
@@ -756,15 +808,19 @@ export async function executeForeach(
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
   };
 
-  const loopSpan = tracingContext.currentSpan?.createChildSpan({
-    type: SpanType.WORKFLOW_LOOP,
-    name: `loop: 'foreach'`,
-    input: prevOutput,
-    attributes: {
-      loopType: 'foreach',
-      concurrency,
+  const loopSpan = await engine.createChildSpan({
+    parentSpan: tracingContext.currentSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.start`,
+    options: {
+      type: SpanType.WORKFLOW_LOOP,
+      name: `loop: 'foreach'`,
+      input: prevOutput,
+      attributes: {
+        loopType: 'foreach',
+        concurrency,
+      },
     },
-    tracingPolicy: engine.options?.tracingPolicy,
+    executionContext,
   });
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -957,15 +1013,18 @@ export async function executeForeach(
     },
   });
 
-  loopSpan?.end({
-    output: results,
+  await engine.endChildSpan({
+    span: loopSpan,
+    operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end`,
+    endOptions: {
+      output: results,
+    },
   });
 
   return {
     ...stepInfo,
     status: 'success',
     output: results,
-    //@ts-ignore
     endedAt: Date.now(),
   } as StepSuccess<any, any, any, any>;
 }

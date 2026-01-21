@@ -41,11 +41,141 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   }
 
   async init(): Promise<void> {
+    // Check if migration is needed (table exists with old sorting key)
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (migrationStatus.needsMigration) {
+      // ClickHouse requires table recreation to change sorting key - always require manual migration
+      // Unlike other databases where we can just add a unique constraint, ClickHouse's
+      // ReplacingMergeTree engine requires the sorting key to be set at table creation time.
+      // This means we need to: 1) Create a new table with correct sorting key, 2) Copy data,
+      // 3) Drop old table, 4) Rename new table. This is a destructive operation that should
+      // only be done explicitly by the user.
+
+      // Check for duplicates to provide more helpful error message
+      const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+      const duplicateMessage = duplicateInfo.hasDuplicates
+        ? `\nFound ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations that will be removed.\n`
+        : '';
+
+      const errorMessage =
+        `\n` +
+        `===========================================================================\n` +
+        `MIGRATION REQUIRED: ClickHouse spans table needs sorting key update\n` +
+        `===========================================================================\n` +
+        `\n` +
+        `The spans table structure has changed. ClickHouse requires a table recreation\n` +
+        `to update the sorting key from (traceId) to (traceId, spanId).\n` +
+        duplicateMessage +
+        `\n` +
+        `To fix this, run the manual migration command:\n` +
+        `\n` +
+        `  npx mastra migrate\n` +
+        `\n` +
+        `This command will:\n` +
+        `  1. Create a new table with the correct sorting key\n` +
+        `  2. Copy data from the old table (deduplicating if needed)\n` +
+        `  3. Replace the old table with the new one\n` +
+        `\n` +
+        `WARNING: This migration involves table recreation and may take significant\n` +
+        `time for large tables. Please ensure you have a backup before proceeding.\n` +
+        `===========================================================================\n`;
+
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATION_REQUIRED', 'SORTING_KEY_CHANGE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: errorMessage,
+      });
+    }
+
+    // Create the table (or add missing columns if it already exists)
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and update the sorting key.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    // Check if migration is needed
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: `Migration already complete. Spans table has correct sorting key.`,
+      };
+    }
+
+    // Check for duplicates (for reporting purposes)
+    const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+
+    if (duplicateInfo.hasDuplicates) {
+      this.logger?.info?.(
+        `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting migration with deduplication...`,
+      );
+    } else {
+      this.logger?.info?.(`No duplicate spans found. Starting sorting key migration...`);
+    }
+
+    // Run the migration (which includes deduplication)
+    await this.#db.migrateSpansTableSortingKey({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: duplicateInfo.duplicateCount,
+      message: duplicateInfo.hasDuplicates
+        ? `Migration complete. Removed duplicates and updated sorting key for ${TABLE_SPANS}.`
+        : `Migration complete. Updated sorting key for ${TABLE_SPANS}.`,
+    };
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    const migrationStatus = await this.#db.checkSpansMigrationStatus(TABLE_SPANS);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        needsMigration: false,
+        hasDuplicates: false,
+        duplicateCount: 0,
+        constraintExists: true,
+        tableName: TABLE_SPANS,
+      };
+    }
+
+    const duplicateInfo = await this.#db.checkForDuplicateSpans(TABLE_SPANS);
+    return {
+      needsMigration: true,
+      hasDuplicates: duplicateInfo.hasDuplicates,
+      duplicateCount: duplicateInfo.duplicateCount,
+      constraintExists: false,
+      tableName: TABLE_SPANS,
+    };
   }
 
   public override get tracingStrategy(): {
@@ -434,10 +564,14 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
               conditions.push(`(error IS NOT NULL AND error != '')`);
               break;
             case TraceStatus.RUNNING:
-              conditions.push(`(endedAt IS NULL OR endedAt = '') AND (error IS NULL OR error = '')`);
+              // endedAt is DateTime64 - only check for NULL (not empty string)
+              // error is String - check for both NULL and empty string
+              conditions.push(`endedAt IS NULL AND (error IS NULL OR error = '')`);
               break;
             case TraceStatus.SUCCESS:
-              conditions.push(`(endedAt IS NOT NULL AND endedAt != '') AND (error IS NULL OR error = '')`);
+              // endedAt is DateTime64 - only check for NULL (not empty string)
+              // error is String - check for both NULL and empty string
+              conditions.push(`endedAt IS NOT NULL AND (error IS NULL OR error = '')`);
               break;
           }
         }
@@ -468,17 +602,17 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       // For endedAt DESC: NULLs FIRST (running spans on top when viewing newest)
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
-      // Note: ClickHouse stores null endedAt as empty strings, so we check for both
+      // Note: endedAt is DateTime64 - only check for NULL (not empty string like String columns)
       const sortField = orderBy.field;
       const sortDirection = orderBy.direction;
       let orderClause: string;
       if (sortField === 'endedAt') {
-        // Use CASE WHEN to handle NULLs and empty strings for endedAt
+        // Use CASE WHEN to handle NULLs for endedAt (DateTime64 column)
         // DESC: NULLs first (0 sorts before 1)
         // ASC: NULLs last (1 sorts after 0)
         const nullSortValue = sortDirection === 'DESC' ? 0 : 1;
         const nonNullSortValue = sortDirection === 'DESC' ? 1 : 0;
-        orderClause = `ORDER BY CASE WHEN ${sortField} IS NULL OR ${sortField} = '' THEN ${nullSortValue} ELSE ${nonNullSortValue} END, ${sortField} ${sortDirection}`;
+        orderClause = `ORDER BY CASE WHEN ${sortField} IS NULL THEN ${nullSortValue} ELSE ${nonNullSortValue} END, ${sortField} ${sortDirection}`;
       } else {
         orderClause = `ORDER BY ${sortField} ${sortDirection}`;
       }

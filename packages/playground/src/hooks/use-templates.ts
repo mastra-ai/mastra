@@ -429,7 +429,7 @@ const restoreTemplateStateFromLocalStorage = (runId: string) => {
   return null;
 };
 
-export const useWatchTemplateInstall = (workflowInfo?: any) => {
+const useWatchTemplateInstall = (workflowInfo?: any) => {
   const client = useMastraClient();
   const [streamResult, setStreamResult] = useState<any>({});
 

@@ -46,9 +46,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       let saveCallCount = 0;
       let savedMessages: any[] = [];
 
-      // // @ts-ignore
+      // // @ts-expect-error
       // const original = mockMemory._storage.stores.memory.saveMessages;
-      // // @ts-ignore
+      // // @ts-expect-error
       // mockMemory._storage.stores.memory.saveMessages = async function (...args) {
       //   saveCallCount++;
       //   return original.apply(this, args);
@@ -116,8 +116,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         stream = await agent.stream(
           'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
           {
-            threadId: 'thread-partial-rescue',
-            resourceId: 'resource-partial-rescue',
+            memory: {
+              thread: 'thread-partial-rescue',
+              resource: 'resource-partial-rescue',
+            },
             savePerStep: true,
             onStepFinish: (result: any) => {
               if (result.toolCalls && result.toolCalls.length > 1) {
@@ -208,8 +210,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('Echo: Please echo this long message and explain why.', {
-          threadId: 'thread-echo',
-          resourceId: 'resource-echo',
+          memory: {
+            thread: 'thread-echo',
+            resource: 'resource-echo',
+          },
           savePerStep: true,
         });
       }
@@ -288,8 +292,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         stream = await agent.stream(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
-            threadId: 'thread-multi',
-            resourceId: 'resource-multi',
+            memory: {
+              thread: 'thread-multi',
+              resource: 'resource-multi',
+            },
             savePerStep: true,
           },
         );
@@ -334,8 +340,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('repeat tool calls', {
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
+          memory: {
+            thread: 'thread-1',
+            resource: 'resource-1',
+          },
         });
       }
 
@@ -422,9 +430,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-ignore
+      // @ts-expect-error
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-ignore
+      // @ts-expect-error
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);
@@ -446,8 +454,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('no progress', {
-          threadId: 'thread-2',
-          resourceId: 'resource-2',
+          memory: {
+            thread: 'thread-2',
+            resource: 'resource-2',
+          },
         });
       }
 
@@ -466,9 +476,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-ignore
+      // @ts-expect-error
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-ignore
+      // @ts-expect-error
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);
@@ -490,8 +500,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         });
       } else {
         stream = await agent.stream('interrupt before step', {
-          threadId: 'thread-3',
-          resourceId: 'resource-3',
+          memory: {
+            thread: 'thread-3',
+            resource: 'resource-3',
+          },
         });
       }
 
@@ -915,8 +927,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         ]);
       } else {
         firstResponse = await agent.generate('What is the weather in London?', {
-          threadId,
-          resourceId,
+          memory: {
+            thread: threadId,
+            resource: resourceId,
+          },
           onStepFinish: args => {
             args;
           },

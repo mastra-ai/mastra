@@ -651,7 +651,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="/models/v1/gateways"
+      href="/models/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -691,7 +691,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="/models/v1/providers"
+      href="/models/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -715,7 +715,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in [Studio](/docs/v1/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
 
 :::info
 
@@ -749,7 +749,7 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/server/request-context), variables, or any other logic.
 
 \`\`\`typescript
 const agent = new Agent({
@@ -875,7 +875,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 \`\`\`
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/v1/evals/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
@@ -900,7 +900,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
 
 ## Custom Gateways
 
-Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/v1/gateways/custom-gateways) for implementation details.
+Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
 
 ## Built-in Gateways
 
@@ -913,7 +913,7 @@ ${gatewaysList
         return `    <CardGridItem
       title="Azure OpenAI"
       description="Use your private Azure OpenAI deployments with associated deployment names"
-      href="/models/v1/gateways/${g}"
+      href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
     />`;
       }
@@ -923,14 +923,14 @@ ${gatewaysList
       return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="/models/v1/gateways/${g}"
+      href="/models/gateways/${g}"
       logo={<NetlifyLogo />}
     />`;
     }
     return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="/models/v1/gateways/${g}"
+      href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
 
     />`;
@@ -964,7 +964,7 @@ ${allProviders
     p => `    <CardGridItem
       title="${p.name.replace(/&/g, '&amp;')}"
       description="${p.models.length} models"
-      href="/models/v1/providers/${p.id}"
+      href="/models/providers/${p.id}"
       logo="${getLogoUrl(p.id)}"
     />`,
   )
@@ -1030,7 +1030,7 @@ ${getGeneratedComment()}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
 
 ## Installation
 

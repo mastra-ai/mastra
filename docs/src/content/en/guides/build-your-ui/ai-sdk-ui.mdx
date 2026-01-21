@@ -11,12 +11,12 @@ import TabItem from "@theme/TabItem";
 [AI SDK UI](https://sdk.vercel.ai) is a library of React utilities and components for building AI-powered interfaces. In this guide, you'll learn how to use `@mastra/ai-sdk` to convert Mastra's output to AI SDK-compatible formats, enabling you to use its hooks and components in your frontend.
 
 :::note
-Migrating from AI SDK v4 to v5? See the [migration guide](/guides/v1/migrations/ai-sdk-v4-to-v5).
+Migrating from AI SDK v4 to v5? See the [migration guide](/guides/migrations/ai-sdk-v4-to-v5).
 :::
 
 :::tip
 
-Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) or the [Next.js quickstart guide](/guides/v1/getting-started/next-js).
+Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) or the [Next.js quickstart guide](/guides/getting-started/next-js).
 
 :::
 
@@ -31,22 +31,22 @@ Install the required packages to get started:
 <Tabs>
   <TabItem value="npm" label="npm">
     ```bash copy
-    npm install @mastra/ai-sdk@beta @ai-sdk/react ai
+    npm install @mastra/ai-sdk@latest @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
     ```bash copy
-    pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+    pnpm add @mastra/ai-sdk@latest @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
     ```bash copy
-    yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+    yarn add @mastra/ai-sdk@latest @ai-sdk/react ai
     ```
   </TabItem>
   <TabItem value="bun" label="bun">
     ```bash copy
-    bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+    bun add @mastra/ai-sdk@latest @ai-sdk/react ai
     ```
   </TabItem>
 </Tabs>
@@ -64,7 +64,7 @@ Once you have your API routes set up, you can use them in the [`useChat()`](#use
 
 ### Mastra's server
 
-Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/v1/server/custom-api-routes) feature for this.
+Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/server/custom-api-routes) feature for this.
 
 :::info
 
@@ -72,7 +72,7 @@ Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) is an example of this setup.
 
 :::
 
-You can use [`chatRoute()`](/reference/v1/ai-sdk/chat-route), [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route), and [`networkRoute()`](/reference/v1/ai-sdk/network-route) to create API routes that stream Mastra content in AI SDK-compatible format. Once implemented, you can use these API routes in [`useChat()`](#usechat).
+You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/reference/ai-sdk/workflow-route), and [`networkRoute()`](/reference/ai-sdk/network-route) to create API routes that stream Mastra content in AI SDK-compatible format. Once implemented, you can use these API routes in [`useChat()`](#usechat).
 
 <Tabs>
 
@@ -96,7 +96,7 @@ export const mastra = new Mastra({
 });
 ```
 
-You can also use dynamic agent routing, see the [`chatRoute()` reference documentation](/reference/v1/ai-sdk/chat-route) for more details.
+You can also use dynamic agent routing, see the [`chatRoute()` reference documentation](/reference/ai-sdk/chat-route) for more details.
 
 </TabItem>
 
@@ -120,13 +120,13 @@ export const mastra = new Mastra({
 });
 ```
 
-You can also use dynamic workflow routing, see the [`workflowRoute()` reference documentation](/reference/v1/ai-sdk/workflow-route) for more details.
+You can also use dynamic workflow routing, see the [`workflowRoute()` reference documentation](/reference/ai-sdk/workflow-route) for more details.
 
 :::tip Agent streaming in workflows
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
 
 :::
 
@@ -152,7 +152,7 @@ export const mastra = new Mastra({
 });
 ```
 
-You can also use dynamic network routing, see the [`networkRoute()` reference documentation](/reference/v1/ai-sdk/network-route) for more details.
+You can also use dynamic network routing, see the [`networkRoute()` reference documentation](/reference/ai-sdk/network-route) for more details.
 
 </TabItem>
 
@@ -160,7 +160,7 @@ You can also use dynamic network routing, see the [`networkRoute()` reference do
 
 ### Framework-agnostic
 
-If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/v1/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream), and [`handleNetworkStream()`](/reference/v1/ai-sdk/handle-network-stream) functions in your own API route handlers.
+If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream), and [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) functions in your own API route handlers.
 
 They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
@@ -694,7 +694,7 @@ export function WorkflowChat() {
 
 </Tabs>
 
-For more details on workflow streaming, see [Workflow Streaming](/docs/v1/streaming/workflow-streaming).
+For more details on workflow streaming, see [Workflow Streaming](/docs/streaming/workflow-streaming).
 
 ### Rendering network data
 
@@ -803,7 +803,7 @@ export function NetworkChat() {
 
 </Tabs>
 
-For more details on agent networks, see [Agent Networks](/docs/v1/agents/networks).
+For more details on agent networks, see [Agent Networks](/docs/agents/networks).
 
 ### Custom events
 
@@ -942,7 +942,7 @@ export function TaskChat() {
 
 ### Tool streaming
 
-Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/v1/streaming/tool-streaming).
+Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/streaming/tool-streaming).
 
 ### Examples
 
@@ -957,15 +957,15 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 ### Stream transformations
 
-To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/v1/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/v1/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
+To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
 ### Loading historical messages
 
-When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/v1/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
+When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
 
 ### Passing additional data
 
-[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/v1/server/request-context).
+[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/server/request-context).
 
 Here's an example of the frontend code:
 
@@ -1044,7 +1044,7 @@ export const mastra = new Mastra({
 
 :::info
 
-You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server/request-context) for more details.
+You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server/request-context) for more details.
 
 :::
 

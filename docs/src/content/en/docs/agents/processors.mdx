@@ -86,7 +86,7 @@ Memory loads message history first, then your processors run.
 ```
 Your processors run first, then memory persists messages.
 
-This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/v1/memory/memory-processors#processor-execution-order) for details.
+This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/memory/memory-processors#processor-execution-order) for details.
 
 ## Creating custom processors
 
@@ -233,8 +233,7 @@ The method can return any combination of:
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
 ```typescript
-await agent.generate({
-  prompt: "Complex task",
+await agent.generate("Complex task", {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
       return { model: "openai/gpt-4o-mini" };
@@ -350,8 +349,8 @@ console.log(response.uiMessages);
 
 Mastra provides utility processors for common tasks:
 
-**For security and validation processors**, see the [Guardrails](/docs/v1/agents/guardrails) page for input/output guardrails and moderation processors.
-**For memory-specific processors**, see the [Memory Processors](/docs/v1/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
+**For security and validation processors**, see the [Guardrails](/docs/agents/guardrails) page for input/output guardrails and moderation processors.
+**For memory-specific processors**, see the [Memory Processors](/docs/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
 
 ### TokenLimiter
 
@@ -413,7 +412,7 @@ const agent = new Agent({
 
 :::note
 
-The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) for details.
 
 :::
 
@@ -448,7 +447,7 @@ const agent = new Agent({
 });
 ```
 
-When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/v1/getting-started/studio).
+When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/getting-started/studio).
 
 ## Retry mechanism
 
@@ -492,6 +491,6 @@ The retry mechanism:
 
 ## Related documentation
 
-- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
-- [Memory Processors](/docs/v1/memory/memory-processors) - Memory-specific processors and automatic integration
-- [Processor Interface](/reference/v1/processors/processor-interface) - Full API reference for processors
+- [Guardrails](/docs/agents/guardrails) - Security and validation processors
+- [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors and automatic integration
+- [Processor Interface](/reference/processors/processor-interface) - Full API reference for processors

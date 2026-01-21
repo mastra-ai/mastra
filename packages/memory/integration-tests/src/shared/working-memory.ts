@@ -95,7 +95,13 @@ function isV5PlusModel(model: MastraModelConfig): boolean {
 // Helper to generate with the appropriate API
 async function agentGenerate(agent: Agent, message: string | any[], options: any, model: MastraModelConfig) {
   if (isV5PlusModel(model)) {
-    return agent.generate(message, options);
+    // Transform deprecated threadId/resourceId to memory format for v5+
+    const { threadId, resourceId, ...rest } = options;
+    const transformedOptions = {
+      ...rest,
+      ...(threadId || resourceId ? { memory: { thread: threadId, resource: resourceId } } : {}),
+    };
+    return agent.generate(message, transformedOptions);
   } else {
     return agent.generateLegacy(message, options);
   }
@@ -155,9 +161,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -695,9 +701,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
 
         afterEach(async () => {
-          //@ts-ignore
+          //@ts-expect-error
           await storage.client.close();
-          //@ts-ignore
+          //@ts-expect-error
           await vector.turso.close();
         });
 
@@ -885,9 +891,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1101,9 +1107,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1455,9 +1461,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 
@@ -1573,9 +1579,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-ignore
+        //@ts-expect-error
         await storage.client.close();
-        //@ts-ignore
+        //@ts-expect-error
         await vector.turso.close();
       });
 

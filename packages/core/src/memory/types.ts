@@ -6,7 +6,7 @@ export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
-import type { MastraStorage } from '../storage';
+import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
@@ -447,7 +447,7 @@ export type SharedMemoryConfig = {
    * storage: new LibSQLStore({ id: 'agent-memory-storage', url: "file:./agent-memory.db" })
    * ```
    */
-  storage?: MastraStorage;
+  storage?: MastraCompositeStore;
 
   /**
    * Configuration for memory behaviors including conversation history, semantic recall,

@@ -1,5 +1,32 @@
 # @mastra/fastembed
 
+## 1.0.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Upgraded to AI SDK v5 (specification version v2) for compatibility with @mastra/core. Default exports now use v2 specification. Legacy v1 exports available for backwards compatibility via `fastembed.smallLegacy` and `fastembed.baseLegacy`. ([#9349](https://github.com/mastra-ai/mastra/pull/9349))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
+- Added support for AI SDK v6 embedding models (specification version v3) in memory and vector modules. Fixed TypeScript error where `ModelRouterEmbeddingModel` was trying to implement a union type instead of `EmbeddingModelV2` directly. ([#11362](https://github.com/mastra-ai/mastra/pull/11362))
+
 ## 1.0.0-beta.3
 
 ### Patch Changes

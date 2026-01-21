@@ -1,6 +1,5 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
@@ -11,15 +10,12 @@ import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> extends LoopRun<
-  Tools,
-  OUTPUT
-> {
+interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 }
 
-export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
+export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
   const {
@@ -142,7 +138,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             type: 'step-finish',
             runId,
             from: ChunkFrom.AGENT,
-            // @ts-ignore TODO: Look into the proper types for this
+            // @ts-expect-error TODO: Look into the proper types for this
             payload: typedInputData,
           });
         }

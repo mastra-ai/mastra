@@ -11,8 +11,7 @@ import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
-import type { InferSchemaOutput } from '../../stream/base/schema';
+import type { ChunkType } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
@@ -69,7 +68,8 @@ function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage
   });
 }
 
-async function getRoutingAgent({
+/** @internal Exported for testing purposes */
+export async function getRoutingAgent({
   requestContext,
   agent,
   routingConfig,
@@ -87,6 +87,12 @@ async function getRoutingAgent({
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
 
+  // Get only user-configured processors (not memory processors) for the routing agent.
+  // Memory processors (semantic recall, working memory) can interfere with routing decisions,
+  // but user-configured processors like token limiters should be applied.
+  const configuredInputProcessors = await agent.listConfiguredInputProcessors(requestContext);
+  const configuredOutputProcessors = await agent.listConfiguredOutputProcessors(requestContext);
+
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
       // Use agent name instead of description since description might not exist
@@ -97,7 +103,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema),
+        zodToJsonSchema(workflow.inputSchema ?? z.object({})),
       )}`;
     })
     .join('\n');
@@ -105,9 +111,9 @@ async function getRoutingAgent({
   const memoryTools = await memoryToUse?.listTools?.();
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
-      )}`;
+      // Use 'in' check for type narrowing, then nullish coalescing for undefined values
+      const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -145,7 +151,9 @@ async function getRoutingAgent({
     instructions,
     model: model,
     memory: memoryToUse,
-    // @ts-ignore
+    inputProcessors: configuredInputProcessors,
+    outputProcessors: configuredOutputProcessors,
+    // @ts-expect-error
     _agentNetworkAppend: true,
   });
 }
@@ -264,7 +272,9 @@ export async function prepareMemoryStep({
   }
 
   // Add title generation to promises if needed (non-blocking)
-  if (thread?.title?.startsWith('New Thread') && memory) {
+  // Check if this is the first user message by looking at existing messages in the thread
+  // This works automatically for pre-created threads without requiring any metadata flags
+  if (thread && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
     const {
@@ -274,27 +284,38 @@ export async function prepareMemoryStep({
     } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
     if (shouldGenerate && userMessage) {
-      promises.push(
-        routingAgent
-          .genTitle(
-            userMessage,
-            requestContext,
-            tracingContext || { currentSpan: undefined },
-            titleModel,
-            titleInstructions,
-          )
-          .then(title => {
-            if (title) {
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            }
-          }),
-      );
+      // Check for existing user messages in the thread - if none, this is the first user message
+      // We fetch existing messages before the new message is saved
+      const existingMessages = await memory.recall({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      });
+      const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
+      const isFirstUserMessage = existingUserMessages.length === 0;
+
+      if (isFirstUserMessage) {
+        promises.push(
+          routingAgent
+            .genTitle(
+              userMessage,
+              requestContext,
+              tracingContext || { currentSpan: undefined },
+              titleModel,
+              titleInstructions,
+            )
+            .then(title => {
+              if (title) {
+                return memory.createThread({
+                  threadId: thread.id,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                  title,
+                  metadata: thread.metadata,
+                });
+              }
+            }),
+        );
+      }
     }
   }
 
@@ -480,7 +501,20 @@ export async function createNetworkLoop({
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
-      const object = result.object;
+      const object = await result.object;
+
+      if (!object) {
+        throw new MastraError({
+          id: 'AGENT_NETWORK_ROUTING_AGENT_INVALID_OUTPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.SYSTEM,
+          text: `Routing agent returned undefined for 'object'. This may indicate an issue with the model's response or structured output parsing.`,
+          details: {
+            finishReason: result.finishReason ?? null,
+            usage: JSON.stringify(result.usage) ?? null,
+          },
+        });
+      }
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
 
@@ -1593,7 +1627,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
+export async function networkLoop<OUTPUT = undefined>({
   networkName,
   requestContext,
   runId,
@@ -1615,7 +1649,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   networkName: string;
   requestContext: RequestContext;
   runId: string;
-  routingAgent: Agent;
+  routingAgent: Agent<any, any, any>;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
@@ -1648,7 +1682,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
    * Structured output configuration for the network's final result.
    * When provided, generates a structured response matching the schema.
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
@@ -1768,6 +1802,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   // If validation fails, marks isComplete=false and adds feedback for next iteration
   const validationStep = createStep({
     id: 'validation-step',
+    // @ts-expect-error - will be fixed by standard schema
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: z.object({
       task: z.string(),
@@ -1826,7 +1861,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       // Run either configured scorers or the default LLM completion check
       let completionResult;
       let generatedFinalResult: string | undefined;
-      let structuredObject: InferSchemaOutput<OUTPUT> | undefined;
+      let structuredObject: OUTPUT | undefined;
 
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);

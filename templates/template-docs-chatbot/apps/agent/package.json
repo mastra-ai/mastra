@@ -22,16 +22,16 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/mcp": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta"
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest"
   },
   "devDependencies": {
     "@types/node": "^24.0.10",
-    "mastra": "beta",
+    "mastra": "latest",
     "tsx": "^4.20.3",
     "typescript": "^5.9.3",
     "dotenv": "^17.0.1",
