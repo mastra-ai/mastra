@@ -51,14 +51,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Trigger mastra-cloud integration tests
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.MASTRA_CLOUD_PAT }}
-          repository: mastra-ai/mastra-cloud
-          event-type: test-mastra-branch
-          client-payload: '{"branch": "${{ github.ref_name }}", "release_type": "prerelease"}'
-
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -128,14 +120,6 @@ jobs:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
-
-      - name: Trigger mastra-cloud integration tests
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.MASTRA_CLOUD_PAT }}
-          repository: mastra-ai/mastra-cloud
-          event-type: test-mastra-branch
-          client-payload: '{"branch": "main", "release_type": "stable"}'
 
       - name: Check for pre.json file existence
         id: check_files
@@ -301,14 +285,6 @@ jobs:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
-
-      - name: Trigger mastra-cloud integration tests
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.MASTRA_CLOUD_PAT }}
-          repository: mastra-ai/mastra-cloud
-          event-type: test-mastra-branch
-          client-payload: '{"branch": "${{ github.ref_name }}", "release_type": "snapshot"}'
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
