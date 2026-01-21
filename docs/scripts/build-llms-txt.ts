@@ -121,8 +121,7 @@ function generateMarkdownList(
 
     if (typeof item === "string" || item.type === "doc") {
       // It's a doc item - create a link
-      const url =
-        docId === "index" ? baseUrl : `${baseUrl}/${docId?.replace("/", "/")}`;
+      const url = docId === "index" ? baseUrl : `${baseUrl}/${docId}`;
       output += `${indent}- [${label}](${url})\n`;
     } else if (item.type === "category") {
       // It's a category - create a label and recurse
