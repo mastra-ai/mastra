@@ -23,8 +23,8 @@ Real-time monitoring, suspend/resume, and step-level observability are enabled v
 
 Install the required packages:
 
-```sh
-npm install @mastra/inngest@beta inngest @inngest/realtime
+```bash npm2yarn
+npm install @mastra/inngest@latest inngest @inngest/realtime
 ```
 
 ## Building an Inngest workflow
@@ -145,7 +145,7 @@ export const mastra = new Mastra({
 1. Run `npx mastra dev` to start the Mastra server locally on port 4111
 2. Start the Inngest Dev Server. In a new terminal, run:
 
-    ```sh
+    ```bash
     npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
     ```
 
@@ -180,7 +180,7 @@ Before you begin, make sure you have:
 
 1. Set your Vercel token in your environment:
 
-    ```sh title=".env"
+    ```bash title=".env"
     export VERCEL_TOKEN=your_vercel_token
     ```
 
@@ -203,13 +203,13 @@ Before you begin, make sure you have:
 
 3. Build the mastra instance
 
-    ```sh
+    ```bash
     npx mastra build
     ```
 
 4. Deploy to Vercel
 
-    ```sh
+    ```bash
     cd .mastra/output
     vercel login
     vercel --prod

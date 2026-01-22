@@ -45,7 +45,7 @@ export async function getInputOptions(
     entryFile,
     {
       dependencies: deps,
-      externalDependencies: new Set(),
+      externalDependencies: new Map(),
       workspaceMap,
     },
     platform,

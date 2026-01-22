@@ -136,7 +136,7 @@ const EmptyProcessorsTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/processors"
+          href="https://mastra.ai/docs/agents/processors"
           target="_blank"
         >
           <Icon>

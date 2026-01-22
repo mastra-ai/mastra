@@ -108,6 +108,8 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -131,18 +133,18 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 >;
 
 export type StreamParamsBase<OUTPUT = undefined> = {
-  messages: MessageListInput;
   tracingOptions?: TracingOptions;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
-export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = Omit<StreamParamsBase<OUTPUT>, 'messages'>;
-export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> &
-  (OUTPUT extends {}
-    ? { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> }
-    : { structuredOutput?: never });
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
+  messages: MessageListInput;
+} & (OUTPUT extends undefined
+    ? { structuredOutput?: never }
+    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -602,6 +604,7 @@ export interface StoredAgentResponse {
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
+  integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
@@ -650,11 +653,13 @@ export interface CreateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -669,11 +674,13 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -682,6 +689,77 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: Record<string, any>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+export interface CreateAgentVersionResponse {
+  version: AgentVersionResponse;
+}
+
+export interface ActivateAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface RestoreAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface DeleteAgentVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VersionDiff {
+  field: string;
+  previousValue: any;
+  currentValue: any;
+  changeType?: 'added' | 'removed' | 'modified';
+}
+
+export type AgentVersionDiff = VersionDiff;
+
+export interface CompareVersionsResponse {
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
 }
 
 export interface ListAgentsModelProvidersResponse {

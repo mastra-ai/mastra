@@ -41,7 +41,7 @@ For detailed setup instructions, refer to the [WorkOS documentation](https://wor
 Before you can use the `MastraAuthWorkos` class you have to install the `@mastra/auth-workos` package.
 
 ```bash
-npm install @mastra/auth-workos@beta
+npm install @mastra/auth-workos@latest
 ```
 
 ## Usage examples
@@ -102,7 +102,7 @@ const workosAuth = new MastraAuthWorkos({
 
 :::info
 
-Visit [MastraAuthWorkos](/reference/v1/auth/workos) for all available configuration options.
+Visit [MastraAuthWorkos](/reference/auth/workos) for all available configuration options.
 
 :::
 
@@ -168,7 +168,7 @@ export const createMastraClient = (accessToken: string) => {
 
 The access token must be prefixed with `Bearer` in the Authorization header.
 
-Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
 :::
 
@@ -179,7 +179,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 <Tabs>
   <TabItem value="react" label="React">
 
-    ```typescript title="src/api/agents.ts" copy
+    ```typescript title="src/api/agents.ts"
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
 
@@ -210,7 +210,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
   </TabItem>
   <TabItem value="curl" label="cURL">
 
-    ```bash copy
+    ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer <your-workos-access-token>" \

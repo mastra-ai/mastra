@@ -3,15 +3,13 @@ title: "Manual Install | Getting Started"
 description: Set up a Mastra project manually without using the create mastra CLI.
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 # Manual Install
 
 :::info
-Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/v1/getting-started/start), which achieves the same result using the [`mastra create`](/reference/v1/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow a [getting-started guide](/docs/getting-started/start), which achieves the same result using the [`mastra create`](/reference/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
 :::
 
 If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
@@ -26,46 +24,18 @@ Create a new project and change directory:
 mkdir my-first-agent && cd my-first-agent
 ```
 
-Initialize a TypeScript project and install the following dependencies:
+Generate a new `package.json` file:
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
-npm init -y
-npm install -D typescript @types/node mastra@beta
-npm install @mastra/core@beta zod@^4
+```bash npm2yarn
+npm init
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
+Install the following dependencies:
 
-```bash
-pnpm init
-pnpm add -D typescript @types/node mastra@beta
-pnpm add @mastra/core@beta zod@^4
+```bash npm2yarn
+npm install -D typescript @types/node mastra@latest
+npm install @mastra/core@latest zod@^4
 ```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn init -y
-yarn add -D typescript @types/node mastra@beta
-yarn add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun init -y
-bun add -d typescript @types/node mastra@beta
-bun add @mastra/core@beta zod@^4
-```
-
-</TabItem>
-</Tabs>
 
 Add `dev` and `build` scripts to your `package.json` file:
 
@@ -132,7 +102,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 
 :::note
 
-This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
+This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
 
 :::
 
@@ -171,7 +141,7 @@ export const weatherTool = createTool({
 
 :::info
 
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
 
 :::
 
@@ -236,38 +206,11 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm run dev
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm run dev
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn run dev
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun run dev
-```
-
-</TabItem>
-</Tabs>
 
 </StepItem>
 

@@ -100,7 +100,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           if ('inputSchema' in tool) {
             inputSchema = tool.inputSchema;
           } else if ('parameters' in tool) {
-            // @ts-ignore tool is not part
+            // @ts-expect-error tool is not part
             inputSchema = tool.parameters;
           }
 

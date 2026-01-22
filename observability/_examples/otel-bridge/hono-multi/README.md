@@ -29,7 +29,7 @@ Without OtelBridge, Mastra would create disconnected traces with new trace IDs.
 ## Prerequisites
 
 - Docker (for Arize Phoenix)
-- Node.js >= 20
+- Node.js 22.13.0 or later
 - pnpm >= 10
 - OpenAI API key
 

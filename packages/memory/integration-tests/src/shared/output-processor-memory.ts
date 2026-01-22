@@ -43,7 +43,7 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
     });
 
     afterEach(async () => {
-      //@ts-ignore
+      //@ts-expect-error
       await storage.client?.close();
     });
 

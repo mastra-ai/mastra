@@ -6,12 +6,16 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/docs/**"]
     },
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["./**/*.d.ts"]
+    },
     "build:docs": {
       "dependsOn": ["build:lib"],
       "outputs": ["dist/docs/**"]
     },
     "build": {
-      "dependsOn": ["build:lib", "build:docs"]
+      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"]
     }
   }
 }

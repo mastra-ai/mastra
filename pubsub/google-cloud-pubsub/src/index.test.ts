@@ -3093,9 +3093,9 @@ describe.sequential(
 
         expect(increment).toHaveBeenCalledTimes(12);
         expect(final).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.result).toEqual({ finalValue: 12 });
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.increment.output).toEqual({ value: 12 });
         await mastra.stopEventEngine();
       });
@@ -3171,9 +3171,9 @@ describe.sequential(
 
         expect(increment).toHaveBeenCalledTimes(12);
         expect(final).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.result).toEqual({ finalValue: 12 });
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.increment.output).toEqual({ value: 12 });
         await mastra.stopEventEngine();
       });
@@ -3376,9 +3376,9 @@ describe.sequential(
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(0);
         expect(final).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.start.output).toEqual({ newValue: 2 });
         await mastra.stopEventEngine();
       });
@@ -3500,9 +3500,9 @@ describe.sequential(
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.start.output).toEqual({ newValue: 7 });
         await mastra.stopEventEngine();
       });
@@ -3743,7 +3743,7 @@ describe.sequential(
           outputSchema: z.object({ name: z.string() }),
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
           return { name: context.name };
         });
@@ -3778,7 +3778,7 @@ describe.sequential(
 
         expect(step1Action).toHaveBeenCalled();
         expect(toolAction).toHaveBeenCalled();
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.step1).toEqual({
           status: 'success',
           output: { name: 'step1' },
@@ -3786,7 +3786,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['random-tool']).toEqual({
           status: 'success',
           output: { name: 'step1' },
@@ -4153,7 +4153,7 @@ describe.sequential(
         const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
         expect(promptAgentAction).toHaveBeenCalledTimes(2);
         expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-        // @ts-ignore
+        // @ts-expect-error
         expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
         await mastra.stopEventEngine();
       });
@@ -4229,7 +4229,7 @@ describe.sequential(
         const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, requestContext });
         expect(promptAgentAction).toHaveBeenCalledTimes(2);
         expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-        // @ts-ignore
+        // @ts-expect-error
         expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
         await mastra.stopEventEngine();
       });
@@ -5107,12 +5107,12 @@ describe.sequential(
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(2);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -5216,12 +5216,12 @@ describe.sequential(
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toEqual({
           newValue: 1,
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 28,
         });
@@ -5333,12 +5333,12 @@ describe.sequential(
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(2);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a-clone'].output).toEqual({
           finalValue: 26 + 1,
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -5429,7 +5429,7 @@ describe.sequential(
           .then(startStep)
           .branch([
             [async () => false, otherStep],
-            // @ts-ignore
+            // @ts-expect-error
             [async () => true, finalStep],
           ])
           .map({
@@ -5470,12 +5470,12 @@ describe.sequential(
         expect(other).toHaveBeenCalledTimes(1);
         expect(final).toHaveBeenCalledTimes(2);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -5613,7 +5613,7 @@ describe.sequential(
           expect(final).toHaveBeenCalledTimes(1);
           expect(first).toHaveBeenCalledTimes(1);
           expect(last).toHaveBeenCalledTimes(1);
-          // @ts-ignore
+          // @ts-expect-error
           expect(result.steps['nested-workflow-a'].output).toEqual({
             finalValue: 26 + 1,
           });
@@ -5759,7 +5759,7 @@ describe.sequential(
           expect(first).toHaveBeenCalledTimes(1);
           expect(last).toHaveBeenCalledTimes(1);
 
-          // @ts-ignore
+          // @ts-expect-error
           expect(result.steps['nested-workflow-b'].output).toEqual({
             finalValue: 1,
           });
@@ -5942,7 +5942,7 @@ describe.sequential(
           expect(first).toHaveBeenCalledTimes(1);
           expect(last).toHaveBeenCalledTimes(1);
 
-          // @ts-ignore
+          // @ts-expect-error
           expect(result.steps['nested-workflow-b'].output).toEqual({
             finalValue: 1,
           });
@@ -6087,12 +6087,12 @@ describe.sequential(
             status: 'suspended',
           });
 
-          // @ts-ignore
+          // @ts-expect-error
           expect(result.steps['last-step']).toEqual(undefined);
 
           const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-          // @ts-ignore
+          // @ts-expect-error
           expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
             finalValue: 26 + 1,
           });
@@ -6209,7 +6209,7 @@ describe.sequential(
           expect(final).toHaveBeenCalledTimes(1);
           expect(last).toHaveBeenCalledTimes(1);
 
-          // @ts-ignore
+          // @ts-expect-error
           expect(results['nested-workflow-a']).toMatchObject({
             status: 'success',
             output: {
@@ -6376,7 +6376,7 @@ describe.sequential(
           },
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toEqual(undefined);
 
         if (result.status !== 'suspended') {
@@ -6385,7 +6385,7 @@ describe.sequential(
         expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
         const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -6429,7 +6429,7 @@ describe.sequential(
         const run = workflow.createRun();
         const result = await run.start({ requestContext });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps.step1.output.injectedValue).toBe(testValue);
         await mastra.stopEventEngine();
       });
@@ -6487,7 +6487,7 @@ describe.sequential(
           requestContext: resumerequestContext,
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
         await mastra.stopEventEngine();
       });

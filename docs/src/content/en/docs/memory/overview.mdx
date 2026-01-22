@@ -13,18 +13,18 @@ Memory gives your agent coherence across interactions and allows it to improve o
 
 Mastra requires a [storage provider](./storage) to persist memory and supports three types:
 
-- [**Message history**](/docs/v1/memory/message-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
-- [**Working memory**](/docs/v1/memory/working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data.
-- [**Semantic recall**](/docs/v1/memory/semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+- [**Message history**](/docs/memory/message-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+- [**Working memory**](/docs/memory/working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data.
+- [**Semantic recall**](/docs/memory/semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
 
-You can enable any combination of these memory types. Mastra assembles the relevant memories into the model’s context window. If the total exceeds the model's token limit, use [memory processors](/docs/v1/memory/memory-processors) to trim or filter messages before sending them to the model.
+You can enable any combination of these memory types. Mastra assembles the relevant memories into the model’s context window. If the total exceeds the model's token limit, use [memory processors](/docs/memory/memory-processors) to trim or filter messages before sending them to the model.
 
 ## Getting started
 
 Install Mastra's memory module and the storage adapter for your preferred database (see the storage section below):
 
-```bash 
-npm install @mastra/memory@beta @mastra/libsql@beta
+```bash npm2yarn
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 Add the storage adapter to the main Mastra instance:
@@ -58,7 +58,7 @@ export const testAgent = new Agent({
 ```
 When you send a new message, the model can now "see" the previous 20 messages, which gives it better context for the conversation and leads to more coherent, accurate replies.
 
-This example configures basic [message history](/docs/v1/memory/message-history). You can also enable [working memory](/docs/v1/memory/working-memory) and [semantic recall](/docs/v1/memory/semantic-recall) by passing additional options to `Memory`.
+This example configures basic [message history](/docs/memory/message-history). You can also enable [working memory](/docs/memory/working-memory) and [semantic recall](/docs/memory/semantic-recall) by passing additional options to `Memory`.
 
 ## Storage
 
@@ -66,7 +66,7 @@ Before enabling memory, you must first configure a storage adapter. Mastra suppo
 
 Storage can be configured at the instance level (shared across all agents) or at the agent level (dedicated per agent). You can also use different databases for storage and vector operations.
 
-See the [Storage](/docs/v1/memory/storage) documentation for configuration options, supported providers, and examples.
+See the [Storage](/docs/memory/storage) documentation for configuration options, supported providers, and examples.
 
 ## Debugging memory
 
@@ -74,10 +74,10 @@ When tracing is enabled, you can inspect exactly which messages the agent uses f
 
 This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
 
-For more details on enabling and configuring tracing, see [Tracing](/docs/v1/observability/tracing/overview).
+For more details on enabling and configuring tracing, see [Tracing](/docs/observability/tracing/overview).
 
 ## Next Steps
 
-- Learn more about [Storage](/docs/v1/memory/storage) providers and configuration options
-- Add [Message History](/docs/v1/memory/message-history), [Working Memory](/docs/v1/memory/working-memory), or [Semantic Recall](/docs/v1/memory/semantic-recall)
-- Visit [Memory configuration reference](/reference/v1/memory/memory-class) for all available options
+- Learn more about [Storage](/docs/memory/storage) providers and configuration options
+- Add [Message History](/docs/memory/message-history), [Working Memory](/docs/memory/working-memory), or [Semantic Recall](/docs/memory/semantic-recall)
+- Visit [Memory configuration reference](/reference/memory/memory-class) for all available options

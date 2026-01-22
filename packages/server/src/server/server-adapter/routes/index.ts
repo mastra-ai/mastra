@@ -29,7 +29,7 @@ import { WORKFLOWS_ROUTES } from './workflows';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools?: ToolsInput;
+  registeredTools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
 };
