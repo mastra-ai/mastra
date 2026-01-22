@@ -108,19 +108,6 @@ export const myAgent = new Agent({
 });
 ```
 
-## Agent tools and processors
-
-A workspace provides tools and processors to agents based on what is configured:
-
-- **Filesystem** - Tools for reading, writing, editing, listing, and deleting files
-- **Sandbox** - Tools for executing code, running shell commands, and installing packages
-- **Search** - Tools for searching and indexing workspace content
-- **Skills** - A processor that injects skill instructions into the system message, plus tools for activating and reading skills
-
-Only the relevant tools are added. A workspace with only a filesystem won't have code execution tools.
-
-See [Workspace Class Reference](/reference/workspace/workspace-class) for details.
-
 ## Skills
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
@@ -151,6 +138,19 @@ When skills are configured, agents receive a `SkillsProcessor` that:
 - Provides tools for activating skills (`skill-activate`)
 - Provides tools for searching skill content (`skill-search`)
 - Provides tools for reading references, scripts, and assets
+
+## Agent tools and processors
+
+A workspace provides tools and processors to agents based on what is configured:
+
+- **Filesystem** - Tools for reading, writing, editing, listing, and deleting files
+- **Sandbox** - Tools for executing code, running shell commands, and installing packages
+- **Search** - Tools for searching and indexing workspace content
+- **Skills** - A processor that injects skill instructions into the system message, plus tools for activating and reading skills
+
+Only the relevant tools are added. A workspace with only a filesystem won't have code execution tools.
+
+See [Workspace Class Reference](/reference/workspace/workspace-class) for details.
 
 ## Safety
 
