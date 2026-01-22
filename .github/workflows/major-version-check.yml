@@ -14,8 +14,10 @@ permissions:
 jobs:
   check-major-bump:
     runs-on: ubuntu-latest
-    # Only run on PR events or issue comments that are on PRs (not regular issues)
-    if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+    # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request))
     steps:
       - name: Check for major changesets
         id: check_major
@@ -50,10 +52,14 @@ jobs:
               return;
             }
 
-            // Get PR head SHA - use context if available, otherwise fetch
-            const headSha = context.payload.pull_request?.head?.sha || (
+            // Get PR data - use context if available, otherwise fetch
+            const pr = context.payload.pull_request || (
               await github.rest.pulls.get({ owner, repo, pull_number: prNumber })
-            ).data.head.sha;
+            ).data;
+
+            const headSha = pr.head.sha;
+            // Output base SHA for checkout step (to prevent malicious PR from modifying local action)
+            core.setOutput('base_sha', pr.base.sha);
 
             // Regex to check for major in frontmatter
             const majorRegex = /:\s*["']?major["']?/;
@@ -83,6 +89,8 @@ jobs:
         if: steps.check_major.outputs.has_major_changeset == 'true'
         uses: actions/checkout@v4
         with:
+          # Pin to PR base SHA to prevent malicious PRs from modifying the local action
+          ref: ${{ steps.check_major.outputs.base_sha }}
           sparse-checkout: .github/actions
           sparse-checkout-cone-mode: false
 
