@@ -156,13 +156,31 @@ export default function Observability() {
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSearchParams({ entity: 'all' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
     setSelectedType('all');
     setSelectedStatus('all');
-    setSelectedRunId('');
+
+    setSearchParams({ entity: 'all' });
+    // postpone clearing runId to avoid race condition
+    setTimeout(() => {
+      setSelectedRunId('');
+    }, 1);
+  };
+
+  const handleLessFilters = () => {
+    setSelectedType('all');
+    setSelectedStatus('all');
+
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.delete('runId');
+      return newParams;
+    });
+    setTimeout(() => {
+      setSelectedRunId('');
+    }, 1);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -261,6 +279,7 @@ export default function Observability() {
               onStatusChange={handleStatusChange}
               onRunIdChange={handleRunIdChange}
               onReset={handleReset}
+              onLessFilters={handleLessFilters}
               entityOptions={entityOptions}
               spanTypeOptions={spanTypeOptions}
               statusOptions={statusOptions}

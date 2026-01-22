@@ -33,7 +33,7 @@ type TracesToolsProps = {
   onStatusChange: (status: TraceStatus | 'all') => void;
   onTypeChange: (type: SpanType | 'all') => void;
   onReset?: () => void;
-  onMinimize?: () => void;
+  onLessFilters?: () => void;
   entityOptions?: EntityOptions[];
   spanTypeOptions?: SpanTypeOptions[];
   statusOptions?: StatusOptions[];
@@ -53,16 +53,16 @@ export function TracesTools({
   onStatusChange,
   onRunIdChange,
   onReset,
-  onMinimize,
+  onLessFilters,
   entityOptions,
   spanTypeOptions,
   statusOptions,
   isLoading,
 }: TracesToolsProps) {
-  const [allFiltersVisible, setAllFiltersVisible] = useState(false);
+  const [allFiltersVisible, setAllFiltersVisible] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
-    if (selectedRunId && !allFiltersVisible) {
+    if (selectedRunId && allFiltersVisible === undefined) {
       setAllFiltersVisible(true);
     }
   }, [allFiltersVisible, setAllFiltersVisible, selectedRunId]);
@@ -165,10 +165,9 @@ export function TracesTools({
         <div className="flex flex-wrap gap-4 justify-between">
           <Button
             size="lg"
-            onClick={onReset}
-            onClickCapture={() => {
-              if (onMinimize && allFiltersVisible) {
-                onMinimize();
+            onClick={() => {
+              if (onLessFilters && allFiltersVisible) {
+                onLessFilters();
               }
               setAllFiltersVisible(!allFiltersVisible);
             }}
