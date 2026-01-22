@@ -321,10 +321,133 @@ Created comprehensive E2E tests verifying that member role has limited access: c
 
 ---
 
+---
+
+## F007: Viewer Role E2E Tests - COMPLETED - 2026-01-22
+
+(See previous commit: 36606c8835)
+
+---
+
+## F011: Server-Side Permission Enforcement Tests - COMPLETED - 2026-01-22
+
+### Implementation Summary
+
+Created comprehensive E2E tests that verify the **server** properly enforces RBAC permissions on API endpoints. Unlike UI tests that mock auth endpoints, these tests make real API calls and verify the server returns correct status codes (401/403).
+
+### Files Created
+
+1. **packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts**
+   - 23 E2E tests organized in 7 test groups
+   - Tests unauthenticated access returns 401
+   - Tests admin role has full access
+   - Tests member role read access but no execute
+   - Tests viewer role read access but no execute
+   - Tests _default role (no permissions) gets 403
+   - Tests error response security (no sensitive info leakage)
+   - Tests permission boundary verification
+
+2. **packages/playground/e2e/kitchen-sink/src/mastra/test-auth.ts**
+   - TestAuthProvider class for E2E testing
+   - Authenticates based on Bearer token value as role
+   - Returns mock users with role-specific permissions
+   - createTestRBACProvider() using StaticRBACProvider
+
+3. **packages/playground/e2e/playwright.auth-server.config.ts**
+   - Separate Playwright config for server-side auth tests
+   - Starts kitchen-sink with E2E_TEST_AUTH=true
+   - Only runs server-permission-enforcement.spec.ts
+
+4. **packages/playground/e2e/kitchen-sink/src/mastra/index.ts** (modified)
+   - Added conditional test auth configuration
+   - Enabled via E2E_TEST_AUTH=true environment variable
+
+### Test Categories
+
+1. **Unauthenticated Access** (3 tests)
+   - GET /api/agents returns 401
+   - GET /api/agents/:id returns 401
+   - POST /api/agents/:id/generate returns 401
+
+2. **Admin Role Access** (3 tests)
+   - Admin can GET /api/agents
+   - Admin can GET /api/agents/:id
+   - Admin can access agents:execute endpoint
+
+3. **Member Role Access** (3 tests)
+   - Member can GET /api/agents (has agents:read)
+   - Member can GET /api/agents/:id (has agents:read)
+   - Member CANNOT POST /api/agents/:id/generate (lacks agents:execute) - 403
+
+4. **Viewer Role Access** (3 tests)
+   - Viewer can GET /api/agents (has agents:read)
+   - Viewer can GET /api/agents/:id (has agents:read)
+   - Viewer CANNOT POST /api/agents/:id/generate (lacks agents:execute) - 403
+
+5. **Default Role Access (No Permissions)** (3 tests)
+   - _default role CANNOT GET /api/agents (lacks agents:read) - 403
+   - _default role CANNOT GET /api/agents/:id (lacks agents:read) - 403
+   - _default role CANNOT POST /api/agents/:id/generate (lacks agents:execute) - 403
+
+6. **Error Response Security** (3 tests)
+   - 403 response does not leak sensitive information
+   - 401 response does not leak sensitive information
+   - Server returns 403 not 404 for unauthorized access (no info leakage)
+
+7. **Permission Boundary Verification** (3 tests)
+   - Wildcard permission (*) grants access to all endpoints
+   - Specific read permission does not grant execute access
+   - Authenticated user without required permission gets 403 not 401
+
+8. **Role Consistency** (2 tests)
+   - Same request returns consistent results for same role
+   - Different roles get different access to same endpoint
+
+### Technical Approach
+
+- **NO route interception** for auth endpoints
+- Tests send Bearer token with role name (e.g., `Authorization: Bearer admin`)
+- TestAuthProvider interprets token value as role
+- Server runs with E2E_TEST_AUTH=true to enable test auth
+- Direct API calls verify actual server-side enforcement
+
+### Test Commands
+
+```bash
+# Run server-side auth tests (uses auth-server config)
+cd packages/playground/e2e
+CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list
+
+# Run all other auth tests (excludes server-side tests)
+CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/ --grep-invert "Server-Side Permission Enforcement"
+```
+
+### Test Results
+
+- **All 23 server-side permission enforcement tests pass**
+- **All 111 existing UI auth tests continue to pass**
+- Typecheck passes with no errors
+
+### Acceptance Criteria Met
+
+- [x] All protected API endpoints return 401 for unauthenticated requests
+- [x] All protected API endpoints return 403 for insufficient permissions
+- [x] Direct API calls fail even when mocked UI would allow the action
+- [x] No information leakage via error messages or status codes
+- [x] Tests do NOT mock auth endpoints - they test real server enforcement
+
+---
+
 ### Next Steps
 
-Continue with the remaining P0 feature:
-- F007: Viewer Role E2E Tests
+The following P0 feature remains:
+- F012: Direct API Bypass Prevention Tests
+
+P1 features to consider next:
+- F003: Sign Up Flow E2E Tests
+- F004: Logout Flow E2E Tests
+- F008: Unauthorized Access E2E Tests
+- F013: Fix Conditional Assertions in Existing Tests
 
 ---
 

@@ -6,6 +6,12 @@ import { weatherAgent } from './agents';
 import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { simpleMcpServer } from './mcps';
 import { registerApiRoute } from '@mastra/core/server';
+import { createTestAuthConfig } from './test-auth';
+
+// Enable test auth for E2E server-side permission enforcement tests
+// This is controlled by the E2E_TEST_AUTH environment variable
+const enableTestAuth = process.env.E2E_TEST_AUTH === 'true';
+const testAuthConfig = enableTestAuth ? createTestAuthConfig() : {};
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
@@ -19,6 +25,7 @@ export const mastra = new Mastra({
     simpleMcpServer,
   },
   server: {
+    ...testAuthConfig,
     apiRoutes: [
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',

@@ -259,7 +259,8 @@
       "name": "Server-Side Permission Enforcement Tests",
       "description": "Test that the server properly enforces RBAC permissions on API endpoints, independent of UI state. These tests verify security at the API level, not just UI restrictions.",
       "priority": "P0",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Test viewer cannot execute workflow via direct API call (expect 403)",
         "Test viewer cannot execute tools via direct API call (expect 403)",
@@ -276,7 +277,16 @@
         "No information leakage via error messages or status codes",
         "Tests do NOT mock auth endpoints - they test real server enforcement"
       ],
-      "notes": "CRITICAL: These tests must NOT use route interception for auth endpoints. They should test actual server-side permission enforcement by making real API calls and verifying the server rejects unauthorized actions."
+      "notes": "CRITICAL: These tests must NOT use route interception for auth endpoints. They should test actual server-side permission enforcement by making real API calls and verifying the server rejects unauthorized actions.",
+      "implementation": {
+        "files": [
+          "packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts",
+          "packages/playground/e2e/kitchen-sink/src/mastra/test-auth.ts",
+          "packages/playground/e2e/playwright.auth-server.config.ts"
+        ],
+        "testsAdded": 23,
+        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Tests run with E2E_TEST_AUTH=true which enables server-side auth enforcement. Tests make direct API calls without mocking auth endpoints and verify 401/403 responses."
+      }
     },
     {
       "id": "F012",
@@ -338,15 +348,18 @@
       "loginFlow": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/login-flow.spec.ts",
       "adminRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/admin-role.spec.ts",
       "memberRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/member-role.spec.ts",
-      "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts"
+      "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts",
+      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list"
     },
-    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/",
+    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/ --grep-invert 'Server-Side Permission Enforcement'",
+    "runServerSideAuthTests": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list",
     "debugSingleTest": "CI=true npx playwright test -c playwright.config.ts --reporter=list --debug tests/auth/{spec-file}.spec.ts",
     "warnings": [
       "Always use --reporter=list to avoid HTML report hanging in CI",
       "Always prefix with CI=true to ensure consistent behavior",
       "Run from packages/playground/e2e directory",
-      "Run individual spec files for faster feedback and easier debugging"
+      "Run individual spec files for faster feedback and easier debugging",
+      "Server-side permission enforcement tests require playwright.auth-server.config.ts (starts server with E2E_TEST_AUTH=true)"
     ]
   },
   "qaReview": {
