@@ -157,6 +157,15 @@ export interface WorkspaceSkills {
    */
   refresh(): Promise<void>;
 
+  /**
+   * Conditionally refresh skills if the skillsPaths have been modified.
+   * Uses a staleness check to avoid unnecessary re-discovery on every call.
+   *
+   * Call this in processInput before each agent turn to catch newly
+   * added skills without the overhead of a full refresh every time.
+   */
+  maybeRefresh(): Promise<void>;
+
   // ===========================================================================
   // Search
   // ===========================================================================

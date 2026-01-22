@@ -1,5 +1,5 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 
 /**
  * Developer agent - inherits globalWorkspace from Mastra instance.
@@ -23,5 +23,10 @@ When helping with code or design:
 3. Be specific and provide examples
 4. Use workspace tools to read, write, and execute code as needed`,
 
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-5.1',
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+    },
+  }),
 });
