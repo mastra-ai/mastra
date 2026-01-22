@@ -350,6 +350,146 @@ export type StorageListAgentsOutput = PaginationInfo & {
   agents: StorageAgentType[];
 };
 
+// Integration Storage Types
+
+/**
+ * Integration provider type for external tool platforms.
+ */
+export type IntegrationProvider = 'composio' | 'arcade' | 'mcp' | 'smithery';
+
+/**
+ * Stored integration configuration type.
+ * Represents a configured integration with an external tool provider.
+ */
+export interface StorageIntegrationConfig {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Integration provider type */
+  provider: IntegrationProvider;
+  /** Display name for this integration */
+  name: string;
+  /** Whether this integration is active */
+  enabled: boolean;
+  /** Array of toolkit/app slugs selected from the provider */
+  selectedToolkits: string[];
+  /** Provider-specific settings and configuration */
+  metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Cached tool definition from an integration provider.
+ * Stores the full tool specification to avoid repeated API calls.
+ */
+export interface StorageCachedTool {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Reference to the parent integration */
+  integrationId: string;
+  /** Provider that this tool comes from */
+  provider: IntegrationProvider;
+  /** Toolkit/app slug that this tool belongs to */
+  toolkitSlug: string;
+  /** Unique tool slug/identifier from the provider */
+  toolSlug: string;
+  /** Display name for the tool */
+  name: string;
+  /** Tool description */
+  description?: string;
+  /** JSON schema for tool input parameters */
+  inputSchema: Record<string, unknown>;
+  /** JSON schema for tool output (optional) */
+  outputSchema?: Record<string, unknown>;
+  /** Raw tool definition from provider API */
+  rawDefinition: Record<string, unknown>;
+  /** When this tool definition was first created */
+  createdAt: Date;
+  /** When this tool definition was cached */
+  cachedAt: Date;
+  /** Last time this tool definition was updated */
+  updatedAt: Date;
+}
+
+export type StorageCreateIntegrationInput = Omit<StorageIntegrationConfig, 'createdAt' | 'updatedAt'>;
+
+export type StorageUpdateIntegrationInput = {
+  id: string;
+  name?: string;
+  enabled?: boolean;
+  selectedToolkits?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+};
+
+export type StorageCachedToolInput = Omit<StorageCachedTool, 'createdAt' | 'cachedAt' | 'updatedAt'>;
+
+export type StorageListIntegrationsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter integrations by owner identifier.
+   * Only integrations with matching ownerId will be returned.
+   */
+  ownerId?: string;
+  /**
+   * Filter integrations by provider.
+   */
+  provider?: IntegrationProvider;
+  /**
+   * Filter integrations by enabled status.
+   */
+  enabled?: boolean;
+};
+
+export type StorageListIntegrationsOutput = PaginationInfo & {
+  integrations: StorageIntegrationConfig[];
+};
+
+export type StorageListCachedToolsInput = {
+  /**
+   * Filter by integration ID.
+   */
+  integrationId?: string;
+  /**
+   * Filter by provider.
+   */
+  provider?: IntegrationProvider;
+  /**
+   * Filter by toolkit slug.
+   */
+  toolkitSlug?: string;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: {
+    field?: 'cachedAt' | 'updatedAt';
+    direction?: ThreadSortDirection;
+  };
+};
+
+export type StorageListCachedToolsOutput = PaginationInfo & {
+  tools: StorageCachedTool[];
+};
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;
