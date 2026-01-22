@@ -39,12 +39,6 @@
 
 export {
   Workspace,
-  WorkspaceError,
-  FilesystemNotAvailableError,
-  SandboxNotAvailableError,
-  SearchNotAvailableError,
-  WorkspaceNotReadyError,
-  WorkspaceReadOnlyError,
   type WorkspaceConfig,
   type WorkspaceSafetyConfig,
   type WorkspaceScope,
@@ -118,6 +112,7 @@ export type {
   InstallPackageOptions,
   SandboxStatus,
   SandboxInfo,
+  SandboxSyncResult,
 } from './sandbox';
 
 export {
@@ -225,3 +220,16 @@ export {
   WorkspaceSkillsImpl,
   type WorkspaceSkillsImplConfig,
 } from './skills';
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+export {
+  WorkspaceError,
+  FilesystemNotAvailableError,
+  SandboxNotAvailableError,
+  SearchNotAvailableError,
+  WorkspaceNotReadyError,
+  WorkspaceReadOnlyError,
+} from './errors';

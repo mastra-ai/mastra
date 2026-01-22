@@ -2,13 +2,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { WorkspaceFilesystem, FileEntry } from './filesystem';
 import type { WorkspaceSandbox, CodeResult, CommandResult } from './sandbox';
+import { Workspace } from './workspace';
+
 import {
-  Workspace,
   WorkspaceError,
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
   SearchNotAvailableError,
-} from './workspace';
+} from './errors';
 
 // =============================================================================
 // Mock Implementations
@@ -18,6 +19,8 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
   const dirs = new Set<string>(['/']);
 
   return {
+    id: 'mock-fs-1',
+    name: 'Mock Filesystem',
     provider: 'mock',
 
     readFile: vi.fn().mockImplementation(async (path: string) => {
@@ -38,6 +41,17 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
       }
     }),
 
+    appendFile: vi.fn().mockImplementation(async (path: string, content: string | Buffer) => {
+      const existing = files.get(path) ?? '';
+      if (typeof existing === 'string' && typeof content === 'string') {
+        files.set(path, existing + content);
+      } else {
+        const existingBuf = typeof existing === 'string' ? Buffer.from(existing) : existing;
+        const contentBuf = typeof content === 'string' ? Buffer.from(content) : content;
+        files.set(path, Buffer.concat([existingBuf, contentBuf]));
+      }
+    }),
+
     readdir: vi.fn().mockImplementation(async (path: string): Promise<FileEntry[]> => {
       const entries: FileEntry[] = [];
       const normalizedPath = path === '/' ? '' : path;
@@ -49,7 +63,6 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
           if (parts.length === 1) {
             entries.push({
               name: parts[0],
-              path: filePath,
               type: 'file',
             });
           }
@@ -63,7 +76,6 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
           if (parts.length === 1 && !entries.some(e => e.name === parts[0])) {
             entries.push({
               name: parts[0],
-              path: dir,
               type: 'directory',
             });
           }
@@ -77,6 +89,31 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
       return files.has(path) || dirs.has(path);
     }),
 
+    stat: vi.fn().mockImplementation(async (path: string) => {
+      const isFile = files.has(path);
+      const isDir = dirs.has(path);
+      if (!isFile && !isDir) {
+        throw new Error(`Path not found: ${path}`);
+      }
+      const content = files.get(path);
+      return {
+        name: path.split('/').pop() ?? '',
+        path,
+        type: isFile ? 'file' : 'directory',
+        size: isFile && content ? (typeof content === 'string' ? content.length : content.length) : 0,
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+      };
+    }),
+
+    isFile: vi.fn().mockImplementation(async (path: string) => {
+      return files.has(path);
+    }),
+
+    isDirectory: vi.fn().mockImplementation(async (path: string) => {
+      return dirs.has(path);
+    }),
+
     mkdir: vi.fn().mockImplementation(async (path: string) => {
       dirs.add(path);
     }),
@@ -86,6 +123,21 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
         throw new Error(`File not found: ${path}`);
       }
       files.delete(path);
+    }),
+
+    copyFile: vi.fn().mockImplementation(async (src: string, dest: string) => {
+      if (!files.has(src)) {
+        throw new Error(`File not found: ${src}`);
+      }
+      files.set(dest, files.get(src)!);
+    }),
+
+    moveFile: vi.fn().mockImplementation(async (src: string, dest: string) => {
+      if (!files.has(src)) {
+        throw new Error(`File not found: ${src}`);
+      }
+      files.set(dest, files.get(src)!);
+      files.delete(src);
     }),
 
     rmdir: vi.fn().mockImplementation(async (path: string) => {
@@ -107,12 +159,17 @@ function createMockSandbox(): WorkspaceSandbox {
   const sandboxFiles = new Map<string, string | Buffer>();
 
   return {
+    id: 'mock-sandbox-1',
+    name: 'Mock Sandbox',
     provider: 'mock-sandbox',
+    status: 'running',
     supportedRuntimes: ['node', 'python', 'bash'] as const,
+    defaultRuntime: 'node',
 
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn().mockResolvedValue(undefined),
+    isReady: vi.fn().mockResolvedValue(true),
 
     executeCode: vi.fn().mockImplementation(async (code: string): Promise<CodeResult> => {
       return {
@@ -120,6 +177,7 @@ function createMockSandbox(): WorkspaceSandbox {
         stdout: `Executed: ${code.slice(0, 20)}...`,
         stderr: '',
         exitCode: 0,
+        executionTimeMs: 10,
       };
     }),
 
@@ -129,6 +187,7 @@ function createMockSandbox(): WorkspaceSandbox {
         stdout: `Command executed: ${command}`,
         stderr: '',
         exitCode: 0,
+        executionTimeMs: 5,
       };
     }),
 
@@ -153,6 +212,76 @@ function createMockSandbox(): WorkspaceSandbox {
         memoryMB: 512,
         cpuCores: 2,
       },
+    }),
+
+    syncFromFilesystem: vi.fn().mockImplementation(async (fs, paths?: string[]) => {
+      const start = Date.now();
+      const synced: string[] = [];
+      const failed: Array<{ path: string; error: string }> = [];
+      let bytesTransferred = 0;
+
+      // Get all files from filesystem
+      const allPaths = paths ?? [];
+      if (!paths) {
+        // List all files (simplified mock - just get top level)
+        try {
+          const entries = await fs.readdir('/');
+          for (const entry of entries) {
+            if (entry.type === 'file') {
+              allPaths.push('/' + entry.name);
+            }
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
+      for (const path of allPaths) {
+        try {
+          const content = await fs.readFile(path);
+          sandboxFiles.set(path, content);
+          synced.push(path);
+          bytesTransferred += typeof content === 'string' ? content.length : content.length;
+        } catch (err) {
+          failed.push({ path, error: String(err) });
+        }
+      }
+
+      return {
+        synced,
+        failed,
+        bytesTransferred,
+        duration: Date.now() - start,
+      };
+    }),
+
+    syncToFilesystem: vi.fn().mockImplementation(async (fs, paths?: string[]) => {
+      const start = Date.now();
+      const synced: string[] = [];
+      const failed: Array<{ path: string; error: string }> = [];
+      let bytesTransferred = 0;
+
+      const pathsToSync = paths ?? Array.from(sandboxFiles.keys());
+
+      for (const path of pathsToSync) {
+        try {
+          const content = sandboxFiles.get(path);
+          if (content !== undefined) {
+            await fs.writeFile(path, content);
+            synced.push(path);
+            bytesTransferred += typeof content === 'string' ? content.length : content.length;
+          }
+        } catch (err) {
+          failed.push({ path, error: String(err) });
+        }
+      }
+
+      return {
+        synced,
+        failed,
+        bytesTransferred,
+        duration: Date.now() - start,
+      };
     }),
   };
 }
@@ -822,12 +951,14 @@ Line 3 conclusion`;
 
       expect(result.synced).toContain('/app.py');
       expect(result.failed).toHaveLength(0);
-      expect(mockSandbox.writeFile).toHaveBeenCalledWith('/app.py', 'print("hello")');
+      // Verify syncFromFilesystem was called on the sandbox
+      expect(mockSandbox.syncFromFilesystem).toHaveBeenCalledWith(mockFs, ['/app.py']);
     });
 
     it('should sync files from sandbox', async () => {
-      (mockSandbox.listFiles as ReturnType<typeof vi.fn>).mockResolvedValue(['/output.txt']);
-      (mockSandbox.readFile as ReturnType<typeof vi.fn>).mockResolvedValue('output content');
+      // First sync a file to the sandbox so there's something to sync back
+      const files = new Map<string, string>([['/output.txt', 'output content']]);
+      mockFs = createMockFilesystem(files);
 
       const workspace = new Workspace({
         filesystem: mockFs,
@@ -835,10 +966,14 @@ Line 3 conclusion`;
         safety: { requireReadBeforeWrite: false },
       });
 
-      const result = await workspace.syncFromSandbox();
+      // Sync to sandbox first so there's content to sync back
+      await workspace.syncToSandbox(['/output.txt']);
+
+      const result = await workspace.syncFromSandbox(['/output.txt']);
 
       expect(result.synced).toContain('/output.txt');
-      expect(mockFs.writeFile).toHaveBeenCalledWith('/output.txt', 'output content');
+      // Verify syncToFilesystem was called on the sandbox
+      expect(mockSandbox.syncToFilesystem).toHaveBeenCalledWith(mockFs, ['/output.txt']);
     });
 
     it('should throw when sync called without both fs and sandbox', async () => {
@@ -847,7 +982,7 @@ Line 3 conclusion`;
         safety: { requireReadBeforeWrite: false },
       });
 
-      await expect(fsOnly.syncToSandbox()).rejects.toThrow('Both filesystem and sandbox are required');
+      await expect(fsOnly.syncToSandbox()).rejects.toThrow('Workspace does not have a sandbox configured');
     });
   });
 

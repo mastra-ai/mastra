@@ -33,6 +33,13 @@
 import type { MastraVector } from '../vector';
 
 import type { BM25Config } from './bm25';
+import {
+  WorkspaceError,
+  FilesystemNotAvailableError,
+  SandboxNotAvailableError,
+  SearchNotAvailableError,
+  WorkspaceReadOnlyError,
+} from './errors';
 import { InMemoryFileReadTracker } from './file-read-tracker';
 import type { FileReadTracker } from './file-read-tracker';
 import { FileReadRequiredError } from './filesystem';
@@ -57,6 +64,8 @@ import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills } from './skills';
 import { WorkspaceSkillsImpl } from './skills';
+import { FilesystemState } from './state';
+import type { WorkspaceStatus } from './types';
 
 // =============================================================================
 // Workspace Scope
@@ -214,11 +223,8 @@ export interface WorkspaceSafetyConfig {
   readOnly?: boolean;
 }
 
-// =============================================================================
-// Workspace Status & Info
-// =============================================================================
-
-export type WorkspaceStatus = 'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed';
+// Re-export WorkspaceStatus from types
+export type { WorkspaceStatus } from './types';
 
 // =============================================================================
 // Path Context Types
@@ -838,78 +844,48 @@ export class Workspace {
    * Sync files from the workspace filesystem to the sandbox.
    * Useful for making persisted files available for execution.
    *
+   * Delegates to the sandbox's `syncFromFilesystem` method, allowing each
+   * sandbox provider to implement its preferred transfer mechanism.
+   *
    * @param paths - Paths to sync (default: all files)
-   * @throws {Error} if either filesystem or sandbox is not available
+   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
    */
   async syncToSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs || !this._sandbox) {
-      throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    if (!this._sandbox) {
+      throw new SandboxNotAvailableError();
+    }
+    if (!this._sandbox.syncFromFilesystem) {
+      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
     }
 
-    const synced: string[] = [];
-    const failed: Array<{ path: string; error: string }> = [];
-    let bytesTransferred = 0;
-    const startTime = Date.now();
-
-    const filesToSync = paths ?? (await this.getAllFiles('/'));
-
-    for (const filePath of filesToSync) {
-      try {
-        const content = await this._fs.readFile(filePath);
-        await this._sandbox.writeFile!(filePath, content as string | Buffer);
-        synced.push(filePath);
-        bytesTransferred += typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        failed.push({ path: filePath, error: message });
-      }
-    }
-
-    return {
-      synced,
-      failed,
-      bytesTransferred,
-      duration: Date.now() - startTime,
-    };
+    return this._sandbox.syncFromFilesystem(this._fs, paths);
   }
 
   /**
    * Sync files from the sandbox back to the workspace filesystem.
    * Useful for persisting execution outputs.
    *
-   * @param paths - Paths to sync (default: all modified files)
-   * @throws {Error} if either filesystem or sandbox is not available
+   * Delegates to the sandbox's `syncToFilesystem` method, allowing each
+   * sandbox provider to implement its preferred transfer mechanism.
+   *
+   * @param paths - Paths to sync (default: all files in sandbox)
+   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
    */
   async syncFromSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs || !this._sandbox) {
-      throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    if (!this._sandbox) {
+      throw new SandboxNotAvailableError();
+    }
+    if (!this._sandbox.syncToFilesystem) {
+      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
     }
 
-    const synced: string[] = [];
-    const failed: Array<{ path: string; error: string }> = [];
-    let bytesTransferred = 0;
-    const startTime = Date.now();
-
-    const filesToSync = paths ?? (await this._sandbox.listFiles!('/'));
-
-    for (const filePath of filesToSync) {
-      try {
-        const content = await this._sandbox.readFile!(filePath);
-        await this._fs.writeFile(filePath, content);
-        synced.push(filePath);
-        bytesTransferred += Buffer.byteLength(content);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        failed.push({ path: filePath, error: message });
-      }
-    }
-
-    return {
-      synced,
-      failed,
-      bytesTransferred,
-      duration: Date.now() - startTime,
-    };
+    return this._sandbox.syncToFilesystem(this._fs, paths);
   }
 
   private async getAllFiles(dir: string): Promise<string[]> {
@@ -1205,133 +1181,5 @@ export class Workspace {
       instructions:
         'Filesystem and sandbox are in different environments. To use workspace files in code: 1) Read file contents using workspace_read_file, 2) Pass contents as variables to your code, or 3) Use workspace_sync_to_sandbox to sync files before execution.',
     };
-  }
-}
-
-// =============================================================================
-// FilesystemState (KV layer over filesystem)
-// =============================================================================
-
-/**
- * Key-value state storage backed by the filesystem.
- */
-class FilesystemState implements WorkspaceState {
-  private readonly fs: WorkspaceFilesystem;
-  private readonly stateDir = '/.state';
-
-  constructor(fs: WorkspaceFilesystem) {
-    this.fs = fs;
-  }
-
-  private keyToPath(key: string): string {
-    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `${this.stateDir}/${safeKey}.json`;
-  }
-
-  async get<T = unknown>(key: string): Promise<T | null> {
-    const path = this.keyToPath(key);
-    try {
-      const content = await this.fs.readFile(path, { encoding: 'utf-8' });
-      return JSON.parse(content as string) as T;
-    } catch {
-      return null;
-    }
-  }
-
-  async set<T = unknown>(key: string, value: T): Promise<void> {
-    const path = this.keyToPath(key);
-    await this.fs.mkdir(this.stateDir, { recursive: true });
-    await this.fs.writeFile(path, JSON.stringify(value, null, 2));
-  }
-
-  async delete(key: string): Promise<boolean> {
-    const path = this.keyToPath(key);
-    try {
-      await this.fs.deleteFile(path);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async has(key: string): Promise<boolean> {
-    const path = this.keyToPath(key);
-    return this.fs.exists(path);
-  }
-
-  async keys(prefix?: string): Promise<string[]> {
-    try {
-      const entries = await this.fs.readdir(this.stateDir);
-      let keys = entries
-        .filter(e => e.type === 'file' && e.name.endsWith('.json'))
-        .map(e => e.name.replace('.json', ''));
-
-      if (prefix) {
-        const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_');
-        keys = keys.filter(k => k.startsWith(safePrefix));
-      }
-
-      return keys;
-    } catch {
-      return [];
-    }
-  }
-
-  async clear(): Promise<void> {
-    try {
-      await this.fs.rmdir(this.stateDir, { recursive: true });
-    } catch {
-      // Ignore
-    }
-  }
-}
-
-// =============================================================================
-// Errors
-// =============================================================================
-
-export class WorkspaceError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly workspaceId?: string,
-  ) {
-    super(message);
-    this.name = 'WorkspaceError';
-  }
-}
-
-export class FilesystemNotAvailableError extends WorkspaceError {
-  constructor() {
-    super('Workspace does not have a filesystem configured', 'NO_FILESYSTEM');
-    this.name = 'FilesystemNotAvailableError';
-  }
-}
-
-export class SandboxNotAvailableError extends WorkspaceError {
-  constructor() {
-    super('Workspace does not have a sandbox configured', 'NO_SANDBOX');
-    this.name = 'SandboxNotAvailableError';
-  }
-}
-
-export class SearchNotAvailableError extends WorkspaceError {
-  constructor() {
-    super('Workspace does not have search configured (enable bm25 or provide vectorStore + embedder)', 'NO_SEARCH');
-    this.name = 'SearchNotAvailableError';
-  }
-}
-
-export class WorkspaceNotReadyError extends WorkspaceError {
-  constructor(workspaceId: string, status: WorkspaceStatus) {
-    super(`Workspace is not ready (status: ${status})`, 'NOT_READY', workspaceId);
-    this.name = 'WorkspaceNotReadyError';
-  }
-}
-
-export class WorkspaceReadOnlyError extends WorkspaceError {
-  constructor(operation: string) {
-    super(`Workspace is in read-only mode. Cannot perform: ${operation}`, 'READ_ONLY');
-    this.name = 'WorkspaceReadOnlyError';
   }
 }

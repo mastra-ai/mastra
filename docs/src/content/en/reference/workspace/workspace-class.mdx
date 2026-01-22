@@ -364,20 +364,34 @@ await workspace.rebuildIndex(['/docs']);
 
 ### Sync operations
 
+These methods delegate to the sandbox provider's sync implementation, allowing each provider to use its optimal transfer mechanism.
+
 #### `syncToSandbox(paths?)`
 
-Sync files from filesystem to sandbox.
+Sync files from the workspace filesystem to the sandbox. Delegates to `sandbox.syncFromFilesystem()`.
 
 ```typescript
 const result = await workspace.syncToSandbox(['/src']);
+// { synced: ['/src/index.ts'], failed: [], bytesTransferred: 1024, duration: 50 }
 ```
 
 #### `syncFromSandbox(paths?)`
 
-Sync files from sandbox back to filesystem.
+Sync files from the sandbox back to the workspace filesystem. Delegates to `sandbox.syncToFilesystem()`.
 
 ```typescript
 const result = await workspace.syncFromSandbox(['/output']);
+```
+
+**Returns:** `Promise<SyncResult>`
+
+```typescript
+interface SyncResult {
+  synced: string[];
+  failed: Array<{ path: string; error: string }>;
+  bytesTransferred: number;
+  duration: number;
+}
 ```
 
 ### Snapshots

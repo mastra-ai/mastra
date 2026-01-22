@@ -295,6 +295,74 @@ await sandbox.writeFile?.('/input/data.json', JSON.stringify(data));
 const files = await sandbox.listFiles?.('/output');
 ```
 
+### Sync operations
+
+Sandbox providers can implement sync operations to transfer files between the workspace filesystem and the sandbox. Each provider implements its preferred transfer mechanism (file copy for local, HTTP upload for cloud, etc.).
+
+#### `syncFromFilesystem(filesystem, paths?)`
+
+Sync files from a workspace filesystem into the sandbox.
+
+```typescript
+const result = await sandbox.syncFromFilesystem?.(workspace.filesystem, ['/src']);
+// { synced: ['/src/index.ts'], failed: [], bytesTransferred: 1024, duration: 50 }
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem",
+      description: "The workspace filesystem to sync from",
+    },
+    {
+      name: "paths",
+      type: "string[]",
+      description: "Specific paths to sync (default: all files)",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### `syncToFilesystem(filesystem, paths?)`
+
+Sync files from the sandbox back to a workspace filesystem.
+
+```typescript
+const result = await sandbox.syncToFilesystem?.(workspace.filesystem, ['/output']);
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem",
+      description: "The workspace filesystem to sync to",
+    },
+    {
+      name: "paths",
+      type: "string[]",
+      description: "Specific paths to sync (default: all files)",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<SandboxSyncResult>`
+
+```typescript
+interface SandboxSyncResult {
+  synced: string[];
+  failed: Array<{ path: string; error: string }>;
+  bytesTransferred: number;
+  duration: number;
+}
+```
+
 ## Runtimes
 
 <PropertiesTable

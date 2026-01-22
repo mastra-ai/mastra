@@ -22,6 +22,7 @@ import type {
   CommandResult,
   InstallPackageOptions,
   InstallPackageResult,
+  SandboxSyncResult,
 } from './sandbox';
 import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
 
@@ -526,5 +527,134 @@ export class LocalSandbox implements WorkspaceSandbox {
   async getFilesystem(): Promise<WorkspaceFilesystem | undefined> {
     // Local sandbox doesn't provide its own filesystem
     return undefined;
+  }
+
+  /**
+   * Sync files from a workspace filesystem into this sandbox's working directory.
+   * For LocalSandbox, this copies files from the filesystem to the working directory.
+   */
+  async syncFromFilesystem(filesystem: WorkspaceFilesystem, paths?: string[]): Promise<SandboxSyncResult> {
+    const synced: string[] = [];
+    const failed: Array<{ path: string; error: string }> = [];
+    let bytesTransferred = 0;
+    const startTime = Date.now();
+
+    const filesToSync = paths ?? (await this.getAllFilesFromFilesystem(filesystem, '/'));
+
+    for (const filePath of filesToSync) {
+      try {
+        const content = await filesystem.readFile(filePath);
+        const destPath = path.join(this._workingDirectory, filePath);
+
+        // Ensure parent directory exists
+        await fs.mkdir(path.dirname(destPath), { recursive: true });
+
+        // Write file
+        if (typeof content === 'string') {
+          await fs.writeFile(destPath, content, 'utf-8');
+          bytesTransferred += Buffer.byteLength(content);
+        } else {
+          await fs.writeFile(destPath, content);
+          bytesTransferred += content.length;
+        }
+
+        synced.push(filePath);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        failed.push({ path: filePath, error: message });
+      }
+    }
+
+    return {
+      synced,
+      failed,
+      bytesTransferred,
+      duration: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Sync files from this sandbox's working directory back to a workspace filesystem.
+   * For LocalSandbox, this copies files from the working directory to the filesystem.
+   */
+  async syncToFilesystem(filesystem: WorkspaceFilesystem, paths?: string[]): Promise<SandboxSyncResult> {
+    const synced: string[] = [];
+    const failed: Array<{ path: string; error: string }> = [];
+    let bytesTransferred = 0;
+    const startTime = Date.now();
+
+    const filesToSync = paths ?? (await this.getAllLocalFiles(this._workingDirectory));
+
+    for (const filePath of filesToSync) {
+      try {
+        const srcPath = path.join(this._workingDirectory, filePath);
+        const content = await fs.readFile(srcPath);
+
+        await filesystem.writeFile(filePath, content, { recursive: true });
+        bytesTransferred += content.length;
+        synced.push(filePath);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        failed.push({ path: filePath, error: message });
+      }
+    }
+
+    return {
+      synced,
+      failed,
+      bytesTransferred,
+      duration: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Recursively get all files from a workspace filesystem.
+   */
+  private async getAllFilesFromFilesystem(filesystem: WorkspaceFilesystem, dir: string): Promise<string[]> {
+    const files: string[] = [];
+
+    try {
+      const entries = await filesystem.readdir(dir);
+
+      for (const entry of entries) {
+        const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+        if (entry.type === 'file') {
+          files.push(fullPath);
+        } else if (entry.type === 'directory') {
+          files.push(...(await this.getAllFilesFromFilesystem(filesystem, fullPath)));
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+
+    return files;
+  }
+
+  /**
+   * Recursively get all files from the local filesystem.
+   */
+  private async getAllLocalFiles(dir: string, basePath?: string): Promise<string[]> {
+    const files: string[] = [];
+    const base = basePath ?? dir;
+
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const relativePath = '/' + path.relative(base, fullPath);
+
+        if (entry.isFile()) {
+          files.push(relativePath);
+        } else if (entry.isDirectory()) {
+          files.push(...(await this.getAllLocalFiles(fullPath, base)));
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+
+    return files;
   }
 }
