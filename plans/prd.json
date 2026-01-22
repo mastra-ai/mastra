@@ -1,0 +1,234 @@
+{
+  "name": "Auth/RBAC E2E Testing",
+  "description": "End-to-end tests for WorkOS authentication and role-based access control (RBAC) in Mastra Playground",
+  "version": "1.0.0",
+  "testDir": "packages/playground/e2e/tests/auth",
+  "features": [
+    {
+      "id": "F001",
+      "name": "E2E Test Infrastructure Setup",
+      "description": "Set up the E2E testing infrastructure for auth tests including test fixtures, helpers, and kitchen-sink app configuration with WorkOS auth enabled",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Create auth test directory at packages/playground/e2e/tests/auth/",
+        "Create test fixtures for different user roles (admin, member, viewer)",
+        "Configure kitchen-sink app with WorkOS auth provider and RBAC",
+        "Create auth helper utilities for login/logout operations",
+        "Add environment variable templates for WorkOS credentials"
+      ],
+      "acceptanceCriteria": [
+        "Auth test directory structure exists",
+        "Test fixtures can simulate different user roles",
+        "Kitchen-sink app runs with auth enabled",
+        "Helper utilities are reusable across all auth tests"
+      ]
+    },
+    {
+      "id": "F002",
+      "name": "Login Flow E2E Tests",
+      "description": "Test the complete login flow including redirects, session management, and error handling",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test unauthenticated user is redirected to login page",
+        "Test successful login redirects to original destination",
+        "Test login with invalid credentials shows error",
+        "Test session persistence across page reloads",
+        "Test login state is reflected in UI (user avatar, name display)"
+      ],
+      "acceptanceCriteria": [
+        "Unauthenticated access redirects to /auth/login",
+        "Successful login redirects back to requested page",
+        "Invalid credentials display appropriate error message",
+        "Session survives page refresh",
+        "User info displays correctly after login"
+      ]
+    },
+    {
+      "id": "F003",
+      "name": "Sign Up Flow E2E Tests",
+      "description": "Test the user registration and sign-up flow with WorkOS AuthKit",
+      "priority": "P1",
+      "status": "pending",
+      "tasks": [
+        "Test sign-up link is accessible from login page",
+        "Test sign-up form validation (email format, password strength)",
+        "Test successful sign-up creates user and logs them in",
+        "Test sign-up with existing email shows appropriate error",
+        "Test email verification flow if enabled"
+      ],
+      "acceptanceCriteria": [
+        "Sign-up link navigates to registration form",
+        "Form validation prevents invalid submissions",
+        "New users are created and auto-logged in",
+        "Duplicate email registration shows error",
+        "Email verification completes successfully"
+      ]
+    },
+    {
+      "id": "F004",
+      "name": "Logout Flow E2E Tests",
+      "description": "Test the logout functionality and session cleanup",
+      "priority": "P1",
+      "status": "pending",
+      "tasks": [
+        "Test logout button is visible when authenticated",
+        "Test clicking logout clears session",
+        "Test logged out user is redirected to login",
+        "Test back button after logout does not restore session",
+        "Test logout from multiple tabs synchronizes state"
+      ],
+      "acceptanceCriteria": [
+        "Logout button appears for authenticated users",
+        "Session is cleared on logout",
+        "User redirected to login after logout",
+        "Browser back does not bypass logout",
+        "Multi-tab logout works correctly"
+      ]
+    },
+    {
+      "id": "F005",
+      "name": "Admin Role E2E Tests",
+      "description": "Test that admin role has full access to all Mastra resources (agents, workflows, tools, MCPs)",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test admin can view all agents",
+        "Test admin can create/edit/delete agents",
+        "Test admin can view all workflows",
+        "Test admin can create/run/delete workflows",
+        "Test admin can view and execute all tools",
+        "Test admin can configure MCP servers",
+        "Test admin can access settings and configuration"
+      ],
+      "acceptanceCriteria": [
+        "Admin sees all navigation items",
+        "Admin can perform CRUD on agents",
+        "Admin can perform CRUD on workflows",
+        "Admin can execute any tool",
+        "Admin can manage MCP servers",
+        "Admin can access all settings"
+      ]
+    },
+    {
+      "id": "F006",
+      "name": "Member Role E2E Tests",
+      "description": "Test that member role has limited access - can read agents and has full workflow access",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test member can view agents list",
+        "Test member cannot create/edit/delete agents",
+        "Test member can view workflows",
+        "Test member can create/run workflows",
+        "Test member can edit own workflows",
+        "Test member has restricted tool access",
+        "Test member cannot access admin settings"
+      ],
+      "acceptanceCriteria": [
+        "Member can read agents but not modify",
+        "Create agent button is hidden for members",
+        "Member has full workflow permissions",
+        "Member restricted from admin-only features",
+        "Permission denied shows appropriate message"
+      ]
+    },
+    {
+      "id": "F007",
+      "name": "Viewer Role E2E Tests",
+      "description": "Test that viewer role has read-only access to agents and workflows",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test viewer can view agents list",
+        "Test viewer cannot modify agents",
+        "Test viewer can view workflows list",
+        "Test viewer cannot create/edit workflows",
+        "Test viewer cannot run workflows",
+        "Test viewer sees read-only UI state",
+        "Test action buttons are hidden or disabled for viewer"
+      ],
+      "acceptanceCriteria": [
+        "Viewer can only read agents",
+        "Viewer can only read workflows",
+        "All create/edit/delete buttons hidden",
+        "Run workflow button is disabled",
+        "UI clearly indicates read-only state"
+      ]
+    },
+    {
+      "id": "F008",
+      "name": "Unauthorized Access E2E Tests",
+      "description": "Test that users without roles (_default) are properly restricted",
+      "priority": "P1",
+      "status": "pending",
+      "tasks": [
+        "Test user with no organization membership has _default permissions",
+        "Test _default permissions deny access to protected resources",
+        "Test appropriate error page shown for unauthorized access",
+        "Test API calls return 403 for unauthorized users",
+        "Test deep links to protected pages redirect appropriately"
+      ],
+      "acceptanceCriteria": [
+        "Users without roles get _default permissions",
+        "Protected resources return 403",
+        "Friendly error page displayed",
+        "Deep links handled gracefully",
+        "No information leakage on unauthorized access"
+      ]
+    },
+    {
+      "id": "F009",
+      "name": "Session Expiry E2E Tests",
+      "description": "Test session timeout and token refresh behavior",
+      "priority": "P2",
+      "status": "pending",
+      "tasks": [
+        "Test session expires after configured timeout",
+        "Test expired session redirects to login",
+        "Test token refresh extends session",
+        "Test graceful handling of expired token during action",
+        "Test remember me functionality if available"
+      ],
+      "acceptanceCriteria": [
+        "Session expires correctly",
+        "Expired users redirected to login",
+        "Token refresh works transparently",
+        "Mid-action expiry handled gracefully"
+      ]
+    },
+    {
+      "id": "F010",
+      "name": "Role Switching E2E Tests",
+      "description": "Test behavior when user's role changes while logged in",
+      "priority": "P2",
+      "status": "pending",
+      "tasks": [
+        "Test UI updates when role permissions change",
+        "Test cached permissions are invalidated on role change",
+        "Test user sees updated access after role upgrade",
+        "Test user loses access immediately after role downgrade"
+      ],
+      "acceptanceCriteria": [
+        "Role changes reflect in UI",
+        "Permission cache cleared on role change",
+        "Upgraded users get immediate access",
+        "Downgraded users lose access immediately"
+      ]
+    }
+  ],
+  "rolePermissions": {
+    "admin": ["*"],
+    "member": ["agents:read", "workflows:*", "tools:read", "tools:execute"],
+    "viewer": ["agents:read", "workflows:read"],
+    "_default": []
+  },
+  "testConfiguration": {
+    "testFramework": "playwright",
+    "testRunCommand": "cd packages/playground/e2e && CI=true npx playwright test -c playwright.config.ts",
+    "typecheckCommand": "pnpm typecheck",
+    "baseUrl": "http://localhost:4111",
+    "note": "E2E tests are in packages/playground/e2e/ - use --reporter=list to avoid HTML report hanging"
+  }
+}

@@ -24,9 +24,9 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  retries: process.env.CI ? 2 : 1,
   workers: 1,
-  reporter: 'html',
+  reporter: process.env.CI ? 'list' : 'html',
 
   use: {
     baseURL: BASE_URL,

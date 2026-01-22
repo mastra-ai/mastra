@@ -1,0 +1,41 @@
+# Auth/RBAC E2E Testing Progress Log
+
+## Initial Setup - 2026-01-22
+
+PRD created at plans/prd.json with 10 features for implementing WorkOS auth and RBAC E2E tests.
+
+### Features Overview (by priority):
+- P0: Infrastructure Setup, Login Flow, Admin Role, Member Role, Viewer Role Tests
+- P1: Sign Up Flow, Logout Flow, Unauthorized Access Tests
+- P2: Session Expiry, Role Switching Tests
+
+### Role Permissions Being Tested:
+- admin: Full access ['*']
+- member: agents:read, workflows:*, tools:read, tools:execute
+- viewer: agents:read, workflows:read
+- _default: No permissions []
+
+### Pre-PRD Fix - 2026-01-22
+
+**Issue**: E2E tests were failing with 403 Forbidden errors even though auth was disabled.
+
+**Root Cause**: The new `requiresPermission` feature on routes (added for RBAC) was enforcing permissions even when no auth provider was configured. Routes like `GET /api/agents` had `requiresPermission: 'agents:read'` set, and when auth was disabled, `userPermissions` was undefined, causing the permission check to fail.
+
+**Fix**: Updated `server-adapters/hono/src/index.ts` to check if auth is configured before enforcing route permissions:
+```typescript
+// Only enforce permissions when auth is configured
+const authConfig = this.mastra.getServer()?.auth;
+if (route.requiresPermission && authConfig) {
+  // ... permission check
+}
+```
+
+**Result**: All 25 E2E tests now pass.
+
+---
+
+### Next Steps:
+Start with F001 (E2E Test Infrastructure Setup) to establish the foundation for all auth tests.
+
+---
+
