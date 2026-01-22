@@ -421,4 +421,216 @@ describe('Dynamic Model Selection with Fallback', () => {
     // Should inherit agent-level maxRetries (5)
     expect(modelList?.[0]?.maxRetries).toBe(5);
   });
+
+  it('should throw error when dynamic function returns empty array', async () => {
+    const agent = new Agent({
+      id: 'empty-array-test',
+      name: 'Empty Array Test',
+      instructions: 'You are a test agent',
+      model: () => [],
+    });
+
+    const requestContext = new RequestContext();
+    await expect(agent.generate('test', { requestContext })).rejects.toThrow(
+      'Dynamic function returned empty model array',
+    );
+  });
+
+  it('should throw error when static empty array is provided', async () => {
+    expect(() => {
+      new Agent({
+        id: 'empty-static-array-test',
+        name: 'Empty Static Array Test',
+        instructions: 'You are a test agent',
+        model: [],
+      });
+    }).toThrow('Model array is empty. Please provide at least one model.');
+  });
+
+  it('should support async dynamic function returning fallback array', async () => {
+    const model1 = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Model 1 failed');
+      },
+      doStream: async () => {
+        const stream = new ReadableStream({
+          pull() {
+            throw new Error('Model 1 failed');
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+
+    const model2 = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Async success',
+          content: [
+            {
+              type: 'text',
+              text: 'Async success',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'async-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Async success' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'async-dynamic-test',
+      name: 'Async Dynamic Test',
+      instructions: 'You are a test agent',
+      model: async ({ requestContext }) => {
+        // Simulate async operation (e.g., database lookup)
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const tier = requestContext.get('tier');
+        if (tier === 'premium') {
+          return [
+            { model: model1, maxRetries: 1 },
+            { model: model2, maxRetries: 0 },
+          ];
+        }
+        return [{ model: model2, maxRetries: 1 }];
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('tier', 'premium');
+    const result = await agent.stream('test', { requestContext });
+    const fullText = await result.text;
+
+    expect(fullText).toBe('Async success');
+  });
+
+  it('should support nested dynamic functions in returned fallback array', async () => {
+    let primaryCallCount = 0;
+    let nestedCallCount = 0;
+
+    const failingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Nested model failed');
+      },
+      doStream: async () => {
+        const stream = new ReadableStream({
+          pull() {
+            throw new Error('Nested model failed');
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+
+    const workingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Nested dynamic success',
+          content: [
+            {
+              type: 'text',
+              text: 'Nested dynamic success',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'nested-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Nested dynamic success' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'nested-dynamic-test',
+      name: 'Nested Dynamic Test',
+      instructions: 'You are a test agent',
+      model: ({ requestContext }) => {
+        primaryCallCount++;
+        const useNested = requestContext.get('useNested');
+        return [
+          {
+            // Each model in the array can also be a dynamic function
+            model: ({ requestContext: ctx }) => {
+              nestedCallCount++;
+              const shouldFail = ctx.get('shouldFail');
+              return shouldFail ? failingModel : workingModel;
+            },
+            maxRetries: 1,
+          },
+          {
+            model: workingModel,
+            maxRetries: 0,
+          },
+        ];
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('useNested', true);
+    requestContext.set('shouldFail', true);
+
+    const result = await agent.stream('test', { requestContext });
+    const fullText = await result.text;
+
+    // Primary function should be called
+    expect(primaryCallCount).toBeGreaterThan(0);
+    // Nested function should be called
+    expect(nestedCallCount).toBeGreaterThan(0);
+    // Should fallback to second model after nested dynamic fails
+    expect(fullText).toBe('Nested dynamic success');
+  });
 });

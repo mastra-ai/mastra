@@ -137,6 +137,66 @@ export interface AgentConfig<
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
    * Supports DynamicArgument for both single models and model fallback arrays.
+   *
+   * @example Static single model (magic string)
+   * ```typescript
+   * model: 'openai/gpt-4'
+   * ```
+   *
+   * @example Static single model (config object)
+   * ```typescript
+   * model: {
+   *   id: 'openai/gpt-4',
+   *   apiKey: process.env.OPENAI_API_KEY
+   * }
+   * ```
+   *
+   * @example Static fallback array
+   * ```typescript
+   * model: [
+   *   { model: 'openai/gpt-4', maxRetries: 2 },
+   *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Dynamic single model (tier-based selection)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium' ? 'openai/gpt-4' : 'openai/gpt-3.5-turbo';
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array (tier-based fallback configuration)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   if (tier === 'premium') {
+   *     return [
+   *       { model: 'openai/gpt-4', maxRetries: 2 },
+   *       { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   *     ];
+   *   }
+   *   return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array with nested dynamic models
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const region = requestContext.get('region');
+   *   return [
+   *     {
+   *       // Each model can also be dynamic
+   *       model: ({ requestContext }) => {
+   *         return region === 'eu' ? 'openai/gpt-4-eu' : 'openai/gpt-4';
+   *       },
+   *       maxRetries: 2
+   *     },
+   *     { model: 'openai/gpt-3.5-turbo', maxRetries: 1 }
+   *   ];
+   * }
+   * ```
    */
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
   /**

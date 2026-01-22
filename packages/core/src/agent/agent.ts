@@ -1108,6 +1108,22 @@ export class Agent<
   }
 
   /**
+   * Type guard to check if an array is already normalized to ModelFallbacks.
+   * Used to optimize and avoid double normalization.
+   * @internal
+   */
+  private isModelFallbacks(arr: any[]): arr is ModelFallbacks {
+    if (arr.length === 0) return false;
+    const first = arr[0];
+    return (
+      typeof first.id === 'string' &&
+      first.model !== undefined &&
+      typeof first.maxRetries === 'number' &&
+      typeof first.enabled === 'boolean'
+    );
+  }
+
+  /**
    * Resolves model configuration that may be a dynamic function returning a single model or array of models.
    * Supports DynamicArgument for both MastraModelConfig and ModelWithRetries[].
    * Normalizes ModelWithRetries[] to ModelFallbacks by filling in defaults.
@@ -1121,8 +1137,21 @@ export class Agent<
     if (typeof modelConfig === 'function') {
       const resolved = await modelConfig({ requestContext, mastra: this.#mastra });
 
-      // If function returns an array, normalize it to ModelFallbacks
+      // If function returns an array, validate and normalize it to ModelFallbacks
       if (Array.isArray(resolved)) {
+        if (resolved.length === 0) {
+          const mastraError = new MastraError({
+            id: 'AGENT_RESOLVE_MODEL_EMPTY_ARRAY',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: { agentName: this.name },
+            text: `[Agent:${this.name}] - Dynamic function returned empty model array`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+
         return resolved.map(m => ({
           id: m.id ?? randomUUID(),
           model: m.model as DynamicArgument<MastraModelConfig>,
@@ -1135,8 +1164,28 @@ export class Agent<
       return resolved;
     }
 
-    // Already resolved - if it's a static array, normalize it
+    // Already resolved - if it's a static array, check if already normalized
     if (Array.isArray(modelConfig)) {
+      // Validate empty array
+      if (modelConfig.length === 0) {
+        const mastraError = new MastraError({
+          id: 'AGENT_RESOLVE_MODEL_EMPTY_ARRAY',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { agentName: this.name },
+          text: `[Agent:${this.name}] - Empty model array provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      // Skip normalization if already normalized (performance optimization)
+      if (this.isModelFallbacks(modelConfig)) {
+        return modelConfig;
+      }
+
+      // Normalize array
       return modelConfig.map(m => ({
         id: m.id ?? randomUUID(),
         model: m.model as DynamicArgument<MastraModelConfig>,
