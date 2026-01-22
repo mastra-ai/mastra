@@ -11,6 +11,18 @@ Mastra lets you choose how you handle authentication, so you can secure access t
 
 You can start with simple shared secret JWT authentication and switch to providers like Supabase, Firebase Auth, Auth0, Clerk, or WorkOS when you need more advanced identity features.
 
+## Default behavior
+
+Authentication is optional in Mastra. When you configure authentication:
+
+- **All built-in API routes** (`/api/agents/*`, `/api/workflows/*`, etc.) require authentication by default
+- **Custom API routes** also require authentication by default
+- **Public access** can be enabled on custom routes using `requiresAuth: false`
+
+If no authentication is configured, all routes are publicly accessible.
+
+See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints.
+
 ## Available providers
 
 - [JSON Web Token (JWT)](/docs/server/auth/jwt)
