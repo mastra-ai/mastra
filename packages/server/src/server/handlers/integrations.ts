@@ -4,14 +4,9 @@ import {
   listProviders,
   SmitheryProvider,
   ArcadeProvider,
-  ComposioProvider
-  
-  
-  
-  
-  
+  ComposioProvider,
 } from '@mastra/core/integrations';
-import type {MCPMetadata, SmitheryMetadata, ProviderMetadata, ToolProvider} from '@mastra/core/integrations';
+import type { MCPMetadata, SmitheryMetadata, ProviderMetadata, ToolProvider } from '@mastra/core/integrations';
 import type { IntegrationProvider } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {

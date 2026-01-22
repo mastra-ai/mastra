@@ -1,0 +1,161 @@
+# PR3: Dynamic Tools - Progress Tracking
+
+## Status: In Progress
+
+## Completed Tasks:
+- Task 001: Copy integration types to storage/types.ts
+  - Added IntegrationProvider type enum for 'composio' | 'arcade' | 'mcp' | 'smithery'
+  - Added StorageIntegrationConfig interface for stored integration configurations
+  - Added StorageCachedTool interface for cached tool definitions
+  - Added all related input/output types for CRUD operations
+  - File: packages/core/src/storage/types.ts
+  - Status: Complete ✓
+
+- Task 002: Copy integrations storage domain
+  - Copied base.ts, index.ts, and inmemory.ts from total-cms branch
+  - Created packages/core/src/storage/domains/integrations/ directory
+  - Added IntegrationsStorage abstract base class with CRUD methods
+  - Added IntegrationsInMemory implementation
+  - Updated InMemoryDB to include integrations and cachedTools Maps
+  - Status: Complete ✓
+
+- Task 003: Update storage domains index
+  - Added export * from './integrations' to packages/core/src/storage/domains/index.ts
+  - Status: Complete ✓
+
+- Task 004: Copy integrations providers types
+  - Copied types.ts from total-cms:packages/core/src/integrations/providers/types.ts
+  - Copied index.ts from total-cms:packages/core/src/integrations/providers/index.ts
+  - Created packages/core/src/integrations/providers/ directory
+  - Added core type definitions for tool providers including IntegrationProviderType
+  - Added provider metadata types: ComposioMetadata, ArcadeMetadata, McpMetadata, SmitheryMetadata
+  - Added ToolProvider interface and implementations for all providers
+  - Added toolkit and tool definition types
+  - Temporarily commented out exports for composio, arcade, mcp, smithery, registry in index.ts (will be uncommented as those files are added)
+  - Verified typecheck passes with commented exports
+  - Verified build completes successfully
+  - Status: Complete ✓
+
+- Tasks 005-009: Copy all provider implementations and registry
+  - Task 005: Copied provider registry (registry.ts) - 146 lines
+  - Task 006: Copied Composio provider implementation (composio.ts) - 551 lines
+  - Task 007: Copied Arcade provider implementation (arcade.ts) - 740 lines
+  - Task 008: Copied MCP placeholder provider (mcp.ts) - 88 lines
+  - Task 009: Copied Smithery placeholder provider (smithery.ts) - 341 lines
+  - Updated packages/core/src/integrations/providers/index.ts to export all providers and registry
+  - Total: 1,866 lines of provider code added
+  - Verified typecheck passes with all exports
+  - Verified build completes successfully
+  - Status: Complete ✓
+  - Note: Completed tasks 005-009 together due to circular dependency (registry imports providers)
+
+## In Progress:
+(none yet)
+
+## Notes:
+- This PR depends on PR1 (Dynamic Agents UI) being merged first
+- Key providers: Composio, Arcade, MCP, Smithery
+- OAuth flows required for Composio and Arcade
+- MCP supports both HTTP and Stdio transports
+
+## Blockers:
+(none yet)
+
+- Task 011: Copy tool ID utilities
+  - Copied tool-id.ts from total-cms:packages/core/src/integrations/tool-id.ts
+  - Added utility functions for generating and parsing integration tool IDs
+  - Tool IDs follow format: provider_toolkitSlug_toolSlug
+  - Functions: generateToolId, parseToolId, isValidToolId, getProviderFromToolId, getToolkitFromToolId, createToolIdMatcher
+  - File: packages/core/src/integrations/tool-id.ts
+  - Verified typecheck passes
+  - Verified build completes successfully
+  - Status: Complete ✓
+
+- Task 010: Copy tool executor
+  - Copied tool-executor.ts from total-cms:packages/core/src/integrations/tool-executor.ts
+  - Added tool execution proxy for Composio and Arcade providers (495 lines)
+  - Implements executeComposioTool with V3 API support
+  - Implements executeArcadeTool with OAuth support
+  - Generic executeTool function routes to appropriate provider
+  - MCP/Smithery execution requires @mastra/server package (not implemented in core)
+  - File: packages/core/src/integrations/tool-executor.ts
+  - Status: Complete ✓
+
+- Task 012: Copy integrations module index
+  - Copied index.ts from total-cms:packages/core/src/integrations/index.ts
+  - Exports all integrations modules: providers, tool-executor, tool-id
+  - File: packages/core/src/integrations/index.ts
+  - Verified typecheck passes
+  - Verified build completes successfully (124 successful, 124 total)
+  - Status: Complete ✓
+
+- Task 014: Update Mastra class with integrations
+  - Analysis: No changes needed to Mastra class for integration support
+  - Reason: The `integrationTools` field already exists in `StorageAgentType` (added in task 001)
+  - The Mastra class already resolves all fields from StorageAgentType when creating agents
+  - Integration tool execution happens via the tool executor (task 010) and doesn't require Mastra class changes
+  - The diff from total-cms includes scorer-related changes from PR2, which are not applicable to PR3
+  - Verified typecheck passes without any changes
+  - File: packages/core/src/mastra/index.ts
+  - Status: Complete (no-op) ✓
+
+- Task 015: Copy integrations Zod schemas
+  - Copied integrations.ts from total-cms:packages/server/src/server/schemas/integrations.ts
+  - Added comprehensive Zod validation schemas for all integrations API endpoints (459 lines)
+  - Includes schemas for: path params, query params, request bodies, response types
+  - Covers all providers: Composio, Arcade, MCP, Smithery
+  - Includes OAuth authorization schemas for Arcade and Composio
+  - Includes Smithery registry browsing schemas
+  - Includes MCP validation schemas for HTTP and Stdio transports
+  - File: packages/server/src/server/schemas/integrations.ts
+  - Verified typecheck passes
+  - Verified build completes successfully (124 successful, 124 total)
+  - Status: Complete ✓
+
+- Task 016: Copy integrations API handler
+  - Copied integrations.ts from total-cms:packages/server/src/server/handlers/integrations.ts (1440 lines)
+  - Also copied required dependency: mcp-tool-provider.ts (522 lines)
+  - Added @mastra/mcp as peer dependency (optional) and dev dependency to packages/server/package.json
+  - Updated packages/core/src/storage/base.ts to add integrations domain:
+    - Added IntegrationsStorage to imports
+    - Added integrations?: IntegrationsStorage to StorageDomains type
+    - Added integrations domain to composition logic
+    - Added integrations init to init() method
+  - Added stub methods to Mastra class (packages/core/src/mastra/index.ts):
+    - getToolProvider(name: string): any - returns undefined, falls back to global registry
+    - listToolProviders(): any[] - returns empty array, falls back to global registry
+    - getToolProviderStatuses(): Promise<any[]> - returns empty promise array, falls back to global registry
+  - Fixed bug: Changed composioProvider.authorize(toolkitSlug, userId, { callbackUrl }) to composioProvider.authorize(toolkitSlug, userId, callbackUrl)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - File: packages/server/src/server/handlers/integrations.ts, mcp-tool-provider.ts
+  - Status: Complete ✓
+
+- Task 017: Copy integrations routes
+  - Copied integrations.ts from total-cms:packages/server/src/server/server-adapter/routes/integrations.ts
+  - Added route definitions for all integrations endpoints (65 lines)
+  - Routes include: provider discovery, OAuth flows (Arcade, Composio), Smithery registry, MCP validation, integration CRUD, tool management
+  - Important: Routes are ordered carefully to prevent path matching conflicts (e.g., /providers before /:integrationId)
+  - Includes all 18 route constants: LIST_INTEGRATIONS_ROUTE, GET_INTEGRATION_ROUTE, CREATE_INTEGRATION_ROUTE, etc.
+  - Verified typecheck passes
+  - Verified build completes successfully (124/124 tasks successful)
+  - File: packages/server/src/server/server-adapter/routes/integrations.ts
+  - Status: Complete ✓
+
+- Task 018: Register integrations routes
+  - Added import for INTEGRATIONS_ROUTES from './integrations' in packages/server/src/server/server-adapter/routes/index.ts
+  - Added INTEGRATIONS_ROUTES to the SERVER_ROUTES array (between STORED_AGENTS_ROUTES and SYSTEM_ROUTES)
+  - The integrations routes are now registered and available via the server API
+  - Verified typecheck passes
+  - Verified build completes successfully (124/124 tasks successful)
+  - Verified server tests pass (436 tests passed)
+  - File: packages/server/src/server/server-adapter/routes/index.ts
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 018 completed successfully - server API layer is now complete with all 18 integrations routes registered
+- Core and server packages are fully implemented and passing all checks
+- Next logical high-priority tasks are in the stores and frontend categories:
+  - Task 019 (P1): Copy LibSQL integrations storage implementation
+  - Task 022 (P1): Copy integrations domain types for frontend
+  - Consider starting with Task 019 to complete the storage layer before moving to frontend

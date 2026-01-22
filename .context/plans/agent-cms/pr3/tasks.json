@@ -1,0 +1,803 @@
+{
+  "prNumber": 3,
+  "prTitle": "Dynamic Tools",
+  "prDescription": "Tool provider integrations (Composio, Arcade, Smithery, MCP) with OAuth and execution support. Porting from total-cms branch.",
+  "sourceBranch": "total-cms",
+  "targetBranch": "main",
+  "dependsOnPRs": [1],
+  "approach": "port-from-source",
+  "prerequisites": [
+    "PR1 (Dynamic Agents UI) must be merged first - provides stored-agents domain and shared storage infrastructure patterns"
+  ],
+  "notes": [
+    "This PR ports existing code from the total-cms branch rather than reimplementing from scratch.",
+    "No PostgreSQL store exists for integrations in total-cms - only LibSQL implementation.",
+    "Use 'git show total-cms:<path>' to view files and 'git diff main...total-cms -- <path>' to see changes.",
+    "Copy files exactly from total-cms, then adjust only if there are merge conflicts with main."
+  ],
+  "tasks": [
+    {
+      "id": "001",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy integration types to storage/types.ts",
+      "description": "Add IntegrationProvider, StorageIntegrationConfig, and related input/output types to core storage types.",
+      "filesToModify": [
+        "packages/core/src/storage/types.ts"
+      ],
+      "commands": [
+        "git diff main...total-cms -- packages/core/src/storage/types.ts",
+        "Apply integration-related additions (IntegrationProvider, StorageIntegrationConfig, StorageCachedTool, etc.)"
+      ],
+      "typesToAdd": [
+        "IntegrationProvider",
+        "StorageIntegrationConfig",
+        "StorageCachedTool",
+        "StorageCreateIntegrationInput",
+        "StorageUpdateIntegrationInput",
+        "StorageListIntegrationsInput",
+        "StorageListIntegrationsOutput",
+        "StorageCachedToolInput",
+        "StorageListCachedToolsInput",
+        "StorageListCachedToolsOutput"
+      ],
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "002",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy integrations storage domain",
+      "description": "Copy the entire integrations storage domain directory with base class and in-memory implementation.",
+      "filesToCopy": [
+        "packages/core/src/storage/domains/integrations/base.ts",
+        "packages/core/src/storage/domains/integrations/index.ts",
+        "packages/core/src/storage/domains/integrations/inmemory.ts"
+      ],
+      "commands": [
+        "mkdir -p packages/core/src/storage/domains/integrations",
+        "git show total-cms:packages/core/src/storage/domains/integrations/base.ts > packages/core/src/storage/domains/integrations/base.ts",
+        "git show total-cms:packages/core/src/storage/domains/integrations/index.ts > packages/core/src/storage/domains/integrations/index.ts",
+        "git show total-cms:packages/core/src/storage/domains/integrations/inmemory.ts > packages/core/src/storage/domains/integrations/inmemory.ts"
+      ],
+      "lineCount": "~500 lines total",
+      "dependencies": ["001"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "003",
+      "category": "core",
+      "priority": "P0",
+      "title": "Update storage domains index",
+      "description": "Export integrations from the storage domains index.",
+      "filesToModify": [
+        "packages/core/src/storage/domains/index.ts"
+      ],
+      "changes": "Add: export * from './integrations';",
+      "dependencies": ["002"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "004",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy integrations providers types",
+      "description": "Copy the core type definitions for tool providers including provider types, toolkit definitions, and tool definitions.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/types.ts",
+        "packages/core/src/integrations/providers/index.ts"
+      ],
+      "commands": [
+        "mkdir -p packages/core/src/integrations/providers",
+        "git show total-cms:packages/core/src/integrations/providers/types.ts > packages/core/src/integrations/providers/types.ts",
+        "git show total-cms:packages/core/src/integrations/providers/index.ts > packages/core/src/integrations/providers/index.ts"
+      ],
+      "lineCount": "~700 lines total",
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "005",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy provider registry",
+      "description": "Copy the provider registry that manages tool provider instances.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/registry.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/registry.ts > packages/core/src/integrations/providers/registry.ts"
+      ],
+      "dependencies": ["004"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "006",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy Composio provider",
+      "description": "Copy the Composio provider implementation with OAuth support.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/composio.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/composio.ts > packages/core/src/integrations/providers/composio.ts"
+      ],
+      "lineCount": "~551 lines",
+      "dependencies": ["004", "005"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "007",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy Arcade provider",
+      "description": "Copy the Arcade provider implementation with OAuth support.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/arcade.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/arcade.ts > packages/core/src/integrations/providers/arcade.ts"
+      ],
+      "dependencies": ["004", "005"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "008",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy MCP placeholder provider",
+      "description": "Copy the placeholder MCP provider for the global registry.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/mcp.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/mcp.ts > packages/core/src/integrations/providers/mcp.ts"
+      ],
+      "dependencies": ["004", "005"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "009",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy Smithery placeholder provider",
+      "description": "Copy the placeholder Smithery provider for the global registry.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/smithery.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/smithery.ts > packages/core/src/integrations/providers/smithery.ts"
+      ],
+      "dependencies": ["004", "005"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "010",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy tool executor",
+      "description": "Copy the tool execution proxy that routes execution requests to provider APIs.",
+      "filesToCopy": [
+        "packages/core/src/integrations/tool-executor.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/tool-executor.ts > packages/core/src/integrations/tool-executor.ts"
+      ],
+      "dependencies": ["004"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "011",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy tool ID utilities",
+      "description": "Copy utilities for parsing and formatting tool IDs.",
+      "filesToCopy": [
+        "packages/core/src/integrations/tool-id.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/tool-id.ts > packages/core/src/integrations/tool-id.ts"
+      ],
+      "dependencies": [],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "012",
+      "category": "core",
+      "priority": "P0",
+      "title": "Copy integrations module index",
+      "description": "Copy the main index.ts for the integrations module.",
+      "filesToCopy": [
+        "packages/core/src/integrations/index.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/index.ts > packages/core/src/integrations/index.ts"
+      ],
+      "dependencies": ["004", "005", "006", "007", "008", "009", "010", "011"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "013",
+      "category": "core",
+      "priority": "P1",
+      "title": "Copy provider tests",
+      "description": "Copy the test file for provider implementations.",
+      "filesToCopy": [
+        "packages/core/src/integrations/providers/providers.test.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/core/src/integrations/providers/providers.test.ts > packages/core/src/integrations/providers/providers.test.ts"
+      ],
+      "dependencies": ["006", "007"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "014",
+      "category": "core",
+      "priority": "P0",
+      "title": "Update Mastra class with integrations",
+      "description": "Add integration-related fields and methods to the Mastra class.",
+      "filesToModify": [
+        "packages/core/src/mastra/index.ts"
+      ],
+      "commands": [
+        "git diff main...total-cms -- packages/core/src/mastra/index.ts",
+        "Apply only integration-related changes"
+      ],
+      "changes": [
+        "Add integrations and integrationTools to agent resolution",
+        "Add integration storage domain support"
+      ],
+      "dependencies": ["002", "012"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "015",
+      "category": "server",
+      "priority": "P0",
+      "title": "Copy integrations Zod schemas",
+      "description": "Copy the Zod validation schemas for integrations API endpoints.",
+      "filesToCopy": [
+        "packages/server/src/server/schemas/integrations.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/server/src/server/schemas/integrations.ts > packages/server/src/server/schemas/integrations.ts"
+      ],
+      "dependencies": ["001"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "016",
+      "category": "server",
+      "priority": "P0",
+      "title": "Copy integrations API handler",
+      "description": "Copy the CRUD API handlers for integrations management.",
+      "filesToCopy": [
+        "packages/server/src/server/handlers/integrations.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/server/src/server/handlers/integrations.ts > packages/server/src/server/handlers/integrations.ts"
+      ],
+      "lineCount": "~1440 lines",
+      "dependencies": ["015", "014"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "017",
+      "category": "server",
+      "priority": "P0",
+      "title": "Copy integrations routes",
+      "description": "Copy the route definitions for integrations endpoints.",
+      "filesToCopy": [
+        "packages/server/src/server/server-adapter/routes/integrations.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/server/src/server/server-adapter/routes/integrations.ts > packages/server/src/server/server-adapter/routes/integrations.ts"
+      ],
+      "dependencies": ["016"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "018",
+      "category": "server",
+      "priority": "P0",
+      "title": "Register integrations routes",
+      "description": "Add integrations routes to the main routes index.",
+      "filesToModify": [
+        "packages/server/src/server/server-adapter/routes/index.ts"
+      ],
+      "changes": [
+        "Import INTEGRATIONS_ROUTES from './integrations'",
+        "Add INTEGRATIONS_ROUTES to the SERVER_ROUTES array"
+      ],
+      "dependencies": ["017"],
+      "status": "completed",
+      "passing": true
+    },
+    {
+      "id": "019",
+      "category": "stores",
+      "priority": "P1",
+      "title": "Copy LibSQL integrations storage",
+      "description": "Copy the LibSQL implementation of integrations storage.",
+      "filesToCopy": [
+        "stores/libsql/src/storage/domains/integrations/index.ts"
+      ],
+      "commands": [
+        "mkdir -p stores/libsql/src/storage/domains/integrations",
+        "git show total-cms:stores/libsql/src/storage/domains/integrations/index.ts > stores/libsql/src/storage/domains/integrations/index.ts"
+      ],
+      "lineCount": "~642 lines",
+      "dependencies": ["002"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "020",
+      "category": "stores",
+      "priority": "P1",
+      "title": "Update LibSQL storage index",
+      "description": "Export IntegrationsLibSQL and register in LibSQLStore.",
+      "filesToModify": [
+        "stores/libsql/src/storage/index.ts"
+      ],
+      "changes": [
+        "Import IntegrationsLibSQL from './domains/integrations'",
+        "Add to exports: IntegrationsLibSQL",
+        "Add to domains object: integrations: new IntegrationsLibSQL(domainConfig)"
+      ],
+      "dependencies": ["019"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "021",
+      "category": "stores",
+      "priority": "P2",
+      "title": "Copy integrations test data",
+      "description": "Copy the test utility data for integrations storage testing.",
+      "filesToCopy": [
+        "stores/_test-utils/src/domains/integrations/data.ts",
+        "stores/_test-utils/src/domains/integrations/index.ts"
+      ],
+      "commands": [
+        "mkdir -p stores/_test-utils/src/domains/integrations",
+        "git show total-cms:stores/_test-utils/src/domains/integrations/data.ts > stores/_test-utils/src/domains/integrations/data.ts",
+        "git show total-cms:stores/_test-utils/src/domains/integrations/index.ts > stores/_test-utils/src/domains/integrations/index.ts"
+      ],
+      "dependencies": ["002"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "022",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy integrations domain types",
+      "description": "Copy the TypeScript types for the integrations UI domain.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/types.ts"
+      ],
+      "commands": [
+        "mkdir -p packages/playground-ui/src/domains/integrations",
+        "git show total-cms:packages/playground-ui/src/domains/integrations/types.ts > packages/playground-ui/src/domains/integrations/types.ts"
+      ],
+      "lineCount": "~5 lines",
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "023",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy integrations React Query hooks",
+      "description": "Copy the React Query hooks for fetching and mutating integrations.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-integrations.ts",
+        "packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts"
+      ],
+      "commands": [
+        "mkdir -p packages/playground-ui/src/domains/integrations/hooks",
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-integrations.ts > packages/playground-ui/src/domains/integrations/hooks/use-integrations.ts",
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts > packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts"
+      ],
+      "dependencies": ["022"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "024",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy provider discovery hooks",
+      "description": "Copy the React Query hooks for discovering and browsing tool providers.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-providers.ts",
+        "packages/playground-ui/src/domains/integrations/hooks/use-provider-toolkits.ts",
+        "packages/playground-ui/src/domains/integrations/hooks/use-provider-tools.ts"
+      ],
+      "commands": [
+        "git show total-cms:<path> > <path> (for each file)"
+      ],
+      "dependencies": ["022"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "025",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy Smithery browsing hook",
+      "description": "Copy the React Query hook for browsing the Smithery MCP server registry.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts > packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts"
+      ],
+      "dependencies": ["022"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "026",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy OAuth callback hook",
+      "description": "Copy the hook for handling OAuth callback redirects.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts > packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts"
+      ],
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "027",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy Arcade auth hook",
+      "description": "Copy the hook for Arcade OAuth authorization flow management.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts > packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts"
+      ],
+      "dependencies": ["026"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "028",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy Composio auth hook",
+      "description": "Copy the hook for Composio OAuth authorization flow management.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts > packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts"
+      ],
+      "dependencies": ["026"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "029",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy hooks index",
+      "description": "Copy the hooks index file to export all integration hooks.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/hooks/index.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/index.ts > packages/playground-ui/src/domains/integrations/hooks/index.ts"
+      ],
+      "dependencies": ["023", "024", "025", "026", "027", "028"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "030",
+      "category": "frontend",
+      "priority": "P2",
+      "title": "Copy Smithery OAuth provider utility",
+      "description": "Copy the utility for handling MCP OAuth flow via Smithery servers.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts"
+      ],
+      "commands": [
+        "mkdir -p packages/playground-ui/src/domains/integrations/lib",
+        "git show total-cms:packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts > packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts"
+      ],
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "031",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy provider list component",
+      "description": "Copy the UI component for displaying available tool providers.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/provider-list.tsx"
+      ],
+      "commands": [
+        "mkdir -p packages/playground-ui/src/domains/integrations/components",
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/provider-list.tsx > packages/playground-ui/src/domains/integrations/components/provider-list.tsx"
+      ],
+      "dependencies": ["024"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "032",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy toolkit browser component",
+      "description": "Copy the UI component for browsing and selecting toolkits from a provider.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx > packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx"
+      ],
+      "dependencies": ["024"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "033",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy tool selector component",
+      "description": "Copy the UI component for reviewing and selecting individual tools.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/tool-selector.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/tool-selector.tsx > packages/playground-ui/src/domains/integrations/components/tool-selector.tsx"
+      ],
+      "dependencies": ["024"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "034",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy MCP connection input component",
+      "description": "Copy the UI component for entering MCP server connection details.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/mcp-connection-input.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/mcp-connection-input.tsx > packages/playground-ui/src/domains/integrations/components/mcp-connection-input.tsx"
+      ],
+      "dependencies": [],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "035",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy Smithery browser component",
+      "description": "Copy the UI component for browsing MCP servers from the Smithery registry.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx > packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx"
+      ],
+      "dependencies": ["025"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "036",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy add tools dialog",
+      "description": "Copy the main multi-step wizard dialog for adding integration tools.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx > packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx"
+      ],
+      "dependencies": ["029", "030", "031", "032", "033", "034", "035"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "037",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy integration card component",
+      "description": "Copy the UI component for displaying a single integration in a list.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/integration-card.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/integration-card.tsx > packages/playground-ui/src/domains/integrations/components/integration-card.tsx"
+      ],
+      "dependencies": ["023"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "038",
+      "category": "frontend",
+      "priority": "P1",
+      "title": "Copy integrations list component",
+      "description": "Copy the UI component for displaying the list of configured integrations.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/integrations-list.tsx"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/integrations-list.tsx > packages/playground-ui/src/domains/integrations/components/integrations-list.tsx"
+      ],
+      "dependencies": ["023", "037"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "039",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy components index",
+      "description": "Copy the components index file to export all integration components.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/components/index.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/components/index.ts > packages/playground-ui/src/domains/integrations/components/index.ts"
+      ],
+      "dependencies": ["036", "038"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "040",
+      "category": "frontend",
+      "priority": "P0",
+      "title": "Copy integrations domain index",
+      "description": "Copy the main index file for the integrations UI domain.",
+      "filesToCopy": [
+        "packages/playground-ui/src/domains/integrations/index.ts"
+      ],
+      "commands": [
+        "git show total-cms:packages/playground-ui/src/domains/integrations/index.ts > packages/playground-ui/src/domains/integrations/index.ts"
+      ],
+      "dependencies": ["029", "039"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "041",
+      "category": "verification",
+      "priority": "P0",
+      "title": "Build and typecheck",
+      "description": "Verify the complete PR builds and passes type checking.",
+      "commands": [
+        "pnpm build",
+        "pnpm typecheck"
+      ],
+      "acceptanceCriteria": [
+        "pnpm build completes without errors",
+        "pnpm typecheck completes without errors"
+      ],
+      "dependencies": [
+        "003", "012", "013", "014", "018", "020", "021", "040"
+      ],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "042",
+      "category": "verification",
+      "priority": "P1",
+      "title": "Run affected package tests",
+      "description": "Run tests for packages modified in this PR.",
+      "commands": [
+        "cd packages/core && pnpm test",
+        "cd packages/server && pnpm test",
+        "cd stores/libsql && pnpm test"
+      ],
+      "dependencies": ["041"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "043",
+      "category": "verification",
+      "priority": "P1",
+      "title": "Manual playground testing",
+      "description": "Manually test the feature in the playground.",
+      "steps": [
+        "Start playground: cd packages/playground && pnpm dev",
+        "Navigate to Tools page",
+        "Test Composio provider flow: select, browse toolkits, OAuth, confirm tools",
+        "Test Arcade provider flow: select, browse toolkits, OAuth, confirm tools",
+        "Test MCP provider flow: select, enter config, validate connection, confirm tools",
+        "Test Smithery provider flow: select, search server, confirm tools",
+        "Verify integrations appear in list",
+        "Test refresh and delete integration",
+        "Verify tools are available in agent tool picker"
+      ],
+      "dependencies": ["041"],
+      "status": "pending",
+      "passing": false
+    },
+    {
+      "id": "044",
+      "category": "release",
+      "priority": "P1",
+      "title": "Create changeset",
+      "description": "Create a changeset file documenting the changes.",
+      "commands": [
+        "Create .changeset/<name>.md with affected packages"
+      ],
+      "packages": [
+        "@mastra/core",
+        "@mastra/server",
+        "@mastra/playground-ui",
+        "@mastra/store-libsql"
+      ],
+      "versionBump": "minor",
+      "dependencies": ["043"],
+      "status": "pending",
+      "passing": false
+    }
+  ],
+  "summary": {
+    "totalTasks": 44,
+    "byCategory": {
+      "core": 14,
+      "server": 4,
+      "stores": 3,
+      "frontend": 19,
+      "verification": 3,
+      "release": 1
+    },
+    "byPriority": {
+      "P0": 21,
+      "P1": 18,
+      "P2": 5
+    },
+    "filesToCopy": 40,
+    "filesToModify": 6,
+    "notes": [
+      "No PostgreSQL store for integrations exists in total-cms",
+      "SDK methods not included - check if needed separately"
+    ]
+  }
+}
