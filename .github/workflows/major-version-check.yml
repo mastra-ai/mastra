@@ -79,13 +79,20 @@ jobs:
 
             core.setOutput('has_major_changeset', hasMajorChangeset);
 
+      - name: Checkout for local action
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+
       - name: Generate GitHub App token
         if: steps.check_major.outputs.has_major_changeset == 'true'
         id: app_token
-        uses: actions/create-github-app-token@v1
+        uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ secrets.ORG_MEMBERSHIP_APP_ID }}
-          private-key: ${{ secrets.ORG_MEMBERSHIP_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Check if major version bump is allowed
         if: steps.check_major.outputs.has_major_changeset == 'true'
