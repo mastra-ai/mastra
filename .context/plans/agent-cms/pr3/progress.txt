@@ -718,3 +718,28 @@
   - Task 040 (P0): Copy integrations domain index - exports entire domain
   - After these exports, move to verification tasks (041-043) to ensure everything works end-to-end
   - Consider completing Tasks 039 and 040 together since they are both simple exports
+
+- Task 039: Copy components index
+  - Copied index.ts from total-cms:packages/playground-ui/src/domains/integrations/components/index.ts
+  - Exports all integration UI components:
+    - provider-list: ProviderList component for showing available providers
+    - toolkit-browser: ToolkitBrowser component for browsing and selecting toolkits
+    - tool-selector: ToolSelector component for reviewing and deselecting tools
+    - add-tools-dialog: AddToolsDialog main wizard for adding integrations
+    - integration-card: IntegrationCard component for displaying individual integrations
+    - integrations-list: IntegrationsList component for managing all integrations
+    - mcp-connection-input: MCPConnectionInput component for MCP server configuration
+    - smithery-browser: SmitheryBrowser component for browsing Smithery MCP registry
+  - Total: 8 component exports covering all integration UI functionality
+  - File: packages/playground-ui/src/domains/integrations/components/index.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 039 completed successfully - All integration components are now exported from a single index
+- This completes the components layer exports for the integrations domain
+- Next logical high-priority task is Task 040 (P0): Copy integrations domain index
+- Task 040 will export the entire integrations domain (hooks, components, types) for external use
+- After Task 040, move to verification tasks (041-043) to ensure everything works end-to-end
+- Consider completing Task 040 immediately as it's a simple export and depends on Task 039

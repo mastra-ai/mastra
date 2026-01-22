@@ -682,8 +682,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/components/index.ts > packages/playground-ui/src/domains/integrations/components/index.ts"
       ],
       "dependencies": ["036", "038"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "040",
