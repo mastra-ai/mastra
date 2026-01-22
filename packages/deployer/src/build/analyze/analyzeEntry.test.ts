@@ -3,12 +3,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFile } from 'fs-extra';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
-import resolveFrom from 'resolve-from';
+import { resolveModule } from 'local-pkg';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { rollup } from 'rollup';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-vi.mock('resolve-from');
+vi.mock('local-pkg', async () => {
+  const actual = await vi.importActual<typeof import('local-pkg')>('local-pkg');
+  return {
+    ...actual,
+    resolveModule: vi.fn(),
+  };
+});
 vi.mock('rollup', async () => {
   const actual = await vi.importActual<typeof import('rollup')>('rollup');
   return {
@@ -21,7 +27,7 @@ describe('analyzeEntry', () => {
   beforeEach(() => {
     vi.mocked(rollup).mockClear();
     vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-    vi.mocked(resolveFrom).mockReset();
+    vi.mocked(resolveModule).mockReset();
   });
 
   it('should analyze the entry file', async () => {
@@ -197,7 +203,7 @@ describe('analyzeEntry', () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
 
-    vi.mocked(resolveFrom).mockImplementation((_, dep) => {
+    vi.mocked(resolveModule).mockImplementation(dep => {
       if (dep === '@internal/a') {
         return join(root, 'packages', 'a', 'src', 'index.ts');
       }
@@ -205,7 +211,7 @@ describe('analyzeEntry', () => {
         return join(root, 'packages', 'shared', 'src', 'index.ts');
       }
 
-      throw new Error(`Unknown dependency: ${dep}`);
+      return undefined;
     });
 
     // Create a workspace map that includes @mastra/core to test recursive transitive dependencies

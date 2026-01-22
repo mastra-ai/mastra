@@ -23,7 +23,7 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: ToolsInput;
+      registeredTools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
     }
@@ -75,7 +75,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Set context in res.locals
       res.locals.requestContext = requestContext;
       res.locals.mastra = this.mastra;
-      res.locals.tools = this.tools || {};
+      res.locals.registeredTools = this.tools || {};
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
@@ -323,6 +323,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       `${prefix}${route.path}`,
       ...middlewares,
       async (req: Request, res: Response) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: String(req.path || '/'),
+          method: String(req.method || 'GET'),
+          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => req.query[name] as string | undefined,
+          requestContext: res.locals.requestContext,
+        });
+
+        if (authError) {
+          return res.status(authError.status).json({ error: authError.error });
+        }
+
         const params = await this.getParams(route, req);
 
         if (params.queryParams) {
@@ -363,7 +376,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
-          tools: res.locals.tools,
+          registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
         };

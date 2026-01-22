@@ -13,6 +13,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   summary: 'Get installed Mastra packages',
   description: 'Returns a list of all installed Mastra packages and their versions from the project',
   tags: ['System'],
+  requiresAuth: true,
   handler: async () => {
     try {
       const packagesFilePath = process.env.MASTRA_PACKAGES_FILE;

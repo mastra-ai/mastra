@@ -75,7 +75,6 @@ export type ProviderModelsMap = {
     'gemma3:4b',
     'glm-4.6',
     'glm-4.7',
-    'glm-4.7:cloud',
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
@@ -201,6 +200,7 @@ export type ProviderModelsMap = {
     'microsoft/phi-3.5-vision-instruct',
     'microsoft/phi-4-mini-instruct',
     'minimaxai/minimax-m2',
+    'minimaxai/minimax-m2.1',
     'mistralai/codestral-22b-instruct-v0.1',
     'mistralai/devstral-2-123b-instruct-2512',
     'mistralai/mamba-codestral-7b-v0.1',
@@ -233,6 +233,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
+    'z-ai/glm-4.7',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly groq: readonly [
@@ -1498,8 +1499,6 @@ export type ProviderModelsMap = {
     'gpt-oss-120b',
     'gpt-oss-20b',
     'llama-3.1-8b-instruct',
-    'llava-next-mistral-7b',
-    'meta-llama-3_1-70b-instruct',
     'meta-llama-3_3-70b-instruct',
     'mistral-7b-instruct-v0.3',
     'mistral-nemo-instruct-2407',

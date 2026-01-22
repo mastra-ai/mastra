@@ -12,9 +12,11 @@ import type {
   TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   SpanRecord,
   StorageAgentType,
 } from '@mastra/core/storage';
+import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -109,6 +111,7 @@ export type RecordTypes = {
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
+  [TABLE_AGENT_VERSIONS]: AgentVersion;
 };
 
 export type ListOptions = {
