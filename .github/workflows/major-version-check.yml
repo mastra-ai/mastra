@@ -79,16 +79,25 @@ jobs:
 
             core.setOutput('has_major_changeset', hasMajorChangeset);
 
+      - name: Generate GitHub App token
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ORG_MEMBERSHIP_APP_ID }}
+          private-key: ${{ secrets.ORG_MEMBERSHIP_APP_PRIVATE_KEY }}
+
       - name: Check if major version bump is allowed
         if: steps.check_major.outputs.has_major_changeset == 'true'
         id: check_approval
         uses: actions/github-script@v7
         with:
+          github-token: ${{ steps.app_token.outputs.token }}
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
             const { owner, repo } = context.repo;
 
-            // Get all comments on the PR
+            // Get all comments on the PR (use default token for this - no special perms needed)
             const { data: comments } = await github.rest.issues.listComments({
               owner,
               repo,
@@ -120,9 +129,22 @@ jobs:
                 });
                 membershipCache.set(username, true);
                 return true;
-              } catch {
-                membershipCache.set(username, false);
-                return false;
+              } catch (error) {
+                // 403: Token lacks org:read permission - this is a configuration error
+                if (error.status === 403) {
+                  core.setFailed(
+                    `Permission denied checking org membership. Ensure the GitHub App has "Organization members: Read" permission. Error: ${error.message}`
+                  );
+                  throw error;
+                }
+                // 404: User is not a member of the org - this is expected for non-members
+                if (error.status === 404) {
+                  membershipCache.set(username, false);
+                  return false;
+                }
+                // Other errors (network issues, rate limits, etc.) - rethrow to fail loudly
+                core.setFailed(`Unexpected error checking org membership for ${username}: ${error.message}`);
+                throw error;
               }
             };
 
