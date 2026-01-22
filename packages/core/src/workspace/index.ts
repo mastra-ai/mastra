@@ -153,6 +153,12 @@ export type { FilesystemMountConfig } from './filesystem';
 export type { LocalMountConfig } from './local-filesystem';
 
 // =============================================================================
+// VirtualFilesystem (for advanced multi-mount use cases)
+// =============================================================================
+
+export { VirtualFilesystem, type VirtualFilesystemConfig } from './virtual-filesystem';
+
+// =============================================================================
 // Built-in Providers
 // =============================================================================
 

@@ -41,7 +41,6 @@ import type {
   WorkspaceState,
   FileContent,
   FileEntry,
-  FileStat,
   ReadOptions,
   WriteOptions,
   ListOptions,
@@ -58,6 +57,7 @@ import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills } from './skills';
 import { WorkspaceSkillsImpl } from './skills';
+import { VirtualFilesystem } from './virtual-filesystem';
 
 // =============================================================================
 // Workspace Scope
@@ -99,58 +99,38 @@ export interface WorkspaceConfig {
   name?: string;
 
   /**
-   * Filesystem provider instance for non-mounted use cases.
-   * Use this when you don't need mounting (no sandbox, or sync mode).
+   * Filesystem provider instance.
+   * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
    *
-   * For mounted filesystems, use `mounts` instead.
+   * Mutually exclusive with `mounts`. Use `mounts` for multiple filesystems.
+   */
+  filesystem?: WorkspaceFilesystem;
+
+  /**
+   * Mount multiple filesystems at different paths.
+   * Each key is a mount path (e.g., '/data', '/s3') and value is the filesystem.
    *
    * @example
    * ```typescript
-   * // Filesystem-only workspace (no code execution)
    * new Workspace({
-   *   filesystem: new LocalFilesystem({ basePath: './data' }),
+   *   mounts: {
+   *     '/data': new LocalFilesystem({ basePath: './data' }),
+   *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
+   *   },
+   *   sandbox: myE2BSandbox,
    * });
+   * // readdir('/') returns [{ name: 'data', type: 'directory' }, { name: 's3', type: 'directory' }]
    * ```
+   *
+   * Mutually exclusive with `filesystem`. Use `filesystem` for a single filesystem.
    */
-  filesystem?: WorkspaceFilesystem;
+  mounts?: Record<string, WorkspaceFilesystem>;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
    */
   sandbox?: WorkspaceSandbox;
-
-  /**
-   * Filesystems to mount into the sandbox.
-   * Keys are mount paths, values are filesystem instances.
-   *
-   * The first entry becomes the primary filesystem for workspace operations
-   * (readFile, writeFile, etc.) and is mounted at the specified path.
-   *
-   * This creates a unified view where:
-   * - workspace.writeFile('/data.json') writes to the filesystem
-   * - Sandbox code reading `${mountPath}/data.json` reads the same file
-   *
-   * Use this instead of `filesystem` + `mountPath` when you want mounting.
-   *
-   * @example
-   * ```typescript
-   * // S3 mounted at /workspace in E2B sandbox
-   * new Workspace({
-   *   sandbox: new E2BSandbox(),
-   *   mounts: {
-   *     '/workspace': new S3Filesystem({ bucket: 'my-bucket' }),
-   *   },
-   * });
-   * ```
-   */
-  mounts?: Record<string, WorkspaceFilesystem>;
-
-  /**
-   * @deprecated Use `mounts` instead for mounted filesystems.
-   * Mount path for the filesystem in the sandbox.
-   */
-  mountPath?: string;
 
   // ---------------------------------------------------------------------------
   // Search Configuration
@@ -415,15 +395,16 @@ export class Workspace {
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
+  /**
+   * Mounts configured for this workspace.
+   * Used for mounting filesystems into the sandbox.
+   */
+  private readonly _mounts: Map<string, WorkspaceFilesystem>;
+
   // Safety-related properties
   private readonly _readOnly: boolean;
   private readonly _requireReadBeforeWrite: boolean;
   private readonly _readTracker?: FileReadTracker;
-
-  // Mount-related properties
-  private readonly _mounts: Map<string, WorkspaceFilesystem>;
-  private readonly _mountPath: string;
-  private _accessMode: 'mounted' | 'sync' = 'sync';
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -433,30 +414,24 @@ export class Workspace {
 
     this._config = config;
     this._sandbox = config.sandbox;
-
-    // Initialize mounts map
     this._mounts = new Map();
 
-    // Handle mounts vs filesystem config
+    // Validate mutually exclusive options
+    if (config.filesystem && config.mounts && Object.keys(config.mounts).length > 0) {
+      throw new WorkspaceError(
+        'Cannot specify both filesystem and mounts. Use filesystem for a single filesystem, or mounts for multiple.',
+        'INVALID_CONFIG',
+      );
+    }
+
+    // Initialize filesystem - either from direct config or from mounts via VirtualFilesystem
     if (config.mounts && Object.keys(config.mounts).length > 0) {
-      // Use mounts - first entry becomes primary filesystem
-      const entries = Object.entries(config.mounts);
-      for (const [path, fs] of entries) {
+      for (const [path, fs] of Object.entries(config.mounts)) {
         this._mounts.set(path, fs);
       }
-      // First mount is the primary filesystem
-      const firstEntry = entries[0]!;
-      this._fs = firstEntry[1];
-      this._mountPath = firstEntry[0];
+      this._fs = new VirtualFilesystem({ mounts: config.mounts });
     } else {
-      // Use legacy filesystem + mountPath
       this._fs = config.filesystem;
-      this._mountPath = config.mountPath ?? '';
-
-      // If legacy mountPath is provided, add to mounts map for setupFilesystemAccess
-      if (config.filesystem && config.mountPath) {
-        this._mounts.set(config.mountPath, config.filesystem);
-      }
     }
 
     // Initialize safety features
@@ -541,6 +516,14 @@ export class Workspace {
   }
 
   /**
+   * The configured mounts for this workspace.
+   * Returns an empty map if no mounts were configured.
+   */
+  get mounts(): ReadonlyMap<string, WorkspaceFilesystem> {
+    return this._mounts;
+  }
+
+  /**
    * Key-value state storage (available when filesystem is present).
    */
   get state(): WorkspaceState | undefined {
@@ -562,36 +545,6 @@ export class Workspace {
   }
 
   /**
-   * How the filesystem is accessed from the sandbox.
-   * - 'mounted': Filesystem is directly mounted in sandbox (unified view)
-   * - 'sync': Files are copied between filesystem and sandbox (separate views)
-   *
-   * Mounted mode is preferred when both filesystem and sandbox support it,
-   * as it provides a single unified view where workspace files are directly
-   * accessible in sandbox code.
-   */
-  get accessMode(): 'mounted' | 'sync' {
-    return this._accessMode;
-  }
-
-  /**
-   * The path where the primary filesystem is mounted in the sandbox.
-   * Returns undefined if no mount path was configured (sync mode).
-   * Only has a value when accessMode is 'mounted'.
-   */
-  get mountPath(): string | undefined {
-    return this._mountPath || undefined;
-  }
-
-  /**
-   * All configured mounts (path -> filesystem).
-   * Returns an empty Map if no mounts are configured.
-   */
-  get mounts(): ReadonlyMap<string, WorkspaceFilesystem> {
-    return this._mounts;
-  }
-
-  /**
    * Get the safety configuration for this workspace.
    */
   getSafetyConfig(): WorkspaceSafetyConfig | undefined {
@@ -606,52 +559,6 @@ export class Workspace {
     if (this._readOnly) {
       throw new WorkspaceReadOnlyError(operation);
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Path Translation (for mounted filesystems)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Convert a sandbox/user-facing path to the internal filesystem path.
-   * When mounted at /home/user/s3, "/home/user/s3/file.txt" becomes "/file.txt"
-   * Paths not under the mount point are returned as-is.
-   */
-  private toFilesystemPath(sandboxPath: string): string {
-    if (!this._mountPath) {
-      return sandboxPath;
-    }
-
-    // If path starts with mount path, strip it
-    if (sandboxPath.startsWith(this._mountPath)) {
-      const relativePath = sandboxPath.slice(this._mountPath.length);
-      // Ensure we return a valid path (at least '/')
-      return relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-    }
-
-    // Path doesn't start with mount path - return as-is
-    // This allows using filesystem-relative paths directly
-    return sandboxPath;
-  }
-
-  /**
-   * Convert an internal filesystem path to a sandbox/user-facing path.
-   * When mounted at /home/user/s3, "/file.txt" becomes "/home/user/s3/file.txt"
-   * Only applies when in mounted mode.
-   */
-  private toSandboxPath(filesystemPath: string): string {
-    if (!this._mountPath || this._accessMode !== 'mounted') {
-      return filesystemPath;
-    }
-
-    // If it already has the mount path prefix, return as-is
-    if (filesystemPath.startsWith(this._mountPath)) {
-      return filesystemPath;
-    }
-
-    // Prepend mount path
-    const cleanFsPath = filesystemPath.startsWith('/') ? filesystemPath.slice(1) : filesystemPath;
-    return this._mountPath.endsWith('/') ? `${this._mountPath}${cleanFsPath}` : `${this._mountPath}/${cleanFsPath}`;
   }
 
   /**
@@ -675,12 +582,9 @@ export class Workspace {
 
     // Lazy initialization
     if (!this._skills) {
-      // Translate skillsPaths from sandbox paths to filesystem paths
-      const translatedSkillsPaths = this._config.skillsPaths?.map(p => this.toFilesystemPath(p));
-
       this._skills = new WorkspaceSkillsImpl({
         filesystem: this._fs,
-        skillsPaths: translatedSkillsPaths,
+        skillsPaths: this._config.skillsPaths,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
       });
@@ -720,8 +624,6 @@ export class Workspace {
 
   /**
    * Read a file from the workspace filesystem.
-   * Paths can use either sandbox paths (e.g., /home/user/s3/file.txt) or
-   * filesystem-relative paths (e.g., /file.txt) when mounted.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
@@ -730,12 +632,11 @@ export class Workspace {
     }
     this.lastAccessedAt = new Date();
 
-    const fsPath = this.toFilesystemPath(path);
-    const content = await this._fs.readFile(fsPath, options);
+    const content = await this._fs.readFile(path, options);
 
     // Track the read if requireReadBeforeWrite is enabled
     if (this._readTracker) {
-      const stat = await this._fs.stat(fsPath);
+      const stat = await this._fs.stat(path);
       this._readTracker.recordRead(path, stat.modifiedAt);
     }
 
@@ -744,8 +645,6 @@ export class Workspace {
 
   /**
    * Write a file to the workspace filesystem.
-   * Paths can use either sandbox paths (e.g., /home/user/s3/file.txt) or
-   * filesystem-relative paths (e.g., /file.txt) when mounted.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
    * @throws {FileReadRequiredError} if requireReadBeforeWrite is enabled and file wasn't read or was modified
@@ -758,13 +657,11 @@ export class Workspace {
     // Check readonly mode
     this.assertWritable('writeFile');
 
-    const fsPath = this.toFilesystemPath(path);
-
     // Check read-before-write requirement (only for existing files)
     if (this._readTracker) {
-      const exists = await this._fs.exists(fsPath);
+      const exists = await this._fs.exists(path);
       if (exists) {
-        const stat = await this._fs.stat(fsPath);
+        const stat = await this._fs.stat(path);
         const check = this._readTracker.needsReRead(path, stat.modifiedAt);
         if (check.needsReRead) {
           throw new FileReadRequiredError(path, check.reason!);
@@ -774,7 +671,7 @@ export class Workspace {
     }
 
     this.lastAccessedAt = new Date();
-    await this._fs.writeFile(fsPath, content, options);
+    await this._fs.writeFile(path, content, options);
 
     // Clear the read record after successful write
     // (requires a new read to write again)
@@ -784,61 +681,7 @@ export class Workspace {
   }
 
   /**
-   * Get virtual directory entries for paths above mount points.
-   * For example, if mounted at /home/user/s3, listing / returns [{name: 'home', type: 'directory'}]
-   */
-  private getVirtualDirEntries(path: string): FileEntry[] | null {
-    if (!this._mountPath) return null;
-
-    const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
-    const mountParts = this._mountPath.split('/').filter(Boolean);
-
-    // Check if path is above the mount point
-    const pathParts = normalizedPath.split('/').filter(Boolean);
-
-    // If path has same or more parts than mount, it's at or under mount - use filesystem
-    if (pathParts.length >= mountParts.length) {
-      return null;
-    }
-
-    // Check if path is a prefix of the mount path
-    const isPrefix = pathParts.every((part, i) => mountParts[i] === part);
-    if (!isPrefix) {
-      return null;
-    }
-
-    // Return the next directory in the mount path as a virtual entry
-    const nextDir = mountParts[pathParts.length];
-    if (nextDir) {
-      return [{ name: nextDir, type: 'directory' as const }];
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if a path is a virtual directory (above mount points).
-   */
-  private isVirtualPath(path: string): boolean {
-    if (!this._mountPath) return false;
-
-    const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
-    const mountParts = this._mountPath.split('/').filter(Boolean);
-    const pathParts = normalizedPath.split('/').filter(Boolean);
-
-    // Path must be shorter than mount and be a prefix of mount
-    if (pathParts.length >= mountParts.length) return false;
-
-    return pathParts.every((part, i) => mountParts[i] === part);
-  }
-
-  /**
    * List directory contents.
-   * When mounted, shows virtual directory structure leading to mount points.
-   * For example, if mounted at /home/user/s3:
-   * - readdir('/') returns [{name: 'home', type: 'directory'}]
-   * - readdir('/home') returns [{name: 'user', type: 'directory'}]
-   * - readdir('/home/user/s3') returns actual filesystem contents
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
@@ -846,69 +689,33 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-
-    // Check for virtual directories above mount point
-    const virtualEntries = this.getVirtualDirEntries(path);
-    if (virtualEntries !== null) {
-      return virtualEntries;
-    }
-
-    const fsPath = this.toFilesystemPath(path);
-    return this._fs.readdir(fsPath, options);
+    return this._fs.readdir(path, options);
   }
 
   /**
    * Check if a path exists.
-   * Returns true for virtual directories above mount points.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
   async exists(path: string): Promise<boolean> {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
-
-    // Virtual directories above mount point always exist
-    if (this.isVirtualPath(path)) {
-      return true;
-    }
-
-    const fsPath = this.toFilesystemPath(path);
-    return this._fs.exists(fsPath);
+    return this._fs.exists(path);
   }
 
   /**
-   * Get file/directory metadata.
-   * Returns virtual directory info for paths above mount points.
+   * Get file or directory stats.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    */
-  async stat(path: string): Promise<FileStat> {
+  async stat(path: string) {
     if (!this._fs) {
       throw new FilesystemNotAvailableError();
     }
-
-    // Virtual directories above mount point
-    if (this.isVirtualPath(path)) {
-      const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
-      const parts = normalizedPath.split('/').filter(Boolean);
-      const name = parts[parts.length - 1] || '';
-      const now = new Date();
-      return {
-        name,
-        path: normalizedPath || '/',
-        type: 'directory',
-        size: 0,
-        createdAt: now,
-        modifiedAt: now,
-      };
-    }
-
-    const fsPath = this.toFilesystemPath(path);
-    return this._fs.stat(fsPath);
+    return this._fs.stat(path);
   }
 
   /**
-   * Delete a file.
-   * Paths can use either sandbox paths or filesystem-relative paths when mounted.
+   * Delete a file from the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
    */
@@ -917,13 +724,12 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.assertWritable('deleteFile');
-    const fsPath = this.toFilesystemPath(path);
-    await this._fs.deleteFile(fsPath, options);
+    this.lastAccessedAt = new Date();
+    await this._fs.deleteFile(path, options);
   }
 
   /**
-   * Create a directory.
-   * Paths can use either sandbox paths or filesystem-relative paths when mounted.
+   * Create a directory in the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
    */
@@ -932,13 +738,12 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.assertWritable('mkdir');
-    const fsPath = this.toFilesystemPath(path);
-    await this._fs.mkdir(fsPath, options);
+    this.lastAccessedAt = new Date();
+    await this._fs.mkdir(path, options);
   }
 
   /**
-   * Remove a directory.
-   * Paths can use either sandbox paths or filesystem-relative paths when mounted.
+   * Remove a directory from the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
    */
@@ -947,8 +752,8 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.assertWritable('rmdir');
-    const fsPath = this.toFilesystemPath(path);
-    await this._fs.rmdir(fsPath, options);
+    this.lastAccessedAt = new Date();
+    await this._fs.rmdir(path, options);
   }
 
   // ---------------------------------------------------------------------------
@@ -1215,31 +1020,7 @@ export class Workspace {
     };
   }
 
-  /**
-   * List all files in the workspace, optionally under a specific directory.
-   * Returns paths in sandbox format when mounted (e.g., /home/user/s3/file.txt).
-   * @param dir - Directory to list (defaults to root). Can use sandbox or filesystem paths.
-   * @throws {FilesystemNotAvailableError} if no filesystem is configured
-   */
-  async listFiles(dir?: string): Promise<string[]> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    // If dir is provided, translate to filesystem path
-    // If not provided, start from root of filesystem
-    const fsDir = dir ? this.toFilesystemPath(dir) : '/';
-    const files = await this.getAllFilesInternal(fsDir);
-
-    // Transform to sandbox paths when mounted
-    return files.map(f => this.toSandboxPath(f));
-  }
-
-  /**
-   * Internal method to recursively get all files from filesystem.
-   * Returns filesystem-relative paths (not sandbox paths).
-   */
-  private async getAllFilesInternal(dir: string): Promise<string[]> {
+  private async getAllFiles(dir: string): Promise<string[]> {
     if (!this._fs) return [];
 
     const files: string[] = [];
@@ -1250,18 +1031,11 @@ export class Workspace {
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory') {
-        files.push(...(await this.getAllFilesInternal(fullPath)));
+        files.push(...(await this.getAllFiles(fullPath)));
       }
     }
 
     return files;
-  }
-
-  /**
-   * @deprecated Use listFiles() instead for sandbox-aware paths
-   */
-  private async getAllFiles(dir: string): Promise<string[]> {
-    return this.getAllFilesInternal(dir);
   }
 
   // ---------------------------------------------------------------------------
@@ -1338,41 +1112,26 @@ export class Workspace {
   // ---------------------------------------------------------------------------
 
   /**
-   * Initialize the workspace.
-   * Starts the sandbox and initializes the filesystem.
+   * Mount filesystems to the sandbox.
+   * Called during init() to make workspace filesystems accessible from sandbox code.
    */
-  /**
-   * Setup filesystem access mode (mounted vs sync).
-   * Called during init() after sandbox is started.
-   *
-   * Mounting only occurs when:
-   * 1. mounts are configured (or legacy mountPath is provided)
-   * 2. Both filesystem and sandbox are configured
-   * 3. Both filesystem and sandbox support mounting
-   *
-   * Otherwise, falls back to sync mode where files are copied on demand.
-   */
-  private async setupFilesystemAccess(): Promise<void> {
+  private async mountFilesystemsToSandbox(): Promise<void> {
     // Need sandbox for mounting
     if (!this._sandbox) {
-      this._accessMode = 'sync';
       return;
     }
 
-    // No mounts configured - use sync mode
+    // No mounts configured
     if (this._mounts.size === 0) {
-      this._accessMode = 'sync';
       return;
     }
 
     // Check if sandbox supports mounting
     if (!this._sandbox.supportsMounting || !this._sandbox.mount) {
-      this._accessMode = 'sync';
       return;
     }
 
     // Try to mount all configured filesystems
-    let allMounted = true;
     for (const [mountPath, filesystem] of this._mounts) {
       const canMount = filesystem.supportsMounting && this._sandbox.canMount?.(filesystem);
 
@@ -1380,18 +1139,17 @@ export class Workspace {
         try {
           await this._sandbox.mount(filesystem, mountPath);
         } catch (error) {
-          console.warn(`Failed to mount filesystem at ${mountPath}, falling back to sync mode: ${error}`);
-          allMounted = false;
+          // Mount failed - log warning but continue
+          console.warn(`Failed to mount filesystem at ${mountPath}: ${error}`);
         }
-      } else {
-        // This filesystem can't be mounted
-        allMounted = false;
       }
     }
-
-    this._accessMode = allMounted ? 'mounted' : 'sync';
   }
 
+  /**
+   * Initialize the workspace.
+   * Starts the sandbox, initializes the filesystem, and mounts filesystems to sandbox.
+   */
   async init(): Promise<void> {
     this._status = 'initializing';
 
@@ -1404,8 +1162,8 @@ export class Workspace {
         await this._sandbox.start();
       }
 
-      // Setup filesystem access (mount if possible, otherwise sync)
-      await this.setupFilesystemAccess();
+      // Mount filesystems to sandbox
+      await this.mountFilesystemsToSandbox();
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
