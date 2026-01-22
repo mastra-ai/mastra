@@ -171,6 +171,51 @@ export const spanRecordSchema = z
 export type SpanRecord = z.infer<typeof spanRecordSchema>;
 
 // ============================================================================
+// Trace List Item Schema (SpanRecord + computed status for list responses)
+// ============================================================================
+
+/**
+ * Computes the trace status from a root span's error and endedAt fields.
+ * - ERROR: if error is present (regardless of endedAt)
+ * - RUNNING: if endedAt is null/undefined and no error
+ * - SUCCESS: if endedAt is present and no error
+ */
+export function computeTraceStatus(span: SpanRecord): TraceStatus {
+  if (span.error != null) return TraceStatus.ERROR;
+  if (span.endedAt == null) return TraceStatus.RUNNING;
+  return TraceStatus.SUCCESS;
+}
+
+/** Schema for a trace list item (root span with computed status) */
+export const traceListItemSchema = spanRecordSchema
+  .extend({
+    status: traceStatusField,
+  })
+  .describe('Trace list item with computed status (root spans only)');
+
+/** Trace list item (root span with computed status) */
+export type TraceListItem = z.infer<typeof traceListItemSchema>;
+
+/**
+ * Converts a SpanRecord to a TraceListItem by adding computed status.
+ * Used when returning root spans from listTraces.
+ */
+export function toTraceListItem(span: SpanRecord): TraceListItem {
+  return {
+    ...span,
+    status: computeTraceStatus(span),
+  };
+}
+
+/**
+ * Converts an array of SpanRecords to TraceListItems by adding computed status.
+ * Used when returning root spans from listTraces.
+ */
+export function toTraceListItems(spans: SpanRecord[]): TraceListItem[] {
+  return spans.map(toTraceListItem);
+}
+
+// ============================================================================
 // Storage Operation Schemas
 // ============================================================================
 
@@ -328,13 +373,22 @@ export const listTracesArgsSchema = z
 /** Arguments for listing traces with optional filters, pagination, and ordering */
 export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 
-/** Schema for listTraces operation response */
-export const listTracesResponseSchema = z.object({
+/** Schema for listTraces operation response (from storage, without computed status) */
+export const listTracesStorageResponseSchema = z.object({
   pagination: paginationInfoSchema,
   spans: z.array(spanRecordSchema),
 });
 
-/** Response containing paginated root spans for trace listing */
+/** Response from storage containing paginated root spans */
+export type ListTracesStorageResponse = z.infer<typeof listTracesStorageResponseSchema>;
+
+/** Schema for listTraces API response (with computed status) */
+export const listTracesResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  spans: z.array(traceListItemSchema),
+});
+
+/** API response containing paginated root spans with computed status */
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 /**

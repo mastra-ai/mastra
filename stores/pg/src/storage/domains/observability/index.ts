@@ -22,7 +22,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
-  ListTracesResponse,
+  ListTracesStorageResponse,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
@@ -416,7 +416,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
-  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesStorageResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
     const { page, perPage } = pagination;
