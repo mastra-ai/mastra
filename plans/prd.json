@@ -1,7 +1,7 @@
 {
   "name": "Auth/RBAC E2E Testing",
   "description": "End-to-end tests for WorkOS authentication and role-based access control (RBAC) in Mastra Playground",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "testDir": "packages/playground/e2e/tests/auth",
   "features": [
     {
@@ -170,7 +170,8 @@
       "name": "Viewer Role E2E Tests",
       "description": "Test that viewer role has read-only access to agents and workflows",
       "priority": "P0",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Test viewer can view agents list",
         "Test viewer cannot modify agents",
@@ -186,7 +187,12 @@
         "All create/edit/delete buttons hidden",
         "Run workflow button is disabled",
         "UI clearly indicates read-only state"
-      ]
+      ],
+      "implementation": {
+        "files": ["packages/playground/e2e/tests/auth/viewer-role.spec.ts"],
+        "testsAdded": 28,
+        "approach": "Uses Playwright route interception to mock viewer auth state with permissions ['agents:read', 'workflows:read']. Tests cover navigation access to read-only sections, agent and workflow read-only access verification, tools access denial (no tools permission), read-only UI state verification including disabled/hidden action buttons, and comparison with admin/member roles."
+      }
     },
     {
       "id": "F008",
@@ -247,6 +253,72 @@
         "Upgraded users get immediate access",
         "Downgraded users lose access immediately"
       ]
+    },
+    {
+      "id": "F011",
+      "name": "Server-Side Permission Enforcement Tests",
+      "description": "Test that the server properly enforces RBAC permissions on API endpoints, independent of UI state. These tests verify security at the API level, not just UI restrictions.",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test viewer cannot execute workflow via direct API call (expect 403)",
+        "Test viewer cannot execute tools via direct API call (expect 403)",
+        "Test member cannot modify agent settings via direct API call (expect 403)",
+        "Test member cannot delete agents via direct API call (expect 403)",
+        "Test unauthenticated user cannot access any protected API endpoints (expect 401)",
+        "Test API returns 403 not 404 for unauthorized resource access (no information leakage)",
+        "Test permission checks cannot be bypassed by manipulating client-side state"
+      ],
+      "acceptanceCriteria": [
+        "All protected API endpoints return 401 for unauthenticated requests",
+        "All protected API endpoints return 403 for insufficient permissions",
+        "Direct API calls fail even when mocked UI would allow the action",
+        "No information leakage via error messages or status codes",
+        "Tests do NOT mock auth endpoints - they test real server enforcement"
+      ],
+      "notes": "CRITICAL: These tests must NOT use route interception for auth endpoints. They should test actual server-side permission enforcement by making real API calls and verifying the server rejects unauthorized actions."
+    },
+    {
+      "id": "F012",
+      "name": "Direct API Bypass Prevention Tests",
+      "description": "Test that users cannot bypass UI restrictions by making direct API calls or manipulating URLs",
+      "priority": "P0",
+      "status": "pending",
+      "tasks": [
+        "Test viewer making POST to /api/workflows/{id}/run returns 403",
+        "Test viewer making DELETE to /api/agents/{id} returns 403",
+        "Test member making PUT to /api/agents/{id}/settings returns 403",
+        "Test direct URL access to admin pages with viewer role shows permission denied",
+        "Test API rate limiting on permission-denied requests",
+        "Test no sensitive data returned in 403 error responses"
+      ],
+      "acceptanceCriteria": [
+        "All write operations blocked at API level for read-only roles",
+        "Direct URL manipulation does not grant unauthorized access",
+        "API error responses do not leak sensitive information",
+        "Server logs show blocked unauthorized attempts"
+      ]
+    },
+    {
+      "id": "F013",
+      "name": "Fix Conditional Assertions in Existing Tests",
+      "description": "Refactor existing tests to remove conditional assertions that can silently pass when UI elements are missing",
+      "priority": "P1",
+      "status": "pending",
+      "tasks": [
+        "Replace 'if (visible) { expect }' patterns with explicit assertions",
+        "Add data-testid attributes to replace fragile .first() selectors",
+        "Ensure all permission UI tests have explicit visible/not-visible assertions",
+        "Remove silent pass conditions in viewer-role.spec.ts (lines 156-160, 187-192, etc.)",
+        "Remove silent pass conditions in member-role.spec.ts (lines 121-128, etc.)",
+        "Add test coverage for cases where buttons should NOT exist vs should be disabled"
+      ],
+      "acceptanceCriteria": [
+        "No tests use 'if (await element.isVisible())' conditional patterns",
+        "All selectors use data-testid or unique role/name combinations",
+        "Tests fail explicitly when expected restrictions are not present",
+        "Code review confirms no silent pass conditions remain"
+      ]
     }
   ],
   "rolePermissions": {
@@ -257,9 +329,122 @@
   },
   "testConfiguration": {
     "testFramework": "playwright",
-    "testRunCommand": "cd packages/playground/e2e && CI=true npx playwright test -c playwright.config.ts",
-    "typecheckCommand": "pnpm typecheck",
+    "workingDirectory": "packages/playground/e2e",
     "baseUrl": "http://localhost:4111",
-    "note": "E2E tests are in packages/playground/e2e/ - use --reporter=list to avoid HTML report hanging"
+    "typecheckCommand": "pnpm typecheck",
+    "runIndividualSuites": {
+      "note": "IMPORTANT: Run test suites INDIVIDUALLY to avoid timeouts and get clearer feedback. Do NOT run the entire test suite at once.",
+      "infrastructure": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/infrastructure.spec.ts",
+      "loginFlow": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/login-flow.spec.ts",
+      "adminRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/admin-role.spec.ts",
+      "memberRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/member-role.spec.ts",
+      "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts"
+    },
+    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/",
+    "debugSingleTest": "CI=true npx playwright test -c playwright.config.ts --reporter=list --debug tests/auth/{spec-file}.spec.ts",
+    "warnings": [
+      "Always use --reporter=list to avoid HTML report hanging in CI",
+      "Always prefix with CI=true to ensure consistent behavior",
+      "Run from packages/playground/e2e directory",
+      "Run individual spec files for faster feedback and easier debugging"
+    ]
+  },
+  "qaReview": {
+    "reviewedAt": "2026-01-22",
+    "overallAssessment": "Tests provide good UI regression coverage but CRITICAL gaps in server-side security enforcement testing",
+    "ratings": {
+      "userFlowCoverage": "3/5 - Good UI flow coverage but missing actual user interactions",
+      "securityEnforcement": "1/5 - CRITICAL: Only tests UI restrictions, not server enforcement",
+      "testReliability": "2/5 - Conditional assertions can silently pass",
+      "realWorldScenarios": "2/5 - Heavy mocking means tests verify mock behavior, not real app"
+    },
+    "actionItems": [
+      {
+        "id": "QA001",
+        "priority": "CRITICAL",
+        "category": "Security",
+        "issue": "No server-side permission enforcement tests",
+        "description": "All tests mock auth endpoints. No tests verify that the server actually enforces RBAC permissions on API calls.",
+        "recommendation": "Implement F011 - Add tests that make real API calls without mocking auth and verify 403 responses for unauthorized actions",
+        "relatedFeature": "F011"
+      },
+      {
+        "id": "QA002",
+        "priority": "CRITICAL",
+        "category": "Security",
+        "issue": "No direct API bypass prevention tests",
+        "description": "Tests only verify UI hides/disables buttons. A malicious user could make direct API calls to bypass UI restrictions.",
+        "recommendation": "Implement F012 - Add tests that attempt API calls as wrong role and verify server rejection",
+        "relatedFeature": "F012"
+      },
+      {
+        "id": "QA003",
+        "priority": "HIGH",
+        "category": "Test Quality",
+        "issue": "Conditional assertions that silently pass",
+        "description": "Multiple tests use 'if (visible) { expect }' patterns. If the element doesn't exist, the test passes without verifying anything.",
+        "recommendation": "Implement F013 - Replace with explicit assertions: expect(element).toBeVisible() or expect(element).not.toBeVisible()",
+        "relatedFeature": "F013",
+        "examples": [
+          "viewer-role.spec.ts:156-160 - runButton visibility check",
+          "viewer-role.spec.ts:187-192 - edit/delete button checks",
+          "member-role.spec.ts:121-128 - settings section check",
+          "admin-role.spec.ts:90-95 - settings controls check"
+        ]
+      },
+      {
+        "id": "QA004",
+        "priority": "HIGH",
+        "category": "Test Quality",
+        "issue": "Over-mocked authentication",
+        "description": "Every test intercepts real auth endpoints. Tests verify mock behavior, not actual application security.",
+        "recommendation": "Add at least one test per role that uses real auth endpoints if test environment supports it, or clearly document these as 'UI Permission Tests' not 'Security Tests'"
+      },
+      {
+        "id": "QA005",
+        "priority": "MEDIUM",
+        "category": "Test Quality",
+        "issue": "Non-unique selectors using .first()",
+        "description": "Multiple tests rely on .first() calls, suggesting non-unique selectors that may be fragile.",
+        "recommendation": "Add data-testid attributes to key UI elements and use them in tests",
+        "examples": [
+          "viewer-role.spec.ts:152 - runButton.first()",
+          "member-role.spec.ts:165 - triggerButton.first()",
+          "admin-role.spec.ts:119 - workflowRow.first()"
+        ]
+      },
+      {
+        "id": "QA006",
+        "priority": "MEDIUM",
+        "category": "Coverage",
+        "issue": "Missing logout flow tests",
+        "description": "F004 (Logout Flow) is pending - no tests verify logout invalidates sessions.",
+        "recommendation": "Implement F004 with focus on session invalidation, not just UI state"
+      },
+      {
+        "id": "QA007",
+        "priority": "LOW",
+        "category": "Organization",
+        "issue": "Fixture validation tests in E2E suite",
+        "description": "infrastructure.spec.ts contains tests like 'ROLE_PERMISSIONS matches PRD specification' which are unit tests, not E2E tests.",
+        "recommendation": "Move pure fixture/helper validation tests to a unit test file"
+      }
+    ],
+    "securityTestingGuidelines": {
+      "principle": "UI permission checks are NOT security. Server MUST independently validate all permissions.",
+      "mustTest": [
+        "Server returns 401 for unauthenticated API requests",
+        "Server returns 403 for authenticated but unauthorized API requests",
+        "Direct API calls fail for restricted actions regardless of mocked UI state",
+        "No information leakage in error responses",
+        "Session invalidation actually works at server level"
+      ],
+      "antiPatterns": [
+        "Testing only that buttons are hidden/disabled (security by obscurity)",
+        "Conditional assertions that pass when elements don't exist",
+        "Mocking auth endpoints when testing security enforcement",
+        "Assuming UI restrictions = server restrictions"
+      ]
+    }
   }
 }
