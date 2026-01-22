@@ -39,13 +39,13 @@ export function getPerformanceTests(memory: Memory) {
     // Reset message counter
     messageCounter = 0;
     // Clean up before each test
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
+    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
     // Final cleanup
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
+    const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 

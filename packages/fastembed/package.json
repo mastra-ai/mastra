@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -53,7 +53,7 @@
     "@vitest/ui": "catalog:",
     "ai-v4": "npm:ai@4.3.19",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

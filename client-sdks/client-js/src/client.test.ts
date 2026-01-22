@@ -321,4 +321,218 @@ describe('MastraClient', () => {
       });
     });
   });
+
+  describe('Memory Thread Operations without agentId', () => {
+    describe('listMemoryThreads', () => {
+      it('should list threads with agentId', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Test' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          agentId: 'agent-1',
+          resourceId: 'resource-1',
+        });
+
+        // Note: URL includes both resourceId and resourceid (lowercase) for backwards compatibility
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/memory/threads?'), expect.any(Object));
+        expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('agentId=agent-1'), expect.any(Object));
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list threads without agentId (storage fallback)', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Test' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          resourceId: 'resource-1',
+        });
+
+        // URL should NOT include agentId when not provided
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain('/api/memory/threads?');
+        expect(fetchCall).toContain('resourceId=resource-1');
+        expect(fetchCall).not.toContain('agentId=');
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list all threads without resourceId filter', async () => {
+        const mockThreads = {
+          threads: [
+            { id: 'thread-1', title: 'Test 1' },
+            { id: 'thread-2', title: 'Test 2' },
+          ],
+          total: 2,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads();
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toBe('http://localhost:4111/api/memory/threads');
+        expect(fetchCall).not.toContain('resourceId=');
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list threads with metadata filter', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Support Thread' }],
+          total: 1,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          metadata: { category: 'support', priority: 'high' },
+        });
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain('/api/memory/threads?');
+        expect(fetchCall).toContain('metadata=');
+        expect(fetchCall).toContain(encodeURIComponent(JSON.stringify({ category: 'support', priority: 'high' })));
+        expect(result).toEqual(mockThreads);
+      });
+
+      it('should list threads with both resourceId and metadata filter', async () => {
+        const mockThreads = {
+          threads: [{ id: 'thread-1', title: 'Test' }],
+          total: 1,
+          page: 0,
+          perPage: 100,
+          hasMore: false,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThreads,
+        });
+
+        const result = await client.listMemoryThreads({
+          resourceId: 'user-123',
+          metadata: { status: 'active' },
+        });
+
+        const fetchCall = (global.fetch as any).mock.calls[0][0];
+        expect(fetchCall).toContain('resourceId=user-123');
+        expect(fetchCall).toContain('metadata=');
+        expect(result).toEqual(mockThreads);
+      });
+    });
+
+    describe('getMemoryThread', () => {
+      it('should get thread with agentId', async () => {
+        const mockThread = { id: 'thread-1', title: 'Test' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThread,
+        });
+
+        const thread = client.getMemoryThread({
+          agentId: 'agent-1',
+          threadId: 'thread-1',
+        });
+        await thread.get();
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1?agentId=agent-1',
+          expect.any(Object),
+        );
+      });
+
+      it('should get thread without agentId (storage fallback)', async () => {
+        const mockThread = { id: 'thread-1', title: 'Test' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockThread,
+        });
+
+        const thread = client.getMemoryThread({
+          threadId: 'thread-1',
+        });
+        await thread.get();
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1',
+          expect.any(Object),
+        );
+      });
+    });
+
+    describe('listThreadMessages', () => {
+      it('should list messages with agentId', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+
+      it('should list messages without agentId (storage fallback)', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1');
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+    });
+  });
 });

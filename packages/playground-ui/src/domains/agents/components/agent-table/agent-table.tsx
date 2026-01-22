@@ -7,24 +7,29 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
+import { Plus, BookOpen } from 'lucide-react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
-import { columns } from './columns';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { getColumns } from './columns';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-experimental-features';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
+  onCreateClick?: () => void;
 }
 
-export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
+export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
+  const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
 
   const table = useReactTable({
     data: projectData,
@@ -36,7 +41,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   const rows = table.getRowModel().rows.concat();
 
   if (rows.length === 0 && !isLoading) {
-    return <EmptyAgentsTable />;
+    return <EmptyAgentsTable onCreateClick={onCreateClick} />;
   }
 
   const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
@@ -48,7 +53,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
       </SearchbarWrapper>
 
       {isLoading ? (
-        <AgentsTableSkeleton />
+        <AgentsTableSkeleton showSourceColumn={experimentalFeaturesEnabled} />
       ) : (
         <ScrollableContainer>
           <TooltipProvider>
@@ -79,10 +84,11 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   );
 }
 
-const AgentsTableSkeleton = () => (
+const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }) => (
   <Table>
     <Thead>
       <Th>Name</Th>
+      {showSourceColumn && <Th>Source</Th>}
       <Th>Model</Th>
       <Th>Attached entities</Th>
     </Thead>
@@ -92,6 +98,11 @@ const AgentsTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
+          {showSourceColumn && (
+            <Cell>
+              <Skeleton className="h-4 w-16" />
+            </Cell>
+          )}
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
@@ -104,26 +115,40 @@ const AgentsTableSkeleton = () => (
   </Table>
 );
 
-const EmptyAgentsTable = () => (
+interface EmptyAgentsTableProps {
+  onCreateClick?: () => void;
+}
+
+const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<AgentCoinIcon />}
-      titleSlot="Configure Agents"
-      descriptionSlot="Mastra agents are not configured yet. You can find more information in the documentation."
+      titleSlot="No Agents Yet"
+      descriptionSlot="Create your first agent or configure agents in code."
       actionSlot={
-        <Button
-          size="lg"
-          className="w-full"
-          variant="light"
-          as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
-          target="_blank"
-        >
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          Docs
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {onCreateClick && (
+            <Button size="lg" variant="light" onClick={onCreateClick}>
+              <Icon>
+                <Plus />
+              </Icon>
+              Create Agent
+            </Button>
+          )}
+          <Button
+            size="lg"
+            variant="outline"
+            as="a"
+            href="https://mastra.ai/docs/agents"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon>
+              <BookOpen />
+            </Icon>
+            Documentation
+          </Button>
+        </div>
       }
     />
   </div>

@@ -17,6 +17,7 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -66,6 +67,14 @@ export interface HttpResponse {
 }
 
 /**
+ * Options for adapter setup
+ */
+export interface AdapterSetupOptions {
+  /** Route prefix (e.g., '/v2' or '/api/v2') */
+  prefix?: string;
+}
+
+/**
  * Configuration for adapter integration test suite
  */
 export interface AdapterTestSuiteConfig {
@@ -75,8 +84,13 @@ export interface AdapterTestSuiteConfig {
   /**
    * Setup adapter and app for testing
    * Called once before all tests
+   * @param context - Test context with Mastra instance
+   * @param options - Optional adapter options (e.g., prefix)
    */
-  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
+  setupAdapter: (
+    context: AdapterTestContext,
+    options?: AdapterSetupOptions,
+  ) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)
@@ -157,8 +171,21 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
-  // Mock legacy generate - returns a stream
-  vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
+  // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
+  vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
+    text: 'test response',
+    toolCalls: [],
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 5 },
+    experimental_output: undefined,
+    response: {
+      id: 'test-response-id',
+      timestamp: new Date(),
+      modelId: 'gpt-4',
+    },
+    request: {},
+    warnings: [],
+  } as any);
 
   // Helper to create a mock Response object for datastream-response routes
   const createMockResponse = () => {
@@ -185,6 +212,12 @@ export function mockAgentMethods(agent: Agent) {
 
   // Mock declineToolCall method - returns object with fullStream property
   vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
+
+  // Mock approveToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'approveToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Mock declineToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
@@ -293,6 +326,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     name: 'Test Scorer',
     description: 'Test scorer for observability tests',
   });
+
+  // Create test processor
+  const testProcessor = createTestProcessor({ id: 'test-processor' });
 
   mockLogger.transports = new Map([
     ['console', {}],
@@ -404,6 +440,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
     },
+    processors: {
+      'test-processor': testProcessor,
+    },
   });
 
   await mockWorkflowRun(workflow);
@@ -436,7 +475,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      await agents.createAgent({
+      const storedAgent = await agents.createAgent({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -444,6 +483,71 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           instructions: 'Test instructions for stored agent',
           model: { provider: 'openai', name: 'gpt-4o' },
         },
+      });
+
+      // Create test versions for version-specific routes
+      // Version 1: Will be the active version
+      const version1 = await agents.createVersion({
+        id: 'test-version-1',
+        agentId: 'test-stored-agent',
+        versionNumber: 1,
+        name: 'Test Version 1',
+        snapshot: storedAgent,
+        changedFields: ['name', 'instructions'],
+        changeMessage: 'Initial test version',
+      });
+
+      // Update the agent to have some changes for version 2
+      const updatedAgent = await agents.updateAgent({
+        id: 'test-stored-agent',
+        instructions: 'Updated test instructions for version 2',
+      });
+
+      // Version 2: Non-active version that can be deleted or used in comparisons
+      await agents.createVersion({
+        id: 'test-version-id',
+        agentId: 'test-stored-agent',
+        versionNumber: 2,
+        name: 'Test Version 2',
+        snapshot: updatedAgent,
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+
+      // Update the agent's activeVersionId to version 1
+      // This leaves version 2 (test-version-id) as non-active and deletable
+      await agents.updateAgent({
+        id: 'test-stored-agent',
+        activeVersionId: version1.id,
+      });
+    }
+
+    // Add test thread and messages to Mastra's storage for memory routes without agentId
+    // This is needed because when agentId is not provided, the handler falls back to storage directly
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await memoryStore.saveThread({
+        thread: {
+          id: 'test-thread',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'test-message-1',
+            threadId: 'test-thread',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test message' }],
+            },
+            createdAt: new Date(),
+          },
+        ],
       });
     }
   }
@@ -455,27 +559,27 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 }
 
 async function mockWorkflowRun(workflow: Workflow) {
-  // Mock getWorkflowRunById to return a mock run object
-  // This is needed for routes that require an existing workflow run (restart, resume, etc.)
+  // Mock getWorkflowRunById to return a mock WorkflowState object
+  // This is the unified format that includes both metadata and processed execution state
   vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
     runId: 'test-run',
     workflowName: 'test-workflow',
-    status: 'completed',
     resourceId: 'test-resource',
-    snapshot: {
-      context: {},
-      value: {},
-      status: 'done',
-      runId: 'test-run',
-    },
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as any);
-
-  // Mock getWorkflowRunExecutionResult for execution-result routes
-  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
-    results: { step1: { output: 'test-output' } },
     status: 'success',
+    result: { output: 'test-output' },
+    payload: {},
+    steps: {
+      step1: {
+        status: 'success',
+        output: { result: 'test-output' },
+        startedAt: Date.now() - 1000,
+        endedAt: Date.now(),
+      },
+    },
+    activeStepsPath: {},
+    serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
   } as any);
 
   // Mock createRun to return a mocked run object with all required methods
@@ -556,6 +660,27 @@ export function createMockMemory() {
   const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
+}
+
+/**
+ * Creates a test processor for integration tests
+ */
+export function createTestProcessor(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+  } = {},
+): Processor {
+  return {
+    id: overrides.id || 'test-processor',
+    name: overrides.name || 'Test Processor',
+    description: overrides.description || 'A test processor for integration tests',
+    async processInput({ messages }: ProcessInputArgs): Promise<ProcessInputResult> {
+      // Simple pass-through processor
+      return messages;
+    },
+  };
 }
 
 /**
@@ -754,11 +879,14 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
+  /** Prefix to prepend to the route path (defaults to '/api') */
+  prefix?: string;
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  let path = route.path;
+  const prefix = overrides.prefix ?? '/api';
+  let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {
     const defaults = getDefaultValidPathParams(route);
@@ -797,7 +925,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
   const appendValue = (prefix: string, value: unknown) => {
     if (value === undefined || value === null) return;
     if (Array.isArray(value)) {
-      query[prefix] = value.map(item => convertQueryValue(item));
+      // JSON-encode arrays for complex query params (e.g., tags=["tag1","tag2"])
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     if (value instanceof Date) {
@@ -805,9 +935,9 @@ export function convertQueryValues(values: Record<string, unknown>): Record<stri
       return;
     }
     if (typeof value === 'object') {
-      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-        appendValue(`${prefix}[${key}]`, nested);
-      }
+      // JSON-encode objects for complex query params (e.g., dateRange={"gte":"2024-01-01"})
+      // Server uses wrapSchemaForQueryParams which expects JSON strings for complex types
+      query[prefix] = JSON.stringify(value);
       return;
     }
     query[prefix] = convertQueryValue(value);

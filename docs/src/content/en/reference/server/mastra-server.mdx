@@ -97,20 +97,6 @@ constructor(options: MastraServerOptions<TApp>)
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
-    {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values in adapters implementing the MastraServer",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
-    },
   ]}
 />
 
@@ -343,6 +329,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters
-- [Custom Adapters](/docs/v1/server/custom-adapters) - Creating custom adapters
-- [createRoute()](/reference/v1/server/create-route) - Creating custom routes
+- [Server Adapters](/docs/server/server-adapters) - Using adapters
+- [Custom Adapters](/docs/server/custom-adapters) - Creating custom adapters
+- [createRoute()](/reference/server/create-route) - Creating custom routes

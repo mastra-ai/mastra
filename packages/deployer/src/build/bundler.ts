@@ -11,7 +11,7 @@ import { analyzeBundle } from './analyze';
 import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
-import { slash } from './utils';
+import { slash, type BundlerPlatform } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -19,7 +19,7 @@ import { removeDeployer } from './plugins/remove-deployer';
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-  platform: 'node' | 'browser',
+  platform: BundlerPlatform,
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
@@ -37,8 +37,9 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
+  // For 'neutral' platform (Bun), use similar settings to 'node' for module resolution
   let nodeResolvePlugin =
-    platform === 'node'
+    platform === 'node' || platform === 'neutral'
       ? nodeResolve({
           preferBuiltins: true,
           exportConditions: ['node'],
@@ -48,7 +49,7 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
@@ -137,11 +138,11 @@ export async function getInputOptions(
       // for debugging
       // {
       //   name: 'logger',
-      //   //@ts-ignore
+      //   //@ts-expect-error
       //   resolveId(id, ...args) {
       //     console.log({ id, args });
       //   },
-      //   // @ts-ignore
+      //   // @ts-expect-error
       // transform(code, id) {
       //   if (code.includes('class Duplexify ')) {
       //     console.log({ duplex: id });

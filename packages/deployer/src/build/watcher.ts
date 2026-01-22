@@ -9,11 +9,11 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { noopLogger } from '@mastra/core/logger';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
-import { getPackageName, slash } from './utils';
+import { getPackageName, slash, type BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
-  platform: 'node' | 'browser',
+  platform: BundlerPlatform,
   env?: Record<string, string>,
   { sourcemap = false }: { sourcemap?: boolean } = {},
 ) {
@@ -27,7 +27,7 @@ export async function getInputOptions(
     {
       outputDir: posix.join(process.cwd(), '.mastra', '.build'),
       projectRoot: workspaceRoot || process.cwd(),
-      platform: 'node',
+      platform,
       isDev: true,
     },
     noopLogger,
@@ -45,7 +45,7 @@ export async function getInputOptions(
     entryFile,
     {
       dependencies: deps,
-      externalDependencies: new Set(),
+      externalDependencies: new Map(),
       workspaceMap,
     },
     platform,

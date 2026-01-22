@@ -15,7 +15,8 @@ export type StorageDomains = {
  *
  * @param perPageInput - The raw perPage value from the user
  * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
- * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER)
+ * @throws Error if perPage is a negative number
  */
 export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
   if (perPageInput === false) {
@@ -24,8 +25,10 @@ export function normalizePerPage(perPageInput: number | false | undefined, defau
     return 0; // Return zero results
   } else if (typeof perPageInput === 'number' && perPageInput > 0) {
     return perPageInput; // Valid positive number
+  } else if (typeof perPageInput === 'number' && perPageInput < 0) {
+    throw new Error('perPage must be >= 0');
   }
-  // For undefined, negative, or other invalid values, use default
+  // For undefined, use default
   return defaultValue;
 }
 
@@ -56,13 +59,13 @@ export function calculatePagination(
 export type MastraStorageDomains = Partial<StorageDomains>;
 
 /**
- * Configuration options for MastraStorage.
+ * Configuration options for MastraCompositeStore.
  *
  * Can be used in two ways:
  * 1. By store implementations: `{ id, name, disableInit? }` - stores set `this.stores` directly
  * 2. For composition: `{ id, default?, domains?, disableInit? }` - compose domains from multiple stores
  */
-export interface MastraStorageConfig {
+export interface MastraCompositeStoreConfig {
   /**
    * Unique identifier for this storage instance.
    */
@@ -70,7 +73,7 @@ export interface MastraStorageConfig {
 
   /**
    * Name of the storage adapter (used for logging).
-   * Required for store implementations extending MastraStorage.
+   * Required for store implementations extending MastraCompositeStore.
    */
   name?: string;
 
@@ -78,7 +81,7 @@ export interface MastraStorageConfig {
    * Default storage adapter to use for domains not explicitly specified.
    * If provided, domains from this storage will be used as fallbacks.
    */
-  default?: MastraStorage;
+  default?: MastraCompositeStore;
 
   /**
    * Individual domain overrides. Each domain can come from a different storage adapter.
@@ -132,7 +135,7 @@ export interface MastraStorageConfig {
  * @example
  * ```typescript
  * // Composition: mix domains from different stores
- * const storage = new MastraStorage({
+ * const storage = new MastraCompositeStore({
  *   id: 'composite',
  *   default: pgStore,
  *   domains: {
@@ -145,7 +148,7 @@ export interface MastraStorageConfig {
  * await memory?.saveThread({ thread });
  * ```
  */
-export class MastraStorage extends MastraBase {
+export class MastraCompositeStore extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
@@ -157,8 +160,8 @@ export class MastraStorage extends MastraBase {
    */
   disableInit: boolean = false;
 
-  constructor(config: MastraStorageConfig) {
-    const name = config.name ?? 'MastraStorage';
+  constructor(config: MastraCompositeStoreConfig) {
+    const name = config.name ?? 'MastraCompositeStore';
 
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error(`${name}: id must be provided and cannot be empty.`);
@@ -183,7 +186,7 @@ export class MastraStorage extends MastraBase {
 
       if (!hasDefaultDomains && !hasOverrideDomains) {
         throw new Error(
-          'MastraStorage requires at least one storage source. Provide either a default storage with domains or domain overrides.',
+          'MastraCompositeStore requires at least one storage source. Provide either a default storage with domains or domain overrides.',
         );
       }
 
@@ -256,3 +259,13 @@ export class MastraStorage extends MastraBase {
     await this.hasInitialized;
   }
 }
+
+/**
+ * @deprecated Use MastraCompositeStoreConfig instead. This alias will be removed in a future version.
+ */
+export interface MastraStorageConfig extends MastraCompositeStoreConfig {}
+
+/**
+ * @deprecated Use MastraCompositeStore instead. This alias will be removed in a future version.
+ */
+export class MastraStorage extends MastraCompositeStore {}

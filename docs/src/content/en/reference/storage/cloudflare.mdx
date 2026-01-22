@@ -11,8 +11,8 @@ The Cloudflare KV storage implementation provides a globally distributed, server
 
 ## Installation
 
-```bash
-npm install @mastra/cloudflare@beta
+```bash npm2yarn
+npm install @mastra/cloudflare@latest
 ```
 
 ## Usage
@@ -22,6 +22,7 @@ import { CloudflareStore } from "@mastra/cloudflare";
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new CloudflareStore({
+  id: "cloudflare-workers-storage",
   bindings: {
     threads: THREADS_KV, // KVNamespace binding for threads table
     messages: MESSAGES_KV, // KVNamespace binding for messages table
@@ -32,6 +33,7 @@ const storageWorkers = new CloudflareStore({
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareStore({
+  id: "cloudflare-rest-storage",
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
   namespacePrefix: "dev_", // Optional: isolate namespaces per environment
@@ -42,6 +44,12 @@ const storageRest = new CloudflareStore({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
     {
       name: "bindings",
       type: "Record<string, KVNamespace>",

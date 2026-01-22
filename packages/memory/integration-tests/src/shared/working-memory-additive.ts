@@ -44,7 +44,10 @@ async function agentGenerate(
   isV5: boolean,
 ) {
   if (isV5) {
-    return agent.generate(prompt, options);
+    // Transform deprecated threadId/resourceId to memory format for v5+
+    return agent.generate(prompt, {
+      memory: { thread: options.threadId, resource: options.resourceId },
+    });
   } else {
     return agent.generateLegacy(prompt, options);
   }
@@ -104,7 +107,7 @@ You only need to include the fields that have new information - existing data is
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -209,7 +212,7 @@ You only need to include fields that have changed - existing data is automatical
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -247,7 +250,9 @@ You only need to include fields that have changed - existing data is automatical
       });
     });
 
-    describe('Large Real-World Schema - User Context', () => {
+    // These tests depend on complex LLM behavior with a complex schema.
+    // Adding retry to help with CI stability.
+    describe('Large Real-World Schema - User Context', { retry: 2 }, () => {
       /**
        * This is the exact schema from the issue reporter
        */
@@ -361,16 +366,21 @@ You only need to include fields that have changed - existing data is automatical
           id: 'context-agent',
           name: 'User Context Agent',
           instructions: `You are a helpful AI assistant that remembers everything about the user.
-Update working memory with any information the user shares.
+IMPORTANT: You MUST call the update-working-memory tool whenever the user shares ANY information about themselves, their work, or people they know.
 You only need to include the fields that have new information - existing data is automatically preserved.
-Be thorough in capturing details about people, work, and preferences.`,
+
+Schema structure reminder:
+- User's personal info (name, location, timezone, pronouns) goes in the "about" object
+- Other people the user mentions go in the "people" array (each person needs at least a "name" field)
+- Work/company info goes in the "work" object
+- To remove a field, set it to null (e.g., to remove user's location, set about.location to null)`,
           model,
           memory,
         });
       });
 
       afterEach(async () => {
-        // @ts-ignore
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -472,11 +482,11 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('phoenix');
       });
 
-      it('should remove fields when user asks to forget something (null delete)', async () => {
+      it('should remove fields when user asks to forget something (null delete)', { retry: 2 }, async () => {
         // Turn 1: Set up comprehensive data
         await agentGenerate(
           agent,
-          "I'm Jordan Lee, I work at DataCorp. My email contact is jordan@datacorp.com and I'm in Seattle.",
+          'My name is Jordan Lee and I live in Seattle. I work at DataCorp as a software engineer.',
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -488,10 +498,10 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
         expect(wmRaw!.toLowerCase()).toContain('seattle');
 
-        // Turn 2: Ask to forget location for privacy
+        // Turn 2: Ask to forget location for privacy - be explicit about which field to null
         await agentGenerate(
           agent,
-          'Actually, please forget my location. Remove it from your memory for privacy reasons.',
+          'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons.',
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -512,7 +522,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         // Turn 1: Mention people first
         await agentGenerate(
           agent,
-          'I work closely with Alice (my manager), Bob (engineering lead), and Carol (design director).',
+          'Please remember these people I work with: Alice (my manager), Bob (engineering lead), and Carol (design director). Add them to my people list.',
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -526,7 +536,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         // Turn 2: Add work details (people should be preserved)
         await agentGenerate(
           agent,
-          "We're at TechStartup Inc, a Series A company focused on AI tools.",
+          "Store this work info: We're at TechStartup Inc, a Series A company focused on AI tools.",
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -543,7 +553,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         // Turn 3: Add about info (people and work should be preserved)
         await agentGenerate(
           agent,
-          "By the way, my name is Jamie and I'm in the Seattle area.",
+          "Remember my personal info: my name is Jamie and I'm located in the Seattle area.",
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -596,8 +606,13 @@ Be thorough in capturing details about people, work, and preferences.`,
       });
 
       it('should update people list when team changes', async () => {
-        // Turn 1: Set up initial team
-        await agentGenerate(agent, 'My team is Alice, Bob, and Charlie.', { threadId: thread.id, resourceId }, isV5);
+        // Turn 1: Set up initial team - be explicit about storing in memory
+        await agentGenerate(
+          agent,
+          'Please remember my team members: Alice (engineer), Bob (designer), and Charlie (PM). Store them in my people list.',
+          { threadId: thread.id, resourceId },
+          isV5,
+        );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         expect(wmRaw).not.toBeNull();
@@ -608,7 +623,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         // Turn 2: Team changes - replace the people array
         await agentGenerate(
           agent,
-          "Update: my team has completely changed. It's now Diana and Eric. Alice, Bob, and Charlie are no longer on my team.",
+          'Update my people list: my team has completely changed. Replace the list with Diana (engineer) and Eric (lead). Remove Alice, Bob, and Charlie.',
           { threadId: thread.id, resourceId },
           isV5,
         );

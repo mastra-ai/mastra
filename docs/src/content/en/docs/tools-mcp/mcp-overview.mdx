@@ -24,8 +24,8 @@ Mastra currently supports two MCP classes:
 
 To use MCP, install the required dependency:
 
-```bash
-npm install @mastra/mcp@beta
+```bash npm2yarn
+npm install @mastra/mcp@latest
 ```
 
 ## Configuring `MCPClient`
@@ -53,7 +53,13 @@ export const testMcpClient = new MCPClient({
 
 :::info
 
-Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+Visit [MCPClient](/reference/tools/mcp-client) for a full list of configuration options.
+
+:::
+
+:::tip Authentication
+
+For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/reference/tools/mcp-client#oauth-authentication) section.
 
 :::
 
@@ -83,7 +89,7 @@ export const testAgent = new Agent({
 
 :::info
 
-Visit [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+Visit [Agent Class](/reference/agents/agent) for a full list of configuration options.
 
 :::
 
@@ -110,7 +116,13 @@ export const testMcpServer = new MCPServer({
 
 :::info
 
-Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+Visit [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
+
+:::
+
+:::tip Authentication
+
+To protect your MCP server with OAuth, see the [OAuth Protection](/reference/tools/mcp-server#oauth-protection) section.
 
 :::
 
@@ -118,7 +130,7 @@ Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configurati
 
 `MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
 
-**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/v1/tools/mcp-server#starthttp) in the API reference for full details and limitations.
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
 
 ## Registering an `MCPServer`
 
@@ -157,7 +169,7 @@ Use the `.listTools()` method to fetch tools from all configured MCP servers. Th
 
 :::info
 
-Visit [listTools()](/reference/v1/tools/mcp-client#listtools) for more information.
+Visit [listTools()](/reference/tools/mcp-client#listtools) for more information.
 
 :::
 
@@ -210,7 +222,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 
 :::info
 
-Visit [listToolsets()](/reference/v1/tools/mcp-client#listtoolsets) for more information.
+Visit [listToolsets()](/reference/tools/mcp-client#listtoolsets) for more information.
 
 :::
 
@@ -388,6 +400,6 @@ As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so 
 
 ## Related
 
-- [Using Tools](/docs/v1/agents/using-tools)
-- [MCPClient](/reference/v1/tools/mcp-client)
-- [MCPServer](/reference/v1/tools/mcp-server)
+- [Using Tools](/docs/agents/using-tools)
+- [MCPClient](/reference/tools/mcp-client)
+- [MCPServer](/reference/tools/mcp-server)

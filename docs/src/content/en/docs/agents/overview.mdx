@@ -31,8 +31,8 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 
 Add the Mastra core package to your project:
 
-```bash
-npm install @mastra/core@beta
+```bash npm2yarn
+npm install @mastra/core@latest
 ```
 
 </StepItem>
@@ -47,7 +47,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models/v1).
+Mastra supports more than 600 models. Choose from the [full list](/models).
 
 :::
 
@@ -116,7 +116,17 @@ instructions: {
 
 :::info
 
-Visit [Agent reference](/reference/v1/agents/agent) for more information.
+Visit [Agent reference](/reference/agents/agent) for more information.
+
+:::
+
+### Dynamic instructions
+
+Instructions can be provided as an async function, allowing you to resolve prompts at runtime. This enables patterns like personalizing instructions based on user context, fetching prompts from external registry services, and running A/B tests with different variants.
+
+:::info
+
+See [Dynamic instructions](/docs/server/request-context#dynamic-instructions) for examples.
 
 :::
 
@@ -193,7 +203,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### Completion using `onFinish()`
+<h3 id="completion-using-onfinish">Completion using `onFinish()`</h3>
 
 When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
@@ -215,7 +225,7 @@ for await (const chunk of stream.textStream) {
 
 :::info
 
-Visit [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+Visit [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
 
 :::
 
@@ -225,7 +235,7 @@ Agents can return structured, type-safe data using Zod or JSON Schema. The parse
 
 :::info
 
-Visit [Structured Output](/docs/v1/agents/structured-output) for more information.
+Visit [Structured Output](/docs/agents/structured-output) for more information.
 
 :::
 
@@ -294,7 +304,7 @@ export const testAgent = new Agent({
 
 :::info
 
-Visit [Using Tools](/docs/v1/agents/using-tools) for more information.
+Visit [Using Tools](/docs/agents/using-tools) for more information.
 
 :::
 
@@ -322,16 +332,16 @@ export const testAgent = new Agent({
 
 :::info
 
-See [Request Context](/docs/v1/server/request-context) for more information.
+See [Request Context](/docs/server/request-context) for more information.
 
 :::
 
 ## Testing with Studio
 
-Use [Studio](/docs/v1/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](/docs/v1/agents/using-tools)
-- [Agent Memory](/docs/v1/agents/agent-memory)
-- [Request Context](/docs/v1/server/request-context)
+- [Using Tools](/docs/agents/using-tools)
+- [Agent Memory](/docs/agents/agent-memory)
+- [Request Context](/docs/server/request-context)

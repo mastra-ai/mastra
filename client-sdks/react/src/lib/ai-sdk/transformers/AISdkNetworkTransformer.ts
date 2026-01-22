@@ -1,8 +1,9 @@
-import { NetworkChunkType } from '@mastra/core/stream';
+import { type NetworkChunkType } from '@mastra/core/stream';
 import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
-import { Transformer, TransformerArgs } from './types';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { WorkflowStreamResult } from '@mastra/core/workflows';
+import { type Transformer, type TransformerArgs } from './types';
+import { type MastraUIMessage, type MastraUIMessageMetadata } from '../types';
+import { type WorkflowStreamResult } from '@mastra/core/workflows';
+import { formatCompletionFeedback } from '@mastra/core/loop';
 
 export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
   transform({ chunk, conversation, metadata }: TransformerArgs<NetworkChunkType>): MastraUIMessage[] {
@@ -22,6 +23,38 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
 
     if (chunk.type.startsWith('tool-execution-')) {
       return this.handleToolConversation(chunk, newConversation, metadata);
+    }
+
+    if (chunk.type === 'network-validation-end') {
+      const feedback = formatCompletionFeedback(
+        {
+          complete: chunk.payload.passed,
+          scorers: chunk.payload.results,
+          totalDuration: chunk.payload.duration,
+          timedOut: chunk.payload.timedOut,
+          completionReason: chunk.payload.reason,
+        },
+        chunk.payload.maxIterationReached,
+      );
+      const newMessage: MastraUIMessage = {
+        id: `network-validation-end-${chunk.payload.runId}-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: feedback,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          mode: 'network',
+          completionResult: {
+            passed: chunk.payload.passed,
+          },
+        },
+      };
+
+      return [...newConversation, newMessage];
     }
 
     // Fallback: extract text from result if core didn't send routing-agent-text-* events
@@ -149,6 +182,61 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
       };
 
       return [...newConversation, newMessage];
+    }
+
+    if (chunk.type === 'agent-execution-approval') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            requireApprovalMetadata: {
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                runId: chunk.payload.runId,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    if (chunk.type === 'agent-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
+        },
+      ];
     }
 
     if (chunk.type === 'agent-execution-end') {
@@ -340,6 +428,33 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
       return [...newConversation, newMessage];
     }
 
+    if (chunk.type === 'workflow-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
+        },
+      ];
+    }
+
     if (chunk.type.startsWith('workflow-execution-event-')) {
       const lastMessage = newConversation[newConversation.length - 1];
 
@@ -428,6 +543,61 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
         {
           ...lastMessage,
           parts,
+        },
+      ];
+    }
+
+    if (chunk.type === 'tool-execution-approval') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            requireApprovalMetadata: {
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                runId: chunk.payload.runId,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    if (chunk.type === 'tool-execution-suspended') {
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'network' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'network',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+              },
+            },
+          },
         },
       ];
     }

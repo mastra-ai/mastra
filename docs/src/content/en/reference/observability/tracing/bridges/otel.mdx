@@ -146,7 +146,7 @@ const mastra = new Mastra({
 
 The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
 
-See the [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
+See the [OtelBridge Guide](/docs/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 
 ## Tags Support
 
@@ -155,8 +155,7 @@ The OtelBridge supports trace tagging for categorization and filtering. Tags are
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -177,6 +176,6 @@ This format ensures compatibility with all OTEL-compatible backends and collecto
 
 ## Related
 
-- [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel) - Setup guide with examples
-- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts
-- [OtelExporter Reference](/reference/v1/observability/tracing/exporters/otel) - OTEL exporter for sending traces
+- [OtelBridge Guide](/docs/observability/tracing/bridges/otel) - Setup guide with examples
+- [Tracing Overview](/docs/observability/tracing/overview) - General tracing concepts
+- [OtelExporter Reference](/reference/observability/tracing/exporters/otel) - OTEL exporter for sending traces

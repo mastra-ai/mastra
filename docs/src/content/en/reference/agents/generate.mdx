@@ -9,18 +9,13 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 # Agent.generate()
 
-The `.generate()` method enables non-streaming response generation from an agent, with enhanced capabilities and flexible output formats. It accepts messages and optional generation options, supporting both Mastra’s native format and AI SDK v5 compatibility.
+The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
 ## Usage example
 
 ```typescript
-// Default Mastra format
-const mastraResult = await agent.generate("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkResult = await agent.generate("message for agent", {
-  format: "aisdk",
-});
+// Basic usage
+const result = await agent.generate("message for agent");
 
 // With model settings (e.g., limiting output tokens)
 const limitedResult = await agent.generate("Write a short poem about coding", {
@@ -29,11 +24,35 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     temperature: 0.7,
   },
 });
+
+// With structured output
+const structuredResult = await agent.generate("Extract the user's name and age", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  },
+});
+
+// With memory for conversation persistence
+const memoryResult = await agent.generate("Remember my favorite color is blue", {
+  memory: {
+    thread: "user-123-thread",
+    resource: "user-123",
+  },
+});
+
+// Accessing response headers
+const result = await agent.generate("Hello!");
+const remainingRequests = result.response?.headers?.["anthropic-ratelimit-requests-remaining"];
+const remainingTokens = result.response?.headers?.["x-ratelimit-remaining-tokens"];
+console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remainingTokens}`);
 ```
 
 :::info
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.generateLegacy()`](./generateLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
+**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
 :::
 
@@ -61,18 +80,16 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
 <PropertiesTable
   content={[
     {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
-    {
       name: "maxSteps",
       type: "number",
       isOptional: true,
       description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "stopWhen",
+      type: "LoopOptions['stopWhen']",
+      isOptional: true,
+      description: "Conditions for stopping execution (e.g., step count, token limit).",
     },
     {
       name: "scorers",
@@ -167,10 +184,28 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "prepareStep",
-      type: "PrepareStepFunction<any>",
+      type: "PrepareStepFunction",
       isOptional: true,
       description:
         "Callback function called before each step of multi-step execution.",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description: "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description: "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "context",
@@ -252,6 +287,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         {
           parameters: [
             {
+              name: "logger",
+              type: "IMastraLogger",
+              isOptional: true,
+              description:
+                "Optional logger instance for structured logging during output generation.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
               name: "providerOptions",
               type: "ProviderOptions",
               isOptional: true,
@@ -264,24 +310,31 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "outputProcessors",
-      type: "Processor[]",
+      type: "OutputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Output processors to use for this execution (overrides agent's default).",
     },
     {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times processors can trigger a retry for this generation. Overrides agent's default maxProcessorRetries.",
+    },
+    {
       name: "inputProcessors",
-      type: "Processor[]",
+      type: "InputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Input processors to use for this execution (overrides agent's default).",
     },
     {
       name: "instructions",
-      type: "string",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
       isOptional: true,
       description:
-        "Custom instructions that override the agent's default instructions for this execution.",
+        "Custom instructions that override the agent's default instructions for this execution. Can be a single string, message object, or array of either.",
     },
     {
       name: "system",
@@ -341,24 +394,17 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
     },
     {
       name: "onFinish",
-      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      type: "LoopConfig['onFinish']",
       isOptional: true,
       description:
-        "Callback fired when generation completes. Type varies by format.",
+        "Callback fired when generation completes.",
     },
     {
       name: "onStepFinish",
-      type: "StreamTextOnStepFinishCallback<any> | never",
+      type: "LoopConfig['onStepFinish']",
       isOptional: true,
       description:
-        "Callback fired after each generation step. Type varies by format.",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.resource instead. Identifier for the resource/user.",
+        "Callback fired after each generation step.",
     },
     {
       name: "telemetry",
@@ -410,13 +456,6 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.thread instead. Thread identifier for conversation continuity.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -629,6 +668,13 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
         },
       ],
     },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output. Not available on all model providers.",
+    },
   ]}
 />
 
@@ -638,9 +684,224 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
   content={[
     {
       name: "result",
-      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>> | Awaited<ReturnType<AISDKV5OutputStream<Output>['getFullOutput']>>",
+      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>>",
       description:
-        "Returns the full output of the generation process. When format is 'mastra' (default), returns MastraModelOutput result. When format is 'aisdk', returns AISDKV5OutputStream result for AI SDK v5 compatibility.",
+        "Returns the full output of the generation process including text, object (if structured output), tool calls, tool results, usage statistics, and step information.",
+    },
+    {
+      name: "text",
+      type: "string",
+      description:
+        "The generated text response from the agent.",
+    },
+    {
+      name: "object",
+      type: "Output | undefined",
+      isOptional: true,
+      description:
+        "The structured output object if structuredOutput was provided, validated against the schema.",
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCall[]",
+      description:
+        "Array of tool calls made during generation.",
+    },
+    {
+      name: "toolResults",
+      type: "ToolResult[]",
+      description:
+        "Array of results from tool executions.",
+    },
+    {
+      name: "usage",
+      type: "TokenUsage",
+      description:
+        "Token usage statistics for the generation.",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description:
+        "Array of execution steps, useful for debugging multi-step generations.",
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description:
+        "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (waiting for tool approval), or 'error' (error occurred).",
+    },
+    {
+      name: "response",
+      type: "object",
+      description:
+        "Response metadata from the model provider. Useful for accessing rate limit headers and request IDs.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "Response ID from the model provider.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "timestamp",
+              type: "Date",
+              isOptional: true,
+              description: "Timestamp when the response was generated.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "modelId",
+              type: "string",
+              isOptional: true,
+              description: "Model identifier used for this response.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "headers",
+              type: "Record<string, string>",
+              isOptional: true,
+              description: "HTTP response headers from the model provider. Contains rate limit information (e.g., `anthropic-ratelimit-requests-remaining`, `x-ratelimit-remaining-tokens`) and other provider-specific metadata.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "messages",
+              type: "ResponseMessage[]",
+              isOptional: true,
+              description: "Response messages in model format.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "uiMessages",
+              type: "UIMessage[]",
+              isOptional: true,
+              description: "Response messages in UI format, includes any metadata added by output processors.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "request",
+      type: "object",
+      isOptional: true,
+      description:
+        "The request that was sent to the model.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "body",
+              type: "unknown",
+              isOptional: true,
+              description: "The request body sent to the model provider.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "warnings",
+      type: "LanguageModelWarning[]",
+      isOptional: true,
+      description:
+        "Any warnings from the model provider during generation.",
+    },
+    {
+      name: "providerMetadata",
+      type: "Record<string, unknown>",
+      isOptional: true,
+      description:
+        "Provider-specific metadata returned with the response.",
+    },
+    {
+      name: "reasoning",
+      type: "ReasoningChunk[]",
+      isOptional: true,
+      description:
+        "Reasoning details from models that support reasoning (e.g., OpenAI o1 series).",
+    },
+    {
+      name: "reasoningText",
+      type: "string",
+      isOptional: true,
+      description:
+        "Combined reasoning text from reasoning models.",
+    },
+    {
+      name: "sources",
+      type: "SourceChunk[]",
+      isOptional: true,
+      description:
+        "Sources referenced by the model during generation.",
+    },
+    {
+      name: "files",
+      type: "FileChunk[]",
+      isOptional: true,
+      description:
+        "Files generated by the model.",
+    },
+    {
+      name: "suspendPayload",
+      type: "object",
+      isOptional: true,
+      description:
+        "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "Unique identifier for the pending tool call.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "Name of the tool that requires approval.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "args",
+              type: "Record<string, any>",
+              description: "Arguments that will be passed to the tool.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "Unique identifier for this execution run. Required when calling `approveToolCallGenerate()` or `declineToolCallGenerate()` to resume a suspended execution.",
     },
     {
       name: "traceId",
@@ -648,6 +909,39 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
       isOptional: true,
       description:
         "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description:
+        "All messages from this execution including input, memory history, and response.",
+    },
+    {
+      name: "rememberedMessages",
+      type: "MastraDBMessage[]",
+      description:
+        "Only messages loaded from memory (conversation history).",
+    },
+    {
+      name: "error",
+      type: "Error",
+      isOptional: true,
+      description:
+        "Error object if the generation failed.",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireData",
+      isOptional: true,
+      description:
+        "Tripwire data if content was blocked by a processor.",
+    },
+    {
+      name: "scoringData",
+      type: "object",
+      isOptional: true,
+      description:
+        "Scoring data for evals when `returnScorerData` is enabled.",
     },
   ]}
 />

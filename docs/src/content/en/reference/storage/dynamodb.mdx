@@ -20,15 +20,12 @@ The DynamoDB storage implementation provides a scalable and performant NoSQL dat
 - Compatible with AWS DynamoDB Local for development
 - Stores Thread, Message, Trace, Eval, and Workflow data
 - Optimized for serverless environments
+- Configurable TTL (Time To Live) for automatic data expiration per entity type
 
 ## Installation
 
-```bash
-npm install @mastra/dynamodb@beta
-# or
-pnpm add @mastra/dynamodb@beta
-# or
-yarn add @mastra/dynamodb@beta
+```bash npm2yarn
+npm install @mastra/dynamodb@latest
 ```
 
 ## Prerequisites
@@ -47,7 +44,7 @@ import { DynamoDBStore } from "@mastra/dynamodb";
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  name: "dynamodb", // A name for this storage instance
+  id: "dynamodb", // Unique identifier for this storage instance
   config: {
     tableName: "mastra-single-table", // Name of your DynamoDB table
     region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
@@ -77,11 +74,11 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
-    ```typescript copy
+    ```typescript
     import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({
-      name: "dynamodb-local",
+      id: "dynamodb-local",
       config: {
         tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
         region: "localhost", // Can be any string for local, 'localhost' is common
@@ -100,9 +97,9 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 <PropertiesTable
   content={[
     {
-      name: "name",
+      name: "id",
       type: "string",
-      description: "A name for the storage instance.",
+      description: "Unique identifier for this storage instance.",
       isOptional: false,
     },
     {
@@ -132,8 +129,128 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
         "AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
       isOptional: true,
     },
+    {
+      name: "config.ttl",
+      type: "object",
+      description:
+        "TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
+      isOptional: true,
+    },
   ]}
 />
+
+## TTL (Time To Live) Configuration
+
+DynamoDB TTL allows you to automatically delete items after a specified time period. This is useful for:
+
+- **Cost optimization**: Automatically remove old data to reduce storage costs
+- **Data lifecycle management**: Implement retention policies for compliance
+- **Performance**: Prevent tables from growing indefinitely
+- **Privacy compliance**: Automatically purge personal data after specified periods
+
+### Enabling TTL
+
+To use TTL, you must:
+
+1. **Configure TTL in DynamoDBStore** (shown below)
+2. **Enable TTL on your DynamoDB table** via AWS Console or CLI, specifying the attribute name (default: `ttl`)
+
+```typescript
+import { DynamoDBStore } from "@mastra/dynamodb";
+
+const storage = new DynamoDBStore({
+  name: "dynamodb",
+  config: {
+    tableName: "mastra-single-table",
+    region: "us-east-1",
+    ttl: {
+      // Messages expire after 30 days
+      message: {
+        enabled: true,
+        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+      },
+      // Threads expire after 90 days
+      thread: {
+        enabled: true,
+        defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 days
+      },
+      // Traces expire after 7 days with custom attribute name
+      trace: {
+        enabled: true,
+        attributeName: "expiresAt", // Custom TTL attribute
+        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+      },
+      // Workflow snapshots don't expire
+      workflow_snapshot: {
+        enabled: false,
+      },
+    },
+  },
+});
+```
+
+### Supported Entity Types
+
+TTL can be configured for these entity types:
+
+| Entity | Description |
+|--------|-------------|
+| `thread` | Conversation threads |
+| `message` | Messages within threads |
+| `trace` | Observability traces |
+| `eval` | Evaluation results |
+| `workflow_snapshot` | Workflow state snapshots |
+| `resource` | User/resource data |
+| `score` | Scoring results |
+
+### TTL Entity Configuration
+
+Each entity type accepts the following configuration:
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description: "Whether TTL is enabled for this entity type.",
+      isOptional: false,
+    },
+    {
+      name: "attributeName",
+      type: "string",
+      description: "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
+      isOptional: true,
+    },
+    {
+      name: "defaultTtlSeconds",
+      type: "number",
+      description: "Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Enabling TTL on Your DynamoDB Table
+
+After configuring TTL in your code, you must enable TTL on the DynamoDB table itself:
+
+**Using AWS CLI:**
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name mastra-single-table \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl"
+```
+
+**Using AWS Console:**
+
+1. Go to the DynamoDB console
+2. Select your table
+3. Go to "Additional settings" tab
+4. Under "Time to Live (TTL)", click "Manage TTL"
+5. Enable TTL and specify the attribute name (default: `ttl`)
+
+> **Note**: DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
 
 ## AWS IAM Permissions
 

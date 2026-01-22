@@ -22,15 +22,15 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/mcp": "beta",
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
     "zod": "^3.25.76",
-    "dotenv": "^17.0.1"
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
     "@types/node": "22.13.17",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   }
 }

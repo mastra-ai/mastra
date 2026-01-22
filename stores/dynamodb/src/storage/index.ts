@@ -2,7 +2,7 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
@@ -13,6 +13,73 @@ import { WorkflowStorageDynamoDB } from './domains/workflows';
 // Export domain classes for direct use with MastraStorage composition
 export { MemoryStorageDynamoDB, ScoresStorageDynamoDB, WorkflowStorageDynamoDB };
 export type { DynamoDBDomainConfig } from './db';
+
+// Export TTL utilities
+export { calculateTtl, getTtlAttributeName, isTtlEnabled, getTtlProps } from './ttl';
+
+/**
+ * Entity names that support TTL configuration.
+ */
+export type DynamoDBTtlEntityName =
+  | 'thread'
+  | 'message'
+  | 'trace'
+  | 'eval'
+  | 'workflow_snapshot'
+  | 'resource'
+  | 'score';
+
+/**
+ * TTL configuration for a single entity type.
+ */
+export interface DynamoDBEntityTtlConfig {
+  /**
+   * Whether TTL is enabled for this entity type.
+   */
+  enabled: boolean;
+  /**
+   * The DynamoDB attribute name to use for TTL.
+   * Must match the TTL attribute configured on your DynamoDB table.
+   * @default 'ttl'
+   */
+  attributeName?: string;
+  /**
+   * Default TTL in seconds from item creation/update time.
+   * Items will be automatically deleted by DynamoDB after this duration.
+   * @example 30 * 24 * 60 * 60 // 30 days
+   */
+  defaultTtlSeconds?: number;
+}
+
+/**
+ * TTL configuration for DynamoDB store.
+ * Configure TTL per entity type for automatic data expiration.
+ *
+ * @example
+ * ```typescript
+ * const store = new DynamoDBStore({
+ *   name: 'my-store',
+ *   config: {
+ *     id: 'my-id',
+ *     tableName: 'my-table',
+ *     ttl: {
+ *       message: {
+ *         enabled: true,
+ *         defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+ *       },
+ *       trace: {
+ *         enabled: true,
+ *         attributeName: 'expiresAt',
+ *         defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export type DynamoDBTtlConfig = {
+  [EntityKey in DynamoDBTtlEntityName]?: DynamoDBEntityTtlConfig;
+};
 
 /**
  * DynamoDB configuration type.
@@ -44,6 +111,38 @@ export type DynamoDBStoreConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * TTL (Time To Live) configuration for automatic data expiration.
+   *
+   * Configure TTL per entity type to automatically delete items after a specified duration.
+   * DynamoDB TTL is a background process that deletes items within 48 hours after expiration.
+   *
+   * **Important**: TTL must also be enabled on your DynamoDB table via AWS Console or CLI,
+   * specifying the attribute name (default: 'ttl'). The table-level TTL attribute name
+   * must match the `attributeName` in your configuration.
+   *
+   * @example
+   * ```typescript
+   * const store = new DynamoDBStore({
+   *   name: 'my-store',
+   *   config: {
+   *     id: 'my-id',
+   *     tableName: 'my-table',
+   *     ttl: {
+   *       message: {
+   *         enabled: true,
+   *         defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+   *       },
+   *       trace: {
+   *         enabled: true,
+   *         defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+   *       },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  ttl?: DynamoDBTtlConfig;
 } & (
   | {
       /**
@@ -116,10 +215,11 @@ type MastraService = Service<Record<string, any>> & {
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class DynamoDBStore extends MastraStorage {
+export class DynamoDBStore extends MastraCompositeStore {
   private tableName: string;
   private client: DynamoDBDocumentClient;
   private service: MastraService;
+  private ttlConfig?: DynamoDBTtlConfig;
   protected hasInitialized: Promise<boolean> | null = null;
   stores: StorageDomains;
 
@@ -139,6 +239,7 @@ export class DynamoDBStore extends MastraStorage {
       }
 
       this.tableName = config.tableName;
+      this.ttlConfig = config.ttl;
 
       // Handle pre-configured client vs creating new connection
       if (isClientConfig(config)) {
@@ -156,7 +257,7 @@ export class DynamoDBStore extends MastraStorage {
 
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
-      const domainConfig = { service: this.service };
+      const domainConfig = { service: this.service, ttl: this.ttlConfig };
       const workflows = new WorkflowStorageDynamoDB(domainConfig);
       const memory = new MemoryStorageDynamoDB(domainConfig);
       const scores = new ScoresStorageDynamoDB(domainConfig);

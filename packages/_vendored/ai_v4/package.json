@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v4",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "",
   "type": "module",
   "private": true,
@@ -54,7 +54,7 @@
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

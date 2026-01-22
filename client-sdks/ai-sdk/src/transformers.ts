@@ -1,8 +1,8 @@
+import { TransformStream } from 'node:stream/web';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
-import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
 import {
@@ -96,7 +96,7 @@ export function WorkflowStreamToAISDKTransformer({
     }
   >();
   return new TransformStream<
-    ChunkType,
+    ChunkType<any>,
     | {
         data?: string;
         type?: 'start' | 'finish';
@@ -178,10 +178,10 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
+export function AgentStreamToAISDKTransformer<OUTPUT>({
   lastMessageId,
-  sendStart,
-  sendFinish,
+  sendStart = true,
+  sendFinish = true,
   sendReasoning,
   sendSources,
   messageMetadata,
@@ -199,7 +199,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   let tripwireOccurred = false;
   let finishEventSent = false;
 
-  return new TransformStream<ChunkType<TOutput>, object>({
+  return new TransformStream<ChunkType<OUTPUT>, object>({
     transform(chunk, controller) {
       // Track if tripwire occurred
       if (chunk.type === 'tripwire') {
@@ -229,7 +229,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<TOutput>(payload, bufferedSteps);
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
@@ -258,10 +258,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   });
 }
 
-export function transformAgent<TOutput extends ZodType<any>>(
-  payload: ChunkType<TOutput>,
-  bufferedSteps: Map<string, any>,
-) {
+export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
     case 'start':
@@ -410,8 +407,8 @@ export function transformAgent<TOutput extends ZodType<any>>(
   return null;
 }
 
-export function transformWorkflow<TOutput extends ZodType<any>>(
-  payload: ChunkType<TOutput>,
+export function transformWorkflow<OUTPUT>(
+  payload: ChunkType<OUTPUT>,
   bufferedWorkflows: Map<
     string,
     {
@@ -518,9 +515,10 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
       const output = payload.payload.output;
 
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
-        const part = convertMastraChunkToAISDKv5({ chunk: output, mode: 'stream' });
+        // @ts-expect-error
+        const part = convertMastraChunkToAISDKv5<OUTPUT>({ chunk: output, mode: 'stream' });
 
-        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+        const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
           onError(error) {
             return safeParseErrorObject(error);
@@ -871,6 +869,12 @@ export function transformNetwork(
           output: payload.payload?.result ?? current.output,
         },
       } as const;
+    }
+    case 'network-object':
+    case 'network-object-result': {
+      // Structured output chunks - currently not exposed in AI SDK format
+      // These are used by MastraAgentNetworkStream's .object and .objectStream getters
+      return null;
     }
     default: {
       // Check for custom data chunks first (before processing as events)

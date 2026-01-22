@@ -27,7 +27,7 @@ This template showcases a crucial architectural pattern for working with large d
 
 ## Prerequisites
 
-- Node.js 20.9.0 or higher
+- Node.js 22.13.0 or later
 - API key for your chosen provider (for both summarization and question generation)
 
 ## Setup

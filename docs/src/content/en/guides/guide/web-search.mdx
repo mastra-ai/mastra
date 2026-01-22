@@ -18,8 +18,8 @@ When building a web search agent, you have two main strategies to consider:
 ## Prerequisites
 
 - Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Using native search tools
 
@@ -33,12 +33,12 @@ Install dependencies
 
 <Tabs>
   <TabItem value="openai" label="Open AI">
-    ```bash copy
+    ```bash npm2yarn
     npm install @ai-sdk/openai
     ```
   </TabItem>
   <TabItem value="gemini" label="Gemini">
-    ```bash copy
+    ```bash npm2yarn
     npm install @ai-sdk/google
     ```
   </TabItem>
@@ -53,30 +53,30 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts"
+    ```ts title="src/mastra/agents/searchAgent.ts"
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "openai/gpt-5.1",
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
     });
     ```
 
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts"
+    ```ts title="src/mastra/agents/searchAgent.ts"
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "google/gemini-2.5-flash",
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
     });
     ```
 
@@ -93,40 +93,40 @@ Setup the tool:
 <Tabs>
     <TabItem value="openai" label="Open AI">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-12}
+    ```ts title="src/mastra/agents/searchAgent.ts" {1,9-12}
     import { openai } from "@ai-sdk/openai";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "openai/gpt-5.1",
-        tools: {
-            webSearch: openai.tools.webSearch()
-        }
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
+      tools: {
+        webSearch: openai.tools.webSearch()
+      }
     });
     ```
 
     </TabItem>
     <TabItem value="gemini" label="Gemini">
 
-    ```ts copy title="src/mastra/agents/searchAgent.ts" {9-14}
+    ```ts title="src/mastra/agents/searchAgent.ts" {1,9-14}
     import { google } from "@ai-sdk/google";
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
-        name: "Search Agent",
-        instructions:
-            "You are a search agent that can search the web for information.",
-        model: "google/gemini-2.5-flash",
-        tools: {
-          webSearch: google.tools.googleSearch({
-            mode: "MODE_DYNAMIC"
-          })
-        }
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
+      tools: {
+        webSearch: google.tools.googleSearch({
+          mode: "MODE_DYNAMIC"
+        })
+      }
     });
     ```
 
@@ -153,7 +153,7 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash
 mastra dev
@@ -175,7 +175,7 @@ For more control over search behavior, you can integrate external search APIs as
 
 Install dependencies
 
-```bash
+```bash npm2yarn
 npm install exa-js
 ```
 
@@ -280,7 +280,7 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash
 mastra dev

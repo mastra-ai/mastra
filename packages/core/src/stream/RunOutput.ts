@@ -9,9 +9,9 @@ import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
 import type { StepTripwireData, WorkflowStreamEvent } from './types';
 
-export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>>
-  implements MastraBaseStream<WorkflowStreamEvent>
-{
+export class WorkflowRunOutput<
+  TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
+> implements MastraBaseStream<WorkflowStreamEvent> {
   #status: WorkflowRunStatus = 'running';
   #tripwireData: StepTripwireData | undefined;
   #usageCount: Required<LanguageModelUsage> = {
@@ -128,7 +128,6 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
                 // Include tripwire data when status is 'tripwire'
@@ -301,7 +300,6 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
                 // Include tripwire data when status is 'tripwire'

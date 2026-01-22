@@ -14,7 +14,7 @@ packages:
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/langfuse@beta
+npm install @mastra/langfuse@latest
 ```
 
 ## Configuration
@@ -31,7 +31,30 @@ LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: "my-service",
+        exporters: [new LangfuseExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -125,10 +148,8 @@ import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-});
+// Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
+const langfuse = new Langfuse();
 
 // Fetch the prompt from Langfuse Prompt Management
 const prompt = await langfuse.getPrompt("customer-support");
@@ -139,15 +160,6 @@ export const supportAgent = new Agent({
   model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
-## Using Tags
-
-Tags help you categorize and filter traces in the Langfuse dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
   },
 });
 ```
@@ -185,15 +197,9 @@ You can link prompts using either:
 - All three fields
 
 When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
-Tags appear in Langfuse's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Tracing Overview](/docs/observability/tracing/overview)
 - [Langfuse Documentation](https://langfuse.com/docs)
 - [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management)

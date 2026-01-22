@@ -3,19 +3,43 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["pre-build"],
-      "outputs": ["./**/*.d.ts"]
+      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
+      "inputs": ["package.json"]
     },
-    "pre-build": {
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["./**/*.d.ts"],
+      "inputs": ["src/**", "package.json", "!**/*.md"]
+    },
+    "build:docs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["dist/docs/**"],
+      "inputs": ["src/**", "package.json", "!**/*.md"]
+    },
+    "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts", "!__integration-test__/**/*"]
+      "outputs": ["dist/**", "!dist/docs/**"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**",
+        "!__integration-test__/**/*"
+      ]
     },
     "test": {
       "dependsOn": ["test:unit", "test:types:zod", "test:integration"],
-      "inputs": ["$TURBO_DEFAULT$", "./vitest.config.ts"]
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
     },
-    "test:unit": {},
-    "test:types:zod": {}
+    "test:unit": {
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
+    },
+    "test:types:zod": {
+      "inputs": ["src/**", "tsconfig.json", "package.json", "!**/*.md"]
+    }
   }
 }

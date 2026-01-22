@@ -9,17 +9,17 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleWorkflowStream()
 
-Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/v1/server/custom-api-routes) feature. 
+Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature. 
 
 `handleWorkflowStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
-Use [`workflowRoute()`](/reference/v1/ai-sdk/workflow-route) if you want to create a workflow route inside a Mastra server.
+Use [`workflowRoute()`](/reference/ai-sdk/workflow-route) if you want to create a workflow route inside a Mastra server.
 
 :::tip Agent streaming in workflows
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
 
 :::
 

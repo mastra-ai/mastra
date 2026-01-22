@@ -128,6 +128,72 @@ export class MastraDynamoDbStack extends cdk.Stack {
 }
 ```
 
+## Enabling TTL (Time To Live)
+
+If you want to use automatic data expiration with DynamoDB TTL, you need to enable it on your table. The `@mastra/dynamodb` package supports configuring TTL per entity type (threads, messages, traces, etc.).
+
+### CloudFormation
+
+Add the `TimeToLiveSpecification` to your table definition:
+
+```yaml
+Resources:
+  MastraSingleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      # ... other properties ...
+      TimeToLiveSpecification:
+        AttributeName: ttl # Must match config.ttl.[entity].attributeName (default: 'ttl')
+        Enabled: true
+```
+
+### AWS CDK
+
+Enable TTL when creating the table:
+
+```typescript
+const table = new dynamodb.Table(this, 'MastraSingleTable', {
+  // ... other properties ...
+  timeToLiveAttribute: 'ttl', // Must match config.ttl.[entity].attributeName (default: 'ttl')
+});
+```
+
+### AWS CLI
+
+Enable TTL on an existing table:
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name mastra-single-table \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl"
+```
+
+### Configuring TTL in Code
+
+After enabling TTL on your table, configure which entity types should use TTL:
+
+```typescript
+const storage = new DynamoDBStore({
+  name: 'dynamodb',
+  config: {
+    tableName: 'mastra-single-table',
+    region: 'us-east-1',
+    ttl: {
+      message: {
+        enabled: true,
+        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+      },
+      trace: {
+        enabled: true,
+        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+      },
+    },
+  },
+});
+```
+
+> **Note**: DynamoDB TTL deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+
 ## Using the Table
 
 Once the table is created, you can use it with the DynamoDBStore:
@@ -146,9 +212,8 @@ const storage = new DynamoDBStore({
 });
 
 const vector = new PineconeVector({
+  id: 'dynamodb-pinecone',
   apiKey: process.env.PINECONE_API_KEY,
-  environment: process.env.PINECONE_ENVIRONMENT,
-  index: process.env.PINECONE_INDEX,
 });
 
 const memory = new Memory({

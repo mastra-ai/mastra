@@ -28,7 +28,7 @@ export async function studio(
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(__dirname, 'playground');
+    const distPath = join(__dirname, 'studio');
 
     if (!existsSync(distPath)) {
       logger.error(`Studio distribution not found at ${distPath}.`);
@@ -66,11 +66,17 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
   const basePath = '';
 
+  const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
-    .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
-    .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
-    .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http');
+    .replaceAll('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
+    .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
+    .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
+    .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
+    .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
+    .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '');
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;

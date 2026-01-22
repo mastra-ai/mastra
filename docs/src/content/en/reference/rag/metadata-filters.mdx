@@ -293,6 +293,24 @@ const results = await store.query({
 
 - Supports advanced filtering with nested conditions
 - Payload (metadata) fields must be explicitly indexed for filtering
+- Use `createPayloadIndex()` to index fields you want to filter on:
+
+```typescript
+// Index a field before filtering on it
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword", // 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'
+});
+
+// Now filtering works
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
 - Efficient handling of geo-spatial queries
 - Special handling for null and empty values
 - Vector-specific filtering capabilities
@@ -337,13 +355,13 @@ const results = await store.query({
 
 ## Related
 
-- [Astra](/reference/v1/vectors/astra)
-- [Chroma](/reference/v1/vectors/chroma)
-- [Cloudflare Vectorize](/reference/v1/vectors/vectorize)
-- [libSQL](/reference/v1/vectors/libsql)
-- [MongoDB](/reference/v1/vectors/mongodb)
-- [PgStore](/reference/v1/vectors/pg)
-- [Pinecone](/reference/v1/vectors/pinecone)
-- [Qdrant](/reference/v1/vectors/qdrant)
-- [Upstash](/reference/v1/vectors/upstash)
-- [Amazon S3 Vectors](/reference/v1/vectors/s3vectors)
+- [Astra](/reference/vectors/astra)
+- [Chroma](/reference/vectors/chroma)
+- [Cloudflare Vectorize](/reference/vectors/vectorize)
+- [libSQL](/reference/vectors/libsql)
+- [MongoDB](/reference/vectors/mongodb)
+- [PgStore](/reference/vectors/pg)
+- [Pinecone](/reference/vectors/pinecone)
+- [Qdrant](/reference/vectors/qdrant)
+- [Upstash](/reference/vectors/upstash)
+- [Amazon S3 Vectors](/reference/vectors/s3vectors)

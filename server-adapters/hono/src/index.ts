@@ -4,8 +4,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -18,7 +22,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './auth-middle
 export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools: ToolsInput;
+  registeredTools: ToolsInput;
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
@@ -99,7 +103,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
       c.set('mastra', this.mastra);
-      c.set('tools', this.tools || {});
+      c.set('registeredTools', this.tools || {});
       c.set('taskStore', this.taskStore);
       c.set('abortSignal', c.req.raw.signal);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
@@ -153,12 +157,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     );
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: HonoRequest,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: HonoRequest): Promise<ParsedRequestParams> {
     const urlParams = request.param();
-    const queryParams = request.query();
+    // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
+    const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.header('content-type') || '';
@@ -182,7 +184,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       }
     }
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    return { urlParams, queryParams, body };
   }
 
   /**
@@ -226,7 +228,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req,
           res,
         });
@@ -252,8 +254,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           context: response,
         });
       } catch {
@@ -287,11 +289,24 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       `${prefix}${route.path}`,
       ...middlewares,
       async (c: Context) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+        });
+
+        if (authError) {
+          return c.json({ error: authError.error }, authError.status as any);
+        }
+
         const params = await this.getParams(route, c.req);
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
             console.error('Error parsing query params', error);
             // Zod validation errors should return 400 Bad Request with structured issues
@@ -333,9 +348,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
-          tools: c.get('tools'),
+          registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
+          routePrefix: this.prefix,
         };
 
         try {

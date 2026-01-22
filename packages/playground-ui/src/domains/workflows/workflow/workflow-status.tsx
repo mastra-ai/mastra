@@ -12,8 +12,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { WorkflowCard } from './workflow-card';
-import { SyntaxHighlighter } from '@/components/syntax-highlighter';
-import { CopyButton } from '@/components/ui/copy-button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 export interface TripwireInfo {
   reason?: string;
@@ -49,7 +48,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
             {status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
           </Icon>
-          <Txt as="span" variant="ui-lg" className="text-icon6 font-medium">
+          <Txt as="span" variant="ui-lg" className="text-neutral6 font-medium">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
           </Txt>
         </div>
@@ -63,10 +62,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
           hasMetadata={hasTripwireMetadata}
         />
       ) : (
-        <div className="rounded-md bg-surface4 p-1 font-mono relative">
-          <CopyButton content={JSON.stringify(result, null, 2)} className="absolute top-2 right-2 z-10" />
-          <SyntaxHighlighter data={result} />
-        </div>
+        <CodeEditor data={result} />
       )}
     </WorkflowCard>
   );

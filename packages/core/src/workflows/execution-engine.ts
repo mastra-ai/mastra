@@ -68,7 +68,7 @@ export abstract class ExecutionEngine extends MastraBase {
   /**
    * Invokes the onFinish and onError lifecycle callbacks if they are defined.
    * Errors in callbacks are caught and logged, not propagated.
-   * @param result The workflow result containing status, result, error, steps, and tripwire info
+   * @param result The workflow result containing status, result, error, steps, tripwire info, and context
    */
   public async invokeLifecycleCallbacks(result: {
     status: WorkflowRunStatus;
@@ -76,8 +76,26 @@ export abstract class ExecutionEngine extends MastraBase {
     error?: any;
     steps: Record<string, StepResult<any, any, any, any>>;
     tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
   }): Promise<void> {
     const { onFinish, onError } = this.options;
+
+    // Build common context for callbacks
+    const commonContext = {
+      runId: result.runId,
+      workflowId: result.workflowId,
+      resourceId: result.resourceId,
+      getInitData: () => result.input,
+      mastra: this.mastra,
+      requestContext: result.requestContext,
+      logger: this.logger,
+      state: result.state,
+    };
 
     // Always call onFinish if defined (for any terminal status)
     if (onFinish) {
@@ -89,6 +107,7 @@ export abstract class ExecutionEngine extends MastraBase {
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,
+            ...commonContext,
           }),
         );
       } catch (err) {
@@ -105,6 +124,7 @@ export abstract class ExecutionEngine extends MastraBase {
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,
+            ...commonContext,
           }),
         );
       } catch (err) {

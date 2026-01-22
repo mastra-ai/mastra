@@ -208,8 +208,8 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: "file:./memory.db" }),
-  vector: new LibSQLVector({ connectionUrl: "file:./vector.db" }),
+  storage: new LibSQLStore({ id: 'memory-store', url: "file:./memory.db" }),
+  vector: new LibSQLVector({ id: 'vector-store', url: "file:./vector.db" }),
   embedder: embeddingModel,
   options: {
     semanticRecall: true,
@@ -230,8 +230,8 @@ const results = await memory.recall({
 
 ### Related
 
-- [Memory Class Reference](/reference/v1/memory/memory-class)
-- [createThread](/reference/v1/memory/createThread)
-- [Clone Utility Methods](/reference/v1/memory/clone-utilities)
-- [recall](/reference/v1/memory/recall)
-- [Semantic Recall](/docs/v1/memory/semantic-recall)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [createThread](/reference/memory/createThread)
+- [Clone Utility Methods](/reference/memory/clone-utilities)
+- [recall](/reference/memory/recall)
+- [Semantic Recall](/docs/memory/semantic-recall)

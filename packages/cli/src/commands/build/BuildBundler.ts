@@ -13,6 +13,8 @@ export class BuildBundler extends Bundler {
   constructor({ studio }: { studio?: boolean } = {}) {
     super('Build');
     this.studio = studio ?? false;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   protected async getUserBundlerOptions(
@@ -58,8 +60,8 @@ export class BuildBundler extends Bundler {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
 
-      const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-      await copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
         overwrite: true,
       });
     }
@@ -75,13 +77,13 @@ export class BuildBundler extends Bundler {
 
   protected getEntry(): string {
     return `
-    // @ts-ignore
+    // @ts-expect-error
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
-    // @ts-ignore
-    await createNodeServer(mastra, { tools: getToolExports(tools), playground: ${this.studio} });
+    // @ts-expect-error
+    await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
     if (mastra.getStorage()) {
       // start storage init in the background

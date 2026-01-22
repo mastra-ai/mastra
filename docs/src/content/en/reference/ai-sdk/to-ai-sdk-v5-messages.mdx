@@ -10,12 +10,12 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # toAISdkV5Messages()
 
-Converts messages from various input formats to AI SDK V5 UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5 `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
+Converts messages from various input formats to AI SDK V5 (and later) UI message format. This function accepts messages in multiple formats (strings, AI SDK V4/V5 messages, Mastra DB messages, etc.) and normalizes them to the AI SDK V5+ `UIMessage` format, which is suitable for use with AI SDK UI components like `useChat()`.
 
 ## Usage example
 
 ```typescript title="app/chat/page.tsx"
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 import { useChat } from "ai/react";
 
 // Stored messages from your database, memory or API
@@ -58,7 +58,7 @@ export default function Chat() {
 
 ## Returns
 
-Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
+Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 
 <PropertiesTable
   content={[
@@ -91,7 +91,7 @@ Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
 ### Converting simple text messages
 
 ```typescript
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
 // Returns array of UIMessage objects with user role
@@ -101,7 +101,7 @@ const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
 
 ```typescript
 import { MastraClient } from "@mastra/client-js";
-import { toAISdkV5Messages } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const client = new MastraClient();
 

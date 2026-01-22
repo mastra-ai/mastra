@@ -3,6 +3,45 @@ import type { SystemMessage } from '@mastra/core/llm';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
+import type { ZodType } from 'zod';
+import type { z as zv4 } from 'zod/v4';
+
+/**
+ * Check if a schema looks like a processor step schema.
+ * Processor step schemas are discriminated unions on 'phase' with specific values.
+ */
+function looksLikeProcessorStepSchema(schema: ZodType | zv4.ZodType<any, any> | undefined): boolean {
+  if (!schema) return false;
+
+  try {
+    const jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+
+    // Check for discriminated union pattern: anyOf/oneOf with phase discriminator
+    const variants = (jsonSchema.anyOf || jsonSchema.oneOf) as Array<Record<string, unknown>> | undefined;
+    if (!variants || !Array.isArray(variants)) return false;
+
+    // Check if all variants have a 'phase' property with processor phase values
+    const processorPhases = new Set(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']);
+
+    for (const variant of variants) {
+      const properties = variant.properties as Record<string, unknown> | undefined;
+      if (!properties?.phase) return false;
+
+      const phaseSchema = properties.phase as Record<string, unknown>;
+      const phaseConst = phaseSchema?.const as string | undefined;
+      const phaseEnum = Array.isArray(phaseSchema?.enum) ? (phaseSchema.enum as string[]) : [];
+      const phaseValues = phaseConst ? [phaseConst] : phaseEnum;
+
+      if (!phaseValues.length || phaseValues.some(phase => !processorPhases.has(phase))) {
+        return false;
+      }
+    }
+
+    return variants.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   return Object.entries(steps).reduce<any>((acc, [key, step]) => {
@@ -14,6 +53,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
       resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
       suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+      stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
     };
@@ -40,6 +80,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       allSteps: {},
       inputSchema: undefined,
       outputSchema: undefined,
+      stateSchema: undefined,
     } as WorkflowInfo;
   }
 
@@ -54,6 +95,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
         outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+        stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
         component: step.component,
       };
       return acc;
@@ -62,8 +104,9 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     stepGraph: workflow.serializedStepGraph,
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
+    stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
     options: workflow.options,
-    isProcessorWorkflow: workflow.type === 'processor',
+    isProcessorWorkflow: workflow.type === 'processor' || looksLikeProcessorStepSchema(workflow.inputSchema),
   };
 }
 

@@ -1,17 +1,17 @@
 ---
-title: "Server Configuration | Server"
-description: "Configure the Mastra server with custom settings for port, timeout, CORS, and more."
+title: "Server Overview | Server"
+description: "Overview of the Mastra server, covering HTTP endpoints, middleware, authentication, and client integration."
 packages:
   - "@mastra/core"
 ---
 
-# Server Configuration
+# Server Overview
 
-When deploying your Mastra application to production, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page covers how to configure and customize the server for a production environment.
+Mastra runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. The server handles request routing, middleware execution, authentication, and streaming responses.
 
 :::info
 
-This page covers the `server` configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+This page covers the [`server`](/reference/configuration#server-options) configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), visit [Server Adapters](/docs/server/server-adapters).
 
 :::
 
@@ -21,21 +21,15 @@ Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. Wh
 
 The server provides:
 
-- API endpoints for all registered agents
-- API endpoints for all registered workflows
-- Custom API route support
-- Custom middleware support
-- Configuration of timeout
-- Configuration of port
-- Configuration of body limit
+- API endpoints for all registered agents and workflows
+- Custom API routes and middleware
+- Authentication with multiple providers
+- Request context for dynamic configuration
+- Stream data redaction for secure responses
 
-See the [Middleware](/docs/v1/server/middleware) and
-[Custom API Routes](/docs/v1/server/custom-api-routes) pages for details on
-adding additional server behaviour.
+## Configuration
 
-## Server configuration
-
-You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
+Configure the server by passing a `server` object to the `Mastra` constructor:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -44,17 +38,35 @@ export const mastra = new Mastra({
   server: {
     port: 3000, // Defaults to 4111
     host: "0.0.0.0", // Defaults to 'localhost'
-    studioBase: "/my-mastra-studio", // Sub-path for the studio (optional)
-    timeout: 10000, // Defaults to 3 * 60 * 1000 (3 minutes)
   },
 });
 ```
 
-The `studioBase` option allows you to host Mastra Studio on a sub-path of your existing application. For example, with `studioBase: "/my-mastra-studio"`, the studio will be available at `http://your-host:port/my-mastra-studio` instead of the root.
+:::info
+
+Visit the [configuration reference](/reference/configuration#server-options) for a full list of available server options.
+
+:::
+
+## Server features
+
+- **[Middleware](/docs/server/middleware)**: Intercept requests for authentication, logging, CORS, or injecting request-specific context.
+- **[Custom API Routes](/docs/server/custom-api-routes)**: Extend the server with your own HTTP endpoints that have access to the Mastra instance.
+- **[Request Context](/docs/server/request-context)**: Pass request-specific values to agents, tools, and workflows based on runtime conditions.
+- **[Server Adapters](/docs/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
+- **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
+- **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
+- **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
+
+## Stream data redaction
+
+When streaming agent responses, the HTTP layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
+
+This behavior is only configurable by using [server adapters](/docs/server/server-adapters#stream-data-redaction). For server adapters, stream data redaction is enabled by default, too.
 
 ## TypeScript configuration
 
-Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
+Mastra requires `module` and `moduleResolution` settings compatible with modern Node.js. Legacy options like `CommonJS` or `node` are not supported.
 
 ```json {4-5} title="tsconfig.json"
 {
@@ -72,30 +84,3 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
   "include": ["src/**/*"]
 }
 ```
-
-> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
-
-## CORS configuration
-
-Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  server: {
-    cors: {
-      origin: ["https://example.com"], // Allow specific origins or '*' for all
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
-      credentials: false,
-    },
-  },
-});
-```
-
-## Stream data redaction
-
-When streaming agent responses, the HTTP streaming layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
-
-If you're using server adapters directly, you can configure redaction behavior. See [Stream data redaction](/docs/v1/server/server-adapters#stream-data-redaction) in the Server Adapters docs.

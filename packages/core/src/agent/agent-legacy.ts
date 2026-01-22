@@ -293,7 +293,7 @@ export class AgentLegacyHandler {
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
+          // @ts-expect-error Flag for agent network messages
           _agentNetworkAppend: this.capabilities._agentNetworkAppend,
         })
           .addSystem(instructions || (await this.capabilities.getInstructions({ requestContext })))
@@ -455,7 +455,7 @@ export class AgentLegacyHandler {
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
+          // @ts-expect-error Flag for agent network messages
           _agentNetworkAppend: this.capabilities._agentNetworkAppend,
         })
           .add(result.response.messages, 'response')
@@ -508,33 +508,37 @@ export class AgentLegacyHandler {
             const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
-            if (thread.title?.startsWith('New Thread')) {
-              const config = memory.getMergedThreadConfig(memoryConfig);
-              const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
+            // Check if this is the first user message by looking at remembered (historical) messages
+            // This works automatically for pre-created threads without requiring any metadata flags
+            const config = memory.getMergedThreadConfig(memoryConfig);
+            const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
-              const {
-                shouldGenerate,
-                model: titleModel,
-                instructions: titleInstructions,
-              } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
+            const {
+              shouldGenerate,
+              model: titleModel,
+              instructions: titleInstructions,
+            } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-              if (shouldGenerate && userMessage) {
-                promises.push(
-                  this.capabilities
-                    .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
-                    .then(title => {
-                      if (title) {
-                        return memory.createThread({
-                          threadId: thread.id,
-                          resourceId,
-                          memoryConfig,
-                          title,
-                          metadata: thread.metadata,
-                        });
-                      }
-                    }),
-                );
-              }
+            // Check for existing user messages from memory - if none, this is the first user message
+            const rememberedUserMessages = messageList.get.remembered.db().filter(m => m.role === 'user');
+            const isFirstUserMessage = rememberedUserMessages.length === 0;
+
+            if (shouldGenerate && isFirstUserMessage && userMessage) {
+              promises.push(
+                this.capabilities
+                  .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
+                  .then(title => {
+                    if (title) {
+                      return memory.createThread({
+                        threadId: thread.id,
+                        resourceId,
+                        memoryConfig,
+                        title,
+                        metadata: thread.metadata,
+                      });
+                    }
+                  }),
+              );
             }
 
             if (promises.length > 0) {
@@ -702,7 +706,16 @@ export class AgentLegacyHandler {
         `[Agent:${this.capabilities.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
     }
-    const runId = args.runId || this.capabilities.mastra?.generateId() || randomUUID();
+    const runId =
+      args.runId ||
+      this.capabilities.mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.capabilities.id,
+        threadId: threadFromArgs?.id,
+        resourceId,
+      }) ||
+      randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
     const llm = await this.capabilities.getLLM({ requestContext });
 

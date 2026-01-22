@@ -1,13 +1,18 @@
-import type { MastraStorage } from './base';
+import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
 
-export function augmentWithInit(storage: MastraStorage): MastraStorage {
+export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
   let hasInitialized: null | Promise<void> = null;
 
   const ensureInit = async () => {
     // Skip auto-initialization if disableInit is true
     if (storage.disableInit) {
+      return;
+    }
+
+    // Environment variable equivalent of disableInit - used by migration CLI
+    if (process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
       return;
     }
 
@@ -34,7 +39,18 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
       }
 
       const value = target[prop as keyof typeof target];
-      if (typeof value === 'function' && prop !== 'init') {
+      if (typeof value === 'function') {
+        // Special handling for init to track that it was called
+        if (prop === 'init') {
+          return async (...args: unknown[]) => {
+            if (!hasInitialized) {
+              hasInitialized = Reflect.apply(value, target, args) as Promise<void>;
+            }
+            return hasInitialized;
+          };
+        }
+
+        // All other functions wait for init
         return async (...args: unknown[]) => {
           await ensureInit();
 

@@ -5,7 +5,7 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { z as zv4 } from 'zod-v4';
+import { z as zv4 } from 'zod/v4';
 import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
@@ -13,7 +13,7 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-u
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -996,7 +996,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow-agent-options': workflow },
         agents: { 'test-agent-with-options': agent },
-        idGenerator: randomUUID,
+        idGenerator: () => randomUUID(),
       });
 
       // Create step with multiple agent options to verify they're all passed through
@@ -2837,7 +2837,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow-agent-options-v2': workflow },
         agents: { 'test-agent-with-options-v2': agent },
-        idGenerator: randomUUID,
+        idGenerator: () => randomUUID(),
       });
 
       // Create step with multiple agent options to verify they're all passed through
@@ -4002,10 +4002,10 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
 
-      expect(executionResult?.status).toBe('paused');
-      expect(executionResult?.steps).toEqual({
+      expect(workflowRun?.status).toBe('paused');
+      expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
           output: { value: 'step1' },
@@ -4119,7 +4119,7 @@ describe('Workflow', () => {
 
       // Poll until workflow completes
       while (true) {
-        const currentResult = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+        const currentResult = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
         if (!currentResult) {
           allStepsPresentThroughout = false;
@@ -4191,7 +4191,7 @@ describe('Workflow', () => {
       await workflowPromise;
 
       // Get final workflow execution result
-      const result = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
       // Verify all parallel steps went through running state
       expect(foundAllRunning).toBe(true);
@@ -6189,9 +6189,9 @@ describe('Workflow', () => {
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
           setTimeout(async () => {
-            const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
-            expect(currentExecResult?.status).toBe('running');
-            expect(currentExecResult?.steps['final']?.status).toBe('running');
+            const currentRun = await incrementWorkflow.getWorkflowRunById(run.runId);
+            expect(currentRun?.status).toBe('running');
+            expect(currentRun?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
@@ -6257,7 +6257,7 @@ describe('Workflow', () => {
 
       const run = await incrementWorkflow.createRun();
       await run.start({ inputData: { value: 0 } });
-      const result = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(result?.status).toBe('success');
       expect(result?.steps).toMatchObject({
         'nested-increment-workflow': {
@@ -6305,6 +6305,116 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should return only requested fields when fields option is specified', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ value: 'result1' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const testStorage = new MockStore();
+      const workflow = createWorkflow({
+        id: 'fields-filter-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { workflow },
+      });
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      // Request only status field
+      const statusOnly = await workflow.getWorkflowRunById(run.runId, { fields: ['status'] });
+      expect(statusOnly?.status).toBe('success');
+      expect(statusOnly?.steps).toBeUndefined(); // steps not requested, should be omitted
+      expect(statusOnly?.result).toBeUndefined();
+      expect(statusOnly?.payload).toBeUndefined();
+
+      // Request status and steps
+      const withSteps = await workflow.getWorkflowRunById(run.runId, { fields: ['status', 'steps'] });
+      expect(withSteps?.status).toBe('success');
+      expect(withSteps?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(withSteps?.result).toBeUndefined();
+
+      // Request all fields (no fields option)
+      const allFields = await workflow.getWorkflowRunById(run.runId);
+      expect(allFields?.status).toBe('success');
+      expect(allFields?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(allFields?.result).toBeDefined();
+      expect(allFields?.runId).toBe(run.runId);
+      expect(allFields?.workflowName).toBe('fields-filter-workflow');
+    });
+
+    it('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
+      const innerStep = createStep({
+        id: 'inner-step',
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(innerStep)
+        .commit();
+
+      const outerStep = createStep({
+        id: 'outer-step',
+        execute: async ({ inputData }) => ({ value: inputData.value * 2 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const testStorage = new MockStore();
+      const parentWorkflow = createWorkflow({
+        id: 'parent-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      parentWorkflow.then(nestedWorkflow).then(outerStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { parentWorkflow, nestedWorkflow },
+      });
+
+      const run = await parentWorkflow.createRun();
+      await run.start({ inputData: { value: 1 } });
+
+      // With nested workflows (default) - should include nested step keys
+      const withNested = await parentWorkflow.getWorkflowRunById(run.runId);
+      expect(withNested?.status).toBe('success');
+      expect(withNested?.steps).toHaveProperty('nested-workflow');
+      expect(withNested?.steps).toHaveProperty('nested-workflow.inner-step');
+      expect(withNested?.steps).toHaveProperty('outer-step');
+
+      // Without nested workflows - should only include top-level steps
+      const withoutNested = await parentWorkflow.getWorkflowRunById(run.runId, {
+        withNestedWorkflows: false,
+      });
+      expect(withoutNested?.status).toBe('success');
+      expect(withoutNested?.steps).toHaveProperty('nested-workflow');
+      expect(withoutNested?.steps).not.toHaveProperty('nested-workflow.inner-step');
+      expect(withoutNested?.steps).toHaveProperty('outer-step');
     });
   }, 10000); //we have a 5 second timeout for the final step in the workflow
 
@@ -6518,7 +6628,7 @@ describe('Workflow', () => {
       // Verify status is suspended in storage
       const beforeCancel = await workflow.getWorkflowRunById(runId);
       expect(beforeCancel).not.toBeNull();
-      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+      expect(beforeCancel!.status).toBe('suspended');
 
       // Cancel the suspended workflow
       await run.cancel();
@@ -6526,7 +6636,7 @@ describe('Workflow', () => {
       // Check status IMMEDIATELY after cancel() returns
       const afterCancel = await workflow.getWorkflowRunById(runId);
       expect(afterCancel).not.toBeNull();
-      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
+      expect(afterCancel!.status).toBe('canceled');
     });
   });
 
@@ -7413,9 +7523,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
 
@@ -7486,9 +7596,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
   });
@@ -8405,9 +8515,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toEqual({ newValue: 2 });
     });
 
@@ -8519,9 +8629,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toEqual({ newValue: 7 });
     });
   });
@@ -8686,7 +8796,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9164,7 +9274,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Required');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -9360,14 +9470,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Required',
       );
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -9639,7 +9749,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Schema Validation Zod-v4', () => {
+  describe('Schema Validation zod', () => {
     it('should throw error if trigger data is invalid', async () => {
       const triggerSchema = zv4.object({
         required: zv4.string(),
@@ -9650,7 +9760,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9663,7 +9773,7 @@ describe('Workflow', () => {
         }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       const step2 = createStep({
         id: 'step2',
         execute: vi.fn().mockResolvedValue({ result: 'step2 success' }),
@@ -9680,7 +9790,7 @@ describe('Workflow', () => {
 
       const step3 = createStep({
         id: 'step3',
-        // @ts-ignore
+        // @ts-expect-error
         execute: vi.fn().mockResolvedValue({ result: 'step3 success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9695,9 +9805,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: triggerSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9707,14 +9817,14 @@ describe('Workflow', () => {
 
       const parallelWorkflow = createWorkflow({
         id: 'parallel-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
             value: zv4.number(),
           }),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9772,7 +9882,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async ({ inputData }) => {
           return inputData;
         },
@@ -9782,9 +9892,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: triggerSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: triggerSchema,
         steps: [step1],
         options: { validateInputs: true },
@@ -9808,7 +9918,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9819,7 +9929,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9831,7 +9941,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9843,11 +9953,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9912,7 +10022,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async () => {
           return {};
         },
@@ -9926,7 +10036,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string().optional().default('test'),
@@ -9938,11 +10048,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9952,7 +10062,7 @@ describe('Workflow', () => {
       workflow
         .then(step1)
         .map({
-          // @ts-ignore
+          // @ts-expect-error
           start: mapVariable({
             step: step1,
             path: 'start',
@@ -9999,7 +10109,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async ({ inputData }) => {
           return { start: inputData.start };
         },
@@ -10013,7 +10123,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -10025,11 +10135,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10098,13 +10208,13 @@ describe('Workflow', () => {
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         resumeSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10119,11 +10229,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10136,9 +10246,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10147,9 +10257,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-ignore
+            // @ts-expect-error
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-ignore
+            // @ts-expect-error
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10176,7 +10286,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -10190,13 +10300,13 @@ describe('Workflow', () => {
     it('should use default value from resumeSchema when resuming a workflow', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         resumeSchema: zv4.object({ value: zv4.number().optional().default(21) }),
-        // @ts-ignore
+        // @ts-expect-error
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10211,11 +10321,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10228,9 +10338,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10239,9 +10349,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-ignore
+            // @ts-expect-error
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-ignore
+            // @ts-expect-error
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10290,9 +10400,9 @@ describe('Workflow', () => {
       });
       const startStep = createStep({
         id: 'start',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ startValue: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           newValue: zv4.number(),
         }),
@@ -10304,9 +10414,9 @@ describe('Workflow', () => {
       });
       const otherStep = createStep({
         id: 'other',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ newValue: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
         execute: other,
       });
@@ -10321,20 +10431,20 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ success: zv4.boolean() }),
         execute: final,
       });
 
       const counterWorkflow = createWorkflow({
         id: 'counter-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           startValue: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           success: zv4.boolean(),
         }),
@@ -10344,7 +10454,7 @@ describe('Workflow', () => {
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
@@ -10354,17 +10464,17 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
         .map({
-          // @ts-ignore
+          // @ts-expect-error
           other: mapVariable({
             step: startStep,
             path: 'newValue',
           }),
-          // @ts-ignore
+          // @ts-expect-error
           newValue: mapVariable({
             step: startStep,
             path: 'newValue',
@@ -10375,10 +10485,10 @@ describe('Workflow', () => {
       counterWorkflow
         .parallel([wfA, wfB])
         .then(
-          // @ts-ignore
+          // @ts-expect-error
           createStep({
             id: 'last-step',
-            // @ts-ignore
+            // @ts-expect-error
             execute: last,
             inputSchema: zv4.object({
               'nested-workflow-a': zv4.object({ finalValue: zv4.number() }),
@@ -10398,14 +10508,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -10697,7 +10807,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       const toolAction = vi.fn().mockImplementation(async (input, _context) => {
         return { name: input.name };
       });
@@ -10725,7 +10835,7 @@ describe('Workflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.step1).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -10733,7 +10843,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['random-tool']).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -11610,7 +11720,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-ignore
+      // @ts-expect-error
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -11681,7 +11791,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, requestContext });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-ignore
+      // @ts-expect-error
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -16582,10 +16692,12 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
 
-      const run3 = await workflow.getWorkflowRunById(run1.runId);
-      expect(run3?.runId).toBe(run1.runId);
-      expect(run3?.workflowName).toBe('test-workflow');
-      expect(run3?.snapshot).toEqual(runs[0].snapshot);
+      const workflowRun = await workflow.getWorkflowRunById(run1.runId);
+      expect(workflowRun?.runId).toBe(run1.runId);
+      expect(workflowRun?.workflowName).toBe('test-workflow');
+      // getWorkflowRunById now returns WorkflowState with processed execution state
+      expect(workflowRun?.status).toBe('success');
+      expect(workflowRun?.steps).toBeDefined();
 
       await workflow.deleteWorkflowRunById(run1.runId);
       const deleted = await workflow.getWorkflowRunById(run1.runId);
@@ -16791,9 +16903,9 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        logger: false,
-        storage: testStorage,
+        idGenerator: () => randomUUID(),
       });
+
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
@@ -17364,12 +17476,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17492,12 +17604,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a-clone'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17590,7 +17702,7 @@ describe('Workflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-ignore
+          // @ts-expect-error
           [async () => true, finalStep],
         ])
         .map({
@@ -17622,12 +17734,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17768,7 +17880,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -17913,7 +18025,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18094,7 +18206,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18236,12 +18348,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18363,12 +18475,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: 'nested-workflow-a', resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18701,7 +18813,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -18867,7 +18979,7 @@ describe('Workflow', () => {
         },
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['last-step']).toEqual(undefined);
 
       if (result.status !== 'suspended') {
@@ -18876,7 +18988,7 @@ describe('Workflow', () => {
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
         finalValue: 26 + 1,
       });
@@ -19435,7 +19547,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
       const result = await run.start({ requestContext });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -19489,7 +19601,7 @@ describe('Workflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
@@ -20633,7 +20745,7 @@ describe('Workflow', () => {
       // Poll for completion
       let result;
       for (let i = 0; i < 10; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success') break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -20917,6 +21029,545 @@ describe('Workflow', () => {
           steps: expect.any(Object),
         }),
       );
+    });
+
+    it('should provide getInitData function in onFinish callback', async () => {
+      let receivedInitData: any = null;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-getInitData-onFinish-workflow',
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedInitData = result.getInitData();
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: { userId: 'user-123' } });
+
+      expect(receivedInitData).toEqual({ userId: 'user-123' });
+    });
+
+    it('should provide getInitData function in onError callback', async () => {
+      let receivedInitData: any = null;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-getInitData-onError-workflow',
+        inputSchema: z.object({ userId: z.string() }),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedInitData = errorInfo.getInitData();
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: { userId: 'user-456' } });
+
+      expect(receivedInitData).toEqual({ userId: 'user-456' });
+    });
+
+    it('should provide mastra instance in onFinish callback', async () => {
+      let receivedMastra: Mastra | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-mastra-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedMastra = result.mastra;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-mastra-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-mastra-onFinish-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedMastra).toBe(mastra);
+    });
+
+    it('should provide mastra instance in onError callback', async () => {
+      let receivedMastra: Mastra | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-mastra-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedMastra = errorInfo.mastra;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-mastra-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-mastra-onError-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedMastra).toBe(mastra);
+    });
+
+    it('should provide requestContext in onFinish callback', async () => {
+      let receivedRequestContext: RequestContext | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-requestContext-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedRequestContext = result.requestContext;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-requestContext-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const requestContext = new RequestContext([['customKey', 'customValue']]);
+
+      const run = await mastra.getWorkflow('test-requestContext-onFinish-workflow').createRun();
+      await run.start({ inputData: {}, requestContext });
+
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('customKey')).toBe('customValue');
+    });
+
+    it('should provide requestContext in onError callback', async () => {
+      let receivedRequestContext: RequestContext | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-requestContext-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedRequestContext = errorInfo.requestContext;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-requestContext-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const requestContext = new RequestContext([['errorKey', 'errorValue']]);
+
+      const run = await mastra.getWorkflow('test-requestContext-onError-workflow').createRun();
+      await run.start({ inputData: {}, requestContext });
+
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('errorKey')).toBe('errorValue');
+    });
+
+    it('should provide runId in onFinish callback', async () => {
+      let receivedRunId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-runId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedRunId = result.runId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedRunId).toBeDefined();
+      expect(typeof receivedRunId).toBe('string');
+      expect(receivedRunId).toBe(run.runId);
+    });
+
+    it('should provide workflowId in onFinish callback', async () => {
+      let receivedWorkflowId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflowId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedWorkflowId = result.workflowId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedWorkflowId).toBe('test-workflowId-onFinish-workflow');
+    });
+
+    it('should provide resourceId in onFinish callback when provided', async () => {
+      let receivedResourceId: string | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-resourceId-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedResourceId = result.resourceId;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-resourceId-onFinish-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-resourceId-onFinish-workflow').createRun({
+        resourceId: 'user-resource-123',
+      });
+      await run.start({ inputData: {} });
+
+      expect(receivedResourceId).toBe('user-resource-123');
+    });
+
+    it('should provide logger in onFinish callback', async () => {
+      let receivedLogger: any = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedLogger = result.logger;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedLogger).toBeDefined();
+      expect(typeof receivedLogger.info).toBe('function');
+      expect(typeof receivedLogger.error).toBe('function');
+    });
+
+    it('should provide state in onFinish callback', async () => {
+      let receivedState: Record<string, any> | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ setState }) => {
+          await setState({ counter: 42 });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-state-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+        steps: [step1],
+        options: {
+          onFinish: result => {
+            receivedState = result.state;
+          },
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedState).toBeDefined();
+      expect(receivedState?.counter).toBe(42);
+    });
+
+    it('should provide runId in onError callback', async () => {
+      let receivedRunId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-runId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedRunId = errorInfo.runId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedRunId).toBeDefined();
+      expect(typeof receivedRunId).toBe('string');
+      expect(receivedRunId).toBe(run.runId);
+    });
+
+    it('should provide workflowId in onError callback', async () => {
+      let receivedWorkflowId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflowId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedWorkflowId = errorInfo.workflowId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedWorkflowId).toBe('test-workflowId-onError-workflow');
+    });
+
+    it('should provide logger in onError callback', async () => {
+      let receivedLogger: any = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedLogger = errorInfo.logger;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedLogger).toBeDefined();
+      expect(typeof receivedLogger.info).toBe('function');
+      expect(typeof receivedLogger.error).toBe('function');
+    });
+
+    it('should provide resourceId in onError callback when provided', async () => {
+      let receivedResourceId: string | undefined = undefined;
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-resourceId-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedResourceId = errorInfo.resourceId;
+          },
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-resourceId-onError-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await mastra.getWorkflow('test-resourceId-onError-workflow').createRun({
+        resourceId: 'error-resource-456',
+      });
+      await run.start({ inputData: {} });
+
+      expect(receivedResourceId).toBe('error-resource-456');
+    });
+
+    it('should provide state in onError callback', async () => {
+      let receivedState: Record<string, any> | undefined = undefined;
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ setState }) => {
+          await setState({ counter: 10 });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(new Error('Step execution failed')),
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ counter: z.number().optional() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-state-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema: z.object({ counter: z.number().optional() }),
+        steps: [step1, failingStep],
+        options: {
+          onError: errorInfo => {
+            receivedState = errorInfo.state;
+          },
+        },
+      });
+      workflow.then(step1).then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(receivedState).toBeDefined();
+      expect(receivedState?.counter).toBe(10);
     });
   });
 });

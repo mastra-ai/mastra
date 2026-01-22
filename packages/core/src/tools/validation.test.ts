@@ -1192,3 +1192,244 @@ describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () 
     });
   });
 });
+
+describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () => {
+  it('should preserve Date objects when validating z.coerce.date() schemas', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+    });
+
+    const input = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+  });
+
+  it('should handle ISO string dates with z.coerce.date()', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+    });
+
+    const input = {
+      startDate: '2024-01-01T00:00:00Z',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+  });
+
+  it('should preserve Date objects in nested structures', () => {
+    const schema = z.object({
+      params: z.object({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+      }),
+    });
+
+    const input = {
+      params: {
+        startDate: new Date('2024-01-01T00:00:00Z'),
+        endDate: new Date('2024-12-31T23:59:59Z'),
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).params.startDate).toBeInstanceOf(Date);
+    expect((result.data as any).params.endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve Date objects with nullable optional fields', () => {
+    // This test verifies that Date objects are preserved even in schemas with
+    // optional/nullable fields. The undefined-to-null conversion (GitHub #11457)
+    // happens before validation, so we use nullable() with a transform.
+    const schema = z.object({
+      startDate: z.coerce.date(),
+      endDate: z.coerce
+        .date()
+        .nullable()
+        .transform((val: Date | null) => val ?? undefined),
+    });
+
+    const input = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+      endDate: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve RegExp objects', () => {
+    const schema = z.object({
+      pattern: z.any(),
+    });
+
+    const input = { pattern: /abc/i };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).pattern).toBeInstanceOf(RegExp);
+    expect((result.data as any).pattern).toEqual(/abc/i);
+  });
+
+  it('should preserve Error objects', () => {
+    const schema = z.object({
+      error: z.any(),
+    });
+
+    const input = { error: new Error('Test error') };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).error).toBeInstanceOf(Error);
+    expect((result.data as any).error.message).toBe('Test error');
+  });
+
+  it('should handle Date objects in arrays', () => {
+    const schema = z.object({
+      dates: z.array(z.coerce.date()),
+    });
+
+    const input = {
+      dates: [new Date('2024-01-01T00:00:00Z'), new Date('2024-12-31T23:59:59Z')],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).dates).toHaveLength(2);
+    expect((result.data as any).dates[0]).toBeInstanceOf(Date);
+    expect((result.data as any).dates[1]).toBeInstanceOf(Date);
+  });
+
+  it('should handle mixed Date objects and ISO strings', () => {
+    const schema = z.object({
+      date1: z.coerce.date(),
+      date2: z.coerce.date(),
+      date3: z.coerce.date(),
+    });
+
+    const input = {
+      date1: new Date('2024-01-01T00:00:00Z'),
+      date2: '2024-06-15T12:00:00.000Z',
+      date3: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).date1).toBeInstanceOf(Date);
+    expect((result.data as any).date2).toBeInstanceOf(Date);
+    expect((result.data as any).date3).toBeInstanceOf(Date);
+  });
+
+  it('should preserve Map objects', () => {
+    const schema = z.object({
+      data: z.any(),
+    });
+
+    const map = new Map([
+      ['key1', 'value1'],
+      ['key2', 'value2'],
+    ]);
+    const input = { data: map };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).data).toBeInstanceOf(Map);
+    expect((result.data as any).data.get('key1')).toBe('value1');
+  });
+
+  it('should preserve Set objects', () => {
+    const schema = z.object({
+      data: z.any(),
+    });
+
+    const set = new Set([1, 2, 3]);
+    const input = { data: set };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).data).toBeInstanceOf(Set);
+    expect((result.data as any).data.has(2)).toBe(true);
+  });
+
+  it('should preserve URL objects', () => {
+    const schema = z.object({
+      url: z.any(),
+    });
+
+    const url = new URL('https://example.com/path?query=value');
+    const input = { url };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).url).toBeInstanceOf(URL);
+    expect((result.data as any).url.hostname).toBe('example.com');
+  });
+
+  it('should preserve custom class instances', () => {
+    class CustomClass {
+      constructor(public value: string) {}
+      getValue() {
+        return this.value;
+      }
+    }
+
+    const schema = z.object({
+      instance: z.any(),
+    });
+
+    const instance = new CustomClass('test');
+    const input = { instance };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).instance).toBeInstanceOf(CustomClass);
+    expect((result.data as any).instance.getValue()).toBe('test');
+  });
+
+  it('should handle nested plain objects with non-plain objects inside', () => {
+    const schema = z.object({
+      nested: z.object({
+        date: z.coerce.date(),
+        map: z.any(),
+        name: z.string(),
+      }),
+    });
+
+    const input = {
+      nested: {
+        date: new Date('2024-01-01T00:00:00Z'),
+        map: new Map([['key', 'value']]),
+        name: 'test',
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).nested.date).toBeInstanceOf(Date);
+    expect((result.data as any).nested.map).toBeInstanceOf(Map);
+    expect((result.data as any).nested.map.get('key')).toBe('value');
+  });
+});

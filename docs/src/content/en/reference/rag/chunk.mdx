@@ -1,5 +1,5 @@
 ---
-title: "Reference: Reference: .chunk() | RAG"
+title: "Reference: .chunk() | RAG"
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 packages:
   - "@mastra/rag"
@@ -79,11 +79,11 @@ The following parameters are available for all chunking strategies.
         "Function to calculate text length. Defaults to character count.",
     },
     {
-      name: "keepSeparator",
-      type: "boolean | 'start' | 'end'",
+      name: "separatorPosition",
+      type: "'start' | 'end'",
       isOptional: true,
       description:
-        "Whether to keep the separator at the start or end of chunks",
+        "Where to position the separator in chunks. 'start' attaches to beginning of next chunk, 'end' attaches to end of current chunk. If not specified, separators are discarded.",
     },
     {
       name: "addStartIndex",
@@ -108,7 +108,7 @@ The following parameters are available for all chunking strategies.
   ]}
 />
 
-See [ExtractParams reference](/reference/v1/rag/extract-params) for details on the `extract` parameter.
+See [ExtractParams reference](/reference/rag/extract-params) for details on the `extract` parameter.
 
 ## Strategy-Specific Options
 
@@ -138,7 +138,6 @@ const chunks = await doc.chunk({
   minSize: 50, // Sentence-specific option
   sentenceEnders: ["."], // Sentence-specific option
   fallbackToCharacters: false, // Sentence-specific option
-  keepSeparator: true, // general option
 });
 
 // HTML strategy example

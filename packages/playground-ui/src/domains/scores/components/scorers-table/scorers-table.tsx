@@ -8,12 +8,12 @@ import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { columns } from './columns';
 import { ScorerTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;
@@ -119,7 +119,7 @@ const EmptyScorersTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/scorers/overview"
+          href="https://mastra.ai/en/docs/evals/overview"
           target="_blank"
         >
           <Icon>

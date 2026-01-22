@@ -178,6 +178,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/firmware",
+          label: "Firmware",
+        },
+        {
+          type: "doc",
           id: "providers/friendli",
           label: "Friendli",
         },
@@ -244,12 +249,22 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "MiniMax",
+          label: "MiniMax (minimax.io)",
         },
         {
           type: "doc",
           id: "providers/minimax-cn",
-          label: "MiniMax (China)",
+          label: "MiniMax (minimaxi.com)",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-coding-plan",
+          label: "MiniMax Coding Plan (minimax.io)",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn-coding-plan",
+          label: "MiniMax Coding Plan (minimaxi.com)",
         },
         {
           type: "doc",
@@ -280,6 +295,11 @@ const sidebars = {
           type: "doc",
           id: "providers/nebius",
           label: "Nebius Token Factory",
+        },
+        {
+          type: "doc",
+          id: "providers/novita-ai",
+          label: "NovitaAI",
         },
         {
           type: "doc",
@@ -315,6 +335,11 @@ const sidebars = {
           type: "doc",
           id: "providers/poe",
           label: "Poe",
+        },
+        {
+          type: "doc",
+          id: "providers/privatemode-ai",
+          label: "Privatemode AI",
         },
         {
           type: "doc",
@@ -358,8 +383,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/venice",
-          label: "Venice AI",
+          id: "providers/vivgrid",
+          label: "Vivgrid",
         },
         {
           type: "doc",

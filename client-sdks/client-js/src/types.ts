@@ -23,8 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -104,9 +103,13 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  inputProcessors?: Array<{ id: string; name: string }>;
+  outputProcessors?: Array<{ id: string; name: string }>;
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -129,15 +132,19 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
-  messages: MessageListInput;
+export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
-  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
+  messages: MessageListInput;
+} & (OUTPUT extends undefined
+    ? { structuredOutput?: never }
+    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -180,9 +187,7 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
-export type GetWorkflowRunByIdResponse = WorkflowRun;
-
-export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
+export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -195,6 +200,7 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
     };
   };
   allSteps: {
@@ -205,12 +211,14 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
       isWorkflow: boolean;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  stateSchema: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -273,8 +281,19 @@ export interface CreateMemoryThreadParams {
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
-  resourceId: string;
-  agentId: string;
+  /**
+   * Optional resourceId to filter threads. When not provided, returns all threads.
+   */
+  resourceId?: string;
+  /**
+   * Optional metadata filter. Threads must match all specified key-value pairs (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+  /**
+   * Optional agentId. When not provided and storage is configured on the server,
+   * threads will be retrieved using storage directly.
+   */
+  agentId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
@@ -585,6 +604,7 @@ export interface StoredAgentResponse {
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
+  integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
@@ -633,11 +653,13 @@ export interface CreateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -652,11 +674,13 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -665,6 +689,77 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: Record<string, any>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+export interface CreateAgentVersionResponse {
+  version: AgentVersionResponse;
+}
+
+export interface ActivateAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface RestoreAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface DeleteAgentVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VersionDiff {
+  field: string;
+  previousValue: any;
+  currentValue: any;
+  changeType?: 'added' | 'removed' | 'modified';
+}
+
+export type AgentVersionDiff = VersionDiff;
+
+export interface CompareVersionsResponse {
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
 }
 
 export interface ListAgentsModelProvidersResponse {
@@ -691,4 +786,79 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Processor Types
+// ============================================================================
+
+/**
+ * Processor phase types
+ */
+export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+
+/**
+ * Processor configuration showing how it's attached to an agent
+ */
+export interface ProcessorConfiguration {
+  agentId: string;
+  agentName: string;
+  type: 'input' | 'output';
+}
+
+/**
+ * Processor in list response
+ */
+export interface GetProcessorResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  agentIds: string[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Detailed processor response
+ */
+export interface GetProcessorDetailResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  configurations: ProcessorConfiguration[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Parameters for executing a processor
+ */
+export interface ExecuteProcessorParams {
+  phase: ProcessorPhase;
+  messages: MastraDBMessage[];
+  agentId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Tripwire result from processor execution
+ */
+export interface ProcessorTripwireResult {
+  triggered: boolean;
+  reason?: string;
+  metadata?: unknown;
+}
+
+/**
+ * Response from processor execution
+ */
+export interface ExecuteProcessorResponse {
+  success: boolean;
+  phase: string;
+  messages?: MastraDBMessage[];
+  messageList?: {
+    messages: MastraDBMessage[];
+  };
+  tripwire?: ProcessorTripwireResult;
+  error?: string;
 }

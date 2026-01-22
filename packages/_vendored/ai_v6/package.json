@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "",
   "type": "module",
   "private": true,
@@ -50,11 +50,11 @@
     "ai": "^6.0.1",
     "eslint": "^9.36.0",
     "json-schema": "^0.4.0",
-    "msw": "^2.12.4",
+    "msw": "^2.12.7",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

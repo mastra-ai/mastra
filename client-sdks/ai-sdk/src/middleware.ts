@@ -1,10 +1,11 @@
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import type {
   LanguageModelV2,
   LanguageModelV2Middleware,
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
-import { MessageList, TripWire } from '@mastra/core/agent';
+import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
@@ -342,9 +343,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
 
       // Convert back to AI SDK prompt format using built-in MessageList methods
       // get.all.aiV5.prompt() returns ModelMessage[], then convert to LanguageModelV2Prompt
-      const newPrompt: LanguageModelV2Prompt = messageList.get.all.aiV5
-        .prompt()
-        .map(MessageList.aiV5ModelMessageToV2PromptMessage);
+      const newPrompt: LanguageModelV2Prompt = messageList.get.all.aiV5.prompt().map(aiV5ModelMessageToV2PromptMessage);
 
       return {
         ...params,

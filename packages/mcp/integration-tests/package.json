@@ -10,7 +10,7 @@
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
     "vite": "^7.3.0",
     "zod": "^3.25.76"
   },
@@ -20,7 +20,7 @@
     "@types/node": "22.13.17",
     "get-port": "^7.1.0",
     "mastra": "*",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   },
   "pnpm": {

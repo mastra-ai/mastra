@@ -4,12 +4,10 @@ import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { Button } from '@/ds/components/Button';
-import { CodeBlockDemo } from '@/components/ui/code-block';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Text } from '@/components/ui/text';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
@@ -18,8 +16,15 @@ import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
-import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { WorkflowStatus } from './workflow-status';
 import { WorkflowInputData } from './workflow-input-data';
 import { isObjectEmpty } from '@/lib/object';
@@ -46,12 +51,14 @@ export interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
+    initialState,
     requestContext,
     perStep,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
+    initialState?: Record<string, unknown>;
     requestContext: Record<string, unknown>;
     perStep?: boolean;
   }) => Promise<void>;
@@ -100,6 +107,7 @@ export function WorkflowTrigger({
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
+  const stateSchema = workflow?.stateSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -115,8 +123,11 @@ export function WorkflowTrigger({
       setRunId?.(run.runId);
       setInnerRunId(run.runId);
       setContextRunId(run.runId);
+      const { initialState, inputData: dataInputData } = data ?? {};
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData: data, requestContext });
+      const inputData = stateSchema ? dataInputData : data;
+
+      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -192,6 +203,14 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
+  const zodStateSchema = stateSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stateSchema))) : null;
+
+  const zodSchemaToUse = zodStateSchema
+    ? z.object({
+        inputData: zodInputSchema,
+        initialState: zodStateSchema.optional(),
+      })
+    : zodInputSchema;
 
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
@@ -200,11 +219,11 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
+      <div className="space-y-4 px-5 pb-5 border-b border-border1">
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b border-border1">
             <Icon>
-              <Loader2 className="animate-spin text-icon6" />
+              <Loader2 className="animate-spin text-neutral6" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -212,9 +231,9 @@ export function WorkflowTrigger({
 
         {!isSuspendedSteps && (
           <>
-            {zodInputSchema ? (
+            {zodSchemaToUse ? (
               <WorkflowInputData
-                schema={zodInputSchema}
+                schema={zodSchemaToUse}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
                 submitButtonLabel="Run"
@@ -223,6 +242,7 @@ export function WorkflowTrigger({
                   handleExecuteWorkflow(data);
                 }}
                 withoutSubmit={!!paramsRunId}
+                isProcessorWorkflow={workflow?.isProcessorWorkflow}
               />
             ) : !!paramsRunId ? null : (
               <Button
@@ -254,15 +274,15 @@ export function WorkflowTrigger({
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4" key={step.stepId}>
-                <Text variant="secondary" className="text-mastra-el-3" size="xs">
+                <Txt variant="ui-xs" className="text-neutral3">
                   {step.stepId}
-                </Text>
+                </Txt>
                 {step.suspendPayload && (
                   <div data-testid="suspended-payload">
-                    <CodeBlockDemo
+                    <CodeEditor
+                      data={step.suspendPayload}
                       className="w-full overflow-x-auto p-2"
-                      code={JSON.stringify(step.suspendPayload, null, 2)}
-                      language="json"
+                      showCopyButton={false}
                     />
                   </div>
                 )}
@@ -289,7 +309,6 @@ export function WorkflowTrigger({
           <Button
             variant="light"
             className="w-full"
-            size="lg"
             onClick={handleCancelWorkflowRun}
             disabled={
               !!cancelResponse?.message ||
@@ -312,12 +331,11 @@ export function WorkflowTrigger({
 
         {hasWorkflowActivePaths && (
           <>
-            <hr className="border-border1 border-sm my-5" />
-            <div className="flex flex-col gap-2">
-              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+            <div className="flex flex-col gap-2 pt-5 border-t border-border1">
+              <Txt variant="ui-xs" className="text-neutral3">
                 Status
-              </Text>
-              <div className="px-4 flex flex-col gap-4">
+              </Txt>
+              <div className="flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
                   .map(([stepId, step]) => {
@@ -369,7 +387,7 @@ export function WorkflowTrigger({
       </div>
 
       {result && !isObjectEmpty(result) && (
-        <div className="p-5 border-b-sm border-border1">
+        <div className="p-5 border-b border-border1">
           <WorkflowJsonDialog result={result} />
         </div>
       )}
@@ -382,22 +400,23 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
 
   return (
     <>
-      <Button variant="light" onClick={() => setOpen(true)} className="w-full" size="lg">
+      <Button variant="light" onClick={() => setOpen(true)} className="w-full">
         <Icon>
-          <Braces className="text-icon3" />
+          <Braces className="text-neutral3" />
         </Icon>
         Open Workflow Execution (JSON)
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPortal>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
             <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <div className="w-full h-full overflow-x-scroll">
-              <SyntaxHighlighter data={result} className="p-4" />
-            </div>
-          </DialogContent>
-        </DialogPortal>
+            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="max-h-[90vh]">
+            <CodeEditor data={result} className="p-4" />
+          </DialogBody>
+        </DialogContent>
       </Dialog>
     </>
   );

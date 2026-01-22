@@ -2,7 +2,6 @@
 export const BUNDLE = [
   'v1/mastra-core-imports',
   'v1/runtime-context',
-  'v1/not-implemented/mastra-memory',
   'v1/mastra-plural-apis',
   'v1/not-implemented/mastra-required-id',
   'v1/agent-property-access',
@@ -36,5 +35,7 @@ export const BUNDLE = [
   'v1/storage-postgres-schema-name',
   'v1/storage-get-messages-paginated',
   'v1/storage-list-workflow-runs',
+  'v1/storage-list-threads-by-resource-to-list-threads',
   'v1/vector-pg-constructor',
+  'v1/client-msg-function-args',
 ];

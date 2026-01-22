@@ -16,19 +16,26 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
+  private ttlConfig?: DynamoDBTtlConfig;
+
   constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = resolveDynamoDBConfig(config);
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -159,7 +166,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const threadData = {
+    const threadData: ThreadEntityData = {
       entity: 'thread',
       id: thread.id,
       resourceId: thread.resourceId,
@@ -167,6 +174,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
+      ...getTtlProps('thread', this.ttlConfig),
     };
 
     try {
@@ -530,22 +538,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
 
     // Ensure 'entity' is added and complex fields are handled
-    const messagesToSave = messages.map(msg => {
+    const messagesToSave: MessageEntityData[] = messages.map(msg => {
       const now = new Date().toISOString();
       return {
-        entity: 'message', // Add entity type
+        entity: 'message' as const,
         id: msg.id,
         threadId: msg.threadId,
         role: msg.role,
         type: msg.type,
         resourceId: msg.resourceId,
-        // Ensure complex fields are stringified if not handled by attribute setters
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
         toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
         toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
         toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
         createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
-        updatedAt: now, // Add updatedAt
+        updatedAt: now,
+        ...getTtlProps('message', this.ttlConfig),
       };
     });
 
@@ -602,30 +610,37 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: {
+            page,
+            ...(perPageInput !== undefined && { perPage: perPageInput }),
+          },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
 
-    // When perPage is false (get all), ignore page offset
+    const perPage = normalizePerPage(perPageInput, 100);
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug('Getting threads by resource ID with pagination', {
-      resourceId,
+    // Log only safe fields to avoid leaking PII/secrets in metadata values
+    this.logger.debug('Listing threads with filters', {
+      resourceId: filter?.resourceId,
+      metadataKeys: filter?.metadata ? Object.keys(filter.metadata) : [],
       page,
       perPage,
       field,
@@ -633,14 +648,44 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     });
 
     try {
-      // Query threads by resource ID using the GSI
-      const query = this.service.entities.thread.query.byResource({ entity: 'thread', resourceId });
+      // Fetch threads from DynamoDB
+      // Use query with GSI for resourceId filtering (efficient), otherwise scan all threads
+      const rawThreads = filter?.resourceId
+        ? (
+            await this.service.entities.thread.query
+              .byResource({
+                entity: 'thread',
+                resourceId: filter.resourceId,
+              })
+              .go({ pages: 'all' })
+          ).data
+        : (await this.service.entities.thread.scan.go({ pages: 'all' })).data;
 
-      // Get all threads for this resource ID (DynamoDB doesn't support OFFSET/LIMIT)
-      const results = await query.go();
+      // Transform threads
+      let allThreads = this.transformAndSortThreads(rawThreads, field, direction);
 
-      // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, field, direction);
+      // Apply metadata filters if provided (AND logic)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allThreads = allThreads.filter(thread => {
+          // Handle both object and stringified JSON metadata
+          let threadMeta: Record<string, unknown> | null = null;
+
+          if (typeof thread.metadata === 'string') {
+            try {
+              threadMeta = JSON.parse(thread.metadata);
+            } catch {
+              return false; // Invalid JSON, exclude thread
+            }
+          } else if (thread.metadata && typeof thread.metadata === 'object') {
+            threadMeta = thread.metadata as Record<string, unknown>;
+          }
+
+          if (!threadMeta) return false;
+
+          // Compare metadata values using strict equality
+          return Object.entries(filter.metadata!).every(([key, value]) => threadMeta![key] === value);
+        });
+      }
 
       // Apply pagination in memory
       const endIndex = offset + perPage;
@@ -660,10 +705,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!(filter?.metadata && Object.keys(filter.metadata).length),
+            page,
+            perPage: perPageForResponse,
+          },
         },
         error,
       );
@@ -901,13 +951,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const resourceData = {
+    const resourceData: ResourceEntityData = {
       entity: 'resource',
       id: resource.id,
       workingMemory: resource.workingMemory,
       metadata: resource.metadata ? JSON.stringify(resource.metadata) : undefined,
       createdAt: resource.createdAt?.toISOString() || now.toISOString(),
       updatedAt: now.toISOString(),
+      ...getTtlProps('resource', this.ttlConfig),
     };
 
     try {

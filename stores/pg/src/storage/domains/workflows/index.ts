@@ -26,23 +26,14 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
-    updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
-  };
+/**
+ * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
+ * Removes:
+ * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
+ * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ */
+function sanitizeJsonForPg(jsonString: string): string {
+  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -62,6 +53,25 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
+      updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
+    };
   }
 
   /**
@@ -166,12 +176,14 @@ export class WorkflowsPG extends WorkflowsStorage {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
+      // Sanitize the snapshot JSON to remove problematic Unicode sequences
+      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), createdAtValue, updatedAtValue],
+        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
       );
     } catch (error) {
       throw new MastraError(
@@ -251,7 +263,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result);
+      return this.parseWorkflowRun(result);
     } catch (error) {
       throw new MastraError(
         {
@@ -311,7 +323,15 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
+        // PostgreSQL's jsonb cast fails on:
+        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
+        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // See: https://github.com/mastra-ai/mastra/issues/11563
+        conditions.push(
+          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
+        );
         values.push(status);
         paramIndex++;
       }
@@ -365,7 +385,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return this.parseWorkflowRun(row);
       });
 
       return { runs, total: total || runs.length };

@@ -54,10 +54,9 @@ export class OtelExporter extends BaseExporter {
 
     // Provider configuration is required
     if (!this.config.provider) {
-      this.logger.error(
+      this.setDisabled(
         '[OtelExporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
       );
-      this.isDisabled = true;
       this.isSetup = true;
       return;
     }
@@ -66,7 +65,7 @@ export class OtelExporter extends BaseExporter {
     const resolved = resolveProviderConfig(this.config.provider);
     if (!resolved) {
       // Configuration validation failed, disable tracing
-      this.isDisabled = true;
+      this.setDisabled('[OtelExporter] Provider configuration validation failed.');
       this.isSetup = true;
       return;
     }
@@ -87,7 +86,7 @@ export class OtelExporter extends BaseExporter {
 
     if (!ExporterClass) {
       // Exporter not available, disable tracing
-      this.isDisabled = true;
+      this.setDisabled(`[OtelExporter] Exporter not available for protocol: ${protocol}`);
       this.isSetup = true;
       return;
     }
@@ -103,19 +102,17 @@ export class OtelExporter extends BaseExporter {
         // Dynamically import @grpc/grpc-js to create metadata
         let metadata: any;
         try {
-          // @ts-ignore - Dynamic import for optional dependency
           const grpcModule = await import('@grpc/grpc-js');
           metadata = new grpcModule.Metadata();
           Object.entries(headers).forEach(([key, value]) => {
             metadata.set(key, value);
           });
         } catch (grpcError) {
-          this.logger.error(
+          this.setDisabled(
             `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
-              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
-            grpcError,
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js`,
           );
-          this.isDisabled = true;
+          this.logger.error('[OtelExporter] gRPC error details:', grpcError);
           this.isSetup = true;
           return;
         }
@@ -134,8 +131,8 @@ export class OtelExporter extends BaseExporter {
         });
       }
     } catch (error) {
-      this.logger.error(`[OtelExporter] Failed to create exporter:`, error);
-      this.isDisabled = true;
+      this.setDisabled('[OtelExporter] Failed to create exporter.');
+      this.logger.error('[OtelExporter] Exporter creation error details:', error);
       this.isSetup = true;
       return;
     }
@@ -210,6 +207,17 @@ export class OtelExporter extends BaseExporter {
       );
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
+    }
+  }
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * Delegates to the BatchSpanProcessor's forceFlush() method.
+   */
+  async flush(): Promise<void> {
+    if (this.processor) {
+      await this.processor.forceFlush();
+      this.logger.debug('[OtelExporter] Flushed pending spans');
     }
   }
 

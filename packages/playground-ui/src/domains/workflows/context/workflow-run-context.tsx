@@ -1,11 +1,13 @@
 import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { createContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
-import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks';
+import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { useWorkflow, useWorkflowRunExecutionResult } from '@/hooks';
+import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
 import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { toast } from '@/lib/toast';
 
 export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
@@ -72,7 +74,7 @@ export function WorkflowRunProvider({
       ? undefined
       : 5000;
 
-  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRunExecutionResult(
+  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRun(
     workflowId,
     initialRunId ?? '',
     refetchExecResultInterval,
@@ -90,13 +92,15 @@ export function WorkflowRunProvider({
           error: runExecutionResult?.error,
           runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
+          value: runExecutionResult?.initialState,
         } as WorkflowRunState)
       : undefined;
   }, [runExecutionResult, initialRunId]);
 
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
+  const { settings } = useTracingSettings();
 
-  const { createWorkflowRun } = useExecuteWorkflow();
+  const createWorkflowRun = useCreateWorkflowRun();
   const {
     streamWorkflow,
     streamResult,
@@ -105,8 +109,12 @@ export function WorkflowRunProvider({
     closeStreamsAndReset,
     resumeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamWorkflow({ debugMode });
-  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
+  } = useStreamWorkflow({
+    debugMode,
+    tracingOptions: settings?.tracingOptions,
+    onError: error => toast.error(error.message),
+  });
+  const cancelWorkflowRun = useCancelWorkflowRun();
 
   const clearData = () => {
     setResult(null);
@@ -120,7 +128,14 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (runSnapshot?.runId) {
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      setPayload(runSnapshot.context?.input);
+      if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
+        setPayload({
+          initialState: runSnapshot.value,
+          inputData: runSnapshot.context?.input,
+        });
+      } else {
+        setPayload(runSnapshot.context?.input);
+      }
       setRunId(runSnapshot.runId);
     }
   }, [runSnapshot]);
@@ -151,8 +166,8 @@ export function WorkflowRunProvider({
         },
         streamResult,
         isStreamingWorkflow: isStreaming,
-        isCancellingWorkflowRun,
-        cancelWorkflowRun,
+        isCancellingWorkflowRun: cancelWorkflowRun.isPending,
+        cancelWorkflowRun: cancelWorkflowRun.mutateAsync,
         observeWorkflowStream: props => {
           setIsRunning(true);
           return observeWorkflowStream.mutate(props);

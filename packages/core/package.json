@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.19",
+  "version": "1.0.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -171,6 +171,16 @@
         "default": "./dist/agent/message-list/index.cjs"
       }
     },
+    "./loop/server": {
+      "import": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.js"
+      },
+      "require": {
+        "types": "./dist/loop/server.d.ts",
+        "default": "./dist/loop/server.cjs"
+      }
+    },
     "./storage/constants": {
       "import": {
         "types": "./dist/storage/constants.d.ts",
@@ -189,10 +199,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "typecheck:zod-compat": "NODE_OPTIONS='--max-old-space-size=4096' tsc --project tsconfig.zod-compat.json",
     "lint": "eslint .",
-    "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
-    "build": "node ./tools/commonjs-tsc-fixer.js",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
+    "build:watch": "pnpm build:lib --watch",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "generate:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
@@ -212,10 +222,10 @@
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@sindresorhus/slugify": "^2.2.1",
-    "dotenv": "^16.6.1",
-    "hono": "^4.10.5",
+    "dotenv": "^17.2.3",
+    "hono": "^4.11.3",
     "hono-openapi": "^1.1.1",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.2",
     "p-map": "^7.0.3",
@@ -260,10 +270,9 @@
     "rollup": "^4.50.2",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76",
-    "zod-v4": "npm:zod@4.1.12"
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=22.13.0"

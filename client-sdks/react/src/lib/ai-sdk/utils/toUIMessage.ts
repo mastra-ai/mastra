@@ -1,6 +1,6 @@
-import { AgentChunkType, ChunkType } from '@mastra/core/stream';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { type AgentChunkType, type ChunkType } from '@mastra/core/stream';
+import { type MastraUIMessage, type MastraUIMessageMetadata, type MastraExtendedTextPart } from '../types';
+import { type WorkflowStreamResult, type StepResult } from '@mastra/core/workflows';
 
 type StreamChunk = {
   type: string;
@@ -185,43 +185,68 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       return [...result, newMessage];
     }
 
-    case 'text-start':
+    case 'text-start': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const parts = [...lastMessage.parts];
+      const textId = chunk.payload.id || `text-${Date.now()}`;
+
+      // Always create a new text part on text-start
+      const newTextPart: MastraExtendedTextPart = {
+        type: 'text',
+        text: '',
+        state: 'streaming',
+        textId: textId,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+      parts.push(newTextPart);
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
-      // Find or create a text part
       const parts = [...lastMessage.parts];
-      let textPartIndex = parts.findIndex(part => part.type === 'text');
+      const textId = chunk.payload.id;
 
-      if (chunk.type === 'text-start') {
-        // Add a new text part if it doesn't exist
-        if (textPartIndex === -1) {
-          parts.push({
-            type: 'text',
-            text: '',
-            state: 'streaming',
-            providerMetadata: chunk.payload.providerMetadata,
-          });
-        }
+      let textPartIndex = textId
+        ? parts.findLastIndex(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+        : -1;
+
+      if (textPartIndex === -1) {
+        textPartIndex = parts.findLastIndex(
+          part => part.type === 'text' && (part as MastraExtendedTextPart).state === 'streaming',
+        );
+      }
+
+      if (textPartIndex === -1) {
+        const newTextPart: MastraExtendedTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId: textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        parts.push(newTextPart);
       } else {
-        // text-delta: append to existing text part or create if missing
-        if (textPartIndex === -1) {
-          parts.push({
-            type: 'text',
-            text: chunk.payload.text,
+        const textPart = parts[textPartIndex];
+        if (textPart.type === 'text') {
+          const extendedTextPart = textPart as MastraExtendedTextPart;
+          const updatedTextPart: MastraExtendedTextPart = {
+            ...extendedTextPart,
+            text: extendedTextPart.text + chunk.payload.text,
             state: 'streaming',
-            providerMetadata: chunk.payload.providerMetadata,
-          });
-        } else {
-          const textPart = parts[textPartIndex];
-          if (textPart.type === 'text') {
-            parts[textPartIndex] = {
-              ...textPart,
-              text: textPart.text + chunk.payload.text,
-              state: 'streaming',
-            };
-          }
+          };
+          parts[textPartIndex] = updatedTextPart;
         }
       }
 

@@ -4,6 +4,7 @@ import type {
   SummaryExtractArgs,
   QuestionAnswerExtractArgs,
   KeywordExtractArgs,
+  SchemaExtractArgs,
 } from './extractors';
 
 export enum Language {
@@ -40,13 +41,14 @@ export type ExtractParams = {
   summary?: SummaryExtractArgs | boolean;
   questions?: QuestionAnswerExtractArgs | boolean;
   keywords?: KeywordExtractArgs | boolean;
+  schema?: SchemaExtractArgs;
 };
 
 export type BaseChunkOptions = {
   maxSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;
-  keepSeparator?: boolean | 'start' | 'end';
+  separatorPosition?: 'start' | 'end';
   addStartIndex?: boolean;
   stripWhitespace?: boolean;
 };

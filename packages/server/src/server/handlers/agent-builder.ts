@@ -10,11 +10,12 @@ import {
   startAsyncAgentBuilderBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
   streamLegacyAgentBuilderBodySchema,
+  workflowRunResultSchema,
+  workflowRunResultQuerySchema,
 } from '../schemas/agent-builder';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
@@ -29,12 +30,13 @@ import * as workflows from './workflows';
 
 export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder',
+  path: '/agent-builder',
   responseType: 'json',
   responseSchema: listWorkflowsResponseSchema,
   summary: 'List agent-builder actions',
   description: 'Returns a list of all available agent-builder actions',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra } = ctx;
     const logger = mastra.getLogger();
@@ -55,13 +57,14 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
 
 export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId',
+  path: '/agent-builder/:actionId',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   responseSchema: workflowInfoSchema,
   summary: 'Get action by ID',
   description: 'Returns details for a specific agent-builder action',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId } = ctx;
     const logger = mastra.getLogger();
@@ -88,7 +91,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
 
 export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId/runs',
+  path: '/agent-builder/:actionId/runs',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: listWorkflowRunsQuerySchema,
@@ -96,6 +99,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   summary: 'List action runs',
   description: 'Returns a paginated list of execution runs for the specified action',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId } = ctx;
     const logger = mastra.getLogger();
@@ -123,13 +127,16 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
 
 export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId/runs/:runId',
+  path: '/agent-builder/:actionId/runs/:runId',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
-  responseSchema: workflowRunResponseSchema,
+  queryParamSchema: workflowRunResultQuerySchema,
+  responseSchema: workflowRunResultSchema,
   summary: 'Get action run by ID',
-  description: 'Returns details for a specific action run',
+  description:
+    'Returns details for a specific action run with metadata and processed execution state. Use the fields query parameter to reduce payload size.',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -155,43 +162,9 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   },
 });
 
-export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/agent-builder/:actionId/runs/:runId/execution-result',
-  responseType: 'json',
-  pathParamSchema: actionRunPathParams,
-  responseSchema: workflowExecutionResultSchema,
-  summary: 'Get action execution result',
-  description: 'Returns the final execution result of a completed action run',
-  tags: ['Agent Builder'],
-  handler: async ctx => {
-    const { mastra, actionId, runId } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Getting agent builder action run execution result', { actionId, runId });
-
-      return await workflows.GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-      });
-    } catch (error) {
-      logger.error('Error getting execution result', { error, actionId, runId });
-      return handleError(error, 'Error getting agent builder action execution result');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
 export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/create-run',
+  path: '/agent-builder/:actionId/create-run',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -199,6 +172,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   summary: 'Create action run',
   description: 'Creates a new action execution instance with an optional custom run ID',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -226,7 +200,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 
 export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/stream',
+  path: '/agent-builder/:actionId/stream',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -235,6 +209,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Stream action execution',
   description: 'Executes an action and streams the results in real-time',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -263,7 +238,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/start-async',
+  path: '/agent-builder/:actionId/start-async',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -272,6 +247,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Start action asynchronously',
   description: 'Starts an action execution asynchronously without streaming results',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -300,7 +276,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/start',
+  path: '/agent-builder/:actionId/start',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -309,6 +285,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   summary: 'Start specific action run',
   description: 'Starts execution of a specific action run by ID',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -337,7 +314,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 
 export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/observe',
+  path: '/agent-builder/:actionId/observe',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -345,6 +322,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Observe action stream',
   description: 'Observes and streams updates from an already running action execution',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -372,7 +350,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume-async',
+  path: '/agent-builder/:actionId/resume-async',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -381,6 +359,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action asynchronously',
   description: 'Resumes a suspended action execution asynchronously without streaming',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -409,7 +388,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume',
+  path: '/agent-builder/:actionId/resume',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -418,6 +397,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action',
   description: 'Resumes a suspended action execution from a specific step',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -446,7 +426,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume-stream',
+  path: '/agent-builder/:actionId/resume-stream',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -455,6 +435,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action stream',
   description: 'Resumes a suspended action execution and continues streaming results',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -483,13 +464,14 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/runs/:runId/cancel',
+  path: '/agent-builder/:actionId/runs/:runId/cancel',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
   responseSchema: workflowControlResponseSchema,
   summary: 'Cancel action run',
   description: 'Cancels an in-progress action execution',
   tags: ['Agent Builder'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -518,7 +500,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 // Legacy routes (deprecated)
 export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/stream-legacy',
+  path: '/agent-builder/:actionId/stream-legacy',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -526,8 +508,9 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream agent-builder action with legacy format',
   description:
-    'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
+    'Legacy endpoint for streaming agent-builder action execution. Use /agent-builder/:actionId/stream instead.',
   tags: ['Agent Builder', 'Legacy'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -556,15 +539,16 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/observe-stream-legacy',
+  path: '/agent-builder/:actionId/observe-stream-legacy',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
   description:
-    'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/:actionId/observe instead.',
+    'Legacy endpoint for observing agent-builder action stream. Use /agent-builder/:actionId/observe instead.',
   tags: ['Agent Builder', 'Legacy'],
+  requiresAuth: true,
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();

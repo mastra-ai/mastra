@@ -88,7 +88,7 @@ const result = await run.startAsync({
 });
 ```
 
-The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/workflows/workflow-state) for more details.
 
 To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 
@@ -116,7 +116,7 @@ await run.start({
 });
 
 // Poll for results later
-const result = await workflow.runExecutionResult(run.runId);
+const result = await workflow.runById(run.runId);
 ```
 
 This is useful for long-running workflows where you want to start execution and check results later.
@@ -160,7 +160,7 @@ const result = await run.cancel();
 
 This method stops any running steps and prevents subsequent steps from executing. Steps that check the `abortSignal` parameter can respond to cancellation by cleaning up resources (timeouts, network requests, etc.).
 
-See the [Run.cancel()](/reference/v1/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
+See the [Run.cancel()](/reference/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
 
 ### stream()
 
@@ -180,12 +180,19 @@ for await (const chunk of stream) {
 }
 ```
 
-### runExecutionResult()
+### runById()
 
 Get the execution result for a workflow run:
 
 ```typescript
-const result = await workflow.runExecutionResult(runId);
+const result = await workflow.runById(runId);
+
+// Or with options for performance optimization:
+const result = await workflow.runById(runId, {
+  fields: ['status', 'result'],  // Only fetch specific fields
+  withNestedWorkflows: false,    // Skip expensive nested workflow data
+  requestContext: { userId: 'user-123' }, // Optional request context
+});
 ```
 
 <h3>Run result format</h3>

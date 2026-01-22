@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Scope Guidelines
+
+**IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Focus on core framework packages, integrations, and documentation. Only include examples when the user specifically asks about them.
+
+**UI Development**: When working on UI-related tasks, code modifications should be made in the `packages/playground/` and `packages/playground-ui/` packages. These packages contain the user interface components and follow specific development standards outlined in their respective CLAUDE.md files.
+
 ## Development Commands
 
 ### Setup and Build
@@ -107,6 +113,10 @@ Follow `.cursor/rules/writing-documentation.mdc`:
 - Don't use "your needs", "production-ready", "makes it easy"
 - Focus on technical details rather than benefits
 - Write for engineers, not marketing
+
+### Changeset Writing
+
+Changelogs are authored via changesets in the `.changeset/` folder. Follow the `.claude/commands/changeset.md` guidelines for creating changesets.
 
 ### Monorepo Management
 
