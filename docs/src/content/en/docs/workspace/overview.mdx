@@ -1,24 +1,73 @@
 ---
-title: "Workspace Overview | Workspace"
-description: Workspaces provide agents with filesystem access and code execution capabilities through a unified interface.
+title: "Workspace | Mastra Docs"
+description: Give agents filesystem access and code execution through workspaces.
 packages:
   - "@mastra/core"
 ---
 
-# Workspace Overview
+# Workspace
 
-A Workspace combines a filesystem and a sandbox to give agents a persistent environment for storing files and executing code. Agents use workspace tools to read and write files, run code in different runtimes, and search indexed content.
+A workspace gives agents a persistent environment for storing files and executing code. Agents use workspace tools to read and write files, run code in different runtimes, and search indexed content.
 
-## Configuration
+## How workspaces work
 
-Create a workspace by passing a filesystem provider, sandbox provider, or both:
+A workspace combines two components:
+
+- **Filesystem provider** - Handles file storage (read, write, list, delete)
+- **Sandbox provider** - Handles code execution (Python, JavaScript, TypeScript, shell commands)
+
+When you assign a workspace to an agent, Mastra automatically adds workspace tools to the agent's toolset. The agent can then use these tools to interact with files and execute code as part of its task.
+
+You can create a workspace with just a filesystem (file storage only), just a sandbox (code execution only), or both. The agent receives only the tools relevant to the configured providers.
+
+## Filesystem providers
+
+Filesystem providers determine where files are stored. All file operations go through the provider, which handles the actual storage.
+
+**LocalFilesystem** stores files in a directory on disk:
+
+```typescript
+import { LocalFilesystem } from '@mastra/core/workspace';
+
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+});
+```
+
+All file paths are relative to `basePath`. A path like `/docs/guide.md` maps to `./workspace/docs/guide.md` on disk.
+
+See [Filesystem Reference](/reference/workspace/filesystem) for the full API.
+
+## Sandbox providers
+
+Sandbox providers execute code and shell commands. The sandbox handles runtime selection, dependency management, and process isolation.
+
+**LocalSandbox** runs code locally using system interpreters (Node.js, Python):
+
+```typescript
+import { LocalSandbox } from '@mastra/core/workspace';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  scriptDirectory: './.mastra/sandbox',
+  inheritEnv: false,
+});
+```
+
+- `workingDirectory` - Where shell commands run from
+- `scriptDirectory` - Where code files are written before execution
+- `inheritEnv` - Whether to pass `process.env` to executed code (default: `false` for security)
+
+See [Sandbox Reference](/reference/workspace/sandbox) for the full API.
+
+## Creating a workspace
+
+Combine providers into a workspace:
 
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
-  id: 'my-workspace',
-  name: 'My Workspace',
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
@@ -30,188 +79,149 @@ const workspace = new Workspace({
 await workspace.init();
 ```
 
-### Filesystem providers
+The `init()` call starts the sandbox and indexes any files in `autoIndexPaths` if search is configured.
 
-The filesystem determines where files are stored. Currently available:
+## Global workspace
 
-- `LocalFilesystem` - Files stored in a directory on disk
+Set a workspace on the Mastra instance. All agents inherit this workspace unless they define their own:
 
 ```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
+import { Mastra } from '@mastra/core';
 
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
+const mastra = new Mastra({
+  workspace,
+  agents: { myAgent },
 });
 ```
 
-### Sandbox providers
+## Agent-scoped workspace
 
-The sandbox executes code and commands. Currently available:
-
-- `LocalSandbox` - Runs code locally using system interpreters
-
-```typescript
-import { LocalSandbox } from '@mastra/core/workspace';
-
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  scriptDirectory: './.mastra/sandbox',
-  inheritEnv: true,
-});
-```
-
-## Assigning to agents
-
-Pass a workspace to an agent through the `workspace` property:
+Assign a workspace directly to an agent to override the global workspace:
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
 
 export const myAgent = new Agent({
   id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant.',
   model: 'openai/gpt-4o',
-  workspace: myWorkspace,
+  workspace,
 });
 ```
 
-When an agent has a workspace, it receives workspace tools automatically:
+## Agent tools and processors
 
-- `workspace_read_file` - Read file contents
-- `workspace_write_file` - Write or create files
-- `workspace_edit_file` - Edit existing files with string replacement
-- `workspace_list_files` - List directory contents
-- `workspace_file_exists` - Check if a path exists
-- `workspace_delete_file` - Delete files
-- `workspace_mkdir` - Create directories
-- `workspace_execute_code` - Run code (Python, JavaScript, TypeScript)
-- `workspace_execute_command` - Run shell commands
-- `workspace_install_package` - Install packages (npm, pip)
-- `workspace_search` - Search indexed content
-- `workspace_index` - Index content for search
+A workspace provides tools and processors to agents based on what is configured:
+
+- **Filesystem** - Tools for reading, writing, editing, listing, and deleting files
+- **Sandbox** - Tools for executing code, running shell commands, and installing packages
+- **Search** - Tools for searching and indexing workspace content
+- **Skills** - A processor that injects skill instructions into the system message, plus tools for activating and reading skills
+
+Only the relevant tools are added. A workspace with only a filesystem won't have code execution tools.
+
+See [Workspace Class Reference](/reference/workspace/workspace-class) for details.
+
+## Skills
+
+Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
+
+A skill is a folder containing a `SKILL.md` file with metadata and instructions, plus optional reference files, scripts, and assets. When an agent activates a skill, the instructions are injected into its context.
+
+```
+/skills
+  /code-review
+    SKILL.md          # Instructions for code review
+    /references
+      style-guide.md  # Supporting documentation
+    /scripts
+      lint.ts         # Executable scripts
+```
+
+Configure `skillsPaths` to enable skill discovery:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skillsPaths: ['/skills'],
+});
+```
+
+When skills are configured, agents receive a `SkillsProcessor` that:
+- Injects available skills into the system message
+- Provides tools for activating skills (`skill-activate`)
+- Provides tools for searching skill content (`skill-search`)
+- Provides tools for reading references, scripts, and assets
+
+## Safety
+
+Workspaces include safety controls to prevent accidental damage and require approval for sensitive operations.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  safety: {
+    readOnly: false,
+    requireReadBeforeWrite: true,
+    requireSandboxApproval: 'all',
+    requireFilesystemApproval: 'none',
+  },
+});
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `readOnly` | `false` | Block all write operations |
+| `requireReadBeforeWrite` | `true` | Require reading files before writing |
+| `requireSandboxApproval` | `'all'` | Approval for sandbox ops: `'all'`, `'commands'`, or `'none'` |
+| `requireFilesystemApproval` | `'none'` | Approval for filesystem ops: `'all'`, `'write'`, or `'none'` |
+
+### Read-before-write
+
+When enabled (default), agents must read a file before writing to it. This prevents overwriting files the agent hasn't seen. The workspace tracks:
+
+- **New files** - Can be written without reading (they don't exist yet)
+- **Existing files** - Must be read first
+- **Externally modified files** - If a file changed since the agent read it, the write fails
+
+### Sandbox approval
+
+Controls when sandbox operations require user approval:
+
+| Value | `execute_code` | `execute_command` | `install_package` |
+|-------|---------------|-------------------|-------------------|
+| `'none'` | No approval | No approval | No approval |
+| `'commands'` | No approval | Requires approval | Requires approval |
+| `'all'` | Requires approval | Requires approval | Requires approval |
+
+### Filesystem approval
+
+Controls when filesystem operations require user approval:
+
+| Value | Read ops | Write ops |
+|-------|----------|-----------|
+| `'none'` | No approval | No approval |
+| `'write'` | No approval | Requires approval |
+| `'all'` | Requires approval | Requires approval |
 
 ## Search
 
-Workspaces support BM25 keyword search and vector semantic search.
-
-### BM25 search
-
-Enable keyword search with the `bm25` option:
+Enable search to let agents find content in workspace files. See [Search and Indexing](/docs/workspace/search) for details.
 
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
-  autoIndexPaths: ['/docs', '/support'],
+  autoIndexPaths: ['/docs'],
 });
-```
-
-Files in `autoIndexPaths` are indexed when the workspace initializes. Use `workspace.search()` or the `workspace_search` tool to query:
-
-```typescript
-const results = await workspace.search('password reset');
-```
-
-### Vector search
-
-For semantic search, provide a vector store and embedder:
-
-```typescript
-import { PineconeVector } from '@mastra/pinecone';
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  vectorStore: new PineconeVector({ index: 'my-index' }),
-  embedder: async (text) => { /* return embedding vector */ },
-});
-```
-
-### Hybrid search
-
-When both BM25 and vector search are configured, use mode to choose:
-
-```typescript
-// Keyword only
-await workspace.search('error handling', { mode: 'bm25' });
-
-// Semantic only
-await workspace.search('how to reset credentials', { mode: 'vector' });
-
-// Combined (default when both available)
-await workspace.search('password reset process', { mode: 'hybrid' });
-```
-
-## Skills
-
-Skills are reusable instructions stored in `SKILL.md` files. Configure `skillsPaths` to discover them:
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skillsPaths: ['/skills', '/docs-skills'],
-});
-```
-
-Access skills through `workspace.skills`:
-
-```typescript
-const allSkills = await workspace.skills?.list();
-const skill = await workspace.skills?.get('code-review');
-const results = await workspace.skills?.search('brand colors');
-```
-
-## Path context
-
-When a workspace has both filesystem and sandbox, agents need to know how paths map between them. Call `getPathContext()` to get this information:
-
-```typescript
-const context = workspace.getPathContext();
-
-// context.type: 'same-context' | 'cross-context' | 'sandbox-only' | 'filesystem-only'
-// context.requiresSync: boolean
-// context.instructions: string (human-readable explanation)
-```
-
-For `same-context` setups (e.g., `LocalFilesystem` + `LocalSandbox` pointing to the same directory), files written via workspace tools are immediately accessible in sandbox code.
-
-For `cross-context` setups, use `syncToSandbox()` or read file contents and pass them as variables.
-
-## Lifecycle
-
-```typescript
-// Initialize workspace (start sandbox, index files)
-await workspace.init();
-
-// Pause (stop sandbox but keep state)
-await workspace.pause();
-
-// Resume
-await workspace.resume();
-
-// Destroy (clean up all resources)
-await workspace.destroy();
-```
-
-## Snapshots
-
-Capture and restore workspace state:
-
-```typescript
-// Create snapshot
-const snapshot = await workspace.snapshot({
-  name: 'before-refactor',
-  paths: ['/src'],
-});
-
-// Make changes...
-
-// Restore
-await workspace.restore(snapshot);
 ```
 
 ## Related
 
-- [Workspace Safety](/docs/workspace/safety)
-- [Using Tools](/docs/agents/using-tools)
+- [Search and Indexing](/docs/workspace/search)
+- [Workspace Class Reference](/reference/workspace/workspace-class)
+- [Filesystem Reference](/reference/workspace/filesystem)
+- [Sandbox Reference](/reference/workspace/sandbox)
 - [Agent Approval](/docs/agents/agent-approval)

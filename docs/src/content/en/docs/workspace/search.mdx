@@ -1,19 +1,17 @@
 ---
 title: "Search and Indexing | Workspace"
-description: Index workspace content and search using BM25 keyword search, vector semantic search, or hybrid mode.
+description: Index workspace content for BM25 keyword search, vector semantic search, or hybrid mode.
 packages:
   - "@mastra/core"
 ---
 
 # Search and Indexing
 
-Workspaces support three search modes: BM25 keyword search, vector semantic search, and hybrid search that combines both. Configure search when creating a workspace to enable the `workspace_search` and `workspace_index` tools for agents.
+Workspaces support three search modes: BM25 keyword search, vector semantic search, and hybrid search that combines both.
 
 ## BM25 keyword search
 
-BM25 (Best Matching 25) is a ranking function for keyword-based search. It scores documents based on term frequency and document length, working well for exact matches and specific terminology.
-
-Enable BM25 with the `bm25` option:
+BM25 scores documents based on term frequency and document length. It works well for exact matches and specific terminology.
 
 ```typescript
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
@@ -38,10 +36,9 @@ const workspace = new Workspace({
 
 ## Vector search
 
-Vector search uses embeddings to find semantically similar content. It requires a vector store and an embedder function.
+Vector search uses embeddings to find semantically similar content. It requires a vector store and embedder function.
 
 ```typescript
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { PineconeVector } from '@mastra/pinecone';
 import { embed } from 'ai';
 import { openai } from '@ai-sdk/openai';
@@ -64,7 +61,7 @@ const workspace = new Workspace({
 
 ## Hybrid search
 
-When both BM25 and vector search are configured, hybrid mode combines their results. This gives the precision of keyword matching with the semantic understanding of embeddings.
+Configure both BM25 and vector search to enable hybrid mode, which combines keyword matching with semantic understanding.
 
 ```typescript
 const workspace = new Workspace({
@@ -79,40 +76,13 @@ const workspace = new Workspace({
 
 ### Manual indexing
 
-Use `workspace.index()` to add content to the search index:
-
 ```typescript
 await workspace.index('/docs/guide.md', 'Content of the guide...');
 ```
 
-Include metadata for filtering:
-
-```typescript
-await workspace.index('/docs/api.md', 'API documentation content...', {
-  type: 'text',
-  mimeType: 'text/markdown',
-  metadata: {
-    category: 'api',
-    version: '2.0',
-  },
-});
-```
-
-### Batch indexing
-
-Index multiple documents at once:
-
-```typescript
-await workspace.indexMany([
-  { path: '/docs/intro.md', content: 'Introduction...' },
-  { path: '/docs/setup.md', content: 'Setup guide...' },
-  { path: '/docs/faq.md', content: 'FAQ content...' },
-]);
-```
-
 ### Auto-indexing
 
-Configure `autoIndexPaths` to index files automatically when the workspace initializes:
+Configure `autoIndexPaths` to index files when the workspace initializes:
 
 ```typescript
 const workspace = new Workspace({
@@ -121,38 +91,16 @@ const workspace = new Workspace({
   autoIndexPaths: ['/docs', '/support/faq'],
 });
 
-await workspace.init(); // Indexes all files in /docs and /support/faq
-```
-
-### Removing from index
-
-```typescript
-await workspace.unindex('/docs/deprecated.md');
-```
-
-### Rebuilding the index
-
-Clear and re-index all content from specified paths:
-
-```typescript
-await workspace.rebuildIndex(['/docs', '/support']);
-```
-
-Or use the configured `autoIndexPaths`:
-
-```typescript
-await workspace.rebuildIndex(); // Uses autoIndexPaths from config
+await workspace.init(); // Indexes all files in specified paths
 ```
 
 ## Searching
-
-### Basic search
 
 ```typescript
 const results = await workspace.search('password reset');
 ```
 
-### Search options
+With options:
 
 ```typescript
 const results = await workspace.search('authentication flow', {
@@ -162,72 +110,23 @@ const results = await workspace.search('authentication flow', {
 });
 ```
 
-### Search modes
+### When to use each mode
 
-| Mode | When to use |
-|------|-------------|
+| Mode | Use case |
+|------|----------|
 | `bm25` | Exact term matching, technical queries, code search |
 | `vector` | Conceptual queries, natural language questions |
 | `hybrid` | General search combining both approaches |
 
-### Search results
-
-Results include the document path, content, score, and any metadata:
-
-```typescript
-interface SearchResult {
-  id: string;           // Document path
-  content: string;      // Indexed content
-  score: number;        // Relevance score
-  metadata?: {
-    type?: string;
-    mimeType?: string;
-    startLine?: number; // Line number for chunk start
-    endLine?: number;   // Line number for chunk end
-    [key: string]: unknown;
-  };
-}
-```
-
-## Line number tracking
-
-When indexing file chunks, use `startLineOffset` to track line numbers:
-
-```typescript
-// Index a chunk starting at line 50
-await workspace.index('/docs/guide.md#chunk-2', chunkContent, {
-  startLineOffset: 50,
-});
-```
-
-Search results include `startLine` and `endLine` in metadata, allowing agents to reference specific line ranges in their responses.
-
 ## Agent tools
 
-When an agent has a workspace with search configured, it receives:
+Agents with a search-enabled workspace receive:
 
 - `workspace_search` - Search indexed content
 - `workspace_index` - Index new content
-
-The agent can search for information and index new content as part of its task execution.
-
-```typescript
-const agent = new Agent({
-  workspace: workspace,
-  // Agent automatically gets workspace_search and workspace_index tools
-});
-```
-
-## Checking search capabilities
-
-```typescript
-workspace.canBM25;    // true if BM25 is configured
-workspace.canVector;  // true if vector search is configured
-workspace.canHybrid;  // true if both are configured
-```
 
 ## Related
 
 - [Workspace Overview](/docs/workspace/overview)
 - [RAG Overview](/docs/rag/overview)
-- [Vector Databases](/docs/rag/vector-databases)
+- [Workspace Class Reference](/reference/workspace/workspace-class)

@@ -429,8 +429,19 @@ Get the safety configuration.
 const config = workspace.getSafetyConfig();
 ```
 
+## Agent tools and processors
+
+A workspace provides tools and processors to agents based on what is configured:
+
+**Filesystem** - When a filesystem provider is configured, agents receive tools for file operations: reading, writing, editing, listing, and deleting files.
+
+**Sandbox** - When a sandbox provider is configured, agents receive tools for code execution: running Python/JavaScript/TypeScript code, executing shell commands, and installing packages.
+
+**Search** - When BM25 or vector search is configured, agents receive tools for searching and indexing workspace content.
+
+**Skills** - When `skillsPaths` is configured, agents receive a `SkillsProcessor` that injects available skills into the system message and provides tools for activating skills, searching skill content, and reading skill references.
+
 ## Related
 
 - [Workspace Overview](/docs/workspace/overview)
-- [Workspace Safety](/docs/workspace/safety)
 - [Search and Indexing](/docs/workspace/search)
