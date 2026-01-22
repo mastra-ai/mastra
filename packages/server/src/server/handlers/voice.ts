@@ -28,6 +28,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
   summary: 'Get voice speakers',
   description: 'Returns available voice speakers for the specified agent',
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
@@ -68,6 +69,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   summary: 'Get available speakers for an agent',
   description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: GET_SPEAKERS_ROUTE.handler,
 });
 
@@ -81,6 +83,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
   summary: 'Generate speech',
   description: 'Generates speech audio from text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, text, speakerId, requestContext }) => {
     try {
       if (!agentId) {
@@ -133,6 +136,7 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   description:
     "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: GENERATE_SPEECH_ROUTE.handler,
 });
 
@@ -146,6 +150,7 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   summary: 'Transcribe speech',
   description: 'Transcribes speech audio to text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, audio, options, requestContext }) => {
     try {
       if (!agentId) {
@@ -191,6 +196,7 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   description:
     "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: TRANSCRIBE_SPEECH_ROUTE.handler,
 });
 
@@ -203,6 +209,7 @@ export const GET_LISTENER_ROUTE = createRoute({
   summary: 'Get voice listener',
   description: 'Returns the voice listener configuration for the agent',
   tags: ['Agents', 'Voice'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {

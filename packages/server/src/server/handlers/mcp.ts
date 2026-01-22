@@ -29,6 +29,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
   summary: 'List MCP servers',
   description: 'Returns a list of registered MCP servers with pagination support',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     page,
@@ -106,6 +107,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server details',
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -139,6 +141,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   summary: 'List MCP server tools',
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -167,6 +170,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server tool details',
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -201,6 +205,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   summary: 'Execute MCP server tool',
   description: 'Executes a tool on the specified MCP server with the provided arguments',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     serverId,
@@ -257,6 +262,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP HTTP Transport',
   description: 'Streamable HTTP transport endpoint for MCP protocol communication',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -283,6 +289,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP SSE Transport',
   description: 'SSE transport endpoint for MCP protocol communication',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -310,5 +317,6 @@ export const MCP_SSE_MESSAGES_ROUTE = createRoute({
   summary: 'MCP SSE Messages',
   description: 'Message endpoint for SSE transport (posts messages to active SSE streams)',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: MCP_SSE_TRANSPORT_ROUTE.handler,
 });

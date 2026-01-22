@@ -341,6 +341,19 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     // Define the route handler
     const handler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+      // Check route-level authentication/authorization
+      const authError = await this.checkRouteAuth(route, {
+        path: String(request.url.split('?')[0] || '/'),
+        method: String(request.method || 'GET'),
+        getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
+        getQuery: name => (request.query as Record<string, string>)[name],
+        requestContext: request.requestContext,
+      });
+
+      if (authError) {
+        return reply.status(authError.status).send({ error: authError.error });
+      }
+
       const params = await this.getParams(route, request);
 
       if (params.queryParams) {
