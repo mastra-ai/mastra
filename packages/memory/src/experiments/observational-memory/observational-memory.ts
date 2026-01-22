@@ -1172,7 +1172,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Find the last completed observation boundary in a message's parts.
    * A completed observation is a start marker followed by an end marker.
-   * 
+   *
    * Returns the index of the END marker (which is the observation boundary),
    * or -1 if no completed observation is found.
    */
@@ -1206,7 +1206,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       if (part?.type === 'data-om-observation-start' && lastStartIndex === -1) {
         lastStartIndex = i;
       }
-      if ((part?.type === 'data-om-observation-end' || part?.type === 'data-om-observation-failed') && lastEndOrFailedIndex === -1) {
+      if (
+        (part?.type === 'data-om-observation-end' || part?.type === 'data-om-observation-failed') &&
+        lastEndOrFailedIndex === -1
+      ) {
         lastEndOrFailedIndex = i;
       }
     }
@@ -1218,26 +1221,104 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Insert an observation marker into a message.
    * The marker is appended directly to the message's parts array (mutating in place).
-   * Storage will be updated when persistMessages() is called.
+   * Also persists the change to storage so markers survive page refresh.
+   *
+   * For end/failed markers, the message is also "sealed" to prevent future content
+   * from being merged into it. This ensures observation markers are preserved.
    */
-  private insertObservationMarker(
+  /**
+   * Insert an observation marker into a message.
+   * For start markers, this pushes the part directly.
+   * For end/failed markers, this should be called AFTER writer.custom() has added the part,
+   * so we just find the part and add sealing metadata.
+   */
+  private async insertObservationMarker(
     message: MastraDBMessage,
     marker: DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart,
-  ): void {
+    options?: { skipPush?: boolean },
+  ): Promise<void> {
     if (!message.id) {
       omWarn(`[OM] Cannot insert observation marker: message has no ID`);
       return;
     }
 
     // Mutate the message's parts array directly - this updates the in-memory messageList
-    // Storage will be updated when persistMessages() is called
     if (!message.content?.parts) {
       omWarn(`[OM] Message ${message.id.slice(-8)} has no content.parts, cannot insert marker`);
       return;
     }
-    message.content.parts.push(marker as any);
+
+    // For start markers, we push directly (no streaming involved yet)
+    // For end/failed markers, the part is already added by writer.custom() -> stream handler
+    if (!options?.skipPush) {
+      message.content.parts.push(marker as any);
+    }
+
+    // For end/failed markers, seal the message to prevent future merging
+    // This ensures observation markers are preserved when new content is added
+    const isEndOrFailedMarker =
+      marker.type === 'data-om-observation-end' || marker.type === 'data-om-observation-failed';
+
+    if (isEndOrFailedMarker) {
+      // Initialize metadata structure if needed
+      if (!message.content.metadata) {
+        message.content.metadata = {};
+      }
+      const metadata = message.content.metadata as { mastra?: { sealed?: boolean } };
+      if (!metadata.mastra) {
+        metadata.mastra = {};
+      }
+      metadata.mastra.sealed = true;
+
+      // Find the marker part we need to seal (it may have been added by writer.custom())
+      // Look for the part with matching cycleId
+      const cycleId = (marker as { data?: { cycleId?: string } }).data?.cycleId;
+      let markerPart: { metadata?: { mastra?: { sealedAt?: number } } } | undefined;
+
+      if (cycleId) {
+        // Find by cycleId for precise matching
+        markerPart = message.content.parts.find((p: any) => p.type === marker.type && p.data?.cycleId === cycleId) as
+          | { metadata?: { mastra?: { sealedAt?: number } } }
+          | undefined;
+      }
+
+      // Fallback to last part if not found by cycleId
+      if (!markerPart) {
+        markerPart = message.content.parts[message.content.parts.length - 1] as {
+          metadata?: { mastra?: { sealedAt?: number } };
+        };
+      }
+
+      if (markerPart) {
+        if (!markerPart.metadata) {
+          markerPart.metadata = {};
+        }
+        if (!markerPart.metadata.mastra) {
+          markerPart.metadata.mastra = {};
+        }
+        markerPart.metadata.mastra.sealedAt = Date.now();
+      }
+
+      omDebug(`[OM] Sealed message ${message.id.slice(-8)} after ${marker.type}`);
+    }
 
     omDebug(`[OM] Inserted ${marker.type} marker into message ${message.id.slice(-8)}`);
+
+    // Persist the marker (and seal status) to storage so it survives page refresh
+    try {
+      await this.storage.updateMessages({
+        messages: [
+          {
+            id: message.id,
+            content: message.content,
+          },
+        ],
+      });
+      omDebug(`[OM] Persisted ${marker.type} marker to storage for message ${message.id.slice(-8)}`);
+    } catch (error) {
+      omWarn(`[OM] Failed to persist ${marker.type} marker to storage: ${error}`);
+      // Don't throw - the marker is still in memory and will work for the current session
+    }
   }
 
   /**
@@ -1294,17 +1375,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Get unobserved messages with part-level filtering.
-   * 
+   *
    * This method uses data-om-observation-end markers to filter at the part level:
    * 1. For messages WITH a completed observation: only return parts AFTER the end marker
    * 2. For messages WITHOUT completed observation: check timestamp against lastObservedAt
-   * 
+   *
    * This handles the case where a single message accumulates many parts
    * (like tool calls) during an agentic loop - we only observe the new parts.
    */
   private getUnobservedMessages(allMessages: MastraDBMessage[], record: ObservationalMemoryRecord): MastraDBMessage[] {
     const lastObservedAt = record.lastObservedAt;
-    
+
     if (!lastObservedAt) {
       // No observations yet - all messages are unobserved
       omDebug(`[OM getUnobservedMessages] No lastObservedAt, returning all ${allMessages.length} messages`);
@@ -1322,7 +1403,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       // Check if this message has a completed observation
       const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
       const inProgress = this.hasInProgressObservation(msg);
-      
+
       if (inProgress) {
         messagesInProgress++;
         // Include the full message for in-progress observations
@@ -1984,18 +2065,40 @@ ${suggestedResponse}
           state.unobservedContextBlocks = unobservedContextBlocks;
 
           // Add only current thread's messages to messageList
+          // Skip messages that have been fully observed (have end marker and no unobserved parts)
           const currentThreadMessages = messagesByThread.get(threadId) || [];
+          let skippedFullyObserved = 0;
           for (const msg of currentThreadMessages) {
             if (msg.role !== 'system') {
+              // Check if this message has been fully observed
+              if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) {
+                skippedFullyObserved++;
+                continue; // Skip fully observed messages
+              }
               messageList.add(msg, 'memory');
             }
           }
+          if (skippedFullyObserved > 0) {
+            omDebug(
+              `[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`,
+            );
+          }
         } else {
           // Thread scope: add all messages to messageList
+          // Skip messages that have been fully observed (have end marker and no unobserved parts)
+          let skippedFullyObserved = 0;
           for (const msg of historicalMessages) {
             if (msg.role !== 'system') {
+              // Check if this message has been fully observed
+              if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) {
+                skippedFullyObserved++;
+                continue; // Skip fully observed messages
+              }
               messageList.add(msg, 'memory');
             }
+          }
+          if (skippedFullyObserved > 0) {
+            omDebug(`[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages`);
           }
         }
       }
@@ -2033,7 +2136,7 @@ ${suggestedResponse}
         omDebug(`[OM processInputStep] Resource scope enabled`);
       }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
-      
+
       // Add continuation reminder as a user message right after observations
       // This helps with prompt caching (stable prefix) and tells the agent how to use observations
       // Use Date(0) to ensure this is always sorted first (right after system prompt)
@@ -2077,7 +2180,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // Find the message with the last observation end marker and its index
     let markerMessageIndex = -1;
     let markerMessage: MastraDBMessage | null = null;
-    
+
     for (let i = allMessages.length - 1; i >= 0; i--) {
       const msg = allMessages[i];
       if (!msg) continue;
@@ -2099,7 +2202,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
           messagesToRemove.push(msg.id);
         }
       }
-      
+
       if (messagesToRemove.length > 0) {
         messageList.removeByIds(messagesToRemove);
         removedCount = messagesToRemove.length;
@@ -2108,7 +2211,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
 
       // For the marker message itself, filter to only unobserved parts
       const unobservedParts = this.getUnobservedParts(markerMessage);
-      
+
       if (unobservedParts.length === 0) {
         // All parts observed - remove this message too
         if (markerMessage.id) {
@@ -2125,7 +2228,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
     }
 
     if (filteredCount > 0 || removedCount > 0) {
-      omDebug(`[OM processInputStep] Part-level filtering complete: ${filteredCount} messages filtered, ${removedCount} messages removed`);
+      omDebug(
+        `[OM processInputStep] Part-level filtering complete: ${filteredCount} messages filtered, ${removedCount} messages removed`,
+      );
     }
 
     // Log what agent will actually see
@@ -2402,7 +2507,7 @@ ${formattedMessages}
    */
   async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, requestContext, finishReason, stepNumber, state, writer } = args;
-    
+
     console.log('[OM processOutputStep DEBUG] writer received in args:', !!writer);
     console.log('[OM processOutputStep DEBUG] args keys:', Object.keys(args));
 
@@ -2455,14 +2560,12 @@ ${formattedMessages}
     // Determine if this is the final step
     const isFinalStep = finishReason === 'stop';
 
-    // Determine if we should save messages now
-    // Save when: approaching threshold (80% of threshold) OR final step
-    const approachingThreshold = totalPendingTokens >= threshold * 0.8;
-    const shouldSaveNow = isFinalStep || approachingThreshold;
+    // Determine if we should observe and save now (at threshold OR final step)
+    const shouldObserveAndSave = isFinalStep || totalPendingTokens >= threshold;
 
     omDebug(
       `[OM processOutputStep] Step ${stepNumber}, finishReason: ${finishReason}, ` +
-        `tokens: ${totalPendingTokens}/${threshold}, approaching: ${approachingThreshold}, save: ${shouldSaveNow}`,
+        `tokens: ${totalPendingTokens}/${threshold}, willObserveAndSave: ${shouldObserveAndSave}`,
     );
 
     // Emit progress event for UI feedback
@@ -2476,61 +2579,27 @@ ${formattedMessages}
       pendingTokens: totalPendingTokens,
       threshold,
       thresholdPercent: Math.round((totalPendingTokens / threshold) * 100),
-      willSave: shouldSaveNow,
-      willObserve: totalPendingTokens >= threshold,
+      willSave: shouldObserveAndSave,
+      willObserve: shouldObserveAndSave,
     });
 
-    if (shouldSaveNow) {
-      // Get messages to save (new input + response from this step)
-      const newInput = messageList.get.input.db();
-      const newOutput = messageList.get.response.db();
-      const messagesToSave = [...newInput, ...newOutput];
-
-      if (messagesToSave.length > 0) {
-        // Track which messages we've already saved to avoid duplicates
-        const savedMessageIds = (state.savedMessageIds as Set<string>) ?? new Set<string>();
-
-        // Only save messages we haven't saved yet
-        const unsavedMessages = messagesToSave.filter(m => m.id && !savedMessageIds.has(m.id));
-
-        if (unsavedMessages.length > 0) {
-          omDebug(`[OM processOutputStep] Saving ${unsavedMessages.length} messages via MessageHistory`);
-
-          // Delegate to MessageHistory for filtering and persistence
-          await this.messageHistory.persistMessages({
-            messages: unsavedMessages,
-            threadId,
-            resourceId,
-          });
-
-          // Track saved message IDs
-          for (const m of unsavedMessages) {
-            if (m.id) {
-              savedMessageIds.add(m.id);
-            }
-          }
-          state.savedMessageIds = savedMessageIds;
-        }
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // TRIGGER OBSERVATION MID-LOOP if threshold exceeded
-    // This prevents context from growing unbounded during long agentic loops
-    // ════════════════════════════════════════════════════════════════════════
-    const shouldObserveNow = totalPendingTokens >= threshold;
-    if (shouldObserveNow && !state.observationTriggeredThisLoop) {
-      omDebug(`[OM processOutputStep] Threshold exceeded (${totalPendingTokens} >= ${threshold}), triggering mid-loop observation`);
-
+    if (shouldObserveAndSave && !state.observationTriggeredThisLoop) {
       // Mark that we've triggered observation this loop to avoid re-triggering
       state.observationTriggeredThisLoop = true;
+
+      // ════════════════════════════════════════════════════════════════════════
+      // STEP 1: OBSERVE FIRST (adds markers to in-memory messages)
+      // ════════════════════════════════════════════════════════════════════════
+      omDebug(
+        `[OM processOutputStep] Threshold reached (${totalPendingTokens} >= ${threshold}), observing then saving`,
+      );
 
       const lockKey = this.getLockKey(threadId, resourceId);
       await this.withLock(lockKey, async () => {
         // Re-fetch record inside lock to get latest state
         const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
-        // Get all messages including ones just saved
+        // Get all messages
         const allMessages = messageList.get.all.db();
         const freshUnobservedMessages = this.getUnobservedMessages(allMessages, freshRecord);
 
@@ -2542,6 +2611,56 @@ ${formattedMessages}
           }
         }
       });
+
+      // ════════════════════════════════════════════════════════════════════════
+      // STEP 2: SAVE AFTER OBSERVATION (markers are now in the messages)
+      // Note: We use get() not clear() because the sealed message must remain in
+      // messageList so addOne() can detect it when new parts arrive from the stream
+      // ════════════════════════════════════════════════════════════════════════
+      const newInput = messageList.clear.input.db();
+      const newOutput = messageList.clear.response.db();
+      const messagesToSave = [...newInput, ...newOutput];
+
+      if (messagesToSave.length > 0) {
+        omDebug(`[OM processOutputStep] Saving ${messagesToSave.length} messages (with markers) via MessageHistory`);
+
+        // Delegate to MessageHistory for filtering and persistence
+        await this.messageHistory.persistMessages({
+          messages: messagesToSave,
+          threadId,
+          resourceId,
+        });
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // STEP 3: UPDATE OBSERVATIONS IN CONTEXT
+      // Re-fetch record to get latest observations and inject them
+      // ════════════════════════════════════════════════════════════════════════
+      const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+      if (updatedRecord.activeObservations) {
+        // Fetch thread metadata for current task and suggested response
+        const thread = await this.storage.getThreadById({ threadId });
+        const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+        const currentTask = threadOMMetadata?.currentTask;
+        const suggestedResponse = threadOMMetadata?.suggestedResponse;
+        const patterns = updatedRecord.patterns;
+        const currentDate = (requestContext?.get('currentDate') as Date | undefined) ?? new Date();
+        const unobservedContextBlocks = state.unobservedContextBlocks as string | undefined;
+
+        const observationSystemMessage = this.formatObservationsForContext(
+          updatedRecord.activeObservations,
+          currentTask,
+          suggestedResponse,
+          unobservedContextBlocks,
+          patterns,
+          currentDate,
+        );
+        omDebug(`[OM processOutputStep] Re-injecting updated observations (${observationSystemMessage.length} chars)`);
+
+        // Clear old observation system message and add updated one
+        messageList.clearSystemMessages('observational-memory');
+        messageList.addSystem(observationSystemMessage, 'observational-memory');
+      }
     }
 
     return messageList;
@@ -2551,117 +2670,117 @@ ${formattedMessages}
    * Process output - track messages and trigger Observer/Reflector.
    * Supports async buffering when bufferEvery is configured.
    */
-  async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList> {
-    const { messageList, requestContext } = args;
-
-    const context = this.getThreadContext(requestContext, messageList);
-    if (!context) {
-      return messageList;
-    }
-
-    const { threadId, resourceId } = context;
-
-    // Re-fetch record to get latest state (buffering may have completed)
-    let record = await this.getOrCreateRecord(threadId, resourceId);
-
-    const allMessages = messageList.get.all.db();
-    const unobservedMessages = this.getUnobservedMessages(allMessages, record);
-    const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
-    const currentObservationTokens = record.observationTokenCount ?? 0;
-    // Include pending tokens from previous sessions for threshold check
-    // Use type assertion since pendingMessageTokens was just added to ObservationalMemoryRecord
-    const pendingTokens = record.pendingMessageTokens ?? 0;
-    const totalPendingTokens = pendingTokens + currentSessionTokens;
-
-    const threshold = this.calculateDynamicThreshold(
-      this.observerConfig.observationThreshold,
-      currentObservationTokens,
-      this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
-    );
-
-    omDebug(
-      `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, ` +
-        `SessionTokens: ${currentSessionTokens}, PendingTokens: ${pendingTokens}, TotalPending: ${totalPendingTokens}, ` +
-        `Threshold: ${threshold}`,
-    );
-
-    // ═══════════════════════════════════════════════════════════════════
-    // SIMPLIFIED SYNC-ONLY FLOW (async buffering disabled)
-    // Use in-memory mutex to prevent race conditions between concurrent
-    // observation cycles for the same resource/thread.
-    // ═══════════════════════════════════════════════════════════════════
-
-    const lockKey = this.getLockKey(threadId, resourceId);
-    await this.withLock(lockKey, async () => {
-      // Re-fetch record inside lock to get latest state
-      record = await this.getOrCreateRecord(threadId, resourceId);
-
-      // Recalculate with fresh record data
-      const freshUnobservedMessages = this.getUnobservedMessages(allMessages, record);
-      const freshSessionTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
-      const freshObservationTokens = record.observationTokenCount ?? 0;
-      const freshPendingTokens = record.pendingMessageTokens ?? 0;
-      const freshTotalPendingTokens = freshPendingTokens + freshSessionTokens;
-
-      const freshThreshold = this.calculateDynamicThreshold(
-        this.observerConfig.observationThreshold,
-        freshObservationTokens,
-        this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
-      );
-
-      const shouldObserveNow = this.shouldObserve(freshTotalPendingTokens, freshObservationTokens);
-      omDebug(
-        `[OM] Observe check: totalPending=${freshTotalPendingTokens} > threshold=${freshThreshold} ? ${shouldObserveNow}`,
-      );
-
-      if (shouldObserveNow) {
-        // ════════════════════════════════════════════════════════════
-        // SYNC PATH: Do synchronous observation (blocking)
-        // No need to check isObserving flag - mutex guarantees exclusivity
-        // ════════════════════════════════════════════════════════════
-        omDebug(
-          `[OM] Observation threshold exceeded (${freshTotalPendingTokens} > ${freshThreshold}), triggering Observer`,
-        );
-
-        if (this.scope === 'resource' && resourceId) {
-          // Resource scope: observe ALL threads with unobserved messages
-          // Pass current thread's messages from messageList since they may not be in DB yet
-          await this.doResourceScopedObservation(record, threadId, resourceId, freshUnobservedMessages);
-        } else {
-          // Thread scope: observe only current thread
-          await this.doSynchronousObservation(record, threadId, freshUnobservedMessages);
-        }
-      } else if (freshSessionTokens > 0) {
-        // ═══════════════════════════════════════════════════════════════════
-        // Observation not triggered - accumulate pending tokens for next check
-        // This allows observations to trigger after multiple small sessions
-        // ═══════════════════════════════════════════════════════════════════
-        omDebug(`[OM] Accumulating ${freshSessionTokens} pending tokens (total will be ${freshTotalPendingTokens})`);
-        // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
-        await (this.storage as any).addPendingMessageTokens(record.id, freshSessionTokens);
-
-        // Emit debug event for token accumulation
-        this.emitDebugEvent({
-          type: 'tokens_accumulated',
-          timestamp: new Date(),
-          threadId,
-          resourceId: resourceId ?? '',
-          pendingTokens: freshPendingTokens,
-          sessionTokens: freshSessionTokens,
-          totalPendingTokens: freshTotalPendingTokens,
-          threshold: freshThreshold,
-          messages: freshUnobservedMessages.map(m => ({
-            role: m.role,
-            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-          })),
-        });
-      }
-    });
-
-    // NOTE: Async reflection buffering disabled - reflection happens synchronously in maybeReflect()
-
-    return messageList;
-  }
+  // async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList> {
+  //   const { messageList, requestContext } = args;
+  //
+  //   const context = this.getThreadContext(requestContext, messageList);
+  //   if (!context) {
+  //     return messageList;
+  //   }
+  //
+  //   const { threadId, resourceId } = context;
+  //
+  //   // Re-fetch record to get latest state (buffering may have completed)
+  //   let record = await this.getOrCreateRecord(threadId, resourceId);
+  //
+  //   const allMessages = messageList.get.all.db();
+  //   const unobservedMessages = this.getUnobservedMessages(allMessages, record);
+  //   const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
+  //   const currentObservationTokens = record.observationTokenCount ?? 0;
+  //   // Include pending tokens from previous sessions for threshold check
+  //   // Use type assertion since pendingMessageTokens was just added to ObservationalMemoryRecord
+  //   const pendingTokens = record.pendingMessageTokens ?? 0;
+  //   const totalPendingTokens = pendingTokens + currentSessionTokens;
+  //
+  //   const threshold = this.calculateDynamicThreshold(
+  //     this.observerConfig.observationThreshold,
+  //     currentObservationTokens,
+  //     this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+  //   );
+  //
+  //   omDebug(
+  //     `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, ` +
+  //       `SessionTokens: ${currentSessionTokens}, PendingTokens: ${pendingTokens}, TotalPending: ${totalPendingTokens}, ` +
+  //       `Threshold: ${threshold}`,
+  //   );
+  //
+  //   // ═══════════════════════════════════════════════════════════════════
+  //   // SIMPLIFIED SYNC-ONLY FLOW (async buffering disabled)
+  //   // Use in-memory mutex to prevent race conditions between concurrent
+  //   // observation cycles for the same resource/thread.
+  //   // ═══════════════════════════════════════════════════════════════════
+  //
+  //   const lockKey = this.getLockKey(threadId, resourceId);
+  //   await this.withLock(lockKey, async () => {
+  //     // Re-fetch record inside lock to get latest state
+  //     record = await this.getOrCreateRecord(threadId, resourceId);
+  //
+  //     // Recalculate with fresh record data
+  //     const freshUnobservedMessages = this.getUnobservedMessages(allMessages, record);
+  //     const freshSessionTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
+  //     const freshObservationTokens = record.observationTokenCount ?? 0;
+  //     const freshPendingTokens = record.pendingMessageTokens ?? 0;
+  //     const freshTotalPendingTokens = freshPendingTokens + freshSessionTokens;
+  //
+  //     const freshThreshold = this.calculateDynamicThreshold(
+  //       this.observerConfig.observationThreshold,
+  //       freshObservationTokens,
+  //       this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+  //     );
+  //
+  //     const shouldObserveNow = this.shouldObserve(freshTotalPendingTokens, freshObservationTokens);
+  //     omDebug(
+  //       `[OM] Observe check: totalPending=${freshTotalPendingTokens} > threshold=${freshThreshold} ? ${shouldObserveNow}`,
+  //     );
+  //
+  //     if (shouldObserveNow) {
+  //       // ════════════════════════════════════════════════════════════
+  //       // SYNC PATH: Do synchronous observation (blocking)
+  //       // No need to check isObserving flag - mutex guarantees exclusivity
+  //       // ════════════════════════════════════════════════════════════
+  //       omDebug(
+  //         `[OM] Observation threshold exceeded (${freshTotalPendingTokens} > ${freshThreshold}), triggering Observer`,
+  //       );
+  //
+  //       if (this.scope === 'resource' && resourceId) {
+  //         // Resource scope: observe ALL threads with unobserved messages
+  //         // Pass current thread's messages from messageList since they may not be in DB yet
+  //         await this.doResourceScopedObservation(record, threadId, resourceId, freshUnobservedMessages);
+  //       } else {
+  //         // Thread scope: observe only current thread
+  //         await this.doSynchronousObservation(record, threadId, freshUnobservedMessages);
+  //       }
+  //     } else if (freshSessionTokens > 0) {
+  //       // ═══════════════════════════════════════════════════════════════════
+  //       // Observation not triggered - accumulate pending tokens for next check
+  //       // This allows observations to trigger after multiple small sessions
+  //       // ═══════════════════════════════════════════════════════════════════
+  //       omDebug(`[OM] Accumulating ${freshSessionTokens} pending tokens (total will be ${freshTotalPendingTokens})`);
+  //       // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
+  //       await (this.storage as any).addPendingMessageTokens(record.id, freshSessionTokens);
+  //
+  //       // Emit debug event for token accumulation
+  //       this.emitDebugEvent({
+  //         type: 'tokens_accumulated',
+  //         timestamp: new Date(),
+  //         threadId,
+  //         resourceId: resourceId ?? '',
+  //         pendingTokens: freshPendingTokens,
+  //         sessionTokens: freshSessionTokens,
+  //         totalPendingTokens: freshTotalPendingTokens,
+  //         threshold: freshThreshold,
+  //         messages: freshUnobservedMessages.map(m => ({
+  //           role: m.role,
+  //           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+  //         })),
+  //       });
+  //     }
+  //   });
+  //
+  //   // NOTE: Async reflection buffering disabled - reflection happens synchronously in maybeReflect()
+  //
+  //   return messageList;
+  // }
 
   /**
    * Do synchronous observation (fallback when no buffering)
@@ -2700,7 +2819,7 @@ ${formattedMessages}
     const tokensToObserve = this.tokenCounter.countMessages(unobservedMessages);
     const lastMessage = unobservedMessages[unobservedMessages.length - 1];
     const startedAt = new Date().toISOString();
-    
+
     if (lastMessage?.id) {
       const startMarker = this.createObservationStartMarker({
         cycleId,
@@ -2709,14 +2828,15 @@ ${formattedMessages}
         threadId,
         threadIds: [threadId],
       });
-      this.insertObservationMarker(lastMessage, startMarker);
-      
-      // Stream the start marker to the UI for real-time feedback
+      // Stream the start marker to the UI first - this adds the part via stream handler
       if (writer) {
-        writer.custom(startMarker).catch(() => {
+        await writer.custom(startMarker).catch(() => {
           // Ignore errors from streaming - observation should continue
         });
       }
+
+      // Then add to message (skipPush since writer.custom already added the part)
+      await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
     }
 
     try {
@@ -2765,7 +2885,9 @@ ${formattedMessages}
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
 
-      omDebug(`[OM] Storing observations: ${totalTokenCount} tokens total, ${cycleObservationTokens} tokens this cycle`);
+      omDebug(
+        `[OM] Storing observations: ${totalTokenCount} tokens total, ${cycleObservationTokens} tokens this cycle`,
+      );
 
       // Use the max message timestamp as cursor instead of current time
       // This ensures historical data (like LongMemEval fixtures) works correctly
@@ -2820,14 +2942,16 @@ ${formattedMessages}
           recordId: record.id,
           threadId,
         });
-        this.insertObservationMarker(lastMessage, endMarker);
-        
-        // Stream the end marker to the UI for real-time feedback
+
+        // Stream the end marker to the UI first - this adds the part via stream handler
         if (writer) {
-          writer.custom(endMarker).catch(() => {
+          await writer.custom(endMarker).catch(() => {
             // Ignore errors from streaming - observation should continue
           });
         }
+
+        // Then seal the message (skipPush since writer.custom already added the part)
+        await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
       }
 
       // Emit debug event for observation complete
@@ -2859,14 +2983,16 @@ ${formattedMessages}
           recordId: record.id,
           threadId,
         });
-        this.insertObservationMarker(lastMessage, failedMarker);
-        
-        // Stream the failed marker to the UI for real-time feedback
+
+        // Stream the failed marker to the UI first - this adds the part via stream handler
         if (writer) {
-          writer.custom(failedMarker).catch(() => {
+          await writer.custom(failedMarker).catch(() => {
             // Ignore errors from streaming - observation should continue
           });
         }
+
+        // Then seal the message (skipPush since writer.custom already added the part)
+        await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
       }
       throw error;
     } finally {
@@ -3098,7 +3224,7 @@ ${formattedMessages}
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
       const existingPatterns = freshRecord?.patterns ?? record.patterns;
 
-      // ════════════════════════════════════════════════════════════
+      // ═════════════════════════════════════════���══════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
       // This is much more efficient than calling the Observer for each thread individually
       // ════════════════════════════════════════════════════════════
@@ -3139,7 +3265,7 @@ ${formattedMessages}
         const lastMessage = msgs[msgs.length - 1];
         const tokensToObserve = this.tokenCounter.countMessages(msgs);
         threadTokensToObserve.set(threadId, tokensToObserve);
-        
+
         if (lastMessage?.id) {
           const startMarker = this.createObservationStartMarker({
             cycleId,
@@ -3148,21 +3274,22 @@ ${formattedMessages}
             threadId,
             threadIds: allThreadIds,
           });
-          this.insertObservationMarker(lastMessage, startMarker);
-          
-          // Stream the start marker to the UI for real-time feedback
+          // Stream the start marker to the UI first - this adds the part via stream handler
           if (writer) {
-            writer.custom(startMarker).catch(() => {
+            await writer.custom(startMarker).catch(() => {
               // Ignore errors from streaming - observation should continue
             });
           }
+
+          // Then add to message (skipPush since writer.custom already added the part)
+          await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
         }
       }
 
       // ════════════════════════════════════════════════════════════
       // PARALLEL BATCHING: Chunk threads into batches and process in parallel
       // This combines batching efficiency with parallel execution
-      // ════════════════════════════════════════════════════════════
+      // ════��═══════════════════════════════════════════════════════
       const maxTokensPerBatch = this.observerConfig.maxTokensPerBatch ?? 5000;
       const orderedThreadIds = threadOrder.filter(tid => threadsWithMessages.has(tid));
 
@@ -3204,7 +3331,15 @@ ${formattedMessages}
 
       // Process batches either sequentially or in parallel
       let batchResults: Array<{
-        results: Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string; patterns?: Record<string, string[]> }>;
+        results: Map<
+          string,
+          {
+            observations: string;
+            currentTask?: string;
+            suggestedContinuation?: string;
+            patterns?: Record<string, string[]>;
+          }
+        >;
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
       }>;
 
@@ -3215,19 +3350,21 @@ ${formattedMessages}
 
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
           const batch = batches[batchIndex]!;
-          omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads (sequential)`);
-          
+          omDebug(
+            `[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads (sequential)`,
+          );
+
           const batchResult = await this.callMultiThreadObserver(
             cumulativeObservations,
             batch.threadMap,
             batch.threadIds,
             existingPatterns,
           );
-          
+
           omDebug(
             `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
           );
-          
+
           batchResults.push(batchResult);
 
           // Accumulate observations for next batch
@@ -3346,7 +3483,7 @@ ${formattedMessages}
         if (!obsResult) continue;
 
         const { threadId, threadMessages, result } = obsResult;
-        
+
         // Track tokens generated for this thread
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
@@ -3452,14 +3589,16 @@ ${formattedMessages}
             recordId: record.id,
             threadId,
           });
-          this.insertObservationMarker(lastMessage, endMarker);
-          
-          // Stream the end marker to the UI for real-time feedback
+
+          // Stream the end marker to the UI first - this adds the part via stream handler
           if (writer) {
-            writer.custom(endMarker).catch(() => {
+            await writer.custom(endMarker).catch(() => {
               // Ignore errors from streaming - observation should continue
             });
           }
+
+          // Then seal the message (skipPush since writer.custom already added the part)
+          await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
         }
       }
 
@@ -3491,14 +3630,16 @@ ${formattedMessages}
             recordId: record.id,
             threadId,
           });
-          this.insertObservationMarker(lastMessage, failedMarker);
-          
-          // Stream the failed marker to the UI for real-time feedback
+
+          // Stream the failed marker to the UI first - this adds the part via stream handler
           if (writer) {
-            writer.custom(failedMarker).catch(() => {
+            await writer.custom(failedMarker).catch(() => {
               // Ignore errors from streaming - observation should continue
             });
           }
+
+          // Then seal the message (skipPush since writer.custom already added the part)
+          await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
         }
       }
       throw error;

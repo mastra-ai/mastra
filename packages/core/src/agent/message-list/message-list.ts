@@ -598,6 +598,19 @@ export class MessageList {
   }
 
   /**
+   * Clear system messages, optionally for a specific tag
+   * @param tag - If provided, only clears messages with this tag. Otherwise clears untagged messages.
+   */
+  public clearSystemMessages(tag?: string): this {
+    if (tag) {
+      delete this.taggedSystemMessages[tag];
+    } else {
+      this.systemMessages = [];
+    }
+    return this;
+  }
+
+  /**
    * Replace all system messages with new ones
    * This clears both tagged and untagged system messages and replaces them with the provided array
    * @param messages - Array of system messages to set
@@ -794,7 +807,56 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
-        this.messages[existingIndex] = messageV2;
+        // If the existing message is sealed (e.g., after observation), don't replace it.
+        // Instead, generate a new ID for the incoming message and add it as a new message.
+        if (MessageMerger.isSealed(existingMessage)) {
+          // Find the last part with sealedAt metadata in the EXISTING message.
+          // The existing message has the seal boundary marker from insertObservationMarker.
+          const existingParts = existingMessage.content?.parts || [];
+          let sealedPartCount = 0;
+
+          for (let i = existingParts.length - 1; i >= 0; i--) {
+            const part = existingParts[i] as { metadata?: { mastra?: { sealedAt?: number } } };
+            if (part?.metadata?.mastra?.sealedAt) {
+              // The seal is at index i, so sealed content is parts 0 through i (inclusive)
+              sealedPartCount = i + 1;
+              break;
+            }
+          }
+
+          // If no sealedAt found, use the entire existing message length as the boundary
+          if (sealedPartCount === 0) {
+            sealedPartCount = existingParts.length;
+          }
+
+          // Get parts from incoming message that are beyond the sealed boundary
+          const incomingParts = messageV2.content.parts;
+
+          // If incoming message has fewer or equal parts than the sealed boundary,
+          // it's a stale update from before sealing - ignore it entirely
+          if (incomingParts.length <= sealedPartCount) {
+            // Stale message, ignore - don't replace, don't create new
+            return this;
+          }
+
+          const newParts = incomingParts.slice(sealedPartCount);
+
+          // Only create a new message if there are actually new parts
+          if (newParts.length > 0) {
+            // Generate a new ID for the incoming message
+            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+            // Replace the parts with only the new ones
+            messageV2.content.parts = newParts;
+            // Ensure the new message has a timestamp after the sealed message
+            if (messageV2.createdAt <= existingMessage.createdAt) {
+              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+            }
+            this.messages.push(messageV2);
+          }
+          // If no new parts, don't add anything (the sealed message already has all the content)
+        } else {
+          this.messages[existingIndex] = messageV2;
+        }
       } else if (!exists) {
         this.messages.push(messageV2);
       }
