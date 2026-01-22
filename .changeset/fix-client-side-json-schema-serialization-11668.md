@@ -4,4 +4,23 @@
 "@mastra/schema-compat": patch
 ---
 
-Fix client-side tools with plain JSON Schemas failing with OpenAI's "Invalid schema" error. The fix adds proper detection and handling of plain JSON Schema objects, bypassing unnecessary Zod conversion while maintaining compatibility with Zod-based tools. This resolves serialization issues where JSON Schemas were incorrectly processed, resulting in invalid schema formats being sent to OpenAI.
+Fixed client-side tools using plain JSON Schema objects causing OpenAI to reject requests with "Invalid schema" errors.
+
+**What changed:** Client-side tools can now use plain JSON Schema objects directly without errors when calling OpenAI models.
+
+**Example:**
+```typescript
+const tool = {
+  name: 'searchTool',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' }
+    }
+  },
+  execute: async (input) => { /* ... */ }
+};
+// Previously failed with "Invalid schema" error from OpenAI
+```
+
+Fixes #11668
