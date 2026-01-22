@@ -520,8 +520,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/index.ts > packages/playground-ui/src/domains/integrations/hooks/index.ts"
       ],
       "dependencies": ["023", "024", "025", "026", "027", "028"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "030",

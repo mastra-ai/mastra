@@ -386,3 +386,36 @@
   - Task 033 (P0): Copy tool selector component
   - Consider completing Task 029 to finish the hooks layer before moving to components
 
+- Task 029: Copy hooks index
+  - Copied index.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/index.ts
+  - Exports all integration hooks with proper type exports:
+    - useProviders, useProviderToolkits, useProviderTools
+    - useIntegrations, useIntegration, useIntegrationMutations
+    - useSmitheryServers, useSmitheryServer
+    - useOAuthCallback
+    - useArcadeAuth (with getToolNameForAuth utility and types: ArcadeAuthState, UseArcadeAuthOptions, UseArcadeAuthReturn)
+    - useComposioAuth (with types: ComposioAuthState, UseComposioAuthOptions, UseComposioAuthReturn)
+  - Total: 11 lines with all hook exports
+  - File: packages/playground-ui/src/domains/integrations/hooks/index.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 029 completed successfully - The hooks layer is now fully complete!
+- All integration hooks are now properly exported from a single index file
+- The hooks provide comprehensive functionality:
+  - Provider discovery and browsing
+  - Integration CRUD operations
+  - Smithery MCP registry browsing
+  - OAuth flows for Arcade and Composio
+  - OAuth callback handling for Smithery
+- Next logical high-priority tasks are the UI components:
+  - Task 031 (P0): Copy provider list component - HIGHEST PRIORITY
+  - Task 032 (P0): Copy toolkit browser component
+  - Task 033 (P0): Copy tool selector component
+  - Task 034 (P0): Copy MCP connection input component
+  - Task 035 (P0): Copy Smithery browser component
+  - Task 036 (P0): Copy add tools dialog (main wizard)
+  - Consider starting with Task 031 to begin building the UI layer from the foundation up
+
