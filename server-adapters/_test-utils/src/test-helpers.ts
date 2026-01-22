@@ -879,11 +879,14 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
+  /** Prefix to prepend to the route path (defaults to '/api') */
+  prefix?: string;
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  let path = route.path;
+  const prefix = overrides.prefix ?? '/api';
+  let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {
     const defaults = getDefaultValidPathParams(route);

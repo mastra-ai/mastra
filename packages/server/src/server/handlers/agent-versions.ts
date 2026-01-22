@@ -326,7 +326,7 @@ export async function handleAutoVersioning<TAgent>(
  */
 export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions',
+  path: '/stored/agents/:agentId/versions',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: listVersionsQuerySchema,
@@ -372,7 +372,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
  */
 export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions',
+  path: '/stored/agents/:agentId/versions',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   bodySchema: createVersionBodySchema,
@@ -436,7 +436,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
  */
 export const GET_AGENT_VERSION_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions/:versionId',
+  path: '/stored/agents/:agentId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: getVersionResponseSchema,
@@ -479,7 +479,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
  */
 export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions/:versionId/activate',
+  path: '/stored/agents/:agentId/versions/:versionId/activate',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: activateVersionResponseSchema,
@@ -536,7 +536,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
  */
 export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions/:versionId/restore',
+  path: '/stored/agents/:agentId/versions/:versionId/restore',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: restoreVersionResponseSchema,
@@ -638,7 +638,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
  */
 export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:agentId/versions/:versionId',
+  path: '/stored/agents/:agentId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: deleteVersionResponseSchema,
@@ -697,7 +697,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
  */
 export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions/compare',
+  path: '/stored/agents/:agentId/versions/compare',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: compareVersionsQuerySchema,

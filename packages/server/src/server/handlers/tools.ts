@@ -23,7 +23,7 @@ import { validateBody } from './utils';
 
 export const LIST_TOOLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/tools',
+  path: '/tools',
   responseType: 'json',
   responseSchema: listToolsResponseSchema,
   summary: 'List all tools',
@@ -56,7 +56,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
 export const GET_TOOL_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/tools/:toolId',
+  path: '/tools/:toolId',
   responseType: 'json',
   pathParamSchema: toolIdPathParams,
   responseSchema: serializedToolSchema,
@@ -94,7 +94,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
 
 export const EXECUTE_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/tools/:toolId/execute',
+  path: '/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: toolIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -163,7 +163,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
 export const GET_AGENT_TOOL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/tools/:toolId',
+  path: '/agents/:agentId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
   responseSchema: serializedToolSchema,
@@ -201,7 +201,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
 
 export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/tools/:toolId/execute',
+  path: '/agents/:agentId/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
   bodySchema: executeToolBodySchema,

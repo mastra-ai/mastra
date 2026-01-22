@@ -22,7 +22,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/v0/servers',
+  path: '/mcp/v0/servers',
   responseType: 'json',
   queryParamSchema: listMcpServersQuerySchema,
   responseSchema: listMcpServersResponseSchema,
@@ -99,7 +99,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
 
 export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/v0/servers/:id',
+  path: '/mcp/v0/servers/:id',
   responseType: 'json',
   pathParamSchema: mcpServerDetailPathParams,
   queryParamSchema: getMcpServerDetailQuerySchema,
@@ -134,7 +134,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
 
 export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/:serverId/tools',
+  path: '/mcp/:serverId/tools',
   responseType: 'json',
   pathParamSchema: mcpServerIdPathParams,
   responseSchema: listMcpServerToolsResponseSchema,
@@ -163,7 +163,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
 
 export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/:serverId/tools/:toolId',
+  path: '/mcp/:serverId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
   responseSchema: mcpToolInfoSchema,
@@ -197,7 +197,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
 
 export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/mcp/:serverId/tools/:toolId/execute',
+  path: '/mcp/:serverId/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
   bodySchema: executeToolBodySchema,
@@ -256,7 +256,7 @@ export interface MCPSseTransportResult {
 
 export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   method: 'ALL',
-  path: '/api/mcp/:serverId/mcp',
+  path: '/mcp/:serverId/mcp',
   responseType: 'mcp-http',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP HTTP Transport',
@@ -283,7 +283,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
 
 export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   method: 'ALL',
-  path: '/api/mcp/:serverId/sse',
+  path: '/mcp/:serverId/sse',
   responseType: 'mcp-sse',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP SSE Transport',
@@ -311,7 +311,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
 
 export const MCP_SSE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/mcp/:serverId/messages',
+  path: '/mcp/:serverId/messages',
   responseType: 'mcp-sse',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP SSE Messages',

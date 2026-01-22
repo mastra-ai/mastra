@@ -494,7 +494,7 @@ async function formatAgent({
 
 export const LIST_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents',
+  path: '/agents',
   responseType: 'json',
   queryParamSchema: z.object({
     partial: z.string().optional(),
@@ -565,7 +565,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
 export const GET_AGENT_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId',
+  path: '/agents/:agentId',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: serializedAgentSchema,
@@ -595,7 +595,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   unknown
 > = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate',
+  path: '/agents/:agentId/generate',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -631,7 +631,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 // Legacy routes (deprecated)
 export const GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate-legacy',
+  path: '/agents/:agentId/generate-legacy',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionLegacyBodySchema,
@@ -674,7 +674,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
 export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream-legacy',
+  path: '/agents/:agentId/stream-legacy',
   responseType: 'datastream-response' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionLegacyBodySchema,
@@ -734,7 +734,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
 export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/providers',
+  path: '/agents/providers',
   responseType: 'json',
   responseSchema: providersResponseSchema,
   summary: 'List AI providers',
@@ -767,7 +767,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
   unknown
 > = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate/vnext',
+  path: '/agents/:agentId/generate/vnext',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -781,7 +781,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
 
 export const STREAM_GENERATE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream',
+  path: '/agents/:agentId/stream',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -816,7 +816,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
 export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/vnext',
+  path: '/agents/:agentId/stream/vnext',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -831,7 +831,7 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
 
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/approve-tool-call',
+  path: '/agents/:agentId/approve-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -871,7 +871,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/decline-tool-call',
+  path: '/agents/:agentId/decline-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -911,7 +911,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
 export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/approve-tool-call-generate',
+  path: '/agents/:agentId/approve-tool-call-generate',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: approveToolCallBodySchema,
@@ -950,7 +950,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
 export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/decline-tool-call-generate',
+  path: '/agents/:agentId/decline-tool-call-generate',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: declineToolCallBodySchema,
@@ -989,7 +989,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
 export const STREAM_NETWORK_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/network',
+  path: '/agents/:agentId/network',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -1022,7 +1022,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
 export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/approve-network-tool-call',
+  path: '/agents/:agentId/approve-network-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -1057,7 +1057,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
 export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/decline-network-tool-call',
+  path: '/agents/:agentId/decline-network-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -1092,7 +1092,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
 export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/model',
+  path: '/agents/:agentId/model',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: updateAgentModelBodySchema,
@@ -1122,7 +1122,7 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
 
 export const RESET_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/model/reset',
+  path: '/agents/:agentId/model/reset',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: modelManagementResponseSchema,
@@ -1145,7 +1145,7 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
 
 export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/models/reorder',
+  path: '/agents/:agentId/models/reorder',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: reorderAgentModelListBodySchema,
@@ -1174,7 +1174,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
 
 export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/models/:modelConfigId',
+  path: '/agents/:agentId/models/:modelConfigId',
   responseType: 'json',
   pathParamSchema: modelConfigIdPathParams,
   bodySchema: updateAgentModelInModelListBodySchema,
@@ -1296,7 +1296,7 @@ type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSch
 
 export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/instructions/enhance',
+  path: '/agents/:agentId/instructions/enhance',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: enhanceInstructionsBodySchema,
@@ -1345,7 +1345,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
 
 export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/streamVNext',
+  path: '/agents/:agentId/streamVNext',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -1362,7 +1362,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
 
 export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/vnext/ui',
+  path: '/agents/:agentId/stream/vnext/ui',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -1389,7 +1389,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
 
 export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/ui',
+  path: '/agents/:agentId/stream/ui',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,

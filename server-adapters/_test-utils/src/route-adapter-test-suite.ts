@@ -177,7 +177,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         }
 
         // MCP v0 server detail 404 test (uses :id instead of :serverId)
-        if (route.path.includes('/api/mcp/v0/servers/:id')) {
+        if (route.path.includes('/mcp/v0/servers/:id')) {
           it('should return 404 when MCP server not found (via :id)', async () => {
             const request = buildRouteRequest(route, {
               pathParams: { id: 'non-existent-server' },

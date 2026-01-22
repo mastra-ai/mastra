@@ -30,7 +30,7 @@ import * as workflows from './workflows';
 
 export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder',
+  path: '/agent-builder',
   responseType: 'json',
   responseSchema: listWorkflowsResponseSchema,
   summary: 'List agent-builder actions',
@@ -57,7 +57,7 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
 
 export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId',
+  path: '/agent-builder/:actionId',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   responseSchema: workflowInfoSchema,
@@ -91,7 +91,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
 
 export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId/runs',
+  path: '/agent-builder/:actionId/runs',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: listWorkflowRunsQuerySchema,
@@ -127,7 +127,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
 
 export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agent-builder/:actionId/runs/:runId',
+  path: '/agent-builder/:actionId/runs/:runId',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
   queryParamSchema: workflowRunResultQuerySchema,
@@ -164,7 +164,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
 
 export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/create-run',
+  path: '/agent-builder/:actionId/create-run',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -200,7 +200,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 
 export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/stream',
+  path: '/agent-builder/:actionId/stream',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -238,7 +238,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/start-async',
+  path: '/agent-builder/:actionId/start-async',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -276,7 +276,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/start',
+  path: '/agent-builder/:actionId/start',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -314,7 +314,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 
 export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/observe',
+  path: '/agent-builder/:actionId/observe',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -350,7 +350,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume-async',
+  path: '/agent-builder/:actionId/resume-async',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -388,7 +388,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume',
+  path: '/agent-builder/:actionId/resume',
   responseType: 'json',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -426,7 +426,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/resume-stream',
+  path: '/agent-builder/:actionId/resume-stream',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -464,7 +464,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/runs/:runId/cancel',
+  path: '/agent-builder/:actionId/runs/:runId/cancel',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
   responseSchema: workflowControlResponseSchema,
@@ -500,7 +500,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
 // Legacy routes (deprecated)
 export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/stream-legacy',
+  path: '/agent-builder/:actionId/stream-legacy',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
@@ -539,7 +539,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
 export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agent-builder/:actionId/observe-stream-legacy',
+  path: '/agent-builder/:actionId/observe-stream-legacy',
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,

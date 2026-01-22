@@ -21,7 +21,7 @@ import { validateBody } from './utils';
 
 export const GET_SPEAKERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/voice/speakers',
+  path: '/agents/:agentId/voice/speakers',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
@@ -62,7 +62,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
 
 export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/speakers',
+  path: '/agents/:agentId/speakers',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
@@ -75,7 +75,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
 
 export const GENERATE_SPEECH_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/voice/speak',
+  path: '/agents/:agentId/voice/speak',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
@@ -127,7 +127,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 
 export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/speak',
+  path: '/agents/:agentId/speak',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
@@ -142,7 +142,7 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
 
 export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/voice/listen',
+  path: '/agents/:agentId/voice/listen',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
@@ -187,7 +187,7 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
 
 export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/listen',
+  path: '/agents/:agentId/listen',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
@@ -202,7 +202,7 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
 
 export const GET_LISTENER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/voice/listener',
+  path: '/agents/:agentId/voice/listener',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: getListenerResponseSchema,

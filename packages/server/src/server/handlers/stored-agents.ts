@@ -24,7 +24,7 @@ import { handleError } from './error';
  */
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
@@ -65,7 +65,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: getStoredAgentResponseSchema,
@@ -105,7 +105,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
  */
 export const CREATE_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
@@ -187,7 +187,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
  */
 export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -275,7 +275,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: deleteStoredAgentResponseSchema,
