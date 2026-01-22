@@ -238,3 +238,31 @@
   - Task 026-028 (P1): Copy OAuth hooks (use-oauth-callback, use-arcade-auth, use-composio-auth)
   - Task 031 (P0): Copy provider list component
   - Consider starting with Task 024 to complete the data fetching layer before moving to components
+
+- Task 024: Copy provider discovery hooks
+  - Copied use-providers.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-providers.ts
+  - Copied use-provider-toolkits.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-provider-toolkits.ts
+  - Copied use-provider-tools.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-provider-tools.ts
+  - useProviders: Fetches all available integration providers with connection status
+  - useProviderToolkits: Fetches toolkits from a specific provider with infinite scroll/pagination
+  - useProviderTools: Fetches tools from a specific provider with infinite scroll/pagination
+  - All three hooks use React Query and @mastra/react client
+  - Total: ~100 lines of React Query hook implementations
+  - Files:
+    - packages/playground-ui/src/domains/integrations/hooks/use-providers.ts (created)
+    - packages/playground-ui/src/domains/integrations/hooks/use-provider-toolkits.ts (created)
+    - packages/playground-ui/src/domains/integrations/hooks/use-provider-tools.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 024 completed successfully - Provider discovery hooks are now in place
+- These hooks provide the foundation for browsing available providers, their toolkits, and individual tools
+- The infinite query pattern used in toolkits and tools hooks supports efficient pagination
+- Next logical high-priority tasks are:
+  - Task 025 (P1): Copy Smithery browsing hook (use-smithery.ts)
+  - Task 026-028 (P1): Copy OAuth hooks (use-oauth-callback, use-arcade-auth, use-composio-auth)
+  - Task 029 (P1): Copy hooks index to export all hooks
+  - Task 031 (P0): Copy provider list component
+  - Consider completing remaining hooks (025-028) before moving to components

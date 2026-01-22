@@ -440,8 +440,8 @@
         "git show total-cms:<path> > <path> (for each file)"
       ],
       "dependencies": ["022"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "025",
