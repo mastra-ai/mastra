@@ -12,7 +12,7 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   ListTracesArgs,
-  ListTracesStorageResponse,
+  ListTracesResponse,
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
@@ -109,9 +109,9 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves a list of traces with optional filtering.
-   * Returns raw span records without computed status - use toTraceListItems() to add status.
+   * Returns root spans with computed status.
    */
-  async listTraces(_args: ListTracesArgs): Promise<ListTracesStorageResponse> {
+  async listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_LIST_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

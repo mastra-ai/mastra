@@ -373,22 +373,13 @@ export const listTracesArgsSchema = z
 /** Arguments for listing traces with optional filters, pagination, and ordering */
 export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 
-/** Schema for listTraces operation response (from storage, without computed status) */
-export const listTracesStorageResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  spans: z.array(spanRecordSchema),
-});
-
-/** Response from storage containing paginated root spans */
-export type ListTracesStorageResponse = z.infer<typeof listTracesStorageResponseSchema>;
-
-/** Schema for listTraces API response (with computed status) */
+/** Schema for listTraces operation response */
 export const listTracesResponseSchema = z.object({
   pagination: paginationInfoSchema,
   spans: z.array(traceListItemSchema),
 });
 
-/** API response containing paginated root spans with computed status */
+/** Response containing paginated root spans with computed status */
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 /**

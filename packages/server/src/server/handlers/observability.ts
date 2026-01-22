@@ -13,7 +13,6 @@ import {
   getTraceArgsSchema,
   getTraceResponseSchema,
   dateRangeSchema,
-  toTraceListItems,
 } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -133,13 +132,7 @@ export const LIST_TRACES_ROUTE = createRoute({
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
 
       const observabilityStore = await getObservabilityStore(mastra);
-      const result = await observabilityStore.listTraces({ filters, pagination, orderBy });
-
-      // Transform spans to include computed status
-      return {
-        pagination: result.pagination,
-        spans: toTraceListItems(result.spans),
-      };
+      return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       handleError(error, 'Error listing traces');
     }

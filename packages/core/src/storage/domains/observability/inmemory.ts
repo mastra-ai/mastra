@@ -16,11 +16,12 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   ListTracesArgs,
+  ListTracesResponse,
   SpanRecord,
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
-import { listTracesArgsSchema, TraceStatus } from './types';
+import { listTracesArgsSchema, toTraceListItems, TraceStatus } from './types';
 
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
@@ -203,7 +204,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
 
@@ -251,7 +252,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const paged = matchingRootSpans.slice(start, end);
 
     return {
-      spans: paged,
+      spans: toTraceListItems(paged),
       pagination: { total, page, perPage, hasMore: end < total },
     };
   }

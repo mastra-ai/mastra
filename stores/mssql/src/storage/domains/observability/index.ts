@@ -5,12 +5,14 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
+  toTraceListItems,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   PaginationInfo,
   ListTracesArgs,
+  ListTracesResponse,
   TracingStorageStrategy,
   BatchUpdateSpansArgs,
   BatchDeleteTracesArgs,
@@ -415,7 +417,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
     const { page, perPage } = pagination;
@@ -669,11 +671,13 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: result.recordset.map(span =>
-          transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_SPANS,
-            sqlRow: span,
-          }),
+        spans: toTraceListItems(
+          result.recordset.map(span =>
+            transformFromSqlRow<SpanRecord>({
+              tableName: TABLE_SPANS,
+              sqlRow: span,
+            }),
+          ),
         ),
       };
     } catch (error) {
