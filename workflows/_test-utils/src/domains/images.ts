@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
@@ -15,19 +14,17 @@ const SAMPLE_BASE64_IMAGE =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
 const SAMPLE_DATA_URI = `data:image/png;base64,${SAMPLE_BASE64_IMAGE}`;
 
-export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
+export function createImagesTests({ createAgent }: DurableAgentTestContext) {
   describe('image handling', () => {
     describe('base64 image handling', () => {
       it('should accept raw base64 image in message content', async () => {
         const mockModel = createTextStreamModel('I see a red pixel.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'base64-image-agent',
           name: 'Base64 Image Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -46,14 +43,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle data URI format images', async () => {
         const mockModel = createTextStreamModel('I see a red pixel.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'data-uri-image-agent',
           name: 'Data URI Image Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -73,14 +68,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
     describe('HTTP URL images', () => {
       it('should accept HTTP URL images in message content', async () => {
         const mockModel = createTextStreamModel('I see an image from the URL.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'url-image-agent',
           name: 'URL Image Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -98,14 +91,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle HTTPS URL images', async () => {
         const mockModel = createTextStreamModel('I see an image.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'https-image-agent',
           name: 'HTTPS Image Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -125,14 +116,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
     describe('mixed image formats', () => {
       it('should handle multiple images in different formats', async () => {
         const mockModel = createTextStreamModel('I see multiple images.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'mixed-images-agent',
           name: 'Mixed Images Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -152,14 +141,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle text and image interleaved', async () => {
         const mockModel = createTextStreamModel('Comparing the images...');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'interleaved-images-agent',
           name: 'Interleaved Images Agent',
           instructions: 'Describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -182,14 +169,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
     describe('image serialization in workflow', () => {
       it('should serialize image content in workflow input', async () => {
         const mockModel = createTextStreamModel('Image processed.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'serialize-image-agent',
           name: 'Serialize Image Agent',
           instructions: 'Process images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -211,15 +196,13 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle large base64 images', async () => {
         const mockModel = createTextStreamModel('Large image received.');
-        const pubsub = getPubSub();
         const largeBase64 = SAMPLE_BASE64_IMAGE.repeat(100);
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'large-image-agent',
           name: 'Large Image Agent',
           instructions: 'Process images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -242,14 +225,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
     describe('image with memory', () => {
       it('should handle images with memory configuration', async () => {
         const mockModel = createTextStreamModel('I remember this image.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'image-memory-agent',
           name: 'Image Memory Agent',
           instructions: 'Remember and describe images.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare(
@@ -279,14 +260,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
   describe('image edge cases', () => {
     it('should handle empty image content gracefully', async () => {
       const mockModel = createTextStreamModel('No image data.');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'empty-image-agent',
         name: 'Empty Image Agent',
         instructions: 'Process images.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -304,14 +283,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle message with only image (no text)', async () => {
       const mockModel = createTextStreamModel('I see an image.');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'only-image-agent',
         name: 'Only Image Agent',
         instructions: 'Describe images.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -326,14 +303,12 @@ export function createImagesTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle special characters in image URLs', async () => {
       const mockModel = createTextStreamModel('Processing URL image.');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'special-url-agent',
         name: 'Special URL Agent',
         instructions: 'Process images.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([

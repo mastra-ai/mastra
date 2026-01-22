@@ -7,11 +7,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
-export function createStructuredOutputTests({ getPubSub }: DurableAgentTestContext) {
+export function createStructuredOutputTests({ createAgent }: DurableAgentTestContext) {
   describe('structured output', () => {
     describe('ZodSchema structured output', () => {
       it('should support ZodSchema structured output type', async () => {
@@ -23,14 +22,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             ],
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'election-agent',
           name: 'US Election Agent',
           instructions: 'You know about past US elections',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
@@ -60,14 +57,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             ],
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'array-schema-agent',
           name: 'Array Schema Agent',
           instructions: 'Return user data',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('List all users', {
@@ -96,14 +91,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             ],
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'json-schema-agent',
           name: 'JSON Schema Agent',
           instructions: 'You know about past US elections',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
@@ -142,14 +135,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             role: 'admin',
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'streaming-schema-agent',
           name: 'Streaming Schema Agent',
           instructions: 'Return user profile',
           model: mockModel,
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Get user profile', {
@@ -184,14 +175,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             },
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'nested-schema-agent',
           name: 'Nested Schema Agent',
           instructions: 'Return nested user data',
           model: mockModel,
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Get complete user data', {
@@ -222,14 +211,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
     describe('edge cases', () => {
       it('should handle empty object schemas', async () => {
         const mockModel = createTextStreamModel(JSON.stringify({}));
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'empty-schema-agent',
           name: 'Empty Schema Agent',
           instructions: 'Return empty object',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Get empty data', {
@@ -243,14 +230,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
 
       it('should handle schemas with optional fields', async () => {
         const mockModel = createTextStreamModel(JSON.stringify({ name: 'Alice' }));
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'optional-fields-agent',
           name: 'Optional Fields Agent',
           instructions: 'Return user with optional fields',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Get user data', {
@@ -272,14 +257,12 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
             result: { type: 'success', data: { id: 123 } },
           }),
         );
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'union-schema-agent',
           name: 'Union Schema Agent',
           instructions: 'Return result with union type',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Get result', {
@@ -301,19 +284,17 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
   describe('structured output workflow integration', () => {
     it('should include structuredOutput schema info in workflow input serialization', async () => {
       const mockModel = createTextStreamModel(JSON.stringify({ count: 42, items: ['a', 'b', 'c'] }));
-      const pubsub = getPubSub();
 
       const schema = z.object({
         count: z.number(),
         items: z.array(z.string()),
       });
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'serialization-test-agent',
         name: 'Serialization Test Agent',
         instructions: 'Test serialization',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Get data', {
@@ -327,23 +308,22 @@ export function createStructuredOutputTests({ getPubSub }: DurableAgentTestConte
 
       const parsed = JSON.parse(serialized);
       expect(parsed.runId).toBe(result.runId);
-      expect(parsed.agentId).toBe('serialization-test-agent');
+      // Agent ID may have implementation-specific suffix
+      expect(parsed.agentId).toMatch(/^serialization-test-agent/);
     });
 
     it('should properly serialize complex schemas with descriptions', async () => {
       const mockModel = createTextStreamModel(JSON.stringify({ status: 'active' }));
-      const pubsub = getPubSub();
 
       const schema = z.object({
         status: z.enum(['active', 'inactive', 'pending']).describe('Current user status'),
       });
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'described-schema-agent',
         name: 'Described Schema Agent',
         instructions: 'Test described schemas',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Get status', {

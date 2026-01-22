@@ -7,23 +7,20 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
-export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
+export function createUIMessageTests({ createAgent }: DurableAgentTestContext) {
   describe('UIMessage handling', () => {
     describe('UIMessageWithMetadata support', () => {
       it('should accept UIMessageWithMetadata in prepare', async () => {
         const mockModel = createTextStreamModel('Hello!');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'uimessage-agent',
           name: 'UIMessage Agent',
           instructions: 'Process messages with metadata.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -44,14 +41,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle messages with and without metadata', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'mixed-metadata-agent',
           name: 'Mixed Metadata Agent',
           instructions: 'Process messages.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -72,14 +67,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should preserve metadata through workflow serialization', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'preserve-metadata-agent',
           name: 'Preserve Metadata Agent',
           instructions: 'Process messages.',
           model: mockModel,
-          pubsub,
         });
 
         const metadata = {
@@ -108,14 +101,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
     describe('content format handling', () => {
       it('should handle content as string', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'string-content-agent',
           name: 'String Content Agent',
           instructions: 'Process messages.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -130,14 +121,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle content as array of parts', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'parts-content-agent',
           name: 'Parts Content Agent',
           instructions: 'Process messages.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -155,14 +144,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle empty content', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'empty-content-agent',
           name: 'Empty Content Agent',
           instructions: 'Process messages.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare([
@@ -179,14 +166,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
     describe('streaming with UIMessage', () => {
       it('should stream with UIMessageWithMetadata input', async () => {
         const mockModel = createTextStreamModel('Streaming response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stream-uimessage-agent',
           name: 'Stream UIMessage Agent',
           instructions: 'Process and stream.',
           model: mockModel,
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream([
@@ -207,14 +192,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
   describe('UIMessage edge cases', () => {
     it('should handle metadata with nested objects', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'nested-metadata-agent',
         name: 'Nested Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -247,14 +230,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle metadata with special characters', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'special-metadata-agent',
         name: 'Special Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -276,14 +257,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle null/undefined metadata values', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'null-metadata-agent',
         name: 'Null Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -306,14 +285,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle message ID variations', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'id-variations-agent',
         name: 'ID Variations Agent',
         instructions: 'Process messages.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -344,14 +321,12 @@ export function createUIMessageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle assistant messages with metadata', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'assistant-metadata-agent',
         name: 'Assistant Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([

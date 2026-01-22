@@ -7,17 +7,15 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import { createTool } from '@mastra/core/tools';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createToolCallModel } from '../mock-models';
 
-export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
+export function createStopWhenTests({ createAgent }: DurableAgentTestContext) {
   describe('stopWhen callback', () => {
     describe('stopWhen option configuration', () => {
       it('should accept stopWhen callback in stream options', async () => {
         const mockModel = createToolCallModel('weatherTool', { location: 'Toronto' });
-        const pubsub = getPubSub();
 
         const weatherTool = createTool({
           id: 'weatherTool',
@@ -29,13 +27,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
           }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-agent',
           name: 'StopWhen Agent',
           instructions: 'Get weather information.',
           model: mockModel,
           tools: { weatherTool },
-          pubsub,
         });
 
         const stopWhenCalled = vi.fn().mockReturnValue(false);
@@ -50,14 +47,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should accept stopWhen callback in prepare options', async () => {
         const mockModel = createTextStreamModel('Here is your answer.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-prepare-agent',
           name: 'StopWhen Prepare Agent',
           instructions: 'Respond to questions.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Hello', {
@@ -72,7 +67,6 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
     describe('stopWhen with tools', () => {
       it('should handle stopWhen with tool execution', async () => {
         const mockModel = createToolCallModel('dataTool', { query: 'test' });
-        const pubsub = getPubSub();
 
         const dataTool = createTool({
           id: 'dataTool',
@@ -81,13 +75,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
           execute: async () => ({ data: 'result' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-tool-agent',
           name: 'StopWhen Tool Agent',
           instructions: 'Get data.',
           model: mockModel,
           tools: { dataTool },
-          pubsub,
         });
 
         const stopWhen = vi.fn().mockImplementation(({ steps }) => {
@@ -107,14 +100,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
     describe('stopWhen with maxSteps', () => {
       it('should combine stopWhen with maxSteps option', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-maxsteps-agent',
           name: 'StopWhen MaxSteps Agent',
           instructions: 'Respond.',
           model: mockModel,
-          pubsub,
         });
 
         const stopWhen = vi.fn().mockReturnValue(false);
@@ -130,14 +121,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle stopWhen returning true immediately', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-immediate-agent',
           name: 'StopWhen Immediate Agent',
           instructions: 'Respond.',
           model: mockModel,
-          pubsub,
         });
 
         const stopWhen = vi.fn().mockReturnValue(true);
@@ -154,14 +143,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
     describe('stopWhen serialization', () => {
       it('should handle workflow input without stopWhen (non-serializable)', async () => {
         const mockModel = createTextStreamModel('Response');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stopwhen-serialize-agent',
           name: 'StopWhen Serialize Agent',
           instructions: 'Respond.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Hello', {
@@ -180,14 +167,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
   describe('stopWhen edge cases', () => {
     it('should handle stopWhen with empty steps array', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'stopwhen-empty-steps-agent',
         name: 'StopWhen Empty Steps Agent',
         instructions: 'Respond.',
         model: mockModel,
-        pubsub,
       });
 
       const stopWhen = vi.fn().mockImplementation(({ steps }) => {
@@ -207,14 +192,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle stopWhen that throws an error', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'stopwhen-error-agent',
         name: 'StopWhen Error Agent',
         instructions: 'Respond.',
         model: mockModel,
-        pubsub,
       });
 
       const stopWhen = vi.fn().mockImplementation(() => {
@@ -231,14 +214,12 @@ export function createStopWhenTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle async stopWhen callback', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'stopwhen-async-agent',
         name: 'StopWhen Async Agent',
         instructions: 'Respond.',
         model: mockModel,
-        pubsub,
       });
 
       const stopWhen = vi.fn().mockImplementation(async ({ steps }) => {

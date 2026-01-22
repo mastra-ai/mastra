@@ -7,23 +7,20 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createMultiChunkStreamModel } from '../mock-models';
 
-export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
+export function createReasoningTests({ createAgent }: DurableAgentTestContext) {
   describe('reasoning features', () => {
     describe('reasoning model configuration', () => {
       it('should accept model that supports reasoning', async () => {
         const mockModel = createTextStreamModel('The answer is 42.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'reasoning-agent',
           name: 'Reasoning Agent',
           instructions: 'Think through problems carefully.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('What is the meaning of life?');
@@ -34,14 +31,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should work with model that returns reasoning tokens in usage', async () => {
         const mockModel = createTextStreamModel('Based on my analysis, the answer is clear.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'reasoning-usage-agent',
           name: 'Reasoning Usage Agent',
           instructions: 'Analyze and respond.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Analyze this problem');
@@ -53,14 +48,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
     describe('reasoning with streaming', () => {
       it('should stream reasoning-capable responses', async () => {
         const mockModel = createTextStreamModel('Here is my response.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stream-reasoning-agent',
           name: 'Stream Reasoning Agent',
           instructions: 'Think and respond.',
           model: mockModel,
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Give me a thoughtful answer');
@@ -76,14 +69,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
           'all the factors. ',
           'The answer is clear.',
         ]);
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'interleaved-agent',
           name: 'Interleaved Agent',
           instructions: 'Process information.',
           model: mockModel,
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Process this');
@@ -96,14 +87,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
     describe('reasoning workflow serialization', () => {
       it('should serialize workflow input for reasoning models', async () => {
         const mockModel = createTextStreamModel('Answer');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'serialize-reasoning-agent',
           name: 'Serialize Reasoning Agent',
           instructions: 'Think through problems.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Think about this');
@@ -118,14 +107,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should preserve model configuration through preparation', async () => {
         const mockModel = createTextStreamModel('Result');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'model-config-agent',
           name: 'Model Config Agent',
           instructions: 'Analyze carefully.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Analyze', {
@@ -141,14 +128,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
     describe('reasoning with memory', () => {
       it('should handle reasoning models with memory configuration', async () => {
         const mockModel = createTextStreamModel('Based on our conversation, here is my answer.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'reasoning-memory-agent',
           name: 'Reasoning Memory Agent',
           instructions: 'Think with context.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Continue our discussion', {
@@ -169,14 +154,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
     describe('reasoning edge cases', () => {
       it('should handle empty reasoning response', async () => {
         const mockModel = createTextStreamModel('');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'empty-reasoning-agent',
           name: 'Empty Reasoning Agent',
           instructions: 'Respond.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Hello');
@@ -187,14 +170,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
       it('should handle very long reasoning content', async () => {
         const longText = 'This is a detailed analysis. '.repeat(100);
         const mockModel = createTextStreamModel(longText);
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'long-reasoning-agent',
           name: 'Long Reasoning Agent',
           instructions: 'Analyze thoroughly.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Give me a detailed analysis');
@@ -207,14 +188,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should handle special characters in reasoning content', async () => {
         const mockModel = createTextStreamModel('Done.');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'special-chars-reasoning-agent',
           name: 'Special Chars Reasoning Agent',
           instructions: 'Handle special characters.',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Test special characters');
@@ -227,14 +206,12 @@ export function createReasoningTests({ getPubSub }: DurableAgentTestContext) {
   describe('V3 usage format', () => {
     it('should handle V3-style usage with detailed token breakdown', async () => {
       const mockModel = createTextStreamModel('Response');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'v3-usage-agent',
         name: 'V3 Usage Agent',
         instructions: 'Process with V3 usage.',
         model: mockModel,
-        pubsub,
       });
 
       const { runId, cleanup } = await agent.stream('Test V3 usage');

@@ -6,23 +6,20 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
-export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
+export function createUsageTests({ createAgent }: DurableAgentTestContext) {
   describe('usage tracking', () => {
     describe('basic usage tracking', () => {
       it('should include usage data in workflow input initialization', async () => {
         const mockModel = createTextStreamModel('Response text');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'usage-test-agent',
           name: 'Usage Test Agent',
           instructions: 'You are a helpful assistant',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Test message');
@@ -33,14 +30,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should track model configuration in workflow input', async () => {
         const mockModel = createTextStreamModel('Response text');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'model-config-agent',
           name: 'Model Config Agent',
           instructions: 'Test',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Test');
@@ -54,14 +49,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
     describe('usage in stream options', () => {
       it('should pass includeRawChunks option to workflow', async () => {
         const mockModel = createTextStreamModel('Response text');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'raw-chunks-agent',
           name: 'Raw Chunks Agent',
           instructions: 'Test',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Test', {
@@ -73,14 +66,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
       it('should pass model settings including temperature', async () => {
         const mockModel = createTextStreamModel('Response text');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'temperature-agent',
           name: 'Temperature Agent',
           instructions: 'Test',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Test', {
@@ -96,19 +87,17 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
     describe('workflow initialization state', () => {
       it('should initialize with zero accumulated usage', async () => {
         const mockModel = createTextStreamModel('Response text');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'init-usage-agent',
           name: 'Init Usage Agent',
           instructions: 'Test',
           model: mockModel,
-          pubsub,
         });
 
-        const workflow = agent.getWorkflow();
-        expect(workflow).toBeDefined();
-        expect(workflow.id).toBe('durable-agentic-loop');
+        // Just verify that prepare works - workflow initialization is implementation-specific
+        const result = await agent.prepare('Test');
+        expect(result.runId).toBeDefined();
       });
     });
   });
@@ -116,14 +105,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
   describe('usage accumulation', () => {
     it('should prepare workflow with correct structure for accumulation', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'accumulation-agent',
         name: 'Accumulation Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test');
@@ -138,14 +125,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle multiple prepare calls independently', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'multi-prepare-agent',
         name: 'Multi Prepare Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result1 = await agent.prepare('First message');
@@ -158,24 +143,18 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
       expect(result1.messageId).not.toBe(result2.messageId);
       expect(result2.messageId).not.toBe(result3.messageId);
-
-      expect(agent.runRegistry.has(result1.runId)).toBe(true);
-      expect(agent.runRegistry.has(result2.runId)).toBe(true);
-      expect(agent.runRegistry.has(result3.runId)).toBe(true);
     });
   });
 
   describe('model settings', () => {
     it('should pass temperature setting', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'temp-setting-agent',
         name: 'Temp Setting Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test', {
@@ -187,14 +166,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should handle missing model settings', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'no-settings-agent',
         name: 'No Settings Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test');
@@ -204,14 +181,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should serialize model config correctly', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'serialize-config-agent',
         name: 'Serialize Config Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test');
@@ -227,14 +202,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
   describe('processor retry configuration', () => {
     it('should pass maxProcessorRetries to workflow input', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'retry-config-agent',
         name: 'Retry Config Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test', {
@@ -246,14 +219,12 @@ export function createUsageTests({ getPubSub }: DurableAgentTestContext) {
 
     it('should default maxProcessorRetries to undefined when not specified', async () => {
       const mockModel = createTextStreamModel('Response text');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'default-retry-agent',
         name: 'Default Retry Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Test');
