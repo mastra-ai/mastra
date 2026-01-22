@@ -17,14 +17,14 @@ Mastra can also be used to author MCP servers, exposing agents, tools, and other
 
 Mastra currently supports two MCP classes:
 
-1. **`MCPClient`**: Connects to one or many MCP servers to access their tools, resources, prompts, and handle elicitation requests.
-2. **`MCPServer`**: Exposes Mastra tools, agents, workflows, prompts, and resources to MCP-compatible clients.
+1. `MCPClient`: Connects to one or many MCP servers to access their tools, resources, prompts, and handle elicitation requests.
+2. `MCPServer`: Exposes Mastra tools, agents, workflows, prompts, and resources to MCP-compatible clients.
 
 ## Getting started
 
 To use MCP, install the required dependency:
 
-```bash
+```bash npm2yarn
 npm install @mastra/mcp@latest
 ```
 
@@ -67,9 +67,8 @@ For connecting to OAuth-protected MCP servers, see the [OAuth Authentication](/r
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
-```typescript {3,15} title="src/mastra/agents/test-agent.ts"
+```typescript {2,15} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
-
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
