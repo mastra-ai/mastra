@@ -748,7 +748,7 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessInputStep(args: RunProcessInputStepArgs): Promise<RunProcessInputStepResult> {
-    const { messageList, stepNumber, steps, tracingContext, requestContext } = args;
+    const { messageList, stepNumber, steps, tracingContext, requestContext, writer } = args;
 
     // Initialize with all provided values - processors will modify this object in order
     const stepInput: RunProcessInputStepResult = {
@@ -783,6 +783,7 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
         );
         Object.assign(stepInput, result);
         continue;
@@ -847,15 +848,18 @@ export class ProcessorRunner {
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
 
+        const processMethodArgs = {
+          messageList,
+          ...inputData,
+          state: processorState,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          retryCount: args.retryCount ?? 0,
+          writer,
+        };
+
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
-          await processMethod({
-            messageList,
-            ...inputData,
-            state: processorState,
-            abort,
-            tracingContext: { currentSpan: processorSpan },
-            retryCount: args.retryCount ?? 0,
-          }),
+          await processMethod(processMethodArgs),
           {
             messageList,
             processor,

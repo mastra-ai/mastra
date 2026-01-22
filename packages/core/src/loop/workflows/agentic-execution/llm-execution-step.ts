@@ -596,6 +596,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           try {
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+            
+            // Create a ProcessorStreamWriter from outputWriter if available
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+              : undefined;
+            
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
@@ -611,6 +617,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
               state: {},
+              writer: inputStepWriter,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {

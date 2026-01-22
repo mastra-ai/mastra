@@ -1950,7 +1950,7 @@ ${suggestedResponse}
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, messages, requestContext, stepNumber, state, writer } = args;
 
-    omDebug(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}`);
+    omDebug(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer in args: ${!!args.writer}, writer destructured: ${!!writer}`);
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
@@ -2074,6 +2074,7 @@ ${suggestedResponse}
 
       if (totalPendingTokens >= threshold) {
         omDebug(`[OM processInputStep] Threshold reached, triggering observation`);
+        omDebug(`[OM processInputStep] writer available: ${!!writer}`);
 
         const lockKey = this.getLockKey(threadId, resourceId);
         await this.withLock(lockKey, async () => {
