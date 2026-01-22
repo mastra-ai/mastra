@@ -372,8 +372,6 @@ export class ModelSpanTracker {
    */
   #handleToolApprovalChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     if (chunk.type !== 'tool-call-approval') return;
-
-    // Use payload directly - ChunkType already types tool-call-approval chunks correctly
     const payload = chunk.payload;
 
     // Auto-create step if we see a chunk before step-start
