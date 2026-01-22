@@ -172,7 +172,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
 
   // Display metadata for UI
   readonly displayName?: string;
-  readonly icon: FilesystemIcon = 'aws-s3';
+  readonly icon: FilesystemIcon = 's3';
   readonly description?: string;
 
   /**
@@ -202,7 +202,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
 
     // Display metadata
     this.displayName = options.displayName;
-    this.icon = options.icon ?? 'aws-s3';
+    this.icon = options.icon ?? 's3';
     this.description = options.description;
   }
 

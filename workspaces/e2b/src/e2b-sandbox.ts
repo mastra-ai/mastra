@@ -7,6 +7,8 @@
  * @see https://e2b.dev/docs
  */
 
+import { createHash } from 'node:crypto';
+
 import type {
   WorkspaceSandbox,
   SandboxStatus,
@@ -69,6 +71,14 @@ export interface R2MountConfig extends FilesystemMountConfig {
  * Supported mount config types for E2B sandbox.
  */
 export type E2BMountConfig = S3MountConfig | GCSMountConfig | R2MountConfig;
+
+/**
+ * Hash credentials for marker file comparison.
+ * Uses SHA-256 to create a one-way hash that can detect credential changes.
+ */
+function hashCredentials(accessKeyId: string, secretAccessKey: string): string {
+  return createHash('sha256').update(`${accessKeyId}:${secretAccessKey}`).digest('hex').slice(0, 16);
+}
 
 // =============================================================================
 // E2B Sandbox Options
@@ -221,18 +231,47 @@ export class E2BSandbox implements WorkspaceSandbox {
       throw new Error('Filesystem does not support mounting');
     }
 
+    const config = filesystem.getMountConfig() as E2BMountConfig;
+
     // Check if already mounted (e.g., when reconnecting to existing sandbox)
     const mountCheck = await this._sandbox.commands.run(
       `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
     );
-    if (mountCheck.stdout.trim() === 'mounted') {
-      console.log(`[E2B Mount] ${mountPath} is already mounted, skipping`);
-      const config = filesystem.getMountConfig() as E2BMountConfig;
-      this._mounts.set(mountPath, { filesystem, config });
-      return;
-    }
 
-    const config = filesystem.getMountConfig() as E2BMountConfig;
+    if (mountCheck.stdout.trim() === 'mounted') {
+      // Check if the mounted config matches what we want
+      // Store marker in /tmp so we don't pollute the user's bucket
+      const encodedPath = mountPath.replace(/\//g, '_');
+      const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
+      const expectedBucket = (config as S3MountConfig).bucket;
+      const expectedEndpoint = (config as S3MountConfig).endpoint || '';
+      const expectedCredHash = hashCredentials(
+        (config as S3MountConfig).accessKeyId,
+        (config as S3MountConfig).secretAccessKey,
+      );
+
+      try {
+        const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
+        const markerContent = markerResult.stdout.trim();
+        const expectedMarker = `${expectedBucket}|${expectedEndpoint}|${expectedCredHash}`;
+
+        console.log(
+          `[E2B Mount] Current marker: "${markerContent.slice(0, 50)}...", expected: "${expectedMarker.slice(0, 50)}..."`,
+        );
+
+        if (markerContent === expectedMarker) {
+          console.log(`[E2B Mount] ${mountPath} is already mounted with correct config, skipping`);
+          this._mounts.set(mountPath, { filesystem, config });
+          return;
+        }
+      } catch {
+        // Marker doesn't exist or can't be read - re-mount to be safe
+      }
+
+      // Different config or no marker - unmount and re-mount
+      console.log(`[E2B Mount] Config mismatch or no marker, unmounting to re-mount with new config...`);
+      await this.unmount(mountPath);
+    }
     console.log(`[E2B Mount] Config type: ${config.type}`);
 
     // Create mount directory with sudo (for paths outside home dir like /data)
@@ -262,7 +301,95 @@ export class E2BSandbox implements WorkspaceSandbox {
     }
 
     this._mounts.set(mountPath, { filesystem, config });
+
+    // Write marker file so we can detect config changes on reconnect
+    // Store in /tmp so we don't pollute the user's bucket
+    // Format: bucket|endpoint|credentialHash
+    const encodedPath = mountPath.replace(/\//g, '_');
+    const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
+    const bucket = (config as S3MountConfig).bucket || '';
+    const endpoint = (config as S3MountConfig).endpoint || '';
+    const credHash = hashCredentials((config as S3MountConfig).accessKeyId, (config as S3MountConfig).secretAccessKey);
+    const markerContent = `${bucket}|${endpoint}|${credHash}`;
+    try {
+      await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
+      await this._sandbox.files.write(markerPath, markerContent);
+    } catch {
+      // Non-fatal - marker is just for optimization
+      console.log(`[E2B Mount] Warning: Could not write marker file at ${markerPath}`);
+    }
+
     console.log(`[E2B Mount] Successfully mounted ${mountPath}`);
+  }
+
+  /**
+   * Unmount a filesystem from a path in the sandbox.
+   */
+  async unmount(mountPath: string): Promise<void> {
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+
+    console.log(`[E2B Mount] Unmounting ${mountPath}...`);
+
+    try {
+      // Use fusermount for FUSE mounts, fall back to umount
+      const result = await this._sandbox.commands.run(
+        `sudo fusermount -u "${mountPath}" 2>/dev/null || sudo umount "${mountPath}"`,
+      );
+      if (result.exitCode !== 0) {
+        console.log(`[E2B Mount] Unmount warning: ${result.stderr || result.stdout}`);
+      }
+    } catch (error) {
+      console.log(`[E2B Mount] Unmount error:`, error);
+      // Try lazy unmount as last resort
+      await this._sandbox.commands.run(`sudo umount -l "${mountPath}" 2>/dev/null || true`);
+    }
+
+    this._mounts.delete(mountPath);
+
+    // Clean up marker file
+    const encodedPath = mountPath.replace(/\//g, '_');
+    const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
+    await this._sandbox.commands.run(`rm -f "${markerPath}" 2>/dev/null || true`);
+
+    // Remove empty mount directory (only if empty, rmdir fails on non-empty)
+    // Use sudo since mount directories outside home (like /data) were created with sudo
+    const rmdirResult = await this._sandbox.commands.run(`sudo rmdir "${mountPath}" 2>&1`);
+    if (rmdirResult.exitCode === 0) {
+      console.log(`[E2B Mount] Unmounted and removed ${mountPath}`);
+    } else {
+      console.log(
+        `[E2B Mount] Unmounted ${mountPath} (directory not removed: ${rmdirResult.stderr?.trim() || 'not empty'})`,
+      );
+    }
+  }
+
+  /**
+   * Unmount all stale mounts that are not in the expected mounts list.
+   * Call this after reconnecting to an existing sandbox to clean up old mounts.
+   */
+  async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+
+    // Get current FUSE mounts in the sandbox
+    const mountsResult = await this._sandbox.commands.run(
+      `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+    );
+    const currentMounts = mountsResult.stdout
+      .trim()
+      .split('\n')
+      .filter(p => p.length > 0);
+
+    // Find mounts that exist but shouldn't
+    const staleMounts = currentMounts.filter(path => !expectedMountPaths.includes(path));
+
+    for (const stalePath of staleMounts) {
+      console.log(`[E2B Mount] Found stale mount at ${stalePath}, unmounting...`);
+      await this.unmount(stalePath);
+    }
   }
 
   private async mountS3(mountPath: string, config: S3MountConfig): Promise<void> {
@@ -288,9 +415,10 @@ export class E2BSandbox implements WorkspaceSandbox {
     const idResult = await this._sandbox.commands.run('id -u && id -g');
     const [uid, gid] = idResult.stdout.trim().split('\n');
 
-    // Write credentials file
+    // Write credentials file (remove old one first to avoid permission issues)
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
     const credentialsPath = '/tmp/.passwd-s3fs';
+    await this._sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
     await this._sandbox.files.write(credentialsPath, credentialsContent);
     await this._sandbox.commands.run(`chmod 600 ${credentialsPath}`);
 
@@ -364,30 +492,6 @@ export class E2BSandbox implements WorkspaceSandbox {
     };
 
     await this.mountS3(mountPath, s3Config);
-  }
-
-  /**
-   * Unmount a previously mounted filesystem.
-   */
-  async unmount(mountPath: string): Promise<void> {
-    if (!this._sandbox) {
-      throw new SandboxNotReadyError(this.id);
-    }
-
-    const mount = this._mounts.get(mountPath);
-    if (!mount) {
-      return; // Not mounted, nothing to do
-    }
-
-    // Unmount using fusermount or umount
-    const result = await this._sandbox.commands.run(
-      `fusermount -u "${mountPath}" 2>/dev/null || umount "${mountPath}"`,
-    );
-    if (result.exitCode !== 0) {
-      console.warn(`Warning: Failed to unmount ${mountPath}: ${result.stderr}`);
-    }
-
-    this._mounts.delete(mountPath);
   }
 
   // ---------------------------------------------------------------------------

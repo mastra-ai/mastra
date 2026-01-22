@@ -1121,13 +1121,25 @@ export class Workspace {
       return;
     }
 
-    // No mounts configured
-    if (this._mounts.size === 0) {
+    // Check if sandbox supports mounting
+    if (!this._sandbox.supportsMounting || !this._sandbox.mount) {
       return;
     }
 
-    // Check if sandbox supports mounting
-    if (!this._sandbox.supportsMounting || !this._sandbox.mount) {
+    // Get list of expected mount paths
+    const expectedMountPaths = Array.from(this._mounts.keys());
+
+    // Reconcile mounts - clean up any stale mounts from previous config
+    if (this._sandbox.reconcileMounts) {
+      try {
+        await this._sandbox.reconcileMounts(expectedMountPaths);
+      } catch (error) {
+        console.warn(`Failed to reconcile mounts: ${error}`);
+      }
+    }
+
+    // No mounts configured
+    if (this._mounts.size === 0) {
       return;
     }
 

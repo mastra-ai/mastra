@@ -208,6 +208,14 @@ export interface WorkspaceSandbox {
    */
   unmount?(mountPath: string): Promise<void>;
 
+  /**
+   * Reconcile mounts - unmount any stale mounts not in the expected list.
+   * Called when reconnecting to an existing sandbox to clean up old mounts.
+   *
+   * @param expectedMountPaths - List of mount paths that should exist
+   */
+  reconcileMounts?(expectedMountPaths: string[]): Promise<void>;
+
   // ---------------------------------------------------------------------------
   // Code Execution
   // ---------------------------------------------------------------------------

@@ -13,20 +13,29 @@ export const cloudWorkspace = new Workspace({
   // ?? sandbox logs?
   mounts: {
     '/local': new LocalFilesystem({ basePath: '/Users/caleb/mastra/examples/unified-workspace/agent-files' }),
+    '/default-skills': new S3Filesystem({
+      displayName: 'Cloudflare R2',
+      bucket: 'agent-test-bucket',
+      description: 'agent-test-bucket',
+      region: process.env.S3_REGION ?? 'auto',
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+      endpoint: process.env.S3_ENDPOINT,
+    }),
     '/data': new S3Filesystem({
       displayName: 'Cloudflare R2',
-      bucket: process.env.S3_BUCKET!,
-      region: process.env.S3_REGION ?? 'us-east-1',
+      bucket: 'agent-test-bucket-2',
+      description: 'agent-test-bucket-2',
+      region: process.env.S3_REGION ?? 'auto',
       accessKeyId: process.env.S3_ACCESS_KEY_ID!,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
       endpoint: process.env.S3_ENDPOINT,
     }),
   },
   // TODO: better error messages (not just exit code) for execute_code and execute_command tools
-
-  skillsPaths: ['/local/skills', '/data/skills'],
+  skillsPaths: ['/local/skills', '/default-skills/skills', '/data/skills'],
   bm25: true,
-  autoInit: true,
+  // autoInit: true,
   safety: {
     requireReadBeforeWrite: false,
     requireSandboxApproval: 'none',

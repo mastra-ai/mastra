@@ -59,8 +59,11 @@ function getMountIcon(mount: MountInfo) {
 
   switch (iconKey) {
     case 'aws-s3':
-    case 's3':
+      // Explicit AWS S3
       return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
+    case 's3':
+      // Generic S3-compatible storage (could be MinIO, R2, etc.)
+      return <HardDrive className="h-4 w-4 text-emerald-400" />;
     case 'google-cloud':
     case 'gcs':
       return <GoogleIcon className="h-4 w-4" />;
@@ -270,9 +273,7 @@ export function FileBrowser({
             )}
             {sortedEntries.map(entry => {
               const icon = getFileIcon(entry.name, entry.type, false, entry.mount);
-              const tooltipContent = entry.mount
-                ? `${entry.mount.displayName || entry.name}${entry.mount.description ? ` - ${entry.mount.description}` : ''}`
-                : undefined;
+              const mountLabel = entry.mount?.displayName || entry.mount?.provider;
 
               return (
                 <li key={entry.name} className="group">
@@ -281,24 +282,24 @@ export function FileBrowser({
                       onClick={() => handleEntryClick(entry)}
                       className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
                     >
-                      {tooltipContent ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="flex items-center">{icon}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>{tooltipContent}</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        icon
-                      )}
+                      {icon}
                       <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
-                      {entry.mount && (
-                        <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
-                          {entry.mount.provider}
-                        </span>
-                      )}
+                      {entry.mount &&
+                        mountLabel &&
+                        (entry.mount.description ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                  {mountLabel}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{entry.mount.description}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">{mountLabel}</span>
+                        ))}
                       {entry.type === 'file' && entry.size !== undefined && (
                         <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
                       )}
