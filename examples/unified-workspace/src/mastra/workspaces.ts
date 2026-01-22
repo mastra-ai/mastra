@@ -137,6 +137,8 @@ export const isolatedDocsWorkspace = new Workspace({
     inheritEnv: true,
   }),
   bm25: true,
+  // Auto-index support FAQ content for search
+  autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
   // Only agent-specific skills, no global skills
   skillsPaths: ['/docs-skills'],
   // Auto-initialize on construction
@@ -299,6 +301,8 @@ export const fsAllApprovalWorkspace = new Workspace({
   autoInit: true,
   safety: {
     requireFilesystemApproval: 'all',
+    // Sandbox ops don't need approval - this tests FS approval only
+    requireSandboxApproval: 'none',
   },
 });
 
