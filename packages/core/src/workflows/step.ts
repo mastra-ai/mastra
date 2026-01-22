@@ -41,7 +41,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
-  bail: (result: any) => InnerOutput;
+  bail(result: TStepOutput | Record<string, any>): InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
