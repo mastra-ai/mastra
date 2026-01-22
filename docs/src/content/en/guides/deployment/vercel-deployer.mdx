@@ -100,6 +100,73 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 }
 ```
 
+## Observability
+
+To enable observability on Vercel, you need to configure PostgreSQL storage (since Vercel's ephemeral filesystem doesn't support local file storage) and set up the CloudExporter.
+
+### Storage configuration
+
+Use a PostgreSQL provider like [Neon](https://neon.tech) or [Supabase](https://supabase.com) for persistent storage:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { PostgresStore } from "@mastra/pg";
+import { Observability, DefaultExporter, CloudExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger(),
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-mastra-app",
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(),   // Sends traces to Mastra Cloud
+        ],
+      },
+    },
+  }),
+  // ... agents, tools, workflows
+});
+```
+
+### Environment variables
+
+Add these to your Vercel project settings:
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string (e.g., from Neon or Supabase) |
+| `MASTRA_CLOUD_ACCESS_TOKEN` | Access token from [Mastra Cloud](https://cloud.mastra.ai) for observability |
+| `OPENAI_API_KEY` | Your LLM provider API key |
+
+### Flushing traces
+
+In serverless environments, call `flush()` to ensure traces are exported before the function completes:
+
+```typescript title="app/api/chat/route.ts"
+import { mastra } from "@/mastra";
+
+export async function POST(req: Request) {
+  const { message } = await req.json();
+  const agent = mastra.getAgent("myAgent");
+
+  const result = await agent.generate([{ role: "user", content: message }]);
+
+  // Flush traces before the serverless function completes
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+For more details on tracing configuration, see the [Tracing documentation](/docs/observability/tracing/overview).
+
 ## Next steps
 
 - [Mastra Client SDK](/reference/client-js/mastra-client)

@@ -61,6 +61,10 @@ export const mastra = new Mastra({
 });
 ```
 
+:::note[Serverless environments]
+The `file:./mastra.db` storage URL uses the local filesystem, which doesn't work in serverless environments like Vercel, AWS Lambda, or Cloudflare Workers. For serverless deployments, use an external database like PostgreSQL. See the [Vercel deployment guide](/guides/deployment/vercel-deployer#observability) for a complete example.
+:::
+
 With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
 
 We also support various external tracing providers like MLflow, Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [Tracing](/docs/observability/tracing/overview) documentation.
