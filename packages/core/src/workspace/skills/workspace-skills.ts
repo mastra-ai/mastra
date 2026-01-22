@@ -47,6 +47,8 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /** Mount path prefix to add when returning paths (for mounted filesystems) */
+  mountPath?: string;
 }
 
 /**
@@ -58,6 +60,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsPaths: string[];
   readonly #searchEngine?: SearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #mountPath?: string;
 
   /** Map of skill name -> full skill data */
   #skills: Map<string, InternalSkill> = new Map();
@@ -73,6 +76,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsPaths = config.skillsPaths;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#mountPath = config.mountPath;
   }
 
   // ===========================================================================
@@ -96,9 +100,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(name);
     if (!skill) return null;
 
-    // Return without internal indexableContent field
+    // Return without internal indexableContent field, with path converted to sandbox path
     const { indexableContent: _, ...skillData } = skill;
-    return skillData;
+    return {
+      ...skillData,
+      path: this.#toSandboxPath(skillData.path),
+    };
   }
 
   async has(name: string): Promise<boolean> {
@@ -270,9 +277,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skills.set(metadata.name, skill);
     await this.#indexSkill(skill);
 
-    // Return without internal indexableContent field
+    // Return without internal indexableContent field, with path converted to sandbox path
     const { indexableContent: _, ...skillData } = skill;
-    return skillData;
+    return {
+      ...skillData,
+      path: this.#toSandboxPath(skillData.path),
+    };
   }
 
   async update(name: string, input: UpdateSkillInput): Promise<Skill> {
@@ -322,9 +332,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     // Re-index the skill
     await this.#indexSkill(updatedSkill);
 
-    // Return without internal indexableContent field
+    // Return without internal indexableContent field, with path converted to sandbox path
     const { indexableContent: _, ...skillData } = updatedSkill;
-    return skillData;
+    return {
+      ...skillData,
+      path: this.#toSandboxPath(skillData.path),
+    };
   }
 
   async delete(name: string): Promise<void> {
@@ -793,5 +806,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (parentPath && parentPath !== '/' && !(await this.#filesystem.exists(parentPath))) {
       await this.#filesystem.mkdir(parentPath);
     }
+  }
+
+  /**
+   * Convert a filesystem path to a sandbox path by prepending the mount path.
+   * For example, if mountPath is '/home/user/s3' and filesystemPath is '/skills/sample-skill',
+   * this returns '/home/user/s3/skills/sample-skill'.
+   */
+  #toSandboxPath(filesystemPath: string): string {
+    if (!this.#mountPath) return filesystemPath;
+    // Normalize: ensure mount path doesn't end with slash, and filesystem path starts with slash
+    const mount = this.#mountPath.endsWith('/') ? this.#mountPath.slice(0, -1) : this.#mountPath;
+    const path = filesystemPath.startsWith('/') ? filesystemPath : `/${filesystemPath}`;
+    return `${mount}${path}`;
   }
 }

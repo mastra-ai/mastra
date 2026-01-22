@@ -1177,9 +1177,8 @@ Line 3 conclusion`;
       };
 
       const workspace = new Workspace({
-        filesystem: filesystemWithMount,
         sandbox: sandboxWithMount,
-        mountPath: '/workspace',
+        mounts: { '/workspace': filesystemWithMount },
         safety: { requireReadBeforeWrite: false },
       });
 
@@ -1206,8 +1205,8 @@ Line 3 conclusion`;
       };
 
       const workspace = new Workspace({
-        filesystem: filesystemWithMount,
         sandbox: sandboxWithMount,
+        mounts: { '/workspace': filesystemWithMount },
         safety: { requireReadBeforeWrite: false },
       });
 
@@ -1233,8 +1232,8 @@ Line 3 conclusion`;
       };
 
       const workspace = new Workspace({
-        filesystem: filesystemWithMount,
         sandbox: sandboxWithMount,
+        mounts: { '/workspace': filesystemWithMount },
         safety: { requireReadBeforeWrite: false },
       });
 
@@ -1243,7 +1242,7 @@ Line 3 conclusion`;
       expect(workspace.accessMode).toBe('sync');
     });
 
-    it('should use default mount path /workspace when not specified', async () => {
+    it('should use sync mode when mounts is not specified (mounting is opt-in)', async () => {
       const filesystemWithMount: WorkspaceFilesystem = {
         ...mockFs,
         supportsMounting: true,
@@ -1260,14 +1259,92 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem: filesystemWithMount,
         sandbox: sandboxWithMount,
-        // No mountPath specified
+        // No mounts specified - should use sync mode
         safety: { requireReadBeforeWrite: false },
       });
 
       await workspace.init();
 
+      // Without mounts, should use sync mode (mounting is opt-in)
+      expect(workspace.accessMode).toBe('sync');
+      expect(workspace.mountPath).toBeUndefined();
+      expect(sandboxWithMount.mount).not.toHaveBeenCalled();
+    });
+
+    it('should support mounts API for mounting filesystems', async () => {
+      const s3Filesystem: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 's3',
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 's3', bucket: 'my-bucket' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        sandbox: sandboxWithMount,
+        mounts: {
+          '/workspace': s3Filesystem,
+        },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('mounted');
       expect(workspace.mountPath).toBe('/workspace');
-      expect(sandboxWithMount.mount).toHaveBeenCalledWith(filesystemWithMount, '/workspace');
+      expect(workspace.filesystem).toBe(s3Filesystem);
+      expect(workspace.mounts.get('/workspace')).toBe(s3Filesystem);
+      expect(sandboxWithMount.mount).toHaveBeenCalledWith(s3Filesystem, '/workspace');
+    });
+
+    it('should use first mount as primary filesystem', async () => {
+      const fs1: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs1',
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 's3', bucket: 'bucket1' }),
+      };
+
+      const fs2: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs2',
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 's3', bucket: 'bucket2' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        sandbox: sandboxWithMount,
+        mounts: {
+          '/data': fs1,
+          '/cache': fs2,
+        },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      // First mount is primary
+      expect(workspace.filesystem).toBe(fs1);
+      expect(workspace.mountPath).toBe('/data');
+      expect(workspace.mounts.size).toBe(2);
+
+      // Both filesystems should be mounted
+      expect(sandboxWithMount.mount).toHaveBeenCalledTimes(2);
+      expect(sandboxWithMount.mount).toHaveBeenCalledWith(fs1, '/data');
+      expect(sandboxWithMount.mount).toHaveBeenCalledWith(fs2, '/cache');
     });
   });
 

@@ -75,7 +75,7 @@ export function createWorkspaceTools(workspace: Workspace) {
         const fullContent = await workspace.readFile(path, {
           encoding: (encoding as BufferEncoding) ?? 'utf-8',
         });
-        const stat = await workspace.filesystem!.stat(path);
+        const stat = await workspace.stat(path);
 
         // If content is binary (Buffer), return as base64 without line processing
         if (typeof fullContent !== 'string') {
@@ -211,7 +211,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     tools.workspace_list_files = createTool({
       id: 'workspace_list_files',
-      description: 'List files and directories in the workspace filesystem',
+      description:
+        'List files and directories in the workspace filesystem. Start from "/" to explore the directory structure.',
       // Require approval when fsApproval is 'all'
       requireApproval: fsApproval === 'all',
       inputSchema: z.object({
@@ -222,6 +223,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       outputSchema: z.object({
         entries: z.array(
           z.object({
+            path: z.string().describe('Full path to the file or directory'),
             name: z.string().describe('File or directory name'),
             type: z.enum(['file', 'directory']).describe('Whether this is a file or directory'),
             size: z.number().optional().describe('File size in bytes (only for files)'),
@@ -235,8 +237,13 @@ export function createWorkspaceTools(workspace: Workspace) {
           recursive,
           extension: extension ? [extension] : undefined,
         });
+
+        // Build full paths for each entry
+        const basePath = path.endsWith('/') ? path.slice(0, -1) : path;
+
         return {
           entries: entries.map(e => ({
+            path: basePath ? `${basePath}/${e.name}` : `/${e.name}`,
             name: e.name,
             type: e.type,
             size: e.size,
@@ -263,7 +270,7 @@ export function createWorkspaceTools(workspace: Workspace) {
           path: z.string(),
         }),
         execute: async ({ path, force }) => {
-          await workspace.filesystem!.deleteFile(path, { force });
+          await workspace.deleteFile(path, { force });
           return { success: true, path };
         },
       });
@@ -286,10 +293,10 @@ export function createWorkspaceTools(workspace: Workspace) {
         if (!exists) {
           return { exists: false, type: 'none' as const };
         }
-        const isFile = await workspace.filesystem!.isFile(path);
+        const stat = await workspace.stat(path);
         return {
           exists: true,
-          type: isFile ? ('file' as const) : ('directory' as const),
+          type: stat.type,
         };
       },
     });
@@ -314,7 +321,7 @@ export function createWorkspaceTools(workspace: Workspace) {
           path: z.string(),
         }),
         execute: async ({ path, recursive }) => {
-          await workspace.filesystem!.mkdir(path, { recursive });
+          await workspace.mkdir(path, { recursive });
           return { success: true, path };
         },
       });

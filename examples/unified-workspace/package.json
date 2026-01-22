@@ -8,16 +8,21 @@
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
     "@mastra/core": "beta",
+    "@mastra/e2b": "workspace:*",
+    "@mastra/s3": "workspace:*",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",
     "ai": "^6.0.1",
     "mastra": "beta",
+    "tsx": "^4.19.0",
     "typescript": "^5.8.3",
     "zod": "^3"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/e2b": "link:../../workspaces/e2b",
+      "@mastra/s3": "link:../../workspaces/s3",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
       "mastra": "link:../../packages/cli",
@@ -30,6 +35,8 @@
     "demo:filesystem": "npx bun src/demo/demo-filesystem.ts",
     "demo:sandbox": "npx bun src/demo/demo-sandbox.ts",
     "demo:agents": "npx bun src/demo/demo-agents.ts",
+    "test:e2b": "npx tsx src/test-e2b-sandbox.ts",
+    "agent:e2b": "npx tsx src/agent-with-e2b.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },

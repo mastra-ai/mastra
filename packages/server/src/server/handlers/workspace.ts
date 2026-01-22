@@ -254,13 +254,13 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      // Check if path exists (use workspace method for path translation)
+      if (!(await workspace.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      // Read file content
-      const content = await workspace.fs.readFile(decodedPath, {
+      // Read file content (use workspace method for path translation)
+      const content = await workspace.readFile(decodedPath, {
         encoding: (encoding as BufferEncoding) || 'utf-8',
       });
 
@@ -303,7 +303,8 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         fileContent = Buffer.from(content, 'base64');
       }
 
-      await workspace.fs.writeFile(decodedPath, fileContent, { recursive: recursive ?? true });
+      // Use workspace method for path translation
+      await workspace.writeFile(decodedPath, fileContent, { recursive: recursive ?? true });
 
       return {
         success: true,
@@ -337,12 +338,13 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      // Check if path exists (use workspace method for path translation)
+      if (!(await workspace.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      const entries = await workspace.fs.readdir(decodedPath, { recursive });
+      // Use workspace method for path translation
+      const entries = await workspace.readdir(decodedPath, { recursive });
 
       return {
         path: decodedPath,
@@ -380,18 +382,18 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      // Check if path exists (unless force is true)
-      const exists = await workspace.fs.exists(decodedPath);
-      if (!exists && !force) {
+      // Check if path exists (use workspace method for path translation)
+      const pathExists = await workspace.exists(decodedPath);
+      if (!pathExists && !force) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      if (exists) {
-        // Try to delete as file first, then as directory
+      if (pathExists) {
+        // Use workspace methods for path translation
         try {
-          await workspace.fs.deleteFile(decodedPath, { force });
+          await workspace.deleteFile(decodedPath, { force });
         } catch {
-          await workspace.fs.rmdir(decodedPath, { recursive, force });
+          await workspace.rmdir(decodedPath, { recursive, force });
         }
       }
 
@@ -427,7 +429,8 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      await workspace.fs.mkdir(decodedPath, { recursive: recursive ?? true });
+      // Use workspace method for path translation
+      await workspace.mkdir(decodedPath, { recursive: recursive ?? true });
 
       return {
         success: true,
@@ -461,12 +464,13 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      // Check if path exists (use workspace method for path translation)
+      if (!(await workspace.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      const stat = await workspace.fs.stat(decodedPath);
+      // Use workspace method for path translation
+      const stat = await workspace.stat(decodedPath);
 
       return {
         path: stat.path,

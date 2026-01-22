@@ -4,11 +4,10 @@
  * Provides the core Workspace class, interfaces, and built-in providers
  * for filesystem and sandbox capabilities.
  *
- * @example
+ * @example Local filesystem and sandbox
  * ```typescript
- * import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+ * import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
  *
- * // Workspace with local filesystem and sandbox
  * const workspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
  *   sandbox: new LocalSandbox({ workingDirectory: './my-workspace' }),
@@ -19,16 +18,32 @@
  * const result = await workspace.executeCode('console.log("Hi")', { runtime: 'node' });
  * ```
  *
- * For cloud/remote providers, import them from their respective packages:
- *
+ * @example E2B cloud sandbox (requires @mastra/e2b)
  * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { AgentFS } from '@mastra/filesystem-agentfs';
- * import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ * import { E2BSandbox } from '@mastra/e2b';
  *
- * const cloudWorkspace = new Workspace({
- *   filesystem: new AgentFS({ path: './agent.db' }),
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ *   sandbox: new E2BSandbox({ timeout: 60000 }),
+ * });
+ * ```
+ *
+ * @example S3 filesystem with E2B (requires @mastra/e2b, @mastra/s3)
+ * ```typescript
+ * import { Workspace } from '@mastra/core/workspace';
+ * import { E2BSandbox } from '@mastra/e2b';
+ * import { S3Filesystem } from '@mastra/s3';
+ *
+ * // S3 filesystem can be mounted into E2B sandbox via s3fs-fuse
+ * const workspace = new Workspace({
+ *   filesystem: new S3Filesystem({
+ *     bucket: 'my-bucket',
+ *     region: 'us-east-1',
+ *     accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+ *     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+ *   }),
+ *   sandbox: new E2BSandbox({ timeout: 60000 }),
  * });
  * ```
  */
@@ -143,21 +158,6 @@ export type { LocalMountConfig } from './local-filesystem';
 
 export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
-
-// =============================================================================
-// E2B Providers (requires @e2b/code-interpreter)
-// =============================================================================
-
-export {
-  E2BSandbox,
-  type E2BSandboxOptions,
-  type S3MountConfig,
-  type GCSMountConfig,
-  type R2MountConfig,
-  type E2BMountConfig,
-} from './e2b-sandbox';
-
-export { E2BFilesystem, type E2BFilesystemOptions } from './e2b-filesystem';
 
 // =============================================================================
 // Workspace Tools (for agent auto-injection)
