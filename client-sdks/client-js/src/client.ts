@@ -56,6 +56,24 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  IntegrationProvider,
+  IntegrationConfig,
+  ListProvidersResponse,
+  ListProviderToolkitsParams,
+  ListProviderToolkitsResponse,
+  ListProviderToolsParams,
+  ListProviderToolsResponse,
+  ListIntegrationsParams,
+  ListIntegrationsResponse,
+  CreateIntegrationParams,
+  UpdateIntegrationParams,
+  DeleteIntegrationResponse,
+  RefreshIntegrationResponse,
+  ValidateMCPParams,
+  ValidateMCPResponse,
+  SearchSmitheryServersParams,
+  SearchSmitheryServersResponse,
+  GetSmitheryServerResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -805,6 +823,247 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Integrations
+  // ============================================================================
+
+  /**
+   * Lists all available integration providers with their connection status
+   * @returns Promise containing list of providers and their connection status
+   */
+  public listProviders(): Promise<ListProvidersResponse> {
+    return this.request('/api/integrations/providers');
+  }
+
+  /**
+   * Lists toolkits available from a specific provider
+   * @param provider - Integration provider ('composio' or 'arcade')
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing list of toolkits from the provider
+   */
+  public listProviderToolkits(
+    provider: IntegrationProvider,
+    params?: ListProviderToolkitsParams,
+  ): Promise<ListProviderToolkitsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.search) {
+      searchParams.set('search', params.search);
+    }
+    if (params?.category) {
+      searchParams.set('category', params.category);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.cursor) {
+      searchParams.set('cursor', params.cursor);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/${provider}/toolkits${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Lists tools available from a specific provider
+   * @param provider - Integration provider ('composio' or 'arcade')
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing list of tools from the provider
+   */
+  public listProviderTools(
+    provider: IntegrationProvider,
+    params?: ListProviderToolsParams,
+  ): Promise<ListProviderToolsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.toolkitSlug) {
+      searchParams.set('toolkitSlug', params.toolkitSlug);
+    }
+    if (params?.toolkitSlugs) {
+      searchParams.set('toolkitSlugs', params.toolkitSlugs);
+    }
+    if (params?.search) {
+      searchParams.set('search', params.search);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.cursor) {
+      searchParams.set('cursor', params.cursor);
+    }
+    // MCP HTTP transport parameters
+    if (params?.url) {
+      searchParams.set('url', params.url);
+    }
+    if (params?.headers) {
+      searchParams.set('headers', params.headers);
+    }
+    // MCP Stdio transport parameters
+    if (params?.command) {
+      searchParams.set('command', params.command);
+    }
+    if (params?.args) {
+      searchParams.set('args', params.args);
+    }
+    if (params?.env) {
+      searchParams.set('env', params.env);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/${provider}/tools${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Lists all configured integrations with optional filtering and pagination
+   * @param params - Optional parameters for filtering and pagination
+   * @returns Promise containing paginated list of integrations
+   */
+  public listIntegrations(params?: ListIntegrationsParams): Promise<ListIntegrationsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.ownerId) {
+      searchParams.set('ownerId', params.ownerId);
+    }
+    if (params?.provider) {
+      searchParams.set('provider', params.provider);
+    }
+    if (params?.enabled !== undefined) {
+      searchParams.set('enabled', String(params.enabled));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a single integration by ID
+   * @param integrationId - ID of the integration to retrieve
+   * @returns Promise containing the integration configuration
+   */
+  public getIntegration(integrationId: string): Promise<IntegrationConfig> {
+    return this.request(`/api/integrations/${integrationId}`);
+  }
+
+  /**
+   * Creates a new integration configuration
+   * @param params - Integration configuration parameters
+   * @returns Promise containing the created integration
+   */
+  public createIntegration(params: CreateIntegrationParams): Promise<IntegrationConfig> {
+    return this.request('/api/integrations', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Updates an existing integration configuration
+   * @param integrationId - ID of the integration to update
+   * @param params - Fields to update
+   * @returns Promise containing the updated integration
+   */
+  public updateIntegration(integrationId: string, params: UpdateIntegrationParams): Promise<IntegrationConfig> {
+    return this.request(`/api/integrations/${integrationId}`, {
+      method: 'PATCH',
+      body: params,
+    });
+  }
+
+  /**
+   * Deletes an integration and all its cached tools
+   * @param integrationId - ID of the integration to delete
+   * @returns Promise containing success status
+   */
+  public deleteIntegration(integrationId: string): Promise<DeleteIntegrationResponse> {
+    return this.request(`/api/integrations/${integrationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Refreshes cached tools for an integration by re-fetching from the provider
+   * @param integrationId - ID of the integration to refresh
+   * @returns Promise containing refresh status and count of tools updated
+   */
+  public refreshIntegrationTools(integrationId: string): Promise<RefreshIntegrationResponse> {
+    return this.request(`/api/integrations/${integrationId}/refresh`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Deletes a single cached tool from an integration
+   * @param integrationId - ID of the integration the tool belongs to
+   * @param toolId - ID of the cached tool to delete
+   * @returns Promise containing success status
+   */
+  public deleteIntegrationTool(integrationId: string, toolId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/integrations/${integrationId}/tools/${toolId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Validates connection to an MCP server
+   * @param params - Transport config (HTTP with URL or Stdio with command)
+   * @returns Promise containing validation result with tool count
+   */
+  public validateMCPConnection(params: ValidateMCPParams): Promise<ValidateMCPResponse> {
+    return this.request('/api/integrations/mcp/validate', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  // ============================================================================
+  // Smithery Registry
+  // ============================================================================
+
+  /**
+   * Search for MCP servers in the Smithery registry
+   * @param params - Search parameters including query, page, and pageSize
+   * @returns Promise containing list of servers and pagination info
+   */
+  public searchSmitheryServers(params?: SearchSmitheryServersParams): Promise<SearchSmitheryServersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.q) {
+      searchParams.set('q', params.q);
+    }
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.pageSize !== undefined) {
+      searchParams.set('pageSize', String(params.pageSize));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/integrations/smithery/servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Get detailed information about a specific Smithery server
+   * @param qualifiedName - The server's qualified name (e.g., "@anthropics/mcp-server-filesystem")
+   * @returns Promise containing server details including connection information
+   */
+  public getSmitheryServer(qualifiedName: string): Promise<GetSmitheryServerResponse> {
+    return this.request(`/api/integrations/smithery/servers/${encodeURIComponent(qualifiedName)}`);
   }
 
   // ============================================================================

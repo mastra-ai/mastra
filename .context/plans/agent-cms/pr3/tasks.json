@@ -422,8 +422,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts > packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts"
       ],
       "dependencies": ["022"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "024",

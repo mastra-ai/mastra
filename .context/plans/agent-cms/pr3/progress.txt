@@ -210,11 +210,31 @@
   - Verified client-js tests pass (237 tests passed)
   - Status: Complete ✓
 
+- Task 023: Copy integrations React Query hooks
+  - Copied use-integrations.ts and use-integration-mutations.ts from total-cms
+  - Added comprehensive integration SDK methods to client-sdks/client-js/src/client.ts:
+    - listProviders, listProviderToolkits, listProviderTools
+    - listIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration
+    - refreshIntegrationTools, deleteIntegrationTool, validateMCPConnection
+    - searchSmitheryServers, getSmitheryServer
+  - Added all required type imports to client.ts (IntegrationProvider, IntegrationConfig, etc.)
+  - Total: ~250 lines of SDK methods + ~100 lines of React hooks
+  - Files:
+    - packages/playground-ui/src/domains/integrations/hooks/use-integrations.ts (created)
+    - packages/playground-ui/src/domains/integrations/hooks/use-integration-mutations.ts (created)
+    - client-sdks/client-js/src/client.ts (updated with integration methods)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Verified client-js tests pass (237 tests passed)
+  - Status: Complete ✓
+
 ## Next Engineer Notes:
-- Task 022 completed successfully - integration types are now available in both client-js and playground-ui
-- The types re-export pattern keeps the UI code DRY by importing from the client SDK
-- Next logical high-priority tasks are the React Query hooks and components:
-  - Task 023 (P1): Copy integrations React Query hooks
-  - Task 024 (P1): Copy provider discovery hooks  
+- Task 023 completed successfully - React Query hooks and client SDK methods are now in place
+- The hooks provide comprehensive integration CRUD operations with React Query cache management
+- All integration-related API methods are now available in the client SDK
+- Next logical high-priority tasks are the remaining hooks and components:
+  - Task 024 (P1): Copy provider discovery hooks (use-providers, use-provider-toolkits, use-provider-tools)
+  - Task 025 (P1): Copy Smithery browsing hook
+  - Task 026-028 (P1): Copy OAuth hooks (use-oauth-callback, use-arcade-auth, use-composio-auth)
   - Task 031 (P0): Copy provider list component
-  - Consider starting with Task 023 to implement the data fetching layer
+  - Consider starting with Task 024 to complete the data fetching layer before moving to components
