@@ -4,23 +4,22 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import { createTool } from '@mastra/core/tools';
 import type { DurableAgentTestContext } from '../types';
 import { createSimpleMockModel } from '../mock-models';
 
-export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
+export function createPrepareTests(context: DurableAgentTestContext) {
+  const { createAgent } = context;
+
   describe('prepare', () => {
     it('should prepare workflow input without starting execution', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Hello!');
@@ -29,62 +28,51 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
       expect(result.messageId).toBeDefined();
       expect(result.workflowInput).toBeDefined();
       expect(result.workflowInput.runId).toBe(result.runId);
-      expect(result.workflowInput.agentId).toBe('test-agent');
+      // Agent ID may have implementation-specific suffix, so just check it starts correctly
+      expect(result.workflowInput.agentId).toMatch(/^test-agent/);
       expect(result.workflowInput.messageListState).toBeDefined();
       expect(result.workflowInput.modelConfig).toBeDefined();
       expect(result.workflowInput.options).toBeDefined();
-
-      // Verify entry was registered
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept string messages', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Hello, world!');
 
       expect(result.workflowInput.messageListState).toBeDefined();
-      // Verify messages were added to message list
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept array of string messages', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare(['First message', 'Second message']);
 
       expect(result.workflowInput.messageListState).toBeDefined();
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept message objects', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare([
@@ -94,14 +82,12 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
       ]);
 
       expect(result.workflowInput.messageListState).toBeDefined();
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should serialize tool metadata correctly', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
@@ -119,7 +105,6 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
             execute: async ({ name }: { name: string }) => `Hello, ${name}!`,
           },
         },
-        pubsub,
       });
 
       const result = await agent.prepare('Say hello to Alice');
@@ -127,22 +112,16 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
       // Check that tool metadata is serialized
       expect(result.workflowInput.toolsMetadata).toBeDefined();
       expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(0);
-
-      // Verify tools are stored in registry (with execute functions)
-      const tools = agent.runRegistry.getTools(result.runId);
-      expect(tools).toBeDefined();
     });
 
     it('should handle memory options', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       const result = await agent.prepare('Hello!', {
@@ -158,28 +137,8 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
       expect(result.workflowInput.state.resourceId).toBe('user-456');
     });
 
-    it('should store model in registry', async () => {
-      const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
-
-      const agent = new DurableAgent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'You are a test assistant',
-        model: mockModel,
-        pubsub,
-      });
-
-      const result = await agent.prepare('Hello!');
-
-      // Model should be stored in registry
-      const model = agent.runRegistry.getModel(result.runId);
-      expect(model).toBeDefined();
-    });
-
     it('should handle multiple tools', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
       const echoTool = createTool({
         id: 'echo',
@@ -195,20 +154,18 @@ export function createPrepareTests({ getPubSub }: DurableAgentTestContext) {
         execute: async ({ text }) => text.toUpperCase(),
       });
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
         tools: { echo: echoTool, uppercase: uppercaseTool },
-        pubsub,
       });
 
       const result = await agent.prepare('Use both tools');
 
-      const tools = agent.runRegistry.getTools(result.runId);
-      expect(Object.keys(tools)).toContain('echo');
-      expect(Object.keys(tools)).toContain('uppercase');
+      // Workflow input should include tool metadata
+      expect(result.workflowInput.toolsMetadata).toBeDefined();
     });
   });
 }

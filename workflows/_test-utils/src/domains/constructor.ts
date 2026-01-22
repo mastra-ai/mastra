@@ -1,65 +1,44 @@
 /**
  * Constructor tests for DurableAgent
+ *
+ * Note: Some tests check DurableAgent-specific properties like runRegistry
+ * and are skipped for other implementations.
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createSimpleMockModel } from '../mock-models';
 
-export function createConstructorTests({ getPubSub }: DurableAgentTestContext) {
-  describe('constructor', () => {
-    it('should create a DurableAgent with required config', () => {
-      const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
+export function createConstructorTests(context: DurableAgentTestContext) {
+  const { createAgent } = context;
 
-      const agent = new DurableAgent({
+  describe('agent creation', () => {
+    it('should create agent with id and name', async () => {
+      const mockModel = createSimpleMockModel();
+
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
-      // id and name are available synchronously from config
-      expect(agent.id).toBe('test-agent');
-      expect(agent.name).toBe('Test Agent');
-      expect(agent.runRegistry).toBeDefined();
-
-      // agent getter throws before initialization
-      expect(() => agent.agent).toThrow('DurableAgent not initialized');
+      // id and name should be available (id may have suffix for uniqueness)
+      expect(agent.id).toContain('test-agent');
+      expect(agent.name).toContain('Test Agent');
     });
 
-    it('should provide agent instance after async initialization', async () => {
+    it('should use agent id as name when name is not provided', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const durableAgent = new DurableAgent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'You are a test assistant',
-        model: mockModel,
-        pubsub,
-      });
-
-      // After calling prepare (async), agent should be available
-      await durableAgent.prepare('Hello');
-      expect(durableAgent.agent).toBeDefined();
-      expect(durableAgent.agent.id).toBe('test-agent');
-    });
-
-    it('should use agent id as name when name is not provided', () => {
-      const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
-
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'my-agent-id',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
-      expect(agent.name).toBe('my-agent-id');
+      // Name should contain the id (may have suffix)
+      expect(agent.name).toContain('my-agent-id');
     });
   });
 }

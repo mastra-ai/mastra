@@ -1,50 +1,58 @@
 /**
  * Registry tests for DurableAgent
+ *
+ * These tests are specific to DurableAgent's RunRegistry and are skipped
+ * for implementations that don't have a registry (like InngestDurableAgent).
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent, RunRegistry, ExtendedRunRegistry } from '@mastra/core/agent/durable';
+import { RunRegistry, ExtendedRunRegistry } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent';
 import type { DurableAgentTestContext } from '../types';
 import { createSimpleMockModel } from '../mock-models';
 
-export function createRegistryTests({ getPubSub }: DurableAgentTestContext) {
+export function createRegistryTests(context: DurableAgentTestContext) {
+  const { createAgent, hasRunRegistry } = context;
+
+  // Skip all registry tests if implementation doesn't have runRegistry
+  if (!hasRunRegistry) {
+    describe('runRegistry', () => {
+      it.skip('skipped - implementation does not have runRegistry', () => {});
+    });
+    return;
+  }
   describe('runRegistry', () => {
     it('should track active runs', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       // Initially empty
-      expect(agent.runRegistry.size).toBe(0);
+      expect(agent.runRegistry!.size).toBe(0);
 
       // After prepare, should have one entry
       const result = await agent.prepare('Hello!');
-      expect(agent.runRegistry.size).toBe(1);
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(agent.runRegistry!.size).toBe(1);
+      expect(agent.runRegistry!.has(result.runId)).toBe(true);
 
       // After cleanup, should be empty again
-      agent.runRegistry.cleanup(result.runId);
-      expect(agent.runRegistry.size).toBe(0);
+      agent.runRegistry!.cleanup(result.runId);
+      expect(agent.runRegistry!.size).toBe(0);
     });
 
     it('should track multiple concurrent runs', async () => {
       const mockModel = createSimpleMockModel();
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel,
-        pubsub,
       });
 
       // Create multiple runs
@@ -52,15 +60,15 @@ export function createRegistryTests({ getPubSub }: DurableAgentTestContext) {
       const result2 = await agent.prepare('Second message');
       const result3 = await agent.prepare('Third message');
 
-      expect(agent.runRegistry.size).toBe(3);
-      expect(agent.runRegistry.has(result1.runId)).toBe(true);
-      expect(agent.runRegistry.has(result2.runId)).toBe(true);
-      expect(agent.runRegistry.has(result3.runId)).toBe(true);
+      expect(agent.runRegistry!.size).toBe(3);
+      expect(agent.runRegistry!.has(result1.runId)).toBe(true);
+      expect(agent.runRegistry!.has(result2.runId)).toBe(true);
+      expect(agent.runRegistry!.has(result3.runId)).toBe(true);
 
       // Cleanup one
-      agent.runRegistry.cleanup(result2.runId);
-      expect(agent.runRegistry.size).toBe(2);
-      expect(agent.runRegistry.has(result2.runId)).toBe(false);
+      agent.runRegistry!.cleanup(result2.runId);
+      expect(agent.runRegistry!.size).toBe(2);
+      expect(agent.runRegistry!.has(result2.runId)).toBe(false);
     });
   });
 

@@ -1,18 +1,19 @@
 /**
  * Domain test creators for DurableAgent
+ *
+ * These tests focus on observable behavior, not implementation details.
+ * Tests should work for both DurableAgent and InngestDurableAgent.
  */
 
 export { createConstructorTests } from './constructor';
 export { createPrepareTests } from './prepare';
-export { createRegistryTests } from './registry';
-export { createWorkflowTests } from './workflow';
 export { createStreamTests } from './stream';
 export { createCallbackTests } from './callbacks';
 export { createToolsTests } from './tools';
 export { createMemoryTests } from './memory';
 export { createPubSubTests } from './pubsub';
 
-// New domain test creators
+// Feature-specific test creators
 export { createAdvancedTests } from './advanced';
 export { createImagesTests } from './images';
 export { createReasoningTests } from './reasoning';

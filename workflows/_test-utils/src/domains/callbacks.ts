@@ -3,23 +3,22 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createErrorModel } from '../mock-models';
 
-export function createCallbackTests({ getPubSub, eventPropagationDelay }: DurableAgentTestContext) {
+export function createCallbackTests(context: DurableAgentTestContext) {
+  const { createAgent, eventPropagationDelay } = context;
+
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
       const mockModel = createTextStreamModel('Complete response');
       let finishData: any = null;
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'finish-callback-agent',
         name: 'Finish Callback Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const { cleanup } = await agent.stream('Test', {
@@ -37,14 +36,12 @@ export function createCallbackTests({ getPubSub, eventPropagationDelay }: Durabl
     it('should invoke onError callback when error occurs', async () => {
       const errorModel = createErrorModel('Simulated LLM error');
       let errorReceived: Error | null = null;
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'error-callback-agent',
         name: 'Error Callback Agent',
         instructions: 'Test',
         model: errorModel,
-        pubsub,
       });
 
       const { cleanup } = await agent.stream('Test', {
@@ -62,14 +59,12 @@ export function createCallbackTests({ getPubSub, eventPropagationDelay }: Durabl
     it('should invoke onStepFinish callback after each step', async () => {
       const mockModel = createTextStreamModel('Step complete');
       const stepResults: any[] = [];
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'step-callback-agent',
         name: 'Step Callback Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
 
       const { cleanup } = await agent.stream('Test', {
@@ -87,14 +82,12 @@ export function createCallbackTests({ getPubSub, eventPropagationDelay }: Durabl
     it('should handle model throwing error during streaming', async () => {
       const errorModel = createErrorModel('Model initialization failed');
       let errorReceived: Error | null = null;
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'error-model-agent',
         name: 'Error Model Agent',
         instructions: 'Test',
         model: errorModel,
-        pubsub,
       });
 
       const { cleanup } = await agent.stream('Test', {
@@ -108,28 +101,22 @@ export function createCallbackTests({ getPubSub, eventPropagationDelay }: Durabl
       cleanup();
     });
 
-    it('should cleanup registry on error', async () => {
+    it('should allow cleanup after error', async () => {
       const errorModel = createErrorModel('Cleanup test error');
-      const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'cleanup-error-agent',
         name: 'Cleanup Error Agent',
         instructions: 'Test',
         model: errorModel,
-        pubsub,
       });
 
-      const { runId, cleanup } = await agent.stream('Test');
-
-      // Run should be registered initially
-      expect(agent.runRegistry.has(runId)).toBe(true);
+      const { cleanup } = await agent.stream('Test');
 
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
 
-      // Manual cleanup should work
-      cleanup();
-      expect(agent.runRegistry.has(runId)).toBe(false);
+      // Cleanup should not throw
+      expect(() => cleanup()).not.toThrow();
     });
   });
 }

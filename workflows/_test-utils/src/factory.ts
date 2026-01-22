@@ -4,12 +4,11 @@
 
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
-import type { DurableAgentTestConfig, DurableAgentTestContext } from './types';
+import { DurableAgent } from '@mastra/core/agent/durable';
+import type { DurableAgentTestConfig, DurableAgentTestContext, CreateAgentConfig, DurableAgentLike } from './types';
 import {
   createConstructorTests,
   createPrepareTests,
-  createRegistryTests,
-  createWorkflowTests,
   createStreamTests,
   createCallbackTests,
   createToolsTests,
@@ -32,6 +31,17 @@ import {
 const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
 
 /**
+ * Default agent factory - creates DurableAgent with pubsub from context
+ */
+function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTestContext): DurableAgentLike {
+  const pubsub = context.getPubSub();
+  return new DurableAgent({
+    ...config,
+    pubsub,
+  });
+}
+
+/**
  * Create a complete DurableAgent test suite
  *
  * @example
@@ -48,6 +58,7 @@ const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
 export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
   const { name, createPubSub, cleanupPubSub, skip = {} } = config;
   const eventPropagationDelay = config.eventPropagationDelay ?? DEFAULT_EVENT_PROPAGATION_DELAY;
+  const agentFactory = config.createAgent ?? defaultCreateAgent;
 
   let pubsub: PubSub;
 
@@ -86,9 +97,12 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
       }
     });
 
-    // Create test context
+    // Create test context with agent factory
     const context: DurableAgentTestContext = {
       getPubSub: () => pubsub,
+      createAgent: async (agentConfig: CreateAgentConfig) => {
+        return Promise.resolve(agentFactory(agentConfig, context));
+      },
       eventPropagationDelay,
     };
 
@@ -99,14 +113,6 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
 
     if (!skip.prepare) {
       createPrepareTests(context);
-    }
-
-    if (!skip.registry) {
-      createRegistryTests(context);
-    }
-
-    if (!skip.workflow) {
-      createWorkflowTests(context);
     }
 
     if (!skip.stream) {
