@@ -60,7 +60,7 @@ export class RedisDB {
   }
 
   async scanAndDelete(pattern: string, batchSize = 10000): Promise<number> {
-    let cursor = 0;
+    let cursor = '0';
     let totalDeleted = 0;
 
     do {
@@ -72,13 +72,13 @@ export class RedisDB {
       }
 
       cursor = result.cursor;
-    } while (cursor !== 0);
+    } while (cursor !== '0');
 
     return totalDeleted;
   }
 
   async scanKeys(pattern: string, batchSize = 10000): Promise<string[]> {
-    let cursor = 0;
+    let cursor = '0';
     const keys: string[] = [];
 
     do {
@@ -86,7 +86,7 @@ export class RedisDB {
 
       keys.push(...result.keys);
       cursor = result.cursor;
-    } while (cursor !== 0);
+    } while (cursor !== '0');
 
     return keys;
   }

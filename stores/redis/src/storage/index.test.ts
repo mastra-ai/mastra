@@ -21,7 +21,7 @@ const getConnectionUrl = () => `redis://:${TEST_CONFIG.password}@${TEST_CONFIG.h
 const createTestClient = async (): Promise<RedisClient> => {
   const client = createClient({ url: getConnectionUrl() });
   await client.connect();
-  return client as RedisClient;
+  return client as unknown as RedisClient;
 };
 
 createTestSuite(
