@@ -4,7 +4,7 @@ import {
   listTracesArgsSchema,
   ObservabilityStorage,
   TABLE_SPANS,
-  toTraceListItems,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -764,7 +764,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             perPage,
             hasMore: (page + 1) * perPage < count,
           },
-          spans: toTraceListItems(spans.map((span: any) => this.transformSpanFromMongo(span))),
+          spans: toTraceSpans(spans.map((span: any) => this.transformSpanFromMongo(span))),
         };
       }
 
@@ -826,7 +826,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: toTraceListItems(spans.map((span: any) => this.transformSpanFromMongo(span))),
+        spans: toTraceSpans(spans.map((span: any) => this.transformSpanFromMongo(span))),
       };
     } catch (error) {
       throw new MastraError(

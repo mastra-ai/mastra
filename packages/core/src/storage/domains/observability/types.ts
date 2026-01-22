@@ -200,7 +200,7 @@ export type TraceListItem = z.infer<typeof traceListItemSchema>;
  * Converts a SpanRecord to a TraceListItem by adding computed status.
  * Used when returning root spans from listTraces.
  */
-export function toTraceListItem(span: SpanRecord): TraceListItem {
+export function toTraceSpan(span: SpanRecord): TraceListItem {
   return {
     ...span,
     status: computeTraceStatus(span),
@@ -211,8 +211,8 @@ export function toTraceListItem(span: SpanRecord): TraceListItem {
  * Converts an array of SpanRecords to TraceListItems by adding computed status.
  * Used when returning root spans from listTraces.
  */
-export function toTraceListItems(spans: SpanRecord[]): TraceListItem[] {
-  return spans.map(toTraceListItem);
+export function toTraceSpans(spans: SpanRecord[]): TraceListItem[] {
+  return spans.map(toTraceSpan);
 }
 
 // ============================================================================

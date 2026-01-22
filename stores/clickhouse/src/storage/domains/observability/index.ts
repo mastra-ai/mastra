@@ -6,7 +6,7 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
-  toTraceListItems,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -665,7 +665,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < total,
         },
-        spans: toTraceListItems(spans),
+        spans: toTraceSpans(spans),
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;

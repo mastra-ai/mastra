@@ -5,7 +5,7 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
-  toTraceListItems,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -671,7 +671,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: toTraceListItems(
+        spans: toTraceSpans(
           result.recordset.map(span =>
             transformFromSqlRow<SpanRecord>({
               tableName: TABLE_SPANS,
