@@ -6,7 +6,6 @@ import type { StreamInternal } from '../../../loop/types';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import { SaveQueueManager } from '../../save-queue';
 import { MessageList } from '../../message-list';
-import type { RunRegistry } from '../run-registry';
 import type {
   SerializableDurableState,
   SerializableModelConfig,
@@ -39,8 +38,6 @@ export interface ResolvedRuntimeDependencies {
 export interface ResolveRuntimeOptions {
   /** Mastra instance for accessing services */
   mastra?: Mastra;
-  /** Run registry for accessing per-run state */
-  runRegistry?: RunRegistry;
   /** Run identifier */
   runId: string;
   /** Agent identifier */
@@ -56,12 +53,15 @@ export interface ResolveRuntimeOptions {
  *
  * This function reconstructs the non-serializable state needed to execute
  * agent steps from:
- * 1. The Mastra instance (for memory, model resolution)
- * 2. The run registry (for tools, saveQueueManager)
- * 3. The serialized workflow input (for MessageList, state)
+ * 1. The Mastra instance (for agent lookup, tools, model)
+ * 2. The serialized workflow input (for MessageList, state)
+ *
+ * Unlike the registry-based approach, this reconstructs tools and model
+ * from the agent registered with Mastra, making it truly durable across
+ * process restarts.
  */
-export function resolveRuntimeDependencies(options: ResolveRuntimeOptions): ResolvedRuntimeDependencies {
-  const { mastra, runRegistry, runId, agentId, input, logger } = options;
+export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions): Promise<ResolvedRuntimeDependencies> {
+  const { mastra, runId, agentId, input, logger } = options;
 
   // 1. Deserialize MessageList
   const messageList = new MessageList({
@@ -70,31 +70,53 @@ export function resolveRuntimeDependencies(options: ResolveRuntimeOptions): Reso
   });
   messageList.deserialize(input.messageListState);
 
-  // 2. Resolve tools from run registry
-  const tools = runRegistry?.getTools(runId) ?? {};
-  if (Object.keys(tools).length === 0) {
-    logger?.debug?.(`[DurableAgent:${agentId}] No tools found in registry for run ${runId}`);
-  }
-
-  // 3. Resolve model from registry (preferred) or fallback to config
-  const model = runRegistry?.getModel(runId) ?? resolveModel(input.modelConfig, mastra);
-
-  // 4. Get memory from Mastra (if available)
-  // Note: Memory is typically resolved per-agent, not globally from Mastra
-  // For now, we'll get it from the run registry or leave it undefined
-  // The actual memory instance should be set during preparation phase
+  // 2. Get agent from Mastra and resolve tools
+  let tools: Record<string, CoreTool> = {};
+  let model: MastraLanguageModel;
   let memory: MastraMemory | undefined;
 
-  // 5. Get or create SaveQueueManager
-  let saveQueueManager = runRegistry?.getSaveQueueManager(runId);
-  if (!saveQueueManager && memory) {
+  if (mastra) {
+    try {
+      const agent = mastra.getAgentById(agentId);
+
+      // Get tools from agent - this reconstructs them fresh
+      tools = await agent.getToolsForExecution({
+        runId,
+        threadId: input.state.threadId,
+        resourceId: input.state.resourceId,
+        memoryConfig: input.state.memoryConfig,
+        autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
+      });
+
+      // Get model from agent
+      model = (await (agent as any).getModel?.({})) ?? resolveModel(input.modelConfig, mastra);
+
+      // Get memory from agent
+      memory = await (agent as any).getMemory?.({});
+    } catch (error) {
+      logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
+      // Fallback to config-based model resolution
+      model = resolveModel(input.modelConfig, mastra);
+    }
+  } else {
+    logger?.debug?.(`[DurableAgent:${agentId}] No Mastra instance available, using fallback model`);
+    model = resolveModel(input.modelConfig);
+  }
+
+  if (Object.keys(tools).length === 0) {
+    logger?.debug?.(`[DurableAgent:${agentId}] No tools resolved for run ${runId}`);
+  }
+
+  // 3. Get or create SaveQueueManager
+  let saveQueueManager: SaveQueueManager | undefined;
+  if (memory) {
     saveQueueManager = new SaveQueueManager({
       logger: mastra?.getLogger?.(),
       memory,
     });
   }
 
-  // 6. Reconstruct _internal for compatibility with existing code
+  // 4. Reconstruct _internal for compatibility with existing code
   const _internal = resolveInternalState({
     state: input.state,
     memory,
@@ -170,23 +192,10 @@ export function resolveInternalState(options: {
 }
 
 /**
- * Resolve a single tool by name from the registry or Mastra
+ * Resolve a single tool by name from Mastra's global tool registry
  */
-export function resolveTool(
-  toolName: string,
-  runRegistry?: RunRegistry,
-  runId?: string,
-  mastra?: Mastra,
-): CoreTool | undefined {
-  // First try run registry
-  if (runRegistry && runId) {
-    const tools = runRegistry.getTools(runId);
-    if (tools[toolName]) {
-      return tools[toolName];
-    }
-  }
-
-  // Fallback to Mastra's global tool registry
+export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undefined {
+  // Get from Mastra's global tool registry
   try {
     return mastra?.getTool?.(toolName as any) as CoreTool | undefined;
   } catch {

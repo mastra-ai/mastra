@@ -9,14 +9,42 @@ import type { Inngest } from 'inngest';
 export type InngestPublishFn = (opts: { channel: string; topic: string; data: any }) => Promise<void>;
 
 /**
+ * Parse a topic string and extract the runId and topic type.
+ *
+ * Supported formats:
+ * - "workflow.events.v2.{runId}" - workflow events
+ * - "agent.stream.{runId}" - agent stream events
+ *
+ * @returns { runId, topicType } or null if not a recognized format
+ */
+function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'agent' } | null {
+  // Try workflow format first
+  const workflowMatch = topic.match(/^workflow\.events\.v2\.(.+)$/);
+  if (workflowMatch && workflowMatch[1]) {
+    return { runId: workflowMatch[1], topicType: 'workflow' };
+  }
+
+  // Try agent stream format
+  const agentMatch = topic.match(/^agent\.stream\.(.+)$/);
+  if (agentMatch && agentMatch[1]) {
+    return { runId: agentMatch[1], topicType: 'agent' };
+  }
+
+  return null;
+}
+
+/**
  * PubSub implementation for Inngest workflows.
  *
  * This bridges the PubSub abstract class interface with Inngest's realtime system:
  * - publish() uses Inngest's publish function (only available in function context)
  * - subscribe() uses @inngest/realtime subscribe for real-time streaming
  *
- * Topic format: "workflow.events.v2.{runId}"
- * Channel format: "workflow:{workflowId}:{runId}"
+ * Supported topic formats:
+ * - "workflow.events.v2.{runId}" - workflow events
+ * - "agent.stream.{runId}" - agent stream events (for InngestDurableAgent)
+ *
+ * Both map to Inngest channel: "workflow:{workflowId}:{runId}"
  */
 export class InngestPubSub extends PubSub {
   private inngest: Inngest;
@@ -40,8 +68,12 @@ export class InngestPubSub extends PubSub {
   /**
    * Publish an event to Inngest's realtime system.
    *
-   * Topic format: "workflow.events.v2.{runId}"
-   * Maps to Inngest channel: "workflow:{workflowId}:{runId}"
+   * Supported topic formats:
+   * - "workflow.events.v2.{runId}" - workflow events
+   *   -> channel: "workflow:{workflowId}:{runId}", topic: "watch"
+   * - "agent.stream.{runId}" - agent stream events
+   *   -> channel: "agent:{runId}", topic: "agent-stream"
+   *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     if (!this.publishFn) {
@@ -49,20 +81,26 @@ export class InngestPubSub extends PubSub {
       return;
     }
 
-    // Parse topic to extract runId
-    // Topic format: "workflow.events.v2.{runId}"
-    const match = topic.match(/^workflow\.events\.v2\.(.+)$/);
-    if (!match) {
-      return; // Ignore non-workflow topics
+    const parsed = parseTopic(topic);
+    if (!parsed) {
+      return; // Ignore unrecognized topic formats
     }
 
-    const runId = match[1];
+    const { runId, topicType } = parsed;
+
+    // Use different Inngest topics and channels for different event types
+    // Agent stream events use a runId-only channel so nested workflows publish to the same channel
+    const inngestTopic = topicType === 'agent' ? 'agent-stream' : 'watch';
+    const channel = topicType === 'agent' ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
     try {
+      // For agent stream events, send the full event structure so subscribers can access type/runId/data
+      // For workflow events, send just the data (existing behavior)
+      const dataToSend = topicType === 'agent' ? event : event.data;
       await this.publishFn({
-        channel: `workflow:${this.workflowId}:${runId}`,
-        topic: 'watch',
-        data: event.data,
+        channel,
+        topic: inngestTopic,
+        data: dataToSend,
       });
     } catch (err: any) {
       // Log but don't throw - publishing failures shouldn't break workflow execution
@@ -73,17 +111,20 @@ export class InngestPubSub extends PubSub {
   /**
    * Subscribe to events from Inngest's realtime system.
    *
-   * Topic format: "workflow.events.v2.{runId}"
-   * Maps to Inngest channel: "workflow:{workflowId}:{runId}"
+   * Supported topic formats:
+   * - "workflow.events.v2.{runId}" - workflow events
+   *   -> channel: "workflow:{workflowId}:{runId}", topic: "watch"
+   * - "agent.stream.{runId}" - agent stream events
+   *   -> channel: "agent:{runId}", topic: "agent-stream"
+   *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
    */
   async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
-    // Parse topic: "workflow.events.v2.{runId}"
-    const match = topic.match(/^workflow\.events\.v2\.(.+)$/);
-    if (!match || !match[1]) {
-      return; // Ignore non-workflow topics
+    const parsed = parseTopic(topic);
+    if (!parsed) {
+      return; // Ignore unrecognized topic formats
     }
 
-    const runId: string = match[1];
+    const { runId, topicType } = parsed;
 
     // Check if we already have a subscription for this topic
     if (this.subscriptions.has(topic)) {
@@ -93,23 +134,34 @@ export class InngestPubSub extends PubSub {
 
     const callbacks = new Set<(event: Event, ack?: () => Promise<void>) => void>([cb]);
 
-    const channel = `workflow:${this.workflowId}:${runId}`;
+    // Use different Inngest topics and channels for different event types
+    // Agent stream events use a runId-only channel so nested workflows publish to the same channel
+    const inngestTopic = topicType === 'agent' ? 'agent-stream' : 'watch';
+    const channel = topicType === 'agent' ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
     const streamPromise = subscribe(
       {
         channel,
-        topics: ['watch'],
+        topics: [inngestTopic],
         app: this.inngest,
       },
       (message: any) => {
-        // Transform Inngest message to PubSub Event format
-        const event: Event = {
-          id: crypto.randomUUID(),
-          type: 'watch',
-          runId,
-          data: message.data,
-          createdAt: new Date(),
-        };
+        // For agent stream events, message.data is the full AgentStreamEvent structure (type, runId, data)
+        // For workflow events, wrap message.data in a PubSub Event format
+        let event: Event;
+        if (topicType === 'agent' && message.data?.type && message.data?.runId) {
+          // Agent stream event - pass through the structure as-is (it's already an AgentStreamEvent)
+          event = message.data as unknown as Event;
+        } else {
+          // Workflow event or fallback - wrap in standard Event format
+          event = {
+            id: crypto.randomUUID(),
+            type: inngestTopic,
+            runId,
+            data: message.data,
+            createdAt: new Date(),
+          };
+        }
 
         for (const callback of callbacks) {
           callback(event);

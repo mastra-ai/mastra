@@ -1,21 +1,27 @@
-import type { PubSub } from '../../events/pubsub';
-import type { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
-import type { Agent } from '../agent';
-import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageListInput } from '../message-list';
-import type { AgentConfig, ToolsInput } from '../types';
+import type { Agent } from '@mastra/core/agent';
+import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AgentConfig, ToolsInput } from '@mastra/core/agent';
+import type { PubSub } from '@mastra/core/events';
+import type { MastraModelOutput } from '@mastra/core/stream';
+import type { ChunkType } from '@mastra/core/stream';
+import {
+  prepareForDurableExecution,
+  createDurableAgentStream,
+  emitErrorEvent,
+  DurableStepIds,
+  type AgentFinishEventData,
+  type AgentStepFinishEventData,
+  type AgentSuspendedEventData,
+} from '@mastra/core/agent/durable';
+import type { Inngest } from 'inngest';
 
-import { prepareForDurableExecution } from './preparation';
-import { ExtendedRunRegistry } from './run-registry';
-import { createDurableAgentStream } from './stream-adapter';
-import type { AgentFinishEventData, AgentStepFinishEventData, AgentSuspendedEventData } from './types';
-import { createDurableAgenticWorkflow } from './workflows';
+import { InngestPubSub } from '../pubsub';
 
 /**
- * Options for DurableAgent.stream()
+ * Options for InngestDurableAgent.stream()
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+export interface InngestDurableAgentStreamOptions<OUTPUT = undefined> {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
   /** Additional context messages to provide to the agent */
@@ -59,9 +65,9 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
 }
 
 /**
- * Result from DurableAgent.stream()
+ * Result from InngestDurableAgent.stream()
  */
-export interface DurableAgentStreamResult<OUTPUT = undefined> {
+export interface InngestDurableAgentStreamResult<OUTPUT = undefined> {
   /** The streaming output */
   output: MastraModelOutput<OUTPUT>;
   /** The unique run ID for this execution */
@@ -75,67 +81,83 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
 }
 
 /**
- * Configuration for DurableAgent
+ * Configuration for InngestDurableAgent
  */
-export interface DurableAgentConfig<
+export interface InngestDurableAgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
 > extends AgentConfig<TAgentId, TTools, TOutput> {
   /**
-   * PubSub instance for streaming events.
-   * Required for durable agent execution as it enables streaming
-   * across process boundaries and execution engine replays.
+   * Inngest client instance.
+   * Required for durable agent execution through Inngest's execution engine.
    */
-  pubsub: PubSub;
+  inngest: Inngest;
+  /**
+   * Optional PubSub instance override.
+   * If not provided, defaults to InngestPubSub for Inngest realtime streaming.
+   */
+  pubsub?: PubSub;
 }
 
 /**
- * DurableAgent extends Agent to support durable execution patterns.
+ * InngestDurableAgent provides durable AI agent execution through Inngest.
  *
- * Unlike the standard Agent, DurableAgent:
- * 1. Separates preparation (non-durable) from execution (durable)
- * 2. Uses pubsub for streaming instead of closures
- * 3. Stores non-serializable state in a registry keyed by runId
- * 4. Creates fully serializable workflow inputs
+ * This class enables AI agents to run with Inngest's durable execution engine,
+ * providing:
+ * - Automatic retries and error handling
+ * - Workflow persistence across process restarts
+ * - Real-time streaming via Inngest's realtime system
+ * - Tool approval workflows with suspend/resume
  *
- * This enables the agent to work with durable execution engines like
- * Cloudflare Workflows, Inngest, Temporal, etc. that replay workflow
- * code and require serializable state.
+ * IMPORTANT: Before using InngestDurableAgent, you must:
+ * 1. Create the shared workflow using createInngestDurableAgenticWorkflow()
+ * 2. Register it with Mastra
+ * 3. Register the agent with Mastra so the workflow can look it up
  *
  * @example
  * ```typescript
- * import { DurableAgent } from '@mastra/core/agent/durable';
- * import { InMemoryPubSub } from '@mastra/core/events';
+ * import { InngestDurableAgent, createInngestDurableAgenticWorkflow, serve as inngestServe } from '@mastra/inngest';
+ * import { Mastra } from '@mastra/core/mastra';
+ * import { Inngest } from 'inngest';
  *
- * const pubsub = new InMemoryPubSub();
+ * const inngest = new Inngest({ id: 'my-app' });
  *
- * const durableAgent = new DurableAgent({
- *   id: 'my-durable-agent',
- *   name: 'My Durable Agent',
+ * // 1. Create the shared workflow (once per Inngest client)
+ * const durableAgentWorkflow = createInngestDurableAgenticWorkflow({ inngest });
+ *
+ * // 2. Create the agent
+ * const agent = new InngestDurableAgent({
+ *   id: 'my-agent',
+ *   name: 'My Agent',
  *   instructions: 'You are a helpful assistant',
- *   model: 'openai/gpt-4',
- *   tools: { ... },
- *   pubsub,
+ *   model: openai('gpt-4'),
+ *   inngest,
  * });
  *
- * const { output, runId, cleanup } = await durableAgent.stream(
- *   'Hello!',
- *   {
- *     onChunk: (chunk) => console.log('Chunk:', chunk),
- *     onFinish: (result) => console.log('Done:', result),
- *   }
- * );
+ * // 3. Initialize the agent to get the underlying Agent instance
+ * await agent.prepare([{ role: 'user', content: 'init' }]);
  *
- * // Consume the stream
+ * // 4. Register both workflow AND agent with Mastra
+ * const mastra = new Mastra({
+ *   agents: { [agent.id]: agent.agent },
+ *   workflows: { [durableAgentWorkflow.id]: durableAgentWorkflow },
+ *   server: {
+ *     apiRoutes: [{
+ *       path: '/inngest/api',
+ *       method: 'ALL',
+ *       createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+ *     }],
+ *   },
+ * });
+ *
+ * // 5. Now use the agent
+ * const { output, cleanup } = await agent.stream('Hello!');
  * const text = await output.text;
- * console.log('Final text:', text);
- *
- * // Cleanup when done
  * cleanup();
  * ```
  */
-export class DurableAgent<
+export class InngestDurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
@@ -143,31 +165,30 @@ export class DurableAgent<
   /** The underlying agent instance (lazily initialized) */
   #agent!: Agent<TAgentId, TTools, TOutput> | null;
 
+  /** Inngest client instance */
+  readonly #inngest: Inngest;
+
   /** PubSub instance for streaming events */
   readonly #pubsub: PubSub;
-
-  /** Registry for per-run non-serializable state */
-  readonly #runRegistry: ExtendedRunRegistry;
-
-  /** The durable workflow for agent execution */
-  #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
 
   /** Whether the agent has been initialized */
   #initialized = false;
   /** Pending initialization promise */
   #initPromise: Promise<void> | null = null;
   /** Agent config stored for deferred initialization */
-  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub'>;
+  readonly #agentConfig: Omit<InngestDurableAgentConfig<TAgentId, TTools, TOutput>, 'inngest' | 'pubsub'>;
 
   /**
-   * Create a new DurableAgent
+   * Create a new InngestDurableAgent
    */
-  constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { pubsub, ...agentConfig } = config;
+  constructor(config: InngestDurableAgentConfig<TAgentId, TTools, TOutput>) {
+    const { inngest, pubsub, ...agentConfig } = config;
 
     this.#agentConfig = agentConfig;
-    this.#pubsub = pubsub;
-    this.#runRegistry = new ExtendedRunRegistry();
+    this.#inngest = inngest;
+    // Default to InngestPubSub if not provided
+    // Use the static workflow ID - agent isolation is achieved via unique runIds
+    this.#pubsub = pubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
     this.#agent = null; // Agent will be initialized lazily on first use
   }
 
@@ -180,7 +201,7 @@ export class DurableAgent<
     if (!this.#initPromise) {
       this.#initPromise = (async () => {
         // Use dynamic import for ESM compatibility
-        const { Agent } = await import('../agent');
+        const { Agent } = await import('@mastra/core/agent');
         this.#agent = new Agent(this.#agentConfig);
         this.#initialized = true;
       })();
@@ -195,7 +216,7 @@ export class DurableAgent<
    */
   #getAgent(): Agent<TAgentId, TTools, TOutput> {
     if (!this.#initialized || !this.#agent) {
-      throw new Error('DurableAgent not initialized. Call an async method first (stream, prepare, etc).');
+      throw new Error('InngestDurableAgent not initialized. Call an async method first (stream, prepare, etc).');
     }
     return this.#agent;
   }
@@ -226,20 +247,25 @@ export class DurableAgent<
   }
 
   /**
-   * Get the run registry (for testing and advanced usage)
+   * Get the Inngest client instance.
    */
-  get runRegistry(): ExtendedRunRegistry {
-    return this.#runRegistry;
+  get inngest(): Inngest {
+    return this.#inngest;
   }
 
   /**
-   * Stream a response from the agent using durable execution.
+   * Stream a response from the agent using Inngest's durable execution.
    *
    * This method:
    * 1. Prepares for execution (non-durable phase)
    * 2. Sets up pubsub subscription for streaming
-   * 3. Executes the durable workflow
+   * 3. Sends an event to trigger the shared durable workflow
    * 4. Returns a MastraModelOutput that streams from pubsub events
+   *
+   * Prerequisites:
+   * - The shared workflow must be registered with Mastra (use createInngestDurableAgenticWorkflow)
+   * - The agent must be registered with Mastra (so the workflow can look it up)
+   * - The Inngest serve handler must be running
    *
    * @param messages - User messages to process
    * @param options - Execution options including callbacks
@@ -247,12 +273,12 @@ export class DurableAgent<
    */
   async stream(
     messages: MessageListInput,
-    options?: DurableAgentStreamOptions<TOutput>,
-  ): Promise<DurableAgentStreamResult<TOutput>> {
+    options?: InngestDurableAgentStreamOptions<TOutput>,
+  ): Promise<InngestDurableAgentStreamResult<TOutput>> {
     // Ensure the agent is initialized
     await this.#ensureInitialized();
 
-    // 1. Prepare for durable execution (non-durable phase)
+    // 1. Prepare for durable execution (creates serializable workflow input)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#getAgent() as Agent<string, any, TOutput>,
       messages,
@@ -261,12 +287,9 @@ export class DurableAgent<
       requestContext: options?.requestContext,
     });
 
-    const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+    const { runId, messageId, workflowInput, threadId, resourceId } = preparation;
 
-    // 2. Register non-serializable state
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-
-    // 3. Create the durable agent stream (subscribes to pubsub)
+    // 2. Create the durable agent stream (subscribes to pubsub)
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
       pubsub: this.#pubsub,
       runId,
@@ -285,24 +308,18 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    // 4. Get or create the durable workflow
-    if (!this.#workflow) {
-      this.#workflow = createDurableAgenticWorkflow({
-        maxSteps: options?.maxSteps,
+    // 3. Trigger the shared workflow through Inngest (async, don't await)
+    // Add a small delay to allow subscription to fully establish before workflow starts
+    setTimeout(() => {
+      this.#triggerWorkflow(runId, workflowInput).catch(error => {
+        // Emit error to pubsub so the stream receives it
+        this.#emitError(runId, error);
       });
-    }
+    }, 100);
 
-    // 5. Execute the workflow (async, don't await)
-    // The workflow will emit events to pubsub as it executes
-    this.#executeWorkflow(runId, workflowInput).catch(error => {
-      // Emit error to pubsub so the stream receives it
-      this.#emitError(runId, error);
-    });
-
-    // 6. Create cleanup function
+    // 4. Create cleanup function
     const cleanup = () => {
       streamCleanup();
-      this.#runRegistry.cleanup(runId);
     };
 
     return {
@@ -315,27 +332,27 @@ export class DurableAgent<
   }
 
   /**
-   * Execute the durable workflow.
-   * This is called asynchronously after stream() returns.
+   * Trigger the shared durable workflow through Inngest by sending an event.
+   *
+   * This sends an event to Inngest which triggers the workflow that's
+   * registered with Mastra. The workflow ID is static (durable-agentic-loop),
+   * and the specific agent is identified via agentId in the event data.
    */
-  async #executeWorkflow(runId: string, workflowInput: any): Promise<void> {
-    if (!this.#workflow) {
-      throw new Error('Workflow not initialized');
-    }
-
+  async #triggerWorkflow(runId: string, workflowInput: any): Promise<void> {
     try {
-      // Create a run and start it
-      const run = await this.#workflow.createRun({ runId });
-      const result = await run.start({ inputData: workflowInput });
+      // Send event directly to Inngest
+      // The shared workflow registered with Mastra listens for this event
+      const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}`;
 
-      // Check for errors in result
-      if (result?.status === 'failed') {
-        const error = new Error((result as any).error?.message || 'Workflow execution failed');
-        await this.#emitError(runId, error);
-        return;
-      }
-
-      // Success - finish event should have been emitted by the workflow steps
+      await this.#inngest.send({
+        name: eventName,
+        data: {
+          inputData: workflowInput,
+          runId,
+          resourceId: workflowInput.state?.resourceId,
+          requestContext: {},
+        },
+      });
     } catch (error) {
       await this.#emitError(runId, error as Error);
     }
@@ -345,7 +362,6 @@ export class DurableAgent<
    * Emit an error event to pubsub
    */
   async #emitError(runId: string, error: Error): Promise<void> {
-    const { emitErrorEvent } = await import('./stream-adapter');
     await emitErrorEvent(this.#pubsub, runId, error);
   }
 
@@ -363,21 +379,15 @@ export class DurableAgent<
     runId: string,
     resumeData: unknown,
     options?: {
+      threadId?: string;
+      resourceId?: string;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
       onError?: (error: Error) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<DurableAgentStreamResult<TOutput>> {
-    // Check if we have state for this run
-    const entry = this.#runRegistry.get(runId);
-    if (!entry) {
-      throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
-    }
-
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
-
+  ): Promise<InngestDurableAgentStreamResult<TOutput>> {
     // Re-subscribe to the stream
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
       pubsub: this.#pubsub,
@@ -388,8 +398,8 @@ export class DurableAgent<
         provider: undefined,
         version: 'v3',
       },
-      threadId: memoryInfo?.threadId,
-      resourceId: memoryInfo?.resourceId,
+      threadId: options?.threadId,
+      resourceId: options?.resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -397,43 +407,32 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    // Resume the workflow
-    if (this.#workflow) {
-      (async () => {
-        const run = await this.#workflow!.createRun({ runId });
-        await run.resume({ resumeData });
-      })().catch((error: Error) => {
-        this.#emitError(runId, error);
+    // Resume the workflow through Inngest by sending a resume event
+    (async () => {
+      const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}.resume`;
+
+      await this.#inngest.send({
+        name: eventName,
+        data: {
+          runId,
+          resumeData,
+        },
       });
-    }
+    })().catch((error: Error) => {
+      this.#emitError(runId, error);
+    });
 
     const cleanup = () => {
       streamCleanup();
-      this.#runRegistry.cleanup(runId);
     };
 
     return {
       output,
       runId,
-      threadId: memoryInfo?.threadId,
-      resourceId: memoryInfo?.resourceId,
+      threadId: options?.threadId,
+      resourceId: options?.resourceId,
       cleanup,
     };
-  }
-
-  /**
-   * Get the workflow instance for direct execution.
-   *
-   * This is useful when you want to integrate the durable workflow
-   * into a larger workflow or use it with a specific execution engine.
-   *
-   * @returns The durable agentic workflow
-   */
-  getWorkflow() {
-    if (!this.#workflow) {
-      this.#workflow = createDurableAgenticWorkflow();
-    }
-    return this.#workflow;
   }
 
   /**
@@ -441,7 +440,7 @@ export class DurableAgent<
    *
    * This is useful when you want to:
    * 1. Prepare the workflow input in one process
-   * 2. Execute the workflow in another process (e.g., Cloudflare Worker)
+   * 2. Execute the workflow in another process
    *
    * @param messages - User messages to process
    * @param options - Execution options
@@ -456,12 +455,6 @@ export class DurableAgent<
       messages,
       options,
       requestContext: options?.requestContext,
-    });
-
-    // Register the entry for later execution
-    this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
-      threadId: preparation.threadId,
-      resourceId: preparation.resourceId,
     });
 
     return {

@@ -1,22 +1,28 @@
 import { z } from 'zod';
-import { createWorkflow } from '../../../workflows';
-import type { PubSub } from '../../../events/pubsub';
-import { PUBSUB_SYMBOL } from '../../../workflows/constants';
-import type { Mastra } from '../../../mastra';
-import { DurableStepIds, DurableAgentDefaults } from '../constants';
-import { emitFinishEvent } from '../stream-adapter';
-import type {
-  DurableAgenticWorkflowInput,
-  DurableAgenticExecutionOutput,
-  DurableLLMStepOutput,
-  DurableToolCallOutput,
-} from '../types';
-import { createDurableLLMExecutionStep, createDurableLLMMappingStep } from './steps';
+import type { PubSub } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
+import {
+  DurableStepIds,
+  DurableAgentDefaults,
+  createDurableLLMExecutionStep,
+  createDurableLLMMappingStep,
+  emitFinishEvent,
+  type DurableAgenticWorkflowInput,
+  type DurableAgenticExecutionOutput,
+  type DurableLLMStepOutput,
+  type DurableToolCallOutput,
+} from '@mastra/core/agent/durable';
+import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
+import type { Inngest } from 'inngest';
+
+import { init } from '../index';
 
 /**
- * Options for creating a durable agentic workflow
+ * Options for creating an Inngest durable agentic workflow
  */
-export interface DurableAgenticWorkflowOptions {
+export interface InngestDurableAgenticWorkflowOptions {
+  /** Inngest client instance */
+  inngest: Inngest;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
 }
@@ -85,25 +91,30 @@ const iterationStateSchema = z.object({
 type IterationState = z.infer<typeof iterationStateSchema>;
 
 /**
- * Create a durable agentic workflow.
+ * Create a durable agentic workflow using Inngest.
  *
- * This workflow implements the agentic loop pattern in a durable way:
+ * This workflow implements the agentic loop pattern in a durable way using
+ * Inngest's execution engine:
  *
  * 1. LLM Execution Step - Calls the LLM and gets response/tool calls
- * 2. Tool Call Steps (foreach) - Executes each tool call in parallel
+ * 2. Tool Call Execution - Executes each tool call
  * 3. LLM Mapping Step - Merges tool results back into state
  * 4. Loop - Continues if more tool calls are needed (dowhile)
  *
  * All state flows through workflow input/output, making it durable across
  * process restarts and execution engine replays.
+ *
+ * @param options - Configuration options
+ * @returns An InngestWorkflow instance that implements the agentic loop
  */
-export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOptions) {
-  const maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
+export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
+  const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS } = options;
+  const { createWorkflow } = init(inngest);
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
   const llmExecutionStep = createDurableLLMExecutionStep();
 
-  // Create the LLM mapping step
+  // Create the LLM mapping step - reuse from core
   const llmMappingStep = createDurableLLMMappingStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
@@ -115,6 +126,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
     },
+    steps: [],
   })
     // Step 0: Convert iteration state to LLM input format
     .map(
@@ -294,6 +306,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
         validateInputs: false,
       },
+      steps: [],
     })
       // Initialize iteration state from input
       .map(
@@ -320,7 +333,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
         // Check if we should continue
         const shouldContinue = state.lastStepResult?.isContinued === true;
-        const underMaxSteps = state.iterationCount < maxSteps;
+        // Use maxSteps from options (per-request), falling back to workflow-level default
+        const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
+        const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         return shouldContinue && underMaxSteps;
       })

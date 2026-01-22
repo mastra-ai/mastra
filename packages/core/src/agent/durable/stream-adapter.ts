@@ -124,6 +124,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         case AgentStreamEventTypes.FINISH: {
           const data = streamEvent.data as AgentFinishEventData;
           await onFinish?.(data);
+          // Enqueue a synthetic finish chunk so MastraModelOutput can resolve its promises
+          // The finish chunk is expected by MastraModelOutput to resolve text/usage promises
+          const finishChunk = {
+            type: 'finish' as const,
+            payload: {
+              output: data.output,
+              stepResult: data.stepResult,
+            },
+          } as ChunkType<OUTPUT>;
+          controller.enqueue(finishChunk);
           controller.close();
           break;
         }

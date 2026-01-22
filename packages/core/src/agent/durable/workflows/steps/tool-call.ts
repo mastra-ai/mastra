@@ -91,8 +91,8 @@ export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
         };
       }
 
-      // 1. Resolve the tool
-      const tool = resolveTool(toolName, runRegistry, context.runId, mastra as Mastra);
+      // 1. Resolve the tool from Mastra's global tool registry
+      const tool = resolveTool(toolName, mastra as Mastra);
 
       if (!tool) {
         return {

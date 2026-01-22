@@ -2321,6 +2321,36 @@ export class Agent<
   }
 
   /**
+   * Get tools for execution.
+   *
+   * This method assembles all tools from various sources (assigned tools, memory tools,
+   * toolsets, client tools, agent tools, workflow tools) into a unified CoreTool dictionary.
+   *
+   * This is useful for durable execution where tools need to be reconstructed from
+   * serialized state rather than stored in a registry.
+   *
+   * @param options - Options for tool assembly
+   * @returns A record of tool names to CoreTool instances
+   */
+  async getToolsForExecution(options: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext?: RequestContext;
+    memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    return this.convertTools({
+      ...options,
+      requestContext,
+      methodType: 'stream',
+    });
+  }
+
+  /**
    * Assembles all tools from various sources into a unified CoreTool dictionary.
    * @internal
    */

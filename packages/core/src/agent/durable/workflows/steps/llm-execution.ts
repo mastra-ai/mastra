@@ -11,9 +11,8 @@ import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { DurableStepIds } from '../../constants';
-import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
+import { emitChunkEvent, emitStepStartEvent, emitErrorEvent } from '../../stream-adapter';
 import { resolveRuntimeDependencies } from '../../utils/resolve-runtime';
-import type { RunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 
 /**
@@ -65,8 +64,7 @@ const durableLLMOutputSchema = z.object({
  * Options for creating the durable LLM execution step
  */
 export interface DurableLLMExecutionStepOptions {
-  /** Run registry for accessing non-serializable state */
-  runRegistry: RunRegistry;
+  // No options needed - tools and model are resolved from Mastra at runtime
 }
 
 /**
@@ -83,9 +81,7 @@ export interface DurableLLMExecutionStepOptions {
  * flows through the workflow input/output, and non-serializable
  * dependencies are resolved at execution time.
  */
-export function createDurableLLMExecutionStep(options: DurableLLMExecutionStepOptions) {
-  const { runRegistry } = options;
-
+export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepOptions) {
   return createStep({
     id: DurableStepIds.LLM_EXECUTION,
     inputSchema: durableLLMInputSchema,
@@ -101,10 +97,9 @@ export function createDurableLLMExecutionStep(options: DurableLLMExecutionStepOp
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
 
-      // 1. Resolve runtime dependencies
-      const resolved = resolveRuntimeDependencies({
+      // 1. Resolve runtime dependencies (tools and model from Mastra)
+      const resolved = await resolveRuntimeDependencies({
         mastra: mastra as Mastra,
-        runRegistry,
         runId,
         agentId,
         input: typedInput,
@@ -189,7 +184,10 @@ export function createDurableLLMExecutionStep(options: DurableLLMExecutionStepOp
           if (!chunk) continue;
 
           // Emit chunk via pubsub for streaming to client
-          if (pubsub) {
+          // NOTE: Do NOT emit 'finish' chunks - they will be sent as a proper FINISH event
+          // at the end of the agentic loop. Emitting finish chunks here would cause
+          // the client's MastraModelOutput to close prematurely in multi-step workflows.
+          if (pubsub && chunk.type !== 'finish') {
             await emitChunkEvent(pubsub, runId, chunk);
           }
 
@@ -216,8 +214,10 @@ export function createDurableLLMExecutionStep(options: DurableLLMExecutionStepOp
 
             case 'finish': {
               const payload = chunk.payload as any;
-              finishReason = payload.finishReason || 'stop';
-              usage = payload.usage || usage;
+              // The finish chunk from MastraModelOutput has finishReason in stepResult.reason
+              finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
+              // Usage can be in output.usage or directly in payload.usage
+              usage = payload.output?.usage || payload.usage || usage;
               break;
             }
 
@@ -235,13 +235,50 @@ export function createDurableLLMExecutionStep(options: DurableLLMExecutionStepOp
             case 'error': {
               const payload = chunk.payload as any;
               const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
-              throw new Error(errorMessage);
+              const errorObj = new Error(errorMessage);
+              // Emit error event BEFORE throwing, while we're still in valid async context
+              if (pubsub) {
+                try {
+                  await emitErrorEvent(pubsub, runId, errorObj);
+                } catch {
+                  // Ignore emit failures
+                }
+              }
+              throw errorObj;
             }
           }
         }
       } catch (error) {
         logger?.error?.('Error processing LLM stream', { error, runId });
+
+        // Emit error event so client stream closes properly
+        if (pubsub) {
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          try {
+            await emitErrorEvent(pubsub, runId, errorObj);
+          } catch {
+            // Ignore emit failures - we're throwing the actual error anyway
+          }
+        }
+
         throw error;
+      }
+
+      // Check if the stream captured an error (MastraModelOutput swallows errors internally)
+      const streamError = outputStream.error;
+      if (streamError) {
+        logger?.error?.('Stream captured error', { error: streamError, runId });
+
+        // Emit error event so client stream closes properly
+        if (pubsub) {
+          try {
+            await emitErrorEvent(pubsub, runId, streamError);
+          } catch {
+            // Ignore emit failures
+          }
+        }
+
+        throw streamError;
       }
 
       // 9. Add assistant response to message list
