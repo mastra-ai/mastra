@@ -3302,6 +3302,33 @@ export class Mastra<
     this.#logger?.info('Mastra shutdown completed');
   }
 
+  /**
+   * Get a tool provider by name.
+   * @internal - This is a stub implementation. Tool providers are not yet supported on Mastra instances.
+   * Falls back to global registry in integrations handlers.
+   */
+  getToolProvider(_name: string): any {
+    return undefined;
+  }
+
+  /**
+   * List all registered tool providers.
+   * @internal - This is a stub implementation. Tool providers are not yet supported on Mastra instances.
+   * Falls back to global registry in integrations handlers.
+   */
+  listToolProviders(): any[] {
+    return [];
+  }
+
+  /**
+   * Get statuses of all tool providers.
+   * @internal - This is a stub implementation. Tool providers are not yet supported on Mastra instances.
+   * Falls back to global registry in integrations handlers.
+   */
+  async getToolProviderStatuses(): Promise<any[]> {
+    return [];
+  }
+
   // This method is only used internally for server hnadlers that require temporary persistence
   public get serverCache() {
     return this.#serverCache;
