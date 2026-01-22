@@ -1,3 +1,12 @@
+/**
+ * Playwright configuration for server-side auth enforcement tests.
+ *
+ * This config starts the kitchen-sink app with E2E_TEST_AUTH=true,
+ * enabling the TestAuthProvider for server-side permission enforcement testing.
+ *
+ * Run with: npx playwright test -c playwright.auth-server.config.ts
+ */
+
 import { defineConfig, devices, PlaywrightTestConfig } from '@playwright/test';
 
 const PORT = process.env.E2E_PORT;
@@ -5,9 +14,8 @@ const BASE_URL = `http://localhost:${PORT || '4111'}`;
 
 const webservers: PlaywrightTestConfig['webServer'] = [
   {
-    // UI tests use route interception for auth mocking - no server auth needed
-    // For server-side permission tests, use playwright.auth-server.config.ts
-    command: `pnpm -C ./kitchen-sink dev`,
+    // Start kitchen-sink with test auth enabled for server-side enforcement
+    command: `E2E_TEST_AUTH=true pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
   },
@@ -23,10 +31,9 @@ if (PORT) {
 }
 
 export default defineConfig({
+  // Only run server-side auth enforcement tests
   testDir: './tests',
-  // Exclude server-side permission tests - they need E2E_TEST_AUTH=true
-  // Run those separately with: npx playwright test -c playwright.auth-server.config.ts
-  testIgnore: '**/server-permission-enforcement.spec.ts',
+  testMatch: '**/server-permission-enforcement.spec.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,

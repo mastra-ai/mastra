@@ -210,8 +210,9 @@ export function buildCurrentUserResponse(config: MockAuthConfig): MockUser | nul
  * Intercepts the /api/auth/capabilities and /api/auth/me endpoints
  * to return mock data based on the provided configuration.
  *
- * Also sets the Authorization header for all requests so that
- * server-side auth enforcement works correctly.
+ * Note: This is for UI testing only. It uses route interception to mock
+ * auth responses. For server-side permission enforcement tests, use
+ * playwright.auth-server.config.ts which enables the TestAuthProvider.
  *
  * @example Basic usage with admin role
  * ```typescript
@@ -243,20 +244,8 @@ export function buildCurrentUserResponse(config: MockAuthConfig): MockUser | nul
  * ```
  */
 export async function setupMockAuth(page: Page, config: MockAuthConfig = {}): Promise<void> {
-  const { authenticated = !!config.role, role = '_default' } = config;
   const capabilitiesResponse = buildAuthCapabilities(config);
   const meResponse = buildCurrentUserResponse(config);
-
-  // Set Authorization header for server-side auth enforcement
-  // The TestAuthProvider uses the Bearer token value as the role
-  if (authenticated && role) {
-    await page.setExtraHTTPHeaders({
-      Authorization: `Bearer ${role}`,
-    });
-  } else {
-    // Clear auth header for unauthenticated state
-    await page.setExtraHTTPHeaders({});
-  }
 
   // Intercept /api/auth/capabilities
   await page.route('**/api/auth/capabilities', async (route: Route) => {

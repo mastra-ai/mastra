@@ -282,10 +282,10 @@
         "files": [
           "packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts",
           "packages/playground/e2e/kitchen-sink/src/mastra/test-auth.ts",
-          "packages/playground/e2e/tests/__utils__/auth.ts"
+          "packages/playground/e2e/playwright.auth-server.config.ts"
         ],
         "testsAdded": 23,
-        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Server runs with E2E_TEST_AUTH=true which enables auth enforcement. UI tests set Authorization header via setupMockAuth, and direct API tests in server-permission-enforcement.spec.ts send Bearer tokens manually to verify 401/403 responses."
+        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Uses SEPARATE playwright config (playwright.auth-server.config.ts) that starts server with E2E_TEST_AUTH=true. This keeps UI tests fast (no server auth overhead) while server permission tests verify real RBAC enforcement. Direct API tests send Bearer tokens manually to verify 401/403 responses."
       }
     },
     {
@@ -342,22 +342,40 @@
     "workingDirectory": "packages/playground/e2e",
     "baseUrl": "http://localhost:4111",
     "typecheckCommand": "pnpm typecheck",
+    "configs": {
+      "uiTests": {
+        "config": "playwright.config.ts",
+        "description": "UI tests with mocked auth via route interception. Server runs WITHOUT E2E_TEST_AUTH for faster execution.",
+        "excludes": "server-permission-enforcement.spec.ts"
+      },
+      "serverPermissionTests": {
+        "config": "playwright.auth-server.config.ts",
+        "description": "Server-side permission enforcement tests. Server runs WITH E2E_TEST_AUTH=true to enable TestAuthProvider.",
+        "includes": "server-permission-enforcement.spec.ts only"
+      }
+    },
     "runIndividualSuites": {
-      "note": "IMPORTANT: Run test suites INDIVIDUALLY to avoid timeouts and get clearer feedback. Do NOT run the entire test suite at once.",
+      "note": "CRITICAL: ALWAYS run test files INDIVIDUALLY. NEVER run the full test suite - it causes timeouts, flakiness, and unclear failures. Run ONE spec file at a time.",
       "infrastructure": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/infrastructure.spec.ts",
       "loginFlow": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/login-flow.spec.ts",
       "adminRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/admin-role.spec.ts",
       "memberRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/member-role.spec.ts",
       "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts",
-      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/server-permission-enforcement.spec.ts"
+      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list"
     },
-    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/",
+    "runAllAuthTests": {
+      "WARNING": "DO NOT USE THESE COMMANDS. They are provided for CI pipelines only. Claude and developers should ALWAYS run individual spec files using runIndividualSuites above.",
+      "ciOnly_uiTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/",
+      "ciOnly_serverTests": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list"
+    },
     "debugSingleTest": "CI=true npx playwright test -c playwright.config.ts --reporter=list --debug tests/auth/{spec-file}.spec.ts",
     "warnings": [
+      "NEVER run the full test suite - ALWAYS run individual spec files one at a time",
+      "Running multiple spec files together causes timeouts, flakiness, and unclear failures",
       "Always use --reporter=list to avoid HTML report hanging in CI",
       "Always prefix with CI=true to ensure consistent behavior",
       "Run from packages/playground/e2e directory",
-      "Run individual spec files for faster feedback and easier debugging"
+      "Use playwright.auth-server.config.ts for server-permission-enforcement.spec.ts ONLY"
     ]
   },
   "qaReview": {
