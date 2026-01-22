@@ -3,7 +3,7 @@ import { SERVER_ROUTES } from '../server-adapter/routes';
 
 /**
  * Extract path parameters from a path pattern
- * e.g., '/api/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
+ * e.g., '/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
  */
 export function extractPathParams(path: string): string[] {
   const matches = path.match(/:(\w+)/g);

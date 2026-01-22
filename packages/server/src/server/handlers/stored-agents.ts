@@ -20,7 +20,7 @@ import { handleError } from './error';
 // ============================================================================
 
 /**
- * GET /api/stored/agents - List all stored agents
+ * GET /stored/agents - List all stored agents
  */
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
@@ -61,7 +61,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:storedAgentId - Get a stored agent by ID
+ * GET /stored/agents/:storedAgentId - Get a stored agent by ID
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
@@ -101,7 +101,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents - Create a new stored agent
+ * POST /stored/agents - Create a new stored agent
  */
 export const CREATE_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
@@ -183,7 +183,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * PATCH /api/stored/agents/:storedAgentId - Update a stored agent
+ * PATCH /stored/agents/:storedAgentId - Update a stored agent
  */
 export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   method: 'PATCH',
@@ -271,7 +271,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:storedAgentId - Delete a stored agent
+ * DELETE /stored/agents/:storedAgentId - Delete a stored agent
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',

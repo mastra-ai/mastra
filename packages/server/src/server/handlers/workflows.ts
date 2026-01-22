@@ -1013,7 +1013,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   bodySchema: streamWorkflowBodySchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream workflow with legacy format',
-  description: 'Legacy endpoint for streaming workflow execution. Use /api/workflows/:workflowId/stream instead.',
+  description: 'Legacy endpoint for streaming workflow execution. Use /workflows/:workflowId/stream instead.',
   tags: ['Workflows', 'Legacy'],
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
@@ -1060,7 +1060,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   queryParamSchema: runIdSchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Observe workflow stream with legacy format',
-  description: 'Legacy endpoint for observing workflow stream. Use /api/workflows/:workflowId/observe instead.',
+  description: 'Legacy endpoint for observing workflow stream. Use /workflows/:workflowId/observe instead.',
   tags: ['Workflows', 'Legacy'],
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId }) => {

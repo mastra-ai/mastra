@@ -508,7 +508,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream agent-builder action with legacy format',
   description:
-    'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
+    'Legacy endpoint for streaming agent-builder action execution. Use /agent-builder/:actionId/stream instead.',
   tags: ['Agent Builder', 'Legacy'],
   requiresAuth: true,
   handler: async ctx => {
@@ -546,7 +546,7 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
   description:
-    'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/:actionId/observe instead.',
+    'Legacy endpoint for observing agent-builder action stream. Use /agent-builder/:actionId/observe instead.',
   tags: ['Agent Builder', 'Legacy'],
   requiresAuth: true,
   handler: async ctx => {

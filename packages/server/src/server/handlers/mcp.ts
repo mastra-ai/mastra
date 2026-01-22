@@ -79,9 +79,9 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
         // Return next URL in same format as request (legacy limit/offset or page/perPage)
         if (useLegacyFormat) {
           const nextOffset = actualOffset + finalPerPage;
-          nextUrl = `/api/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+          nextUrl = `/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
         } else {
-          nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+          nextUrl = `/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
         }
       }
     }
@@ -276,7 +276,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
 
     return {
       server,
-      httpPath: `/api/mcp/${serverId}/mcp`,
+      httpPath: `/mcp/${serverId}/mcp`,
     };
   },
 });
@@ -303,8 +303,8 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
 
     return {
       server,
-      ssePath: `/api/mcp/${serverId}/sse`,
-      messagePath: `/api/mcp/${serverId}/messages`,
+      ssePath: `/mcp/${serverId}/sse`,
+      messagePath: `/mcp/${serverId}/messages`,
     };
   },
 });

@@ -322,7 +322,7 @@ export async function handleAutoVersioning<TAgent>(
 // ============================================================================
 
 /**
- * GET /api/stored/agents/:agentId/versions - List all versions for an agent
+ * GET /stored/agents/:agentId/versions - List all versions for an agent
  */
 export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
@@ -368,7 +368,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions - Create a new version snapshot
+ * POST /stored/agents/:agentId/versions - Create a new version snapshot
  */
 export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
@@ -432,7 +432,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions/:versionId - Get a specific version
+ * GET /stored/agents/:agentId/versions/:versionId - Get a specific version
  */
 export const GET_AGENT_VERSION_ROUTE = createRoute({
   method: 'GET',
@@ -475,7 +475,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions/:versionId/activate - Set a version as active
+ * POST /stored/agents/:agentId/versions/:versionId/activate - Set a version as active
  */
 export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
@@ -532,7 +532,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions/:versionId/restore - Restore agent to a version
+ * POST /stored/agents/:agentId/versions/:versionId/restore - Restore agent to a version
  */
 export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
@@ -634,7 +634,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:agentId/versions/:versionId - Delete a version
+ * DELETE /stored/agents/:agentId/versions/:versionId - Delete a version
  */
 export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   method: 'DELETE',
@@ -693,7 +693,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions/compare - Compare two versions
+ * GET /stored/agents/:agentId/versions/compare - Compare two versions
  */
 export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',

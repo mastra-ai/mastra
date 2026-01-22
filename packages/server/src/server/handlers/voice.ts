@@ -67,7 +67,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
   summary: 'Get available speakers for an agent',
-  description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
+  description: '[DEPRECATED] Use /agents/:agentId/voice/speakers instead. Get available speakers for an agent',
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: GET_SPEAKERS_ROUTE.handler,
@@ -134,7 +134,7 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   responseSchema: speakResponseSchema,
   summary: 'Convert text to speech',
   description:
-    "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
+    "[DEPRECATED] Use /agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: GENERATE_SPEECH_ROUTE.handler,
@@ -194,7 +194,7 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   responseSchema: transcribeSpeechResponseSchema,
   summary: 'Convert speech to text',
   description:
-    "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+    "[DEPRECATED] Use /agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: TRANSCRIBE_SPEECH_ROUTE.handler,

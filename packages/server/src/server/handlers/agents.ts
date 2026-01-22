@@ -637,7 +637,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: generateResponseSchema,
   summary: '[DEPRECATED] Generate with legacy format',
-  description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
+  description: 'Legacy endpoint for generating agent responses. Use /agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
@@ -680,7 +680,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream with legacy format',
-  description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
+  description: 'Legacy endpoint for streaming agent responses. Use /agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
