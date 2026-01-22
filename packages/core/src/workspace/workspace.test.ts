@@ -1122,6 +1122,139 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
+  // Virtual Filesystem (Mounts)
+  // ===========================================================================
+  describe('virtual filesystem with mounts', () => {
+    it('should create VirtualFilesystem when mounts config is provided', () => {
+      const fs1: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs1',
+      };
+
+      const workspace = new Workspace({
+        mounts: { '/data': fs1 },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      // filesystem should be the VirtualFilesystem, not the original fs
+      expect(workspace.filesystem).toBeDefined();
+      expect(workspace.filesystem?.provider).toBe('virtual');
+      expect(workspace.filesystem?.name).toBe('VirtualFilesystem');
+
+      // mounts map should contain the original filesystem
+      expect(workspace.mounts.size).toBe(1);
+      expect(workspace.mounts.get('/data')).toBe(fs1);
+    });
+
+    it('should support multiple mounts', () => {
+      const fs1: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs1',
+      };
+
+      const fs2: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs2',
+      };
+
+      const workspace = new Workspace({
+        mounts: {
+          '/data': fs1,
+          '/cache': fs2,
+        },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      expect(workspace.filesystem?.provider).toBe('virtual');
+      expect(workspace.mounts.size).toBe(2);
+      expect(workspace.mounts.get('/data')).toBe(fs1);
+      expect(workspace.mounts.get('/cache')).toBe(fs2);
+    });
+
+    it('should throw error when both filesystem and mounts are provided', () => {
+      expect(
+        () =>
+          new Workspace({
+            filesystem: mockFs,
+            mounts: { '/data': mockFs },
+            safety: { requireReadBeforeWrite: false },
+          }),
+      ).toThrow('Cannot specify both filesystem and mounts');
+    });
+
+    it('should use direct filesystem when mounts is not provided', () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      expect(workspace.filesystem).toBe(mockFs);
+      expect(workspace.mounts.size).toBe(0);
+    });
+
+    it('should route file operations through VirtualFilesystem', async () => {
+      const fs1: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs1',
+        readFile: vi.fn().mockResolvedValue('content from fs1'),
+      };
+
+      const fs2: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs2',
+        readFile: vi.fn().mockResolvedValue('content from fs2'),
+      };
+
+      const workspace = new Workspace({
+        mounts: {
+          '/data': fs1,
+          '/cache': fs2,
+        },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      // Read from first mount
+      const content1 = await workspace.readFile('/data/file.txt');
+      expect(content1).toBe('content from fs1');
+      expect(fs1.readFile).toHaveBeenCalledWith('/file.txt', undefined);
+
+      // Read from second mount
+      const content2 = await workspace.readFile('/cache/other.txt');
+      expect(content2).toBe('content from fs2');
+      expect(fs2.readFile).toHaveBeenCalledWith('/other.txt', undefined);
+    });
+
+    it('should list mount points at root directory', async () => {
+      const fs1: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs1',
+      };
+
+      const fs2: WorkspaceFilesystem = {
+        ...mockFs,
+        provider: 'fs2',
+      };
+
+      const workspace = new Workspace({
+        mounts: {
+          '/data': fs1,
+          '/cache': fs2,
+        },
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      const entries = await workspace.readdir('/');
+
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          { name: 'data', type: 'directory' },
+          { name: 'cache', type: 'directory' },
+        ]),
+      );
+    });
+  });
+
+  // ===========================================================================
   // Error Classes
   // ===========================================================================
   describe('error classes', () => {

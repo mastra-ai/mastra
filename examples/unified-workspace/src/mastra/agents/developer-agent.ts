@@ -23,5 +23,5 @@ When helping with code or design:
 3. Be specific and provide examples
 4. Use workspace tools to read, write, and execute code as needed`,
 
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-5.1',
 });

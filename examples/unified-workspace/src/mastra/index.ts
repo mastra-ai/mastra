@@ -1,16 +1,18 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import {
-  developerAgent,
-  docsAgent,
-  supportAgent,
-  researchAgent,
-  editorAgent,
-  automationAgent,
-  scriptRunnerAgent,
+  // developerAgent,
+  // docsAgent,
+  // supportAgent,
+  // researchAgent,
+  // editorAgent,
+  // automationAgent,
+  // scriptRunnerAgent,
   testAgent,
+  // e2bAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
+import { e2bWorkspace } from './agents/e2b-agent';
 
 // Re-export workspaces for demo scripts
 export {
@@ -23,6 +25,7 @@ export {
   commandApprovalWorkspace,
   testAgentWorkspace,
 } from './workspaces';
+export { e2bWorkspace } from './agents/e2b-agent';
 
 /**
  * Storage for Mastra (threads, memory, etc.)
@@ -46,16 +49,18 @@ const storage = new LibSQLStore({
  */
 export const mastra = new Mastra({
   agents: {
-    developerAgent,
-    docsAgent,
-    supportAgent,
-    researchAgent,
-    editorAgent,
-    automationAgent,
-    scriptRunnerAgent,
+    // developerAgent,
+    // docsAgent,
+    // supportAgent,
+    // researchAgent,
+    // editorAgent,
+    // automationAgent,
+    // scriptRunnerAgent,
     testAgent,
+    // e2bAgent,
   },
-  workspace: globalWorkspace,
+  workspace: e2bWorkspace,
+  // workspace: globalWorkspace,
   storage,
 });
 

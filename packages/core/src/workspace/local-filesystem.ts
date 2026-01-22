@@ -17,7 +17,18 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  FilesystemMountConfig,
 } from './filesystem';
+
+/**
+ * Mount configuration for LocalFilesystem.
+ * Sandboxes use this to mount the local directory.
+ */
+export interface LocalMountConfig extends FilesystemMountConfig {
+  type: 'local';
+  /** Absolute path on disk */
+  basePath: string;
+}
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -63,6 +74,13 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
 
+  /**
+   * LocalFilesystem supports mounting into sandboxes.
+   * LocalSandbox can use the same directory path directly.
+   * Other sandboxes (Docker, E2B) can use volume mounts.
+   */
+  readonly supportsMounting = true;
+
   private readonly _basePath: string;
   private readonly sandbox: boolean;
 
@@ -78,6 +96,17 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this.sandbox = options.sandbox ?? true;
+  }
+
+  /**
+   * Get mount configuration for sandboxes.
+   * Returns the absolute basePath so sandboxes can mount this directory.
+   */
+  getMountConfig(): LocalMountConfig {
+    return {
+      type: 'local',
+      basePath: this._basePath,
+    };
   }
 
   private generateId(): string {

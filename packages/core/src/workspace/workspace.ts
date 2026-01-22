@@ -57,6 +57,7 @@ import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills } from './skills';
 import { WorkspaceSkillsImpl } from './skills';
+import { VirtualFilesystem } from './virtual-filesystem';
 
 // =============================================================================
 // Workspace Scope
@@ -100,8 +101,30 @@ export interface WorkspaceConfig {
   /**
    * Filesystem provider instance.
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
+   *
+   * Mutually exclusive with `mounts`. Use `mounts` for multiple filesystems.
    */
   filesystem?: WorkspaceFilesystem;
+
+  /**
+   * Mount multiple filesystems at different paths.
+   * Each key is a mount path (e.g., '/data', '/s3') and value is the filesystem.
+   *
+   * @example
+   * ```typescript
+   * new Workspace({
+   *   mounts: {
+   *     '/data': new LocalFilesystem({ basePath: './data' }),
+   *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
+   *   },
+   *   sandbox: myE2BSandbox,
+   * });
+   * // readdir('/') returns [{ name: 'data', type: 'directory' }, { name: 's3', type: 'directory' }]
+   * ```
+   *
+   * Mutually exclusive with `filesystem`. Use `filesystem` for a single filesystem.
+   */
+  mounts?: Record<string, WorkspaceFilesystem>;
 
   /**
    * Sandbox provider instance.
@@ -372,6 +395,12 @@ export class Workspace {
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
+  /**
+   * Mounts configured for this workspace.
+   * Used for mounting filesystems into the sandbox.
+   */
+  private readonly _mounts: Map<string, WorkspaceFilesystem>;
+
   // Safety-related properties
   private readonly _readOnly: boolean;
   private readonly _requireReadBeforeWrite: boolean;
@@ -384,8 +413,26 @@ export class Workspace {
     this.lastAccessedAt = new Date();
 
     this._config = config;
-    this._fs = config.filesystem;
     this._sandbox = config.sandbox;
+    this._mounts = new Map();
+
+    // Validate mutually exclusive options
+    if (config.filesystem && config.mounts && Object.keys(config.mounts).length > 0) {
+      throw new WorkspaceError(
+        'Cannot specify both filesystem and mounts. Use filesystem for a single filesystem, or mounts for multiple.',
+        'INVALID_CONFIG',
+      );
+    }
+
+    // Initialize filesystem - either from direct config or from mounts via VirtualFilesystem
+    if (config.mounts && Object.keys(config.mounts).length > 0) {
+      for (const [path, fs] of Object.entries(config.mounts)) {
+        this._mounts.set(path, fs);
+      }
+      this._fs = new VirtualFilesystem({ mounts: config.mounts });
+    } else {
+      this._fs = config.filesystem;
+    }
 
     // Initialize safety features
     this._readOnly = config.safety?.readOnly ?? false;
@@ -466,6 +513,14 @@ export class Workspace {
    */
   get sandbox(): WorkspaceSandbox | undefined {
     return this._sandbox;
+  }
+
+  /**
+   * The configured mounts for this workspace.
+   * Returns an empty map if no mounts were configured.
+   */
+  get mounts(): ReadonlyMap<string, WorkspaceFilesystem> {
+    return this._mounts;
   }
 
   /**
@@ -646,6 +701,59 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     return this._fs.exists(path);
+  }
+
+  /**
+   * Get file or directory stats.
+   * @throws {FilesystemNotAvailableError} if no filesystem is configured
+   */
+  async stat(path: string) {
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    return this._fs.stat(path);
+  }
+
+  /**
+   * Delete a file from the workspace filesystem.
+   * @throws {FilesystemNotAvailableError} if no filesystem is configured
+   * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
+   */
+  async deleteFile(path: string, options?: { force?: boolean }): Promise<void> {
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    this.assertWritable('deleteFile');
+    this.lastAccessedAt = new Date();
+    await this._fs.deleteFile(path, options);
+  }
+
+  /**
+   * Create a directory in the workspace filesystem.
+   * @throws {FilesystemNotAvailableError} if no filesystem is configured
+   * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
+   */
+  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    this.assertWritable('mkdir');
+    this.lastAccessedAt = new Date();
+    await this._fs.mkdir(path, options);
+  }
+
+  /**
+   * Remove a directory from the workspace filesystem.
+   * @throws {FilesystemNotAvailableError} if no filesystem is configured
+   * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
+   */
+  async rmdir(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+    if (!this._fs) {
+      throw new FilesystemNotAvailableError();
+    }
+    this.assertWritable('rmdir');
+    this.lastAccessedAt = new Date();
+    await this._fs.rmdir(path, options);
   }
 
   // ---------------------------------------------------------------------------
@@ -1004,8 +1112,43 @@ export class Workspace {
   // ---------------------------------------------------------------------------
 
   /**
+   * Mount filesystems to the sandbox.
+   * Called during init() to make workspace filesystems accessible from sandbox code.
+   */
+  private async mountFilesystemsToSandbox(): Promise<void> {
+    // Need sandbox for mounting
+    if (!this._sandbox) {
+      return;
+    }
+
+    // No mounts configured
+    if (this._mounts.size === 0) {
+      return;
+    }
+
+    // Check if sandbox supports mounting
+    if (!this._sandbox.supportsMounting || !this._sandbox.mount) {
+      return;
+    }
+
+    // Try to mount all configured filesystems
+    for (const [mountPath, filesystem] of this._mounts) {
+      const canMount = filesystem.supportsMounting && this._sandbox.canMount?.(filesystem);
+
+      if (canMount) {
+        try {
+          await this._sandbox.mount(filesystem, mountPath);
+        } catch (error) {
+          // Mount failed - log warning but continue
+          console.warn(`Failed to mount filesystem at ${mountPath}: ${error}`);
+        }
+      }
+    }
+  }
+
+  /**
    * Initialize the workspace.
-   * Starts the sandbox and initializes the filesystem.
+   * Starts the sandbox, initializes the filesystem, and mounts filesystems to sandbox.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
@@ -1018,6 +1161,9 @@ export class Workspace {
       if (this._sandbox) {
         await this._sandbox.start();
       }
+
+      // Mount filesystems to sandbox
+      await this.mountFilesystemsToSandbox();
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {

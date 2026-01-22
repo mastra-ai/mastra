@@ -82,14 +82,23 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
+  /**
+   * LocalSandbox supports mounting local filesystems.
+   * For LocalFilesystem, mounting is trivial - we just use the same directory.
+   */
+  readonly supportsMounting = true;
+
   private _status: SandboxStatus = 'stopped';
-  private readonly _workingDirectory: string;
+  private _workingDirectory: string;
   private readonly _scriptDirectory?: string;
   private readonly env: Record<string, string>;
   private readonly _inheritEnv: boolean;
   private readonly timeout: number;
   private detectedRuntimes: SandboxRuntime[] = [];
   private configuredRuntimes?: SandboxRuntime[];
+
+  /** Mounted filesystems by mount path */
+  private readonly _mounts: Map<string, WorkspaceFilesystem> = new Map();
 
   /**
    * The working directory where commands are executed.
@@ -126,6 +135,77 @@ export class LocalSandbox implements WorkspaceSandbox {
   private generateId(): string {
     return `local-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
+
+  // ---------------------------------------------------------------------------
+  // Mount Support
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check if this sandbox can mount a specific filesystem.
+   * LocalSandbox can only mount local filesystems.
+   */
+  canMount(filesystem: WorkspaceFilesystem): boolean {
+    if (!filesystem.supportsMounting || !filesystem.getMountConfig) {
+      return false;
+    }
+    const config = filesystem.getMountConfig();
+    // LocalSandbox can only mount local filesystems
+    return config.type === 'local';
+  }
+
+  /**
+   * Mount a filesystem at a path in the sandbox.
+   * For LocalSandbox + LocalFilesystem, this is trivial - we just set the working directory.
+   *
+   * @param filesystem - The filesystem to mount (must be LocalFilesystem)
+   * @param mountPath - The mount path (e.g., '/workspace') - used for tracking
+   */
+  async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<void> {
+    if (!this.canMount(filesystem)) {
+      throw new Error(
+        `LocalSandbox cannot mount filesystem type '${filesystem.provider}'. ` +
+          'Only local filesystems are supported.',
+      );
+    }
+
+    const config = filesystem.getMountConfig!();
+    if (config.type !== 'local') {
+      throw new Error(`Expected local mount config, got '${config.type}'`);
+    }
+
+    // Type narrowing: after checking type === 'local', we know basePath exists
+    const basePath = config.basePath as string;
+    if (typeof basePath !== 'string') {
+      throw new Error('Local mount config missing basePath');
+    }
+
+    // For LocalSandbox, "mounting" a LocalFilesystem means using its basePath as working directory
+    // This creates a unified view where workspace files are directly accessible in sandbox code
+    this._workingDirectory = basePath;
+    this._mounts.set(mountPath, filesystem);
+  }
+
+  /**
+   * Unmount a previously mounted filesystem.
+   */
+  async unmount(mountPath: string): Promise<void> {
+    this._mounts.delete(mountPath);
+    // Reset working directory to cwd if no mounts remain
+    if (this._mounts.size === 0) {
+      this._workingDirectory = process.cwd();
+    }
+  }
+
+  /**
+   * Get all current mounts.
+   */
+  getMounts(): Map<string, WorkspaceFilesystem> {
+    return new Map(this._mounts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Environment
+  // ---------------------------------------------------------------------------
 
   /**
    * Build the environment object for execution.
