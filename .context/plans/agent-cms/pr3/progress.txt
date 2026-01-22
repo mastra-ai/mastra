@@ -673,3 +673,48 @@
 - Task 038 will use IntegrationCard to display all configured integrations
 - After Task 038, complete Tasks 039 and 040 to finish the frontend domain exports
 - Then move to verification tasks (041-043) to ensure everything works end-to-end
+
+- Task 038: Copy integrations list component
+  - Copied integrations-list.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/integrations-list.tsx (676 lines)
+  - Provides IntegrationsList component for displaying all configured integrations
+  - Key features:
+    - Grid layout (1 col mobile, 2 cols tablet, 3 cols desktop) showing integration cards
+    - Header with icon, title, count, and "Add Integration" button
+    - Empty state with helpful message and "Add Your First Integration" button
+    - Optional external control of add dialog state (controlled vs uncontrolled)
+    - Optional hideAddButton prop for external button rendering
+    - OAuth callback detection - auto-opens dialog when returning from OAuth redirect
+    - Integration refresh on successful creation/deletion
+    - Loading state with skeleton placeholders
+    - Edit integration functionality (with internal EditIntegrationDialog or external callback)
+  - Includes EditIntegrationDialog subcomponent with:
+    - View and manage tools within an integration
+    - Rename integration with inline editing (pencil icon → input → save/cancel)
+    - Add more tools from same toolkit/server with search and filtering
+    - Remove tools with confirmation and loading states
+    - Multi-select for adding multiple tools at once
+    - Search functionality within current integration tools
+    - MCP/Smithery support - fetches tools using stored connection params
+    - Composio/Arcade support - fetches tools using toolkit slugs
+    - "Add More Tools" button (always visible, shows message if all tools added)
+    - Tool count display
+    - Toast notifications for feedback
+  - Mental model for edit dialog:
+    - Composio/Arcade: Integration = Provider + Toolkit (e.g., "Hackernews from Composio")
+    - MCP/Smithery: Integration = specific MCP server connection
+    - Edit allows adding/removing tools WITHIN that scope only
+  - File: packages/playground-ui/src/domains/integrations/components/integrations-list.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 038 completed successfully - Integrations list component is now in place
+- This is the main UI component for viewing and managing all integrations
+- The component includes a comprehensive edit dialog for managing tools within each integration
+- Users can rename integrations inline, add more tools, and remove unwanted tools
+- Next logical high-priority tasks are the remaining exports:
+  - Task 039 (P0): Copy components index - exports all integration components - HIGHEST PRIORITY
+  - Task 040 (P0): Copy integrations domain index - exports entire domain
+  - After these exports, move to verification tasks (041-043) to ensure everything works end-to-end
+  - Consider completing Tasks 039 and 040 together since they are both simple exports
