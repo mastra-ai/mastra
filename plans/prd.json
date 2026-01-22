@@ -282,10 +282,10 @@
         "files": [
           "packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts",
           "packages/playground/e2e/kitchen-sink/src/mastra/test-auth.ts",
-          "packages/playground/e2e/playwright.auth-server.config.ts"
+          "packages/playground/e2e/tests/__utils__/auth.ts"
         ],
         "testsAdded": 23,
-        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Tests run with E2E_TEST_AUTH=true which enables server-side auth enforcement. Tests make direct API calls without mocking auth endpoints and verify 401/403 responses."
+        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Server runs with E2E_TEST_AUTH=true which enables auth enforcement. UI tests set Authorization header via setupMockAuth, and direct API tests in server-permission-enforcement.spec.ts send Bearer tokens manually to verify 401/403 responses."
       }
     },
     {
@@ -349,17 +349,15 @@
       "adminRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/admin-role.spec.ts",
       "memberRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/member-role.spec.ts",
       "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts",
-      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list"
+      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/server-permission-enforcement.spec.ts"
     },
-    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/ --grep-invert 'Server-Side Permission Enforcement'",
-    "runServerSideAuthTests": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list",
+    "runAllAuthTests": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/",
     "debugSingleTest": "CI=true npx playwright test -c playwright.config.ts --reporter=list --debug tests/auth/{spec-file}.spec.ts",
     "warnings": [
       "Always use --reporter=list to avoid HTML report hanging in CI",
       "Always prefix with CI=true to ensure consistent behavior",
       "Run from packages/playground/e2e directory",
-      "Run individual spec files for faster feedback and easier debugging",
-      "Server-side permission enforcement tests require playwright.auth-server.config.ts (starts server with E2E_TEST_AUTH=true)"
+      "Run individual spec files for faster feedback and easier debugging"
     ]
   },
   "qaReview": {

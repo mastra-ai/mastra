@@ -5,7 +5,9 @@ const BASE_URL = `http://localhost:${PORT || '4111'}`;
 
 const webservers: PlaywrightTestConfig['webServer'] = [
   {
-    command: `pnpm -C ./kitchen-sink dev`,
+    // E2E_TEST_AUTH enables the TestAuthProvider for server-side permission tests
+    // UI tests still work because route interception takes precedence
+    command: `E2E_TEST_AUTH=true pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
   },

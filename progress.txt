@@ -353,14 +353,17 @@ Created comprehensive E2E tests that verify the **server** properly enforces RBA
    - Returns mock users with role-specific permissions
    - createTestRBACProvider() using StaticRBACProvider
 
-3. **packages/playground/e2e/playwright.auth-server.config.ts**
-   - Separate Playwright config for server-side auth tests
-   - Starts kitchen-sink with E2E_TEST_AUTH=true
-   - Only runs server-permission-enforcement.spec.ts
+3. **packages/playground/e2e/tests/__utils__/auth.ts** (modified)
+   - setupMockAuth now also sets Authorization header for server-side auth
+   - Enables unified test execution with single playwright config
 
 4. **packages/playground/e2e/kitchen-sink/src/mastra/index.ts** (modified)
    - Added conditional test auth configuration
    - Enabled via E2E_TEST_AUTH=true environment variable
+
+5. **packages/playground/e2e/playwright.config.ts** (modified)
+   - Now starts server with E2E_TEST_AUTH=true by default
+   - All auth tests run with a single command
 
 ### Test Categories
 
@@ -405,27 +408,26 @@ Created comprehensive E2E tests that verify the **server** properly enforces RBA
 
 ### Technical Approach
 
-- **NO route interception** for auth endpoints
-- Tests send Bearer token with role name (e.g., `Authorization: Bearer admin`)
-- TestAuthProvider interprets token value as role
-- Server runs with E2E_TEST_AUTH=true to enable test auth
-- Direct API calls verify actual server-side enforcement
+- Server always runs with E2E_TEST_AUTH=true (enabled in playwright.config.ts)
+- UI tests use setupMockAuth which:
+  - Sets up route interception for /api/auth/capabilities and /api/auth/me
+  - Also sets Authorization header (Bearer {role}) for server-side auth
+- Server-side permission tests send Bearer token directly (no route interception)
+- TestAuthProvider interprets Bearer token value as the role
+- All 134 tests run with a single unified command
 
 ### Test Commands
 
 ```bash
-# Run server-side auth tests (uses auth-server config)
+# Run ALL auth tests (unified approach - single command)
 cd packages/playground/e2e
-CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list
-
-# Run all other auth tests (excludes server-side tests)
-CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/ --grep-invert "Server-Side Permission Enforcement"
+CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/
 ```
 
 ### Test Results
 
-- **All 23 server-side permission enforcement tests pass**
-- **All 111 existing UI auth tests continue to pass**
+- **All 134 auth tests pass** (111 UI tests + 23 server-side permission enforcement tests)
+- Single unified test command - no separate configs needed
 - Typecheck passes with no errors
 
 ### Acceptance Criteria Met
