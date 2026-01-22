@@ -743,3 +743,32 @@
 - Task 040 will export the entire integrations domain (hooks, components, types) for external use
 - After Task 040, move to verification tasks (041-043) to ensure everything works end-to-end
 - Consider completing Task 040 immediately as it's a simple export and depends on Task 039
+
+- Task 040: Copy integrations domain index
+  - Copied index.ts from total-cms:packages/playground-ui/src/domains/integrations/index.ts
+  - Exports entire integrations domain with comment header
+  - Exports:
+    - export * from './components' - All UI components (provider list, toolkit browser, tool selector, add tools dialog, etc.)
+    - export * from './hooks' - All React Query hooks (integrations CRUD, provider discovery, OAuth, Smithery)
+    - export * from './types' - Type re-exports from @mastra/client-js
+    - export * from './lib/smithery-oauth-provider' - Smithery OAuth provider utility
+  - This completes the integrations domain exports - entire domain is now accessible via single import
+  - File: packages/playground-ui/src/domains/integrations/index.ts (created, 7 lines)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 040 completed successfully - The integrations domain is now fully exported!
+- This completes ALL frontend implementation tasks (022-040)
+- The entire integrations domain can now be imported from a single entry point
+- Users can import hooks, components, types, and utilities directly
+- Next logical high-priority tasks are the verification tasks:
+  - Task 041 (P0): Build and typecheck - HIGHEST PRIORITY (verify everything works)
+  - Task 042 (P1): Run affected package tests
+  - Task 043 (P1): Manual playground testing
+  - Task 044 (P1): Create changeset
+- Optional test data tasks (lower priority):
+  - Task 013 (P1): Copy provider tests
+  - Task 021 (P2): Copy integrations test data
+- Consider completing Task 041 next to verify the complete PR builds and typechecks
