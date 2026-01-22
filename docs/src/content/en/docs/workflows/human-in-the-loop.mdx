@@ -143,7 +143,7 @@ const step1 = createStep({
 
     if (approved === false) {
       return bail({
-        status: 'rejected' as const,
+        status: 'rejected',
         message: "User rejected the request."
       });
     }
@@ -155,7 +155,7 @@ const step1 = createStep({
     }
 
     return {
-      status: 'sent' as const,
+      status: 'sent',
       message: `Email sent to ${userEmail}`
     };
   }
