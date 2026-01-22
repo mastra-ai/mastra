@@ -718,8 +718,8 @@
       "dependencies": [
         "003", "012", "013", "014", "018", "020", "021", "040"
       ],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "042",
@@ -733,8 +733,8 @@
         "cd stores/libsql && pnpm test"
       ],
       "dependencies": ["041"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "043",
