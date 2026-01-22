@@ -337,7 +337,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       id: 'maxretries-inheritance-test',
       name: 'MaxRetries Inheritance Test',
       instructions: 'You are a test agent',
-      model: ({ requestContext }) => {
+      model: ({ requestContext: _requestContext }) => {
         return [
           { model: workingModel }, // No maxRetries specified - should inherit agent-level
           { model: workingModel, maxRetries: 1 }, // Explicit maxRetries should be preserved
@@ -600,7 +600,7 @@ describe('Dynamic Model Selection with Fallback', () => {
       instructions: 'You are a test agent',
       model: ({ requestContext }) => {
         primaryCallCount++;
-        const useNested = requestContext.get('useNested');
+        const _useNested = requestContext.get('useNested');
         return [
           {
             // Each model in the array can also be a dynamic function
