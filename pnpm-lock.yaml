@@ -65,6 +65,9 @@ importers:
       dotenv:
         specifier: 17.2.0
         version: 17.2.0
+      eslint:
+        specifier: ^9.39.2
+        version: 9.39.2(jiti@2.6.1)
       husky:
         specifier: ^9.1.7
         version: 9.1.7
