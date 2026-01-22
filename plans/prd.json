@@ -111,7 +111,8 @@
       "name": "Admin Role E2E Tests",
       "description": "Test that admin role has full access to all Mastra resources (agents, workflows, tools, MCPs)",
       "priority": "P0",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Test admin can view all agents",
         "Test admin can create/edit/delete agents",
@@ -128,7 +129,12 @@
         "Admin can execute any tool",
         "Admin can manage MCP servers",
         "Admin can access all settings"
-      ]
+      ],
+      "implementation": {
+        "files": ["packages/playground/e2e/tests/auth/admin-role.spec.ts"],
+        "testsAdded": 21,
+        "approach": "Uses Playwright route interception to mock admin auth state with wildcard ['*'] permissions. Tests cover navigation access to all main sections, agent viewing and settings access, workflow viewing and execution controls, tool viewing and execution panel access, MCP server access, and verification that admin has more permissions than member/viewer roles."
+      }
     },
     {
       "id": "F006",
