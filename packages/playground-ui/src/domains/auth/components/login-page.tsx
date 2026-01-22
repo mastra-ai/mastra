@@ -136,7 +136,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
                   onChange={e => setName(e.target.value)}
                   placeholder="Your name"
                   variant="default"
-                  customSize="lg"
+                  size="lg"
                 />
               </div>
             )}
@@ -153,7 +153,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
                 placeholder="you@example.com"
                 required
                 variant="default"
-                customSize="lg"
+                size="lg"
               />
             </div>
 
@@ -169,7 +169,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin' }: Lo
                 placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
                 required
                 variant="default"
-                customSize="lg"
+                size="lg"
               />
             </div>
 
