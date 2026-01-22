@@ -197,6 +197,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
   summary: 'Upsert vectors',
   description: 'Inserts or updates vectors in the specified index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, vectors, metadata, ids } = params;
@@ -224,6 +225,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
   summary: 'Create index',
   description: 'Creates a new vector index with the specified dimension and metric',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, dimension, metric } = params;
@@ -257,6 +259,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
   summary: 'Query vectors',
   description: 'Performs a similarity search on the vector index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, queryVector, topK, filter, includeVector } = params;
@@ -285,6 +288,7 @@ export const LIST_INDEXES_ROUTE = createRoute({
   summary: 'List indexes',
   description: 'Returns a list of all indexes in the vector store',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName }) => {
     try {
       const vector = getVector(mastra, vectorName);
@@ -305,6 +309,7 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
   summary: 'Describe index',
   description: 'Returns statistics and metadata for a specific index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -334,6 +339,7 @@ export const DELETE_INDEX_ROUTE = createRoute({
   summary: 'Delete index',
   description: 'Deletes a vector index and all its data',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {

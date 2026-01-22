@@ -110,6 +110,7 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  source?: 'code' | 'stored';
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -309,6 +310,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -346,6 +348,16 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     }
   }
 
+  // If still not found, try to get stored agent
+  if (!agent) {
+    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
+    }
+  }
+
   if (!agent) {
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
@@ -365,8 +377,8 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const tools = await agent.listTools({ requestContext });
 
+  const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -472,6 +484,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -488,26 +501,60 @@ export const LIST_AGENTS_ROUTE = createRoute({
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
-  description: 'Returns a list of all available agents in the system',
+  description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const agents = mastra.listAgents();
+      const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
-      const serializedAgentsMap = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
+
+      // Serialize code-defined agents
+      const serializedCodeAgentsMap = await Promise.all(
+        Object.entries(codeAgents).map(async ([id, agent]) => {
           return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
-      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
         (acc, { id, ...rest }) => {
           acc[id] = { id, ...rest };
           return acc;
         },
         {},
       );
+
+      // Also fetch and include stored agents
+      try {
+        const storedAgentsResult = await mastra.listStoredAgents();
+        if (storedAgentsResult?.agents) {
+          // Process each agent individually to avoid one bad agent breaking the whole list
+          for (const agent of storedAgentsResult.agents) {
+            try {
+              const serialized = await formatAgentList({
+                id: agent.id,
+                mastra,
+                agent,
+                requestContext,
+                partial: isPartial,
+              });
+              // Don't overwrite code-defined agents with same ID
+              if (!serializedAgents[serialized.id]) {
+                serializedAgents[serialized.id] = serialized;
+              }
+            } catch (agentError) {
+              // Log but continue with other agents
+              const logger = mastra.getLogger();
+              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+            }
+          }
+        }
+      } catch (storageError) {
+        // Storage not configured or doesn't support agents - log and ignore
+        const logger = mastra.getLogger();
+        logger.debug('Could not fetch stored agents', { error: storageError });
+      }
 
       return serializedAgents;
     } catch (error) {
@@ -525,6 +572,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   summary: 'Get agent by ID',
   description: 'Returns details for a specific agent including configuration, tools, and memory settings',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ agentId, mastra, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -555,6 +603,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ agentId, mastra, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -590,6 +639,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -632,6 +682,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -689,6 +740,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   summary: 'List AI providers',
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async () => {
     try {
       const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
@@ -723,6 +775,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
   summary: 'Generate a response from an agent',
   description: 'Generate a response from an agent',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: GENERATE_AGENT_ROUTE.handler,
 });
 
@@ -737,6 +790,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -770,6 +824,7 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
 });
@@ -785,6 +840,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve tool call',
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -824,6 +880,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline tool call',
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -862,6 +919,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   summary: 'Approve tool call (non-streaming)',
   description: 'Approves a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -900,6 +958,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   summary: 'Decline tool call (non-streaming)',
   description: 'Declines a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -939,6 +998,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, messages, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -971,6 +1031,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve network tool call',
   description: 'Approves a pending network tool call and continues network agent execution',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1005,6 +1066,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline network tool call',
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1038,6 +1100,7 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   summary: 'Update agent model',
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, modelId, provider }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1045,6 +1108,9 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
 
+      // Update the model in-memory only (for temporary testing)
+      // This allows users to test different models without persisting
+      // To save permanently, users should use the Edit agent dialog
       agent.__updateModel({ model: newModel });
 
       return { message: 'Agent model updated' };
@@ -1063,6 +1129,7 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   summary: 'Reset agent model',
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1086,6 +1153,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   summary: 'Reorder agent model list',
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, reorderedModelIds }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1114,6 +1182,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   summary: 'Update model in model list',
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1235,6 +1304,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   summary: 'Enhance agent instructions',
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, instructions, comment }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1283,6 +1353,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: async () => {
     throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
@@ -1300,6 +1371,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: async () => {
     try {
@@ -1326,6 +1398,7 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });

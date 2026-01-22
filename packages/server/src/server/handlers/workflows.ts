@@ -96,6 +96,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, partial }) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
@@ -120,6 +121,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   summary: 'Get workflow by ID',
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId }) => {
     try {
       if (!workflowId) {
@@ -143,6 +145,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
   summary: 'List workflow runs',
   description: 'Returns a paginated list of execution runs for the specified workflow',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, fromDate, toDate, page, perPage, limit, offset, resourceId, status }) => {
     try {
       if (!workflowId) {
@@ -203,6 +206,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   description:
     'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result,metadata)',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
     try {
       if (!workflowId) {
@@ -247,6 +251,7 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   summary: 'Delete workflow run by ID',
   description: 'Deletes a specific workflow run by ID',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId }) => {
     try {
       if (!workflowId) {
@@ -283,6 +288,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Create workflow run',
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, disableScorers }) => {
     try {
       if (!workflowId) {
@@ -314,6 +320,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Stream workflow execution',
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, ...params }) => {
     try {
       if (!workflowId) {
@@ -361,6 +368,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow stream',
   description: 'Resumes a suspended workflow execution and continues streaming results',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -417,6 +425,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -449,6 +458,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Start specific workflow run',
   description: 'Starts execution of a specific workflow run by ID',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -493,6 +503,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Observe workflow stream',
   description: 'Observes and streams updates from an already running workflow execution',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId }) => {
     try {
       if (!workflowId) {
@@ -584,6 +595,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -627,6 +639,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow',
   description: 'Resumes a suspended workflow execution from a specific step',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -671,6 +684,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Restart workflow asynchronously',
   description: 'Restarts an active workflow execution asynchronously',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -714,6 +728,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
   summary: 'Restart workflow',
   description: 'Restarts an active workflow execution',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -756,6 +771,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
   summary: 'Restart all active workflow runs asynchronously',
   description: 'Restarts all active workflow runs asynchronously',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId }) => {
     try {
       if (!workflowId) {
@@ -786,6 +802,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   summary: 'Restart all active workflow runs',
   description: 'Restarts all active workflow runs',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId }) => {
     try {
       if (!workflowId) {
@@ -818,6 +835,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Time travel workflow asynchronously',
   description: 'Time travels a workflow run asynchronously without streaming',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -861,6 +879,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
   summary: 'Time travel workflow',
   description: 'Time travels a workflow run, starting from a specific step',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -904,6 +923,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Time travel workflow stream',
   description: 'Time travels a workflow run, starting from a specific step, and streams the results in real-time',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -949,6 +969,7 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Cancel workflow run',
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId }) => {
     try {
       if (!workflowId) {
@@ -994,6 +1015,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream workflow with legacy format',
   description: 'Legacy endpoint for streaming workflow execution. Use /api/workflows/:workflowId/stream instead.',
   tags: ['Workflows', 'Legacy'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, ...params }) => {
     try {
       if (!workflowId) {
@@ -1040,6 +1062,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   summary: '[DEPRECATED] Observe workflow stream with legacy format',
   description: 'Legacy endpoint for observing workflow stream. Use /api/workflows/:workflowId/observe instead.',
   tags: ['Workflows', 'Legacy'],
+  requiresAuth: true,
   handler: async ({ mastra, workflowId, runId }) => {
     try {
       if (!workflowId) {
