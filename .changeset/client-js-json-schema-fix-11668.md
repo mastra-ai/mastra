@@ -1,12 +1,10 @@
 ---
 "@mastra/client-js": patch
-"@mastra/core": patch
-"@mastra/schema-compat": patch
 ---
 
 Fixed client-side tools using plain JSON Schema objects causing OpenAI to reject requests with "Invalid schema" errors.
 
-**What changed:** Client-side tools can now use plain JSON Schema objects directly without errors when calling OpenAI models.
+**What changed:** The `processClientTools` function now correctly handles both Vercel AI SDK tools (with `parameters` field) and Mastra tools (with `inputSchema`/`outputSchema` fields), preserving plain JSON Schemas without modification.
 
 **Example:**
 ```typescript
