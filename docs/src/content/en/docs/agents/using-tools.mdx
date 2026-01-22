@@ -66,7 +66,7 @@ export const weatherAgent = new Agent({
 
 ## Controlling `toolName` in stream responses
 
-When the agent calls a tool, the `toolName` in the stream response is determined by the **object key** you use when passing tools to the agent, not the tool's `id` property.
+The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
 
 ```typescript
 // Tool defined with id: "weather-tool"
@@ -90,37 +90,30 @@ tools: { "my-custom-name": weatherTool }
 
 This gives you full control over how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
 
-### Sub-agents as tools
+### Sub-agents and workflows as tools
 
-The same pattern applies to sub-agents. When you pass agents via the `agents` property, they are converted to tools with a hardcoded `agent-` prefix followed by your object key:
+Sub-agents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+
+| Property | Prefix | Example key | `toolName` |
+|----------|--------|-------------|------------|
+| `agents` | `agent-` | `weather` | `agent-weather` |
+| `workflows` | `workflow-` | `research` | `workflow-research` |
 
 ```typescript
-const weatherAgent = new Agent({
-  id: "weather-agent",
-  // ...
-});
-
 const orchestrator = new Agent({
   // ...
   agents: {
-    weather: weatherAgent,  // object key is "weather"
+    weather: weatherAgent,  // toolName: "agent-weather"
+  },
+  workflows: {
+    research: researchWorkflow,  // toolName: "workflow-research"
   },
 });
-// Tool name becomes: "agent-" + "weather" = "agent-weather"
 ```
 
-Note that you'll see two different identifiers in stream responses:
+Note that for sub-agents, you'll see two different identifiers in stream responses:
 - `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
 - `id: "weather-agent"` in `data-tool-agent` chunks — the sub-agent's actual `id` property
-
-To have these align more closely, use the agent's id as the object key:
-
-```typescript
-agents: {
-  "weather-agent": weatherAgent,
-}
-// toolName: "agent-weather-agent"
-```
 
 ## Calling an agent
 
