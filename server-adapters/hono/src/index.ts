@@ -22,7 +22,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './auth-middle
 export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools: ToolsInput;
+  registeredTools: ToolsInput;
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
@@ -103,7 +103,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
       c.set('mastra', this.mastra);
-      c.set('tools', this.tools || {});
+      c.set('registeredTools', this.tools || {});
       c.set('taskStore', this.taskStore);
       c.set('abortSignal', c.req.raw.signal);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
@@ -335,7 +335,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
-          tools: c.get('tools'),
+          registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
         };
