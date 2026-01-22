@@ -32,6 +32,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({
     mastra,
+    routePrefix,
     page,
     perPage,
     limit,
@@ -77,11 +78,12 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       if (actualOffset + finalPerPage < totalCount) {
         const nextPage = (finalPage ?? 0) + 1;
         // Return next URL in same format as request (legacy limit/offset or page/perPage)
+        const prefix = routePrefix ?? '';
         if (useLegacyFormat) {
           const nextOffset = actualOffset + finalPerPage;
-          nextUrl = `/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+          nextUrl = `${prefix}/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
         } else {
-          nextUrl = `/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+          nextUrl = `${prefix}/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
         }
       }
     }
