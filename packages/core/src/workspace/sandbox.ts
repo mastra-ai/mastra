@@ -24,6 +24,8 @@
  * ```
  */
 
+import type { WorkspaceFilesystem } from './filesystem';
+
 // =============================================================================
 // Core Types
 // =============================================================================
@@ -161,6 +163,50 @@ export interface WorkspaceSandbox {
 
   /** Default runtime */
   readonly defaultRuntime: SandboxRuntime;
+
+  // ---------------------------------------------------------------------------
+  // Mount Support (optional capability)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether this sandbox supports mounting external filesystems.
+   * When true, filesystems can be mounted at specified paths, creating
+   * a unified view where workspace files are directly accessible in sandbox code.
+   *
+   * Mounting capabilities vary by sandbox type:
+   * - LocalSandbox: Can mount local filesystems (same directory)
+   * - E2BSandbox: Can mount S3/GCS via FUSE (s3fs, gcsfuse)
+   * - DockerSandbox: Can mount via volume binds
+   * - BrowserSandbox: Cannot mount (requires sync)
+   */
+  readonly supportsMounting?: boolean;
+
+  /**
+   * Check if this sandbox can mount a specific filesystem.
+   * Only available when supportsMounting is true.
+   *
+   * @param filesystem - The filesystem to check
+   * @returns true if this sandbox can mount the given filesystem
+   */
+  canMount?(filesystem: WorkspaceFilesystem): boolean;
+
+  /**
+   * Mount a filesystem at a path in the sandbox.
+   * Only available when supportsMounting is true and canMount returns true.
+   *
+   * After mounting:
+   * - workspace.writeFile('/data/file.txt') writes to the filesystem
+   * - Sandbox code reading '/workspace/data/file.txt' reads the same file
+   *
+   * @param filesystem - The filesystem to mount
+   * @param mountPath - Path in sandbox where filesystem will be mounted (e.g., '/workspace')
+   */
+  mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<void>;
+
+  /**
+   * Unmount a previously mounted filesystem.
+   */
+  unmount?(mountPath: string): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Code Execution

@@ -1122,6 +1122,156 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
+  // Filesystem Mounting
+  // ===========================================================================
+  describe('filesystem mounting', () => {
+    it('should default to sync mode when sandbox does not support mounting', async () => {
+      const workspace = new Workspace({
+        filesystem: mockFs,
+        sandbox: mockSandbox, // Mock sandbox doesn't have supportsMounting
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('sync');
+    });
+
+    it('should default to sync mode when filesystem does not support mounting', async () => {
+      const filesystemWithoutMount: WorkspaceFilesystem = {
+        ...mockFs,
+        supportsMounting: false,
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        filesystem: filesystemWithoutMount,
+        sandbox: sandboxWithMount,
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('sync');
+      expect(sandboxWithMount.mount).not.toHaveBeenCalled();
+    });
+
+    it('should use mounted mode when both filesystem and sandbox support mounting', async () => {
+      const filesystemWithMount: WorkspaceFilesystem = {
+        ...mockFs,
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 'local', basePath: '/tmp/test' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        filesystem: filesystemWithMount,
+        sandbox: sandboxWithMount,
+        mountPath: '/workspace',
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('mounted');
+      expect(workspace.mountPath).toBe('/workspace');
+      expect(sandboxWithMount.canMount).toHaveBeenCalledWith(filesystemWithMount);
+      expect(sandboxWithMount.mount).toHaveBeenCalledWith(filesystemWithMount, '/workspace');
+    });
+
+    it('should fallback to sync mode when canMount returns false', async () => {
+      const filesystemWithMount: WorkspaceFilesystem = {
+        ...mockFs,
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 's3', bucket: 'my-bucket' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(false), // Can't mount S3
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        filesystem: filesystemWithMount,
+        sandbox: sandboxWithMount,
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('sync');
+      expect(sandboxWithMount.canMount).toHaveBeenCalledWith(filesystemWithMount);
+      expect(sandboxWithMount.mount).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to sync mode when mount fails', async () => {
+      const filesystemWithMount: WorkspaceFilesystem = {
+        ...mockFs,
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 'local', basePath: '/tmp/test' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockRejectedValue(new Error('Mount failed')),
+      };
+
+      const workspace = new Workspace({
+        filesystem: filesystemWithMount,
+        sandbox: sandboxWithMount,
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.accessMode).toBe('sync');
+    });
+
+    it('should use default mount path /workspace when not specified', async () => {
+      const filesystemWithMount: WorkspaceFilesystem = {
+        ...mockFs,
+        supportsMounting: true,
+        getMountConfig: vi.fn().mockReturnValue({ type: 'local', basePath: '/tmp/test' }),
+      };
+
+      const sandboxWithMount: WorkspaceSandbox = {
+        ...mockSandbox,
+        supportsMounting: true,
+        canMount: vi.fn().mockReturnValue(true),
+        mount: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const workspace = new Workspace({
+        filesystem: filesystemWithMount,
+        sandbox: sandboxWithMount,
+        // No mountPath specified
+        safety: { requireReadBeforeWrite: false },
+      });
+
+      await workspace.init();
+
+      expect(workspace.mountPath).toBe('/workspace');
+      expect(sandboxWithMount.mount).toHaveBeenCalledWith(filesystemWithMount, '/workspace');
+    });
+  });
+
+  // ===========================================================================
   // Error Classes
   // ===========================================================================
   describe('error classes', () => {

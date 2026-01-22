@@ -109,6 +109,19 @@ export interface WorkspaceConfig {
    */
   sandbox?: WorkspaceSandbox;
 
+  /**
+   * Mount path for the filesystem in the sandbox.
+   * When both filesystem and sandbox are configured and support mounting,
+   * the filesystem will be mounted at this path in the sandbox.
+   *
+   * This creates a unified view where:
+   * - workspace.writeFile('/data.json') writes to the filesystem
+   * - Sandbox code reading `${mountPath}/data.json` reads the same file
+   *
+   * @default '/workspace'
+   */
+  mountPath?: string;
+
   // ---------------------------------------------------------------------------
   // Search Configuration
   // ---------------------------------------------------------------------------
@@ -377,6 +390,10 @@ export class Workspace {
   private readonly _requireReadBeforeWrite: boolean;
   private readonly _readTracker?: FileReadTracker;
 
+  // Mount-related properties
+  private readonly _mountPath: string;
+  private _accessMode: 'mounted' | 'sync' = 'sync';
+
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
@@ -393,6 +410,9 @@ export class Workspace {
     if (this._requireReadBeforeWrite) {
       this._readTracker = new InMemoryFileReadTracker();
     }
+
+    // Initialize mount path
+    this._mountPath = config.mountPath ?? '/workspace';
 
     // Create state layer if filesystem is available
     if (this._fs) {
@@ -487,6 +507,27 @@ export class Workspace {
    */
   get readOnly(): boolean {
     return this._readOnly;
+  }
+
+  /**
+   * How the filesystem is accessed from the sandbox.
+   * - 'mounted': Filesystem is directly mounted in sandbox (unified view)
+   * - 'sync': Files are copied between filesystem and sandbox (separate views)
+   *
+   * Mounted mode is preferred when both filesystem and sandbox support it,
+   * as it provides a single unified view where workspace files are directly
+   * accessible in sandbox code.
+   */
+  get accessMode(): 'mounted' | 'sync' {
+    return this._accessMode;
+  }
+
+  /**
+   * The path where the filesystem is mounted in the sandbox.
+   * Only relevant when accessMode is 'mounted'.
+   */
+  get mountPath(): string {
+    return this._mountPath;
   }
 
   /**
@@ -1007,6 +1048,40 @@ export class Workspace {
    * Initialize the workspace.
    * Starts the sandbox and initializes the filesystem.
    */
+  /**
+   * Setup filesystem access mode (mounted vs sync).
+   * Called during init() after sandbox is started.
+   *
+   * If both filesystem and sandbox support mounting, the filesystem is
+   * automatically mounted into the sandbox, creating a unified view.
+   * Otherwise, falls back to sync mode.
+   */
+  private async setupFilesystemAccess(): Promise<void> {
+    // Need both filesystem and sandbox for mounting
+    if (!this._fs || !this._sandbox) {
+      this._accessMode = 'sync';
+      return;
+    }
+
+    // Check if both support mounting
+    const canMount = this._sandbox.supportsMounting && this._fs.supportsMounting && this._sandbox.canMount?.(this._fs);
+
+    if (canMount && this._sandbox.mount) {
+      try {
+        // Mount the filesystem into the sandbox
+        await this._sandbox.mount(this._fs, this._mountPath);
+        this._accessMode = 'mounted';
+      } catch (error) {
+        // Fallback to sync mode if mounting fails
+        console.warn(`Failed to mount filesystem, falling back to sync mode: ${error}`);
+        this._accessMode = 'sync';
+      }
+    } else {
+      // Mounting not supported - use sync mode
+      this._accessMode = 'sync';
+    }
+  }
+
   async init(): Promise<void> {
     this._status = 'initializing';
 
@@ -1018,6 +1093,9 @@ export class Workspace {
       if (this._sandbox) {
         await this._sandbox.start();
       }
+
+      // Setup filesystem access (mount if possible, otherwise sync)
+      await this.setupFilesystemAccess();
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {

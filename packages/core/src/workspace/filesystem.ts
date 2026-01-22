@@ -25,6 +25,30 @@
 
 export type FileContent = string | Buffer | Uint8Array;
 
+// =============================================================================
+// Mount Configuration Types
+// =============================================================================
+
+/**
+ * Base configuration for mounting a filesystem into a sandbox.
+ *
+ * Each filesystem provider defines its own specific config type that extends this.
+ * Sandboxes interpret the config based on the `type` field.
+ *
+ * Examples:
+ * - LocalFilesystem returns { type: 'local', basePath: '/path/on/disk' }
+ * - S3Filesystem returns { type: 's3', bucket: '...', credentials: {...} }
+ *
+ * The specific config types are owned by their respective filesystem packages,
+ * not defined centrally. This base interface just ensures a `type` discriminator.
+ */
+export interface FilesystemMountConfig {
+  /** Discriminator for the mount config type (e.g., 'local', 's3', 'gcs') */
+  type: string;
+  /** Provider-specific configuration */
+  [key: string]: unknown;
+}
+
 export interface FileStat {
   /** File or directory name */
   name: string;
@@ -127,6 +151,35 @@ export interface WorkspaceFilesystem {
 
   /** Provider type identifier */
   readonly provider: string;
+
+  // ---------------------------------------------------------------------------
+  // Mount Support (optional capability)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether this filesystem can be mounted into a sandbox.
+   * When true, sandboxes can use getMountConfig() to get mount configuration.
+   *
+   * Mountable filesystems (e.g., LocalFilesystem, S3Filesystem) can be
+   * directly accessed from sandbox code at the mount path.
+   *
+   * Non-mountable filesystems (e.g., DatabaseFilesystem) require sync mode
+   * where files are copied between the filesystem and sandbox.
+   */
+  readonly supportsMounting?: boolean;
+
+  /**
+   * Get configuration for mounting this filesystem.
+   * Only available when supportsMounting is true.
+   *
+   * Sandboxes use this config to mount the filesystem in their own way:
+   * - LocalSandbox: Uses the basePath directly (same directory)
+   * - E2BSandbox: Uses s3fs/gcsfuse for cloud storage
+   * - DockerSandbox: Uses volume mounts
+   *
+   * @returns Mount configuration for sandboxes to use
+   */
+  getMountConfig?(): FilesystemMountConfig;
 
   // ---------------------------------------------------------------------------
   // File Operations
