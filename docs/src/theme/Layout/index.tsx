@@ -18,6 +18,7 @@ import SkipToContent from "@theme/SkipToContent";
 import clsx from "clsx";
 import { type ReactNode } from "react";
 import styles from "./styles.module.css";
+import { v0Urls } from "./v0-only-urls";
 
 export default function Layout(props: Props): ReactNode {
   const {
@@ -43,7 +44,10 @@ export default function Layout(props: Props): ReactNode {
       <PageMetadata title={title} description={description} />
 
       <Head>
-        <link rel="canonical" href={canonicalUrl} />
+        {/* If the current path is in the v0Urls list, do not set a canonical URL */}
+        {!v0Urls.includes(location.pathname) && (
+          <link rel="canonical" href={canonicalUrl} />
+        )}
       </Head>
 
       <SkipToContent />
