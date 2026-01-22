@@ -458,5 +458,38 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
       });
     });
+
+    // Route prefix tests
+    describe('Route Prefix', () => {
+      it('should register routes at prefixed paths without double /api', async () => {
+        // Create a new adapter with a custom prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/v2' });
+        const prefixedApp = prefixedSetup.app;
+
+        // Request the expected path: /v2/agents (not /v2/api/agents)
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/v2/agents',
+        });
+
+        // Should succeed - routes should be at /v2/agents
+        expect(response.status).toBeLessThan(400);
+      });
+
+      it('should not have routes at double /api path when prefix is set', async () => {
+        // Create a new adapter with a custom prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/v2' });
+        const prefixedApp = prefixedSetup.app;
+
+        // The buggy path /v2/api/agents should NOT work
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/v2/api/agents',
+        });
+
+        // Should return 404 - this path should not exist
+        expect(response.status).toBe(404);
+      });
+    });
   });
 }

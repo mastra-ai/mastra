@@ -67,6 +67,14 @@ export interface HttpResponse {
 }
 
 /**
+ * Options for adapter setup
+ */
+export interface AdapterSetupOptions {
+  /** Route prefix (e.g., '/v2' or '/api/v2') */
+  prefix?: string;
+}
+
+/**
  * Configuration for adapter integration test suite
  */
 export interface AdapterTestSuiteConfig {
@@ -76,8 +84,13 @@ export interface AdapterTestSuiteConfig {
   /**
    * Setup adapter and app for testing
    * Called once before all tests
+   * @param context - Test context with Mastra instance
+   * @param options - Optional adapter options (e.g., prefix)
    */
-  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
+  setupAdapter: (
+    context: AdapterTestContext,
+    options?: AdapterSetupOptions,
+  ) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)
