@@ -419,3 +419,35 @@
   - Task 036 (P0): Copy add tools dialog (main wizard)
   - Consider starting with Task 031 to begin building the UI layer from the foundation up
 
+- Task 031: Copy provider list component
+  - Copied provider-list.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/provider-list.tsx (170 lines)
+  - Provides ProviderList component for displaying available integration providers with connection status
+  - Features:
+    - Grid layout with 3 columns showing provider cards
+    - Provider logos using GitHub avatars
+    - Connection status badges (Connected, Not Connected, Enter URL, Browse)
+    - MCP and Smithery are always clickable (dynamic connection)
+    - Other providers require API key to be clickable
+    - Tooltip on disconnected providers explaining missing ENV var
+    - Selected state highlighting
+    - Loading and empty states
+    - Keyboard navigation support
+  - Includes ProviderCard subcomponent with hover states and accessibility features
+  - File: packages/playground-ui/src/domains/integrations/components/provider-list.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 031 completed successfully - Provider list UI component is now in place
+- This component displays the available integration providers (Composio, Arcade, MCP, Smithery) with connection status
+- The component handles both connected and disconnected states appropriately
+- MCP and Smithery are always clickable for dynamic connection flows
+- Next logical high-priority tasks are the remaining UI components:
+  - Task 032 (P0): Copy toolkit browser component - HIGHEST PRIORITY
+  - Task 033 (P0): Copy tool selector component
+  - Task 034 (P0): Copy MCP connection input component
+  - Task 035 (P0): Copy Smithery browser component
+  - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
+  - Consider completing Task 032 next to continue building the integration UI flow
+
