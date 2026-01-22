@@ -141,7 +141,8 @@
       "name": "Member Role E2E Tests",
       "description": "Test that member role has limited access - can read agents and has full workflow access",
       "priority": "P0",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Test member can view agents list",
         "Test member cannot create/edit/delete agents",
@@ -157,7 +158,12 @@
         "Member has full workflow permissions",
         "Member restricted from admin-only features",
         "Permission denied shows appropriate message"
-      ]
+      ],
+      "implementation": {
+        "files": ["packages/playground/e2e/tests/auth/member-role.spec.ts"],
+        "testsAdded": 25,
+        "approach": "Uses Playwright route interception to mock member auth state with permissions ['agents:read', 'workflows:*', 'tools:read', 'tools:execute']. Tests cover navigation access to main sections, agent read-only access verification (no create/edit buttons), full workflow access including execution controls, tool viewing and execution panel access, permission verification, and comparison with admin/viewer roles."
+      }
     },
     {
       "id": "F007",
