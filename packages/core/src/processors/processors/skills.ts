@@ -588,6 +588,9 @@ ${skillInstructions}`;
    * Process input step - inject available skills and provide skill tools
    */
   async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
+    // Refresh skills if any skillsPaths have been modified since last discovery
+    await this.skills?.maybeRefresh();
+
     const skillsList = await this.skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
 

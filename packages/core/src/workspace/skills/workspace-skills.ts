@@ -68,6 +68,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Promise for ongoing initialization (prevents concurrent discovery) */
   #initPromise: Promise<void> | null = null;
 
+  /** Timestamp of last skills discovery (for staleness check) */
+  #lastDiscoveryTime = 0;
+
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#filesystem = config.filesystem;
     this.#skillsPaths = config.skillsPaths;
@@ -111,6 +114,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#searchEngine?.clear();
     this.#initialized = false;
     await this.#discoverSkills();
+  }
+
+  async maybeRefresh(): Promise<void> {
+    // Ensure initial discovery is complete
+    await this.#ensureInitialized();
+
+    // Check if any skillsPath has been modified since last discovery
+    const isStale = await this.#isSkillsPathStale();
+    if (isStale) {
+      await this.refresh();
+    }
   }
 
   // ===========================================================================
@@ -467,6 +481,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const source = this.#determineSource(skillsPath);
       await this.#discoverSkillsInPath(skillsPath, source);
     }
+    // Track when discovery completed for staleness check
+    this.#lastDiscoveryTime = Date.now();
   }
 
   /**
@@ -507,6 +523,52 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         console.error(`[WorkspaceSkills] Failed to scan skills directory ${skillsPath}:`, error.message);
       }
     }
+  }
+
+  /**
+   * Check if any skillsPath directory has been modified since last discovery.
+   * Compares directory mtime to lastDiscoveryTime.
+   */
+  async #isSkillsPathStale(): Promise<boolean> {
+    if (this.#lastDiscoveryTime === 0) {
+      // Never discovered, consider stale
+      return true;
+    }
+
+    for (const skillsPath of this.#skillsPaths) {
+      try {
+        if (!(await this.#filesystem.exists(skillsPath))) {
+          continue;
+        }
+
+        const stat = await this.#filesystem.stat(skillsPath);
+        const mtime = stat.modifiedAt.getTime();
+
+        if (mtime > this.#lastDiscoveryTime) {
+          return true;
+        }
+
+        // Also check subdirectories (skill directories) for changes
+        const entries = await this.#filesystem.readdir(skillsPath);
+        for (const entry of entries) {
+          if (entry.type !== 'directory') continue;
+
+          const entryPath = this.#joinPath(skillsPath, entry.name);
+          try {
+            const entryStat = await this.#filesystem.stat(entryPath);
+            if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+              return true;
+            }
+          } catch {
+            // Couldn't stat, assume not stale
+          }
+        }
+      } catch {
+        // Couldn't stat, assume not stale
+      }
+    }
+
+    return false;
   }
 
   /**
