@@ -451,3 +451,72 @@
   - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
   - Consider completing Task 032 next to continue building the integration UI flow
 
+- Task 032: Copy toolkit browser component
+  - Copied toolkit-browser.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx (336 lines)
+  - Provides ToolkitBrowser component for browsing and selecting toolkits from a provider
+  - Features:
+    - Grid layout with toolkit cards showing name, description, category, tool count
+    - Search functionality with real-time filtering by name or description
+    - Category dropdown filter for organizing toolkits
+    - Multi-select with checkboxes and "Select all" / "Clear" controls
+    - OAuth and API Key requirement badges with tooltips
+    - Load more button for pagination/infinite scroll support
+    - Empty states for no toolkits and no search results
+    - Keyboard navigation support for accessibility
+    - Selection count display
+  - Includes ToolkitCard subcomponent with:
+    - Visual indicators for OAuth requirements (Lock icon)
+    - Visual indicators for API key requirements (Key icon)
+    - Hover and selected states
+    - Clickable card and checkbox interaction
+  - File: packages/playground-ui/src/domains/integrations/components/toolkit-browser.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 032 completed successfully - Toolkit browser UI component is now in place
+- This component allows users to browse, search, and select toolkits from integration providers
+- The component handles OAuth and API key requirements with visual indicators
+- Supports infinite scroll/pagination for large toolkit lists
+- Next logical high-priority tasks are the remaining UI components:
+  - Task 033 (P0): Copy tool selector component - HIGHEST PRIORITY
+  - Task 034 (P0): Copy MCP connection input component
+  - Task 035 (P0): Copy Smithery browser component
+  - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
+  - Consider completing Task 033 next to continue building the integration UI flow
+
+- Task 033: Copy tool selector component
+  - Copied tool-selector.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/tool-selector.tsx (229 lines)
+  - Provides ToolSelector component for reviewing and deselecting individual tools from selected toolkits
+  - Features:
+    - Displays tools grouped by toolkit with expandable sections
+    - Search functionality for filtering tools by name, description, or toolkit
+    - Multi-select with checkboxes and "Select all" / "Clear" controls
+    - Selection count display showing X of Y selected
+    - Empty states for no tools and no search results
+    - Keyboard navigation support for accessibility
+    - All tools selected by default (user can deselect unwanted tools)
+  - Includes ToolRow subcomponent with:
+    - Checkbox for selection/deselection
+    - Tool name, description, and toolkit information
+    - Tool icon (ToolCoinIcon) for visual consistency
+    - Hover states for better UX
+    - Keyboard support (Enter/Space to toggle)
+  - Groups tools alphabetically by toolkit name
+  - File: packages/playground-ui/src/domains/integrations/components/tool-selector.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 033 completed successfully - Tool selector UI component is now in place
+- This component allows users to review and deselect individual tools from the selected toolkits
+- The component provides fine-grained control over which tools to include in the integration
+- All tools are selected by default, and users can deselect specific tools they don't need
+- Next logical high-priority tasks are the remaining UI components:
+  - Task 034 (P0): Copy MCP connection input component - HIGHEST PRIORITY
+  - Task 035 (P0): Copy Smithery browser component
+  - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
+  - Consider completing Task 034 next to continue building the integration UI flow
+
