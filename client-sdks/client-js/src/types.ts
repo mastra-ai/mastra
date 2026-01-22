@@ -776,6 +776,197 @@ export interface Provider {
 }
 
 // ============================================================================
+// Stored Scorer Types
+// ============================================================================
+
+/**
+ * Scoring sampling configuration
+ */
+export interface ScoringSamplingConfig {
+  type: 'ratio' | 'count';
+  rate?: number;
+  count?: number;
+}
+
+/**
+ * Response for a single stored scorer
+ */
+export interface StoredScorerResponse {
+  id: string;
+  name: string;
+  description?: string;
+  model: {
+    provider: string;
+    name: string;
+    toolChoice?: string;
+    reasoningEffort?: string;
+  };
+  prompt: string;
+  scoreRange: {
+    min: number;
+    max: number;
+  };
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+  activeVersionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for listing stored scorers
+ */
+export interface ListStoredScorersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  ownerId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored scorers
+ */
+export interface ListStoredScorersResponse {
+  scorers: StoredScorerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored scorer
+ */
+export interface CreateStoredScorerParams {
+  id: string;
+  name: string;
+  description?: string;
+  model: {
+    provider: string;
+    name: string;
+    toolChoice?: string;
+    reasoningEffort?: string;
+  };
+  prompt: string;
+  scoreRange?: {
+    min: number;
+    max: number;
+  };
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+}
+
+/**
+ * Parameters for updating a stored scorer
+ */
+export interface UpdateStoredScorerParams {
+  name?: string;
+  description?: string;
+  model?: {
+    provider: string;
+    name: string;
+    toolChoice?: string;
+    reasoningEffort?: string;
+  };
+  prompt?: string;
+  scoreRange?: {
+    min: number;
+    max: number;
+  };
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+  activeVersionId?: string;
+}
+
+/**
+ * Response for deleting a stored scorer
+ */
+export interface DeleteStoredScorerResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+/**
+ * Response for a single scorer version
+ */
+export interface ScorerVersionResponse {
+  id: string;
+  scorerId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: StoredScorerResponse;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+/**
+ * Parameters for listing scorer versions
+ */
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
+}
+
+/**
+ * Response for listing scorer versions
+ */
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a scorer version
+ */
+export interface CreateScorerVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+/**
+ * Response for activating a scorer version
+ */
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+/**
+ * Response for restoring a scorer version
+ */
+export interface RestoreScorerVersionResponse {
+  success: boolean;
+  message: string;
+  scorer: StoredScorerResponse;
+  newVersion: ScorerVersionResponse;
+}
+
+/**
+ * Response for deleting a scorer version
+ */
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // System Types
 // ============================================================================
 
