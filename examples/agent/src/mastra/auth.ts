@@ -19,14 +19,14 @@ import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/ee';
 import type { EEUser } from '@mastra/core/ee';
 import { betterAuth } from 'better-auth';
 import { WorkOS } from '@workos-inc/node';
-import { DatabaseSync } from 'node:sqlite';
+// import Database from 'better-sqlite3';
 import { join } from 'node:path';
 
 // ===========================================================================
 // Auth Provider Selection
 // ===========================================================================
 
-const AUTH_PROVIDER = process.env.AUTH_PROVIDER || 'better-auth'; // 'better-auth' | 'workos'
+const AUTH_PROVIDER = 'workos'; //|| 'better-auth'; // 'better-auth' | 'workos'
 
 // ===========================================================================
 // Better Auth Configuration (default)
@@ -35,22 +35,22 @@ const AUTH_PROVIDER = process.env.AUTH_PROVIDER || 'better-auth'; // 'better-aut
 // Use absolute path to ensure database is found regardless of working directory
 const dbPath = join(import.meta.dirname, '../../database.sqlite');
 
-export const auth = betterAuth({
-  database: new DatabaseSync(dbPath),
-  emailAndPassword: {
-    enabled: true,
-  },
-});
+// export const auth = betterAuth({
+//   database: new Database(dbPath),
+//   emailAndPassword: {
+//     enabled: true,
+//   },
+// // });
 
-/**
- * Mastra auth provider using Better Auth.
- *
- * Handles authentication (WHO the user is).
- * Implements IUserProvider for EE user awareness in Studio.
- */
-const betterAuthProvider = new MastraAuthBetterAuth({
-  auth,
-});
+// /**
+//  * Mastra auth provider using Better Auth.
+//  *
+//  * Handles authentication (WHO the user is).
+//  * Implements IUserProvider for EE user awareness in Studio.
+//  */
+// const betterAuthProvider = new MastraAuthBetterAuth({
+//   auth,
+// });
 
 /**
  * RBAC provider using StaticRBACProvider.
@@ -104,7 +104,7 @@ const workosAuthProvider = workosClient
         // Configure SSO connection selection strategy
         // 'auto' - Automatically detect based on email domain
         // 'prompt' - Always show organization selector
-        connectionSelectStrategy: 'auto',
+        // connectionSelectStrategy: 'auto',
       },
     })
   : null;

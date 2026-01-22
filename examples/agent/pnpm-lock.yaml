@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/auth-better-auth': link:../../auth/better-auth
+  '@mastra/auth-workos': link:../../auth/workos
   '@mastra/core': link:../../packages/core
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
@@ -36,6 +37,9 @@ importers:
       '@mastra/auth-better-auth':
         specifier: link:../../auth/better-auth
         version: link:../../auth/better-auth
+      '@mastra/auth-workos':
+        specifier: link:../../auth/workos
+        version: link:../../auth/workos
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js
@@ -63,6 +67,9 @@ importers:
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai
+      '@workos-inc/node':
+        specifier: ^8.0.0
+        version: 8.0.0
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
@@ -253,6 +260,10 @@ packages:
   '@vercel/oidc@3.0.3':
     resolution: {integrity: sha512-yNEQvPcVrK9sIe637+I0jD6leluPxzwJKx/Haw6F4H77CdDsszUn5V3o96LPziXkSNE2B83+Z3mjqGKBK/R6Gg==}
     engines: {node: '>= 20'}
+
+  '@workos-inc/node@8.0.0':
+    resolution: {integrity: sha512-D8VDfx0GXeiVm8vccAl0rElW7taebRnrteKPJzZwehwzI9W/Usa4qKfmwxj+7Lh1Z1deEocDRCpZpV7ml4GpWQ==}
+    engines: {node: '>=20.15.0'}
 
   ai@4.3.19:
     resolution: {integrity: sha512-dIE2bfNpqHN3r6IINp9znguYdhIOheKW2LDigAMrgt/upT3B8eBGPSCblENvaZGoq+hxaN9fSMzjWpbqloP+7Q==}
@@ -463,6 +474,9 @@ packages:
   ini@1.3.8:
     resolution: {integrity: sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew==}
 
+  iron-webcrypto@2.0.0:
+    resolution: {integrity: sha512-rtffZKDUHciZElM8mjFCufBC7nVhCxHYyWHESqs89OioEDz4parOofd8/uhrejh/INhQFfYQfByS22LlezR9sQ==}
+
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
@@ -651,6 +665,10 @@ packages:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  uint8array-extras@1.5.0:
+    resolution: {integrity: sha512-rvKSBiC5zqCCiDZ9kAOszZcDvdAHwwIKJG33Ykj43OKcWsnmcBRL09YTU4nOeHZ8Y2a7l1MgTd08SBe9A8Qj6A==}
+    engines: {node: '>=18'}
 
   until-async@3.0.2:
     resolution: {integrity: sha512-IiSk4HlzAMqTUseHHe3VhIGyuFmN90zMTpD3Z3y8jeQbzLIq500MVM7Jq2vUAnTKAFPJrqwkzr6PoTcPhGcOiw==}
@@ -850,6 +868,11 @@ snapshots:
 
   '@vercel/oidc@3.0.3': {}
 
+  '@workos-inc/node@8.0.0':
+    dependencies:
+      iron-webcrypto: 2.0.0
+      jose: 6.1.3
+
   ai@4.3.19(react@19.1.1)(zod@3.25.76):
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -992,6 +1015,10 @@ snapshots:
   inherits@2.0.4: {}
 
   ini@1.3.8: {}
+
+  iron-webcrypto@2.0.0:
+    dependencies:
+      uint8array-extras: 1.5.0
 
   is-fullwidth-code-point@3.0.0: {}
 
@@ -1181,6 +1208,8 @@ snapshots:
   type-fest@4.41.0: {}
 
   typescript@5.9.3: {}
+
+  uint8array-extras@1.5.0: {}
 
   until-async@3.0.2: {}
 
