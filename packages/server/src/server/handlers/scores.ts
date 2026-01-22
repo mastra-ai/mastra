@@ -33,7 +33,12 @@ async function listScorersFromSystem({
     MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
   >();
 
-  for (const [_, agent] of Object.entries(agents)) {
+  // Helper function to process an agent's scorers
+  const processAgentScorers = async (agent: {
+    id: string;
+    name: string;
+    listScorers: (typeof agents)[string]['listScorers'];
+  }) => {
     const scorers =
       (await agent.listScorers({
         requestContext,
@@ -56,6 +61,23 @@ async function listScorersFromSystem({
         }
       }
     }
+  };
+
+  // Process code-defined agents
+  for (const [_, agent] of Object.entries(agents)) {
+    await processAgentScorers(agent);
+  }
+
+  // Process stored agents (database-backed agents)
+  try {
+    const storedAgentsResult = await mastra.listStoredAgents();
+    if (storedAgentsResult?.agents) {
+      for (const storedAgent of storedAgentsResult.agents) {
+        await processAgentScorers(storedAgent);
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured - not all setups have storage
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
