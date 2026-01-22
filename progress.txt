@@ -96,9 +96,85 @@ Uses **Playwright route interception** to mock auth endpoints:
 
 ---
 
+## F002: Login Flow E2E Tests - COMPLETED - 2026-01-22
+
+### Implementation Summary
+
+Created comprehensive E2E tests for the login flow, covering unauthenticated access, login page variants, successful authentication, invalid credentials, session persistence, and sign-up flow.
+
+### Files Created
+
+1. **packages/playground/e2e/tests/auth/login-flow.spec.ts**
+   - 23 E2E tests organized in 6 test groups
+   - Tests unauthenticated access redirect behavior
+   - Tests login page with SSO, credentials, and both options
+   - Tests successful login state transitions
+   - Tests invalid credentials error handling
+   - Tests session persistence across page reloads and navigation
+   - Tests sign-up link visibility and mode toggling
+   - Tests auth disabled state
+
+### Test Categories
+
+1. **Unauthenticated Access Redirect** (6 tests)
+   - Unauthenticated user sees login prompt on protected page
+   - Unauthenticated user sees login button on protected page
+   - Login page shows when navigating directly
+   - Login page shows SSO option when configured
+   - Login page shows credentials form when configured
+   - Login page shows both SSO and credentials when configured
+
+2. **Successful Login** (3 tests)
+   - Successful login shows authenticated content
+   - Redirect parameter is preserved in login URL
+   - Login page preserves redirect to original destination
+
+3. **Invalid Credentials** (3 tests)
+   - Shows error for invalid credentials login attempt
+   - Form validation requires email
+   - Form validation requires password
+
+4. **Session Persistence** (3 tests)
+   - Authenticated state persists after page reload
+   - Authenticated state persists across navigation
+   - Unauthenticated state shows login prompt consistently
+
+5. **Login State in UI** (4 tests)
+   - Authenticated user sees main application content
+   - Authenticated user can access protected pages
+   - Authenticated user does not see login prompt
+   - Unauthenticated user sees login prompt instead of content
+
+6. **Sign Up Link** (3 tests)
+   - Sign up link is visible when sign up is enabled
+   - Sign up link is hidden when sign up is disabled
+   - Clicking sign up toggles to sign up mode
+
+7. **Auth Not Configured** (1 test)
+   - Shows appropriate message when auth is disabled
+
+### Test Results
+
+- **All 64 E2E tests pass** (41 existing + 23 new login flow tests)
+- Typecheck passes with no errors
+- 1 pre-existing flaky test (tool stream) - unrelated to auth
+
+### Acceptance Criteria Met
+
+- [x] Unauthenticated access shows login prompt (via AuthRequired component)
+- [x] Successful login redirects back to requested page
+- [x] Invalid credentials display appropriate error message
+- [x] Session survives page refresh
+- [x] User authentication state displays correctly in UI
+
+---
+
 ### Next Steps
 
-Start with F002 (Login Flow E2E Tests) or one of the P0 role tests (F005, F006, F007).
+Continue with one of the remaining P0 features:
+- F005: Admin Role E2E Tests
+- F006: Member Role E2E Tests
+- F007: Viewer Role E2E Tests
 
 ---
 

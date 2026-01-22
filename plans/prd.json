@@ -42,7 +42,8 @@
       "name": "Login Flow E2E Tests",
       "description": "Test the complete login flow including redirects, session management, and error handling",
       "priority": "P0",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Test unauthenticated user is redirected to login page",
         "Test successful login redirects to original destination",
@@ -56,7 +57,12 @@
         "Invalid credentials display appropriate error message",
         "Session survives page refresh",
         "User info displays correctly after login"
-      ]
+      ],
+      "implementation": {
+        "files": ["packages/playground/e2e/tests/auth/login-flow.spec.ts"],
+        "testsAdded": 23,
+        "approach": "Uses Playwright route interception to mock auth endpoints. Tests cover unauthenticated access redirect, login page variations (SSO, credentials, both), successful login state transitions, invalid credentials error handling, session persistence across page reloads and navigation, sign-up link toggling, and auth disabled state."
+      }
     },
     {
       "id": "F003",
