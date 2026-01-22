@@ -634,8 +634,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx > packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx"
       ],
       "dependencies": ["029", "030", "031", "032", "033", "034", "035"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "037",

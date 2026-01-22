@@ -591,3 +591,53 @@
 - This is a critical component that orchestrates the entire integration creation experience
 - After Task 036, complete the remaining components (037, 038, 039) to finish the frontend layer
 
+
+- Task 036: Copy add tools dialog
+  - Copied add-tools-dialog.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx (1253 lines)
+  - Provides AddToolsDialog component - the main multi-step wizard for adding integration tools
+  - Orchestrates the entire integration creation experience with 3 steps:
+    - Step 1: Select Provider (Composio, Arcade, MCP, Smithery)
+    - Step 2: Select Toolkits/Server (for Composio/Arcade: toolkits browser; for Smithery: server browser; for MCP: skip to tools)
+    - Step 3: Review and Deselect Tools (all tools selected by default)
+  - Key features:
+    - Provider selection with connection status indicators
+    - Composio OAuth flow with popup authorization and polling
+    - Arcade OAuth flow with popup authorization and polling
+    - MCP direct connection (HTTP and Stdio) with validation
+    - Smithery server browsing with OAuth authentication via MCP SDK
+    - OAuth callback handling for page redirects
+    - Toolkit browsing with infinite scroll
+    - Tool selection/deselection with search
+    - Secrets warning for Arcade API key-based toolkits
+    - Comprehensive error handling and retry logic
+    - Multi-step progress indicator
+    - Real-time validation and status feedback
+  - Integration flows:
+    - Composio: Select provider → Browse toolkits → OAuth if needed → Review tools → Confirm
+    - Arcade: Select provider → Browse toolkits → OAuth if needed → Review tools → Confirm
+    - MCP: Select provider → Configure connection → Validate → Review tools → Confirm
+    - Smithery: Select provider → Browse servers → OAuth if needed → Validate → Review tools → Confirm
+  - State management for:
+    - Wizard step navigation
+    - Provider and toolkit selection
+    - Tool deselection (all selected by default)
+    - MCP configuration and validation
+    - Smithery server selection and OAuth
+    - Arcade/Composio OAuth state
+    - Loading, error, and success states
+  - File: packages/playground-ui/src/domains/integrations/components/add-tools-dialog.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 036 completed successfully - The main add tools dialog wizard is now in place
+- This is the centerpiece component that ties together all integration flows (Composio, Arcade, MCP, Smithery)
+- The component handles complex OAuth flows with popup windows, polling, and redirect fallbacks
+- All provider-specific logic is encapsulated and working
+- Next logical high-priority tasks are the remaining UI components:
+  - Task 037 (P1): Copy integration card component - shows individual integration in list
+  - Task 038 (P1): Copy integrations list component - displays all configured integrations
+  - Task 039 (P0): Copy components index - exports all components
+  - Task 040 (P0): Copy integrations domain index - exports entire domain
+  - Consider completing Tasks 037 and 038 to finish the integration management UI
