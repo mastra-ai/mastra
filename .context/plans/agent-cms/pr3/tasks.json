@@ -488,8 +488,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts > packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts"
       ],
       "dependencies": ["026"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "028",
@@ -504,8 +504,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts > packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts"
       ],
       "dependencies": ["026"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "029",

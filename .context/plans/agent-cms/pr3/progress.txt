@@ -327,3 +327,62 @@
   - Task 031 (P0): Copy provider list component
   - Consider completing Tasks 027 and 028 to finish all OAuth hooks before moving to hooks index and components
 
+- Task 027: Copy Arcade auth hook
+  - Copied use-arcade-auth.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts (280 lines)
+  - Provides useArcadeAuth hook for managing Arcade OAuth authorization flow
+  - Features:
+    - authorize(toolkitSlug): Start OAuth authorization for a toolkit
+    - Opens popup window for user authorization
+    - Polls authorization status every 2 seconds
+    - Automatically closes popup and updates state when completed
+    - Provides authState with status, authorizationId, authorizationUrl, error
+    - Includes checkStatus() for manual status checks
+    - Includes reset() to clear authorization state
+    - Cleanup on unmount (stops polling, closes popup)
+  - Also includes getToolNameForAuth() utility function for constructing Arcade tool names from toolkits
+  - File: packages/playground-ui/src/domains/integrations/hooks/use-arcade-auth.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 027 completed successfully - Arcade OAuth authorization hook is now in place
+- The hook manages the complete OAuth flow with popup window and polling for Arcade integrations
+- Only one more OAuth hook remains: Task 028 (Composio auth hook)
+- After Task 028, Task 029 (hooks index) will complete the hooks layer before moving to components
+- Next logical high-priority tasks are:
+  - Task 028 (P1): Copy Composio auth hook (use-composio-auth.ts) - HIGHEST PRIORITY
+  - Task 029 (P1): Copy hooks index to export all hooks
+  - Task 031 (P0): Copy provider list component
+  - Consider completing Task 028 to finish all OAuth hooks before moving to Task 029 and components
+
+- Task 028: Copy Composio auth hook
+  - Copied use-composio-auth.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts (252 lines)
+  - Provides useComposioAuth hook for managing Composio OAuth authorization flow
+  - Features:
+    - authorize(toolkitSlug): Start OAuth authorization for a toolkit
+    - Opens popup window for user authorization
+    - Polls authorization status every 2 seconds using /api/integrations/composio/auth/status endpoint
+    - Automatically closes popup and updates state when completed or failed
+    - Provides authState with status, authorizationId, authorizationUrl, error
+    - Includes checkStatus(authorizationId) for manual status checks
+    - Includes reset() to clear authorization state
+    - Cleanup on unmount (stops polling, closes popup)
+  - Similar implementation pattern to useArcadeAuth but uses Composio's API endpoints
+  - File: packages/playground-ui/src/domains/integrations/hooks/use-composio-auth.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 028 completed successfully - All OAuth hooks are now in place (Arcade, Composio, OAuth callback)
+- The Composio hook manages the complete OAuth flow with popup window and polling similar to Arcade
+- Next logical high-priority task is Task 029 (P1): Copy hooks index to export all hooks
+- After Task 029, the hooks layer will be complete and we can move to UI components
+- Next logical high-priority tasks are:
+  - Task 029 (P1): Copy hooks index to export all integration hooks - HIGHEST PRIORITY
+  - Task 031 (P0): Copy provider list component
+  - Task 032 (P0): Copy toolkit browser component
+  - Task 033 (P0): Copy tool selector component
+  - Consider completing Task 029 to finish the hooks layer before moving to components
+
