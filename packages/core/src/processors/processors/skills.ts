@@ -28,7 +28,7 @@ import { createTool } from '../../tools';
 import { extractLines } from '../../workspace/line-utils';
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
-import type { ProcessInputArgs, ProcessInputStepArgs, Processor } from '../index';
+import type { ProcessInputStepArgs, Processor } from '../index';
 
 // =============================================================================
 // Configuration
@@ -585,18 +585,13 @@ ${skillInstructions}`;
   // ===========================================================================
 
   /**
-   * Process input - refresh skills if needed (runs once at start of agent call)
-   */
-  async processInput({ messageList }: ProcessInputArgs) {
-    // Refresh skills if any skillsPaths have been modified since last discovery
-    await this.skills?.maybeRefresh();
-    return messageList;
-  }
-
-  /**
    * Process input step - inject available skills and provide skill tools
    */
-  async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, tools, stepNumber }: ProcessInputStepArgs) {
+    // Refresh skills on first step only (not every step in the agentic loop)
+    if (stepNumber === 0) {
+      await this.skills?.maybeRefresh();
+    }
     const skillsList = await this.skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
 
