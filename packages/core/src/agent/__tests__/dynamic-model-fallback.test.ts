@@ -633,4 +633,110 @@ describe('Dynamic Model Selection with Fallback', () => {
     // Should fallback to second model after nested dynamic fails
     expect(fullText).toBe('Nested dynamic success');
   });
+
+  it('should skip disabled models and use first enabled model', async () => {
+    const disabledModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Disabled model should not be called');
+      },
+      doStream: async () => {
+        const stream = new ReadableStream({
+          pull() {
+            throw new Error('Disabled model should not be called');
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+
+    const enabledModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Enabled model success',
+          content: [
+            {
+              type: 'text',
+              text: 'Enabled model success',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'enabled-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Enabled model success' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'skip-disabled-test',
+      name: 'Skip Disabled Test',
+      instructions: 'You are a test agent',
+      model: [
+        { model: disabledModel, enabled: false, maxRetries: 0 }, // Disabled - should be skipped
+        { model: enabledModel, enabled: true, maxRetries: 0 }, // Enabled - should be used
+      ],
+    });
+
+    const requestContext = new RequestContext();
+    const result = await agent.stream('test', { requestContext });
+    const fullText = await result.text;
+
+    // Should use the enabled model, skipping the disabled one
+    expect(fullText).toBe('Enabled model success');
+  });
+
+  it('should throw error when all models are disabled', async () => {
+    const disabledModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Should not be called');
+      },
+      doStream: async () => {
+        const stream = new ReadableStream({
+          pull() {
+            throw new Error('Should not be called');
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'all-disabled-test',
+      name: 'All Disabled Test',
+      instructions: 'You are a test agent',
+      model: [
+        { model: disabledModel, enabled: false, maxRetries: 0 },
+        { model: disabledModel, enabled: false, maxRetries: 0 },
+      ],
+    });
+
+    const requestContext = new RequestContext();
+    await expect(agent.stream('test', { requestContext })).rejects.toThrow('No enabled models found in model list');
+  });
 });

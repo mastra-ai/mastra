@@ -1226,8 +1226,8 @@ export class Agent<
         return this.resolveModelConfig(resolved, requestContext);
       }
 
-      // Array case - return first model
-      if (resolved.length === 0 || !resolved[0]) {
+      // Array case - find first enabled model
+      if (resolved.length === 0) {
         const mastraError = new MastraError({
           id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
           domain: ErrorDomain.AGENT,
@@ -1239,7 +1239,23 @@ export class Agent<
         this.logger.error(mastraError.toString());
         throw mastraError;
       }
-      return this.resolveModelConfig(resolved[0].model, requestContext);
+
+      // Find first enabled model
+      const enabledModel = resolved.find(entry => entry.enabled);
+      if (!enabledModel) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { agentName: this.name },
+          text: `[Agent:${this.name}] - No enabled models found in model list`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return this.resolveModelConfig(enabledModel.model, requestContext);
     }) as MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   }
 
