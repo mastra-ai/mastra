@@ -8,3 +8,6 @@ export const fixtures: Record<Fixtures, Array<unknown>> = {
   'tool-stream': toolStreamFixture,
   'workflow-stream': workflowStreamFixture,
 };
+
+// Auth role fixtures for E2E testing
+export * from './auth-roles.fixture';

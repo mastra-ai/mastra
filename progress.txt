@@ -34,8 +34,71 @@ if (route.requiresPermission && authConfig) {
 
 ---
 
-### Next Steps:
-Start with F001 (E2E Test Infrastructure Setup) to establish the foundation for all auth tests.
+## F001: E2E Test Infrastructure Setup - COMPLETED - 2026-01-22
+
+### Implementation Summary
+
+Created the foundational E2E testing infrastructure for auth/RBAC tests using Playwright route interception.
+
+### Files Created
+
+1. **packages/playground/e2e/tests/__utils__/auth.ts**
+   - Core auth mocking utilities
+   - `setupMockAuth(page, config)` - Main helper for mocking auth state
+   - `setupAdminAuth/MemberAuth/ViewerAuth/Unauthenticated/NoPermissions` - Convenience methods
+   - `buildAuthCapabilities(config)` - Builds mock `/api/auth/capabilities` responses
+   - Role permissions and mock users constants
+
+2. **packages/playground/e2e/tests/__utils__/index.ts**
+   - Exports all test utilities for cleaner imports
+
+3. **packages/playground/e2e/tests/auth/infrastructure.spec.ts**
+   - 16 infrastructure validation tests
+   - Tests auth capabilities mocking for all roles
+   - Tests custom user data and permissions
+   - Tests disabled RBAC and auth states
+   - Tests `/api/auth/me` endpoint mocking
+
+4. **packages/playground/e2e/tests/auth/README.md**
+   - Documentation for auth E2E tests
+   - Usage examples for auth utilities
+   - Test categories and permissions reference
+
+5. **packages/playground/e2e/kitchen-sink/fixtures/auth-roles.fixture.ts**
+   - Role permissions matching PRD specification
+   - Mock user profiles for each role
+   - Permission expectations for validation
+   - UI expectations for role-based visibility
+
+6. **packages/playground/e2e/kitchen-sink/.env.example**
+   - Environment variable template for WorkOS credentials
+   - Documentation for required/optional variables
+
+### Approach
+
+Uses **Playwright route interception** to mock auth endpoints:
+- Intercepts `/api/auth/capabilities` to return mock auth state
+- Intercepts `/api/auth/me` to return mock user data
+- No real WorkOS credentials needed for testing
+- Tests are fast and deterministic
+
+### Test Results
+
+- **All 41 E2E tests pass** (25 existing + 16 new auth infrastructure tests)
+- Typecheck passes with no errors
+
+### Acceptance Criteria Met
+
+- [x] Auth test directory structure exists at `packages/playground/e2e/tests/auth/`
+- [x] Test fixtures can simulate different user roles (admin, member, viewer, _default)
+- [x] Kitchen-sink app runs with mocked auth via route interception
+- [x] Helper utilities are reusable across all auth tests
+
+---
+
+### Next Steps
+
+Start with F002 (Login Flow E2E Tests) or one of the P0 role tests (F005, F006, F007).
 
 ---
 
