@@ -203,6 +203,7 @@ export const DateTimePickerContent = ({
       }}
     >
       <InputField
+        name="date-time-input"
         type="text"
         value={dateInputValue}
         onChange={handleInputChange}

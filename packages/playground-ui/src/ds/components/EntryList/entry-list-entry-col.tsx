@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { EntryListStatus } from './types';
 
 export type EntryListEntryTextColProps = {
   children: React.ReactNode;
@@ -18,8 +19,6 @@ export function EntryListEntryTextCol({ children, isLoading }: EntryListEntryTex
     </div>
   );
 }
-
-export type EntryListStatus = 'success' | 'error' | 'running' | 'suspended';
 
 export type EntryListEntryStatusColProps = {
   status?: EntryListStatus;

@@ -10,7 +10,7 @@ import {
 } from '@/ds/primitives/form-element';
 
 export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
-  name?: string;
+  name: string;
   testId?: string;
   label?: string;
   labelIsHidden?: boolean;
