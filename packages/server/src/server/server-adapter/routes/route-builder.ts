@@ -174,6 +174,7 @@ interface RouteConfig<
   tags?: string[];
   deprecated?: boolean;
   maxBodySize?: number;
+  requiresAuth?: boolean; // Explicit auth requirement for this route
 }
 
 /**
@@ -220,7 +221,7 @@ export function createRoute<
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
   TResponseType
 > {
-  const { summary, description, tags, deprecated, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, requiresAuth, ...baseRoute } = config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -244,5 +245,6 @@ export function createRoute<
     ...baseRoute,
     openapi: openapi as any,
     deprecated,
+    requiresAuth,
   };
 }
