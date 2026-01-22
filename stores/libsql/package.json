@@ -16,12 +16,24 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./drizzle": {
+      "import": {
+        "types": "./dist/drizzle/index.d.ts",
+        "default": "./dist/drizzle/index.js"
+      },
+      "require": {
+        "types": "./dist/drizzle/index.d.ts",
+        "default": "./dist/drizzle/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/libsql",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "generate:drizzle": "node scripts/generate-drizzle-schema.mjs",
+    "generate:drizzle:check": "node scripts/generate-drizzle-schema.mjs --check",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -37,13 +49,21 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "drizzle-kit": "^0.31.8",
+    "drizzle-orm": "^0.45.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "drizzle-orm": ">=0.45.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    }
   },
   "files": [
     "dist",

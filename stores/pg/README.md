@@ -511,7 +511,80 @@ if (efficiency < 0.5) {
 }
 ```
 
+## Drizzle ORM Integration
+
+For type-safe queries with [Drizzle ORM](https://orm.drizzle.team/):
+
+```bash
+npm install drizzle-orm
+npm install -D drizzle-kit  # For schema management with drizzle-kit push
+```
+
+### Basic Usage
+
+```typescript
+// src/db/schema.ts - Export tables for your project
+import { createMastraSchema, type MastraSchema } from '@mastra/pg/drizzle';
+
+// Create tables in public schema (default) or a custom schema
+const schema = createMastraSchema(); // public schema
+// const schema = createMastraSchema({ schemaName: 'mastra' }); // custom schema
+
+// Re-export all tables (drizzle-kit requires top-level exports)
+export const mastraAgents = schema.mastraAgents;
+export const mastraThreads = schema.mastraThreads;
+export const mastraMessages = schema.mastraMessages;
+export const mastraResources = schema.mastraResources;
+export const mastraScorers = schema.mastraScorers;
+export const mastraWorkflowSnapshot = schema.mastraWorkflowSnapshot;
+export const mastraAiSpans = schema.mastraAiSpans;
+
+// Compile-time check: TypeScript will error to remind you to export new tables
+const _dependencies: MastraSchema = {
+  mastraAgents,
+  mastraThreads,
+  mastraMessages,
+  mastraResources,
+  mastraScorers,
+  mastraWorkflowSnapshot,
+  mastraAiSpans,
+};
+```
+
+```typescript
+// Usage
+import { mastraThreads } from './db/schema';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { eq } from 'drizzle-orm';
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool);
+
+const threads = await db.select().from(mastraThreads).where(eq(mastraThreads.resourceId, 'user-123'));
+```
+
+### Schema Management with drizzle-kit
+
+The `createMastraSchema()` factory supports custom PostgreSQL schemas, making it easy to use `drizzle-kit push` to create tables:
+
+```typescript
+// drizzle.config.ts
+import { defineConfig } from 'drizzle-kit';
+export default defineConfig({
+  schema: './src/db/schema.ts',
+  dialect: 'postgresql',
+  dbCredentials: { url: process.env.DATABASE_URL },
+  schemaFilter: ['mastra'], // If using custom schema
+});
+```
+
+Run `npx drizzle-kit push` to create tables. Then set `disableInit: true` on your store to prevent double-initialization.
+
+> **Note:** When using a custom PostgreSQL schema, you must create the schema first: `CREATE SCHEMA IF NOT EXISTS mastra;`
+
 ## Related Links
 
 - [pgvector Documentation](https://github.com/pgvector/pgvector)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [Drizzle ORM Documentation](https://orm.drizzle.team/)

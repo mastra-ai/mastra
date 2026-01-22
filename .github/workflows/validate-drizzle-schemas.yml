@@ -1,0 +1,104 @@
+name: Validate Drizzle Schemas
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/src/storage/**'
+      - 'stores/*/src/storage/**'
+      - 'stores/*/src/drizzle/**'
+      - 'stores/*/scripts/generate-drizzle-schema.mjs'
+      - 'scripts/drizzle-schema-generator/**'
+  pull_request:
+    paths:
+      - 'packages/core/src/storage/**'
+      - 'stores/*/src/storage/**'
+      - 'stores/*/src/drizzle/**'
+      - 'stores/*/scripts/generate-drizzle-schema.mjs'
+      - 'scripts/drizzle-schema-generator/**'
+  # Allow manual triggering
+  workflow_dispatch:
+
+concurrency:
+  group: validate-drizzle-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-pg-drizzle:
+    name: Validate @mastra/pg Drizzle schema
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm build --filter @mastra/pg...
+
+      - name: Validate Drizzle schema is up-to-date
+        run: pnpm --filter @mastra/pg generate:drizzle:check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5434/mastra
+          SKIP_DOCKER: 'true'
+
+      - name: Verify Drizzle schema matches database
+        run: pnpm --filter @mastra/pg verify:drizzle
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5434/mastra
+
+  validate-libsql-drizzle:
+    name: Validate @mastra/libsql Drizzle schema
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm build --filter @mastra/libsql...
+
+      - name: Validate Drizzle schema is up-to-date
+        run: pnpm --filter @mastra/libsql generate:drizzle:check
+        env:
+          SKIP_DOCKER: 'true'
+
+  validate-d1-drizzle:
+    name: Validate @mastra/cloudflare-d1 Drizzle schema
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm build --filter @mastra/cloudflare-d1...
+
+      - name: Validate Drizzle schema is up-to-date
+        run: pnpm --filter @mastra/cloudflare-d1 generate:drizzle:check
