@@ -15,6 +15,7 @@ export { createPubSubTests } from './pubsub';
 
 // Feature-specific test creators
 export { createAdvancedTests } from './advanced';
+export { createAdvancedDurableOnlyTests } from './advanced-durable-only';
 export { createImagesTests } from './images';
 export { createReasoningTests } from './reasoning';
 export { createRequestContextTests } from './request-context';

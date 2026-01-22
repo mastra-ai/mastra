@@ -52,6 +52,7 @@ export type DurableAgentTestDomain =
   | 'tools'
   // New domains
   | 'advanced'
+  | 'advancedDurableOnly'
   | 'images'
   | 'reasoning'
   | 'requestContext'

@@ -73,9 +73,7 @@ createDurableAgentTestSuite({
   skip: {
     // PubSub tests are implementation-specific (EventEmitterPubSub vs InngestPubSub)
     pubsub: true,
-    // Callbacks include error handling tests that cause NonRetriableError in Inngest
-    callbacks: true,
-    // Advanced tests use DurableAgent-specific APIs (runRegistry, getWorkflow)
-    advanced: true,
+    // DurableAgent-specific tests (runRegistry, lazy init) - not available in InngestDurableAgent
+    advancedDurableOnly: true,
   },
 });

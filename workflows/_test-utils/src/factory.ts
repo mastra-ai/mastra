@@ -16,6 +16,7 @@ import {
   createPubSubTests,
   // New domain test creators
   createAdvancedTests,
+  createAdvancedDurableOnlyTests,
   createImagesTests,
   createReasoningTests,
   createRequestContextTests,
@@ -138,6 +139,11 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // New domain tests
     if (!skip.advanced) {
       createAdvancedTests(context);
+    }
+
+    // DurableAgent-specific tests (registry, lazy init) - skip for InngestDurableAgent
+    if (!skip.advancedDurableOnly) {
+      createAdvancedDurableOnlyTests(context);
     }
 
     if (!skip.images) {
