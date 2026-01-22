@@ -10,6 +10,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  checks: write
 
 jobs:
   check-major-bump:
@@ -58,6 +59,8 @@ jobs:
             ).data;
 
             const headSha = pr.head.sha;
+            // Output SHAs for downstream steps
+            core.setOutput('head_sha', headSha);
             // Output base SHA for checkout step (to prevent malicious PR from modifying local action)
             core.setOutput('base_sha', pr.base.sha);
 
@@ -111,6 +114,27 @@ jobs:
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
             const { owner, repo } = context.repo;
+            const headSha = '${{ steps.check_major.outputs.head_sha }}';
+            const isCommentEvent = context.eventName === 'issue_comment';
+            const checkName = 'Major Version Check';
+
+            // Helper to create/update check run on PR head SHA
+            const reportCheckResult = async (conclusion, title, summary) => {
+              // For issue_comment events, we need to create a check run on the PR head SHA
+              // because the workflow runs on the default branch, not the PR
+              if (isCommentEvent) {
+                await github.rest.checks.create({
+                  owner,
+                  repo,
+                  name: checkName,
+                  head_sha: headSha,
+                  status: 'completed',
+                  conclusion,
+                  output: { title, summary },
+                });
+                console.log(`Created check run on ${headSha}: ${conclusion}`);
+              }
+            };
 
             // Get all comments on the PR (paginated to handle PRs with many comments)
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -125,7 +149,9 @@ jobs:
             );
 
             if (approvalComments.length === 0) {
-              core.setFailed('Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.');
+              const msg = 'Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.';
+              await reportCheckResult('failure', 'Approval Required', msg);
+              core.setFailed(msg);
               return;
             }
 
@@ -147,9 +173,9 @@ jobs:
               } catch (error) {
                 // 403: Token lacks org:read permission - this is a configuration error
                 if (error.status === 403) {
-                  core.setFailed(
-                    `Permission denied checking org membership. Ensure the GitHub App has "Organization members: Read" permission. Error: ${error.message}`
-                  );
+                  const msg = `Permission denied checking org membership. Ensure the GitHub App has "Organization members: Read" permission. Error: ${error.message}`;
+                  await reportCheckResult('failure', 'Permission Error', msg);
+                  core.setFailed(msg);
                   throw error;
                 }
                 // 404: User is not a member of the org - this is expected for non-members
@@ -158,7 +184,9 @@ jobs:
                   return false;
                 }
                 // Other errors (network issues, rate limits, etc.) - rethrow to fail loudly
-                core.setFailed(`Unexpected error checking org membership for ${username}: ${error.message}`);
+                const msg = `Unexpected error checking org membership for ${username}: ${error.message}`;
+                await reportCheckResult('failure', 'Unexpected Error', msg);
+                core.setFailed(msg);
                 throw error;
               }
             };
@@ -166,9 +194,13 @@ jobs:
             // Check membership for all approval comment authors
             for (const comment of approvalComments) {
               if (await checkMembership(comment.user.login)) {
-                console.log(`Major version bump approved by organization member: ${comment.user.login}`);
+                const msg = `Major version bump approved by organization member: ${comment.user.login}`;
+                await reportCheckResult('success', 'Approved', msg);
+                console.log(msg);
                 return;
               }
             }
 
-            core.setFailed('Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.');
+            const msg = 'Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.';
+            await reportCheckResult('failure', 'Approval Required', msg);
+            core.setFailed(msg);
