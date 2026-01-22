@@ -14,6 +14,10 @@ export interface DependencyMetadata {
    * Whether the dependency is a workspace package
    */
   isWorkspace: boolean;
+  /**
+   * The resolved version of the dependency (exact version from package.json)
+   */
+  version?: string;
 }
 
 export interface BundlerOptions {
@@ -21,4 +25,14 @@ export interface BundlerOptions {
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
+}
+
+/**
+ * Version information for an external dependency
+ */
+export interface ExternalDependencyInfo {
+  /**
+   * The resolved version of the dependency (exact version from package.json)
+   */
+  version?: string;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.24",
+  "version": "1.0.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -200,7 +200,7 @@
     "typecheck:zod-compat": "NODE_OPTIONS='--max-old-space-size=4096' tsc --project tsconfig.zod-compat.json",
     "lint": "eslint .",
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
-    "build:patch-commonjs": "node ./tools/commonjs-tsc-fixer.js",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
@@ -272,8 +272,7 @@
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76",
-    "zod-v4": "npm:zod@4.1.12"
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=22.13.0"

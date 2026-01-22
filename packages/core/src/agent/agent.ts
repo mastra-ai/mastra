@@ -272,7 +272,7 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
-    // @ts-ignore Flag for agent network messages
+    // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
@@ -494,6 +494,42 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Returns only the user-configured input processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listInputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `inputProcessors` option.
+   */
+  public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (!this.#inputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+  }
+
+  /**
+   * Returns only the user-configured output processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listOutputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `outputProcessors` option.
+   */
+  public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+    if (!this.#outputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
   }
 
   /**
@@ -1299,6 +1335,8 @@ export class Agent<
             throw error;
           }
         }
+        // Always register the configuration with agent context
+        mastra.addProcessorConfiguration(processor, this.id, 'input');
       });
     }
 
@@ -1313,6 +1351,8 @@ export class Agent<
             throw error;
           }
         }
+        // Always register the configuration with agent context
+        mastra.addProcessorConfiguration(processor, this.id, 'output');
       });
     }
   }
@@ -2132,6 +2172,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
+          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2142,6 +2183,7 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
+              // @ts-expect-error - zod types mismatch between v3 and v4
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
@@ -2153,7 +2195,7 @@ export class Agent<
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          // @ts-ignore
+          // @ts-expect-error
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
@@ -3668,6 +3710,50 @@ export class Agent<
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return this.resumeStream({ approved: false }, options);
+  }
+
+  /**
+   * Approves a pending tool call and returns the complete result (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
+   *
+   * @example
+   * ```typescript
+   * const output = await agent.generate('Find user', { requireToolApproval: true });
+   * if (output.finishReason === 'suspended') {
+   *   const result = await agent.approveToolCallGenerate({
+   *     runId: output.runId,
+   *     toolCallId: output.suspendPayload.toolCallId
+   *   });
+   *   console.log(result.text);
+   * }
+   * ```
+   */
+  async approveToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    return this.resumeGenerate({ approved: true }, options);
+  }
+
+  /**
+   * Declines a pending tool call and returns the complete result (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
+   *
+   * @example
+   * ```typescript
+   * const output = await agent.generate('Find user', { requireToolApproval: true });
+   * if (output.finishReason === 'suspended') {
+   *   const result = await agent.declineToolCallGenerate({
+   *     runId: output.runId,
+   *     toolCallId: output.suspendPayload.toolCallId
+   *   });
+   *   console.log(result.text);
+   * }
+   * ```
+   */
+  async declineToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    return this.resumeGenerate({ approved: false }, options);
   }
 
   /**

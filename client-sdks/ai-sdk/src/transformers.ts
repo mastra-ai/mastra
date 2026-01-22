@@ -1,3 +1,4 @@
+import { TransformStream } from 'node:stream/web';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
@@ -179,8 +180,8 @@ export function AgentNetworkToAISDKTransformer() {
 
 export function AgentStreamToAISDKTransformer<OUTPUT>({
   lastMessageId,
-  sendStart,
-  sendFinish,
+  sendStart = true,
+  sendFinish = true,
   sendReasoning,
   sendSources,
   messageMetadata,

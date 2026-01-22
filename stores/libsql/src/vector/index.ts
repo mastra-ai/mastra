@@ -4,7 +4,7 @@ import type { Client as TursoClient, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
   QueryResult,
@@ -93,7 +93,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       } catch (error: any) {
         if (
           error.code === 'SQLITE_BUSY' ||
-          (error.message && error.message.toLowerCase().includes('database is locked'))
+          error.code === 'SQLITE_LOCKED' ||
+          error.code === 'SQLITE_LOCKED_SHAREDCACHE' ||
+          (error.message && error.message.toLowerCase().includes('database is locked')) ||
+          (error.message && error.message.toLowerCase().includes('database table is locked'))
         ) {
           attempts++;
           if (attempts >= this.maxRetries) {
@@ -129,22 +132,16 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     includeVector = false,
     minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
-    try {
-      if (!Number.isInteger(topK) || topK <= 0) {
-        throw new Error('topK must be a positive integer');
-      }
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        error,
-      );
+    // Validate topK parameter - throws MastraError directly
+    validateTopK('LIBSQL', topK);
+
+    if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+      throw new MastraError({
+        id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { message: 'queryVector must be an array of finite numbers' },
+      });
     }
 
     try {
@@ -212,6 +209,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('LIBSQL', vectors, metadata, ids);
+
     const tx = await this.turso.transaction('write');
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');

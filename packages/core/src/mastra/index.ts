@@ -20,7 +20,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type { MastraCompositeStore, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -113,7 +113,7 @@ export interface Config<
    * Storage provider for persisting data, conversation history, and workflow state.
    * Required for agent memory and workflow persistence.
    */
-  storage?: MastraStorage;
+  storage?: MastraCompositeStore;
 
   /**
    * Vector stores for semantic search and retrieval-augmented generation (RAG).
@@ -295,10 +295,12 @@ export class Mastra<
     path: string;
   }> = [];
 
-  #storage?: MastraStorage;
+  #storage?: MastraCompositeStore;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
+  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
+    new Map();
   #memory?: TMemory;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
@@ -313,6 +315,8 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
+  // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
+  #storedAgentsCache: Map<string, Agent> = new Map();
 
   get pubsub() {
     return this.#pubsub;
@@ -743,6 +747,8 @@ export class Mastra<
    * @param id - The unique identifier of the stored agent
    * @param options - Options for the query
    * @param options.raw - If true, returns raw stored data instead of Agent instance
+   * @param options.versionId - Fetch a specific version by its ID
+   * @param options.versionNumber - Fetch a specific version by its version number
    *
    * @throws {MastraError} When storage is not configured or doesn't support agents
    *
@@ -764,11 +770,26 @@ export class Mastra<
    * if (rawConfig) {
    *   console.log(rawConfig.instructions);
    * }
+   *
+   * // Get a specific version by versionId
+   * const versionedAgent = await mastra.getStoredAgentById('my-agent-id', { versionId: 'version-ulid' });
+   *
+   * // Get a specific version by version number
+   * const v2Agent = await mastra.getStoredAgentById('my-agent-id', { versionNumber: 2 });
    * ```
    */
-  public async getStoredAgentById(id: string, options?: { raw?: false }): Promise<Agent | null>;
-  public async getStoredAgentById(id: string, options: { raw: true }): Promise<StorageAgentType | null>;
-  public async getStoredAgentById(id: string, options?: { raw?: boolean }): Promise<Agent | StorageAgentType | null> {
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: false; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | null>;
+  public async getStoredAgentById(
+    id: string,
+    options: { raw: true; versionId?: string; versionNumber?: number },
+  ): Promise<StorageAgentType | null>;
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: boolean; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | StorageAgentType | null> {
     const storage = this.#storage;
 
     if (!storage) {
@@ -796,7 +817,51 @@ export class Mastra<
       throw error;
     }
 
-    const storedAgent = await agentsStore.getAgentById({ id });
+    // Handle version resolution
+    if (options?.versionId && options?.versionNumber !== undefined) {
+      this.#logger?.warn(`Both versionId and versionNumber provided for agent "${id}". Using versionId.`);
+    }
+
+    if (options?.versionId) {
+      // Fetch the specific version by its ID
+      const version = await agentsStore.getVersion(options.versionId);
+      if (!version) {
+        return null;
+      }
+      // Verify the version belongs to the requested agent
+      if (version.agentId !== id) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    if (options?.versionNumber !== undefined) {
+      // Fetch the specific version by agent ID and version number
+      const version = await agentsStore.getVersionByNumber(id, options.versionNumber);
+      if (!version) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    // Default behavior: get the current agent config with version resolution
+    // Check cache first for non-raw requests (allows in-memory model changes to persist)
+    if (!options?.raw) {
+      const cachedAgent = this.#storedAgentsCache.get(id);
+      if (cachedAgent) {
+        this.#logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
+        return cachedAgent;
+      }
+      this.#logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
+    }
+
+    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
 
     if (!storedAgent) {
       return null;
@@ -806,7 +871,21 @@ export class Mastra<
       return storedAgent;
     }
 
-    return this.#createAgentFromStoredConfig(storedAgent);
+    const agent = this.#createAgentFromStoredConfig(storedAgent);
+    // Cache the agent for future requests
+    this.#storedAgentsCache.set(id, agent);
+    return agent;
+  }
+
+  /**
+   * Clears the cached stored agent instance, forcing a fresh load from storage on next access.
+   * This should be called when an agent is updated via the Edit dialog to ensure
+   * the cached instance is refreshed with the new configuration.
+   *
+   * @param id - The ID of the agent to clear from cache
+   */
+  public clearStoredAgentCache(id: string): void {
+    this.#storedAgentsCache.delete(id);
   }
 
   /**
@@ -912,7 +991,8 @@ export class Mastra<
       throw error;
     }
 
-    const result = await agentsStore.listAgents({
+    // Use listAgentsResolved to get version-resolved configs
+    const result = await agentsStore.listAgentsResolved({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,
@@ -998,6 +1078,9 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    // Mark the agent as coming from storage (used by UI to show edit button)
+    (agent as any).source = 'stored';
+
     return agent;
   }
 
@@ -1011,13 +1094,13 @@ export class Mastra<
     }
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
-    const registeredTools = this.#tools;
 
     for (const toolKey of storedTools) {
-      // Try to find the tool in registered tools
-      if (registeredTools && registeredTools[toolKey]) {
-        resolvedTools[toolKey] = registeredTools[toolKey];
-      } else {
+      // Try to find the tool by ID (which also falls back to registration key)
+      try {
+        const tool = this.getToolById(toolKey as any);
+        resolvedTools[toolKey] = tool;
+      } catch {
         // Tool reference exists but tool is not registered - log warning
         this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }
@@ -1115,7 +1198,7 @@ export class Mastra<
    * @private
    */
   #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
-    if (!storedScorers) {
+    if (!storedScorers || Object.keys(storedScorers).length === 0) {
       return undefined;
     }
 
@@ -1768,6 +1851,56 @@ export class Mastra<
     throw error;
   }
 
+  // NOTE: Stored scorer methods are commented out until the storage infrastructure is added in PR2
+  // /**
+  //  * Retrieves a stored scorer by its ID from the database.
+  //  */
+  // public async getStoredScorerById(id: string): Promise<StoredScorerType | null> {
+  //   // Implementation will be added in PR2
+  //   throw new Error('Stored scorers not yet implemented');
+  // }
+
+  // /**
+  //  * Lists all stored scorers from the database with optional pagination.
+  //  */
+  // public async listStoredScorers(args?: {
+  //   page?: number;
+  //   perPage?: number | false;
+  //   orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+  // }): Promise<{
+  //   scorers: StoredScorerType[];
+  //   total: number;
+  //   page: number;
+  //   perPage: number | false;
+  //   hasMore: boolean;
+  // }> {
+  //   // Implementation will be added in PR2
+  //   throw new Error('Stored scorers not yet implemented');
+  // }
+
+  // /**
+  //  * Retrieves and resolves a stored scorer from the database into an executable MastraScorer.
+  //  */
+  // public async resolveStoredScorer(id: string): Promise<MastraScorer | null> {
+  //   // Implementation will be added in PR2
+  //   return null;
+  // }
+
+  // /**
+  //  * Unified method to get a scorer by ID, checking code-defined scorers first,
+  //  * then falling back to stored scorers from the database.
+  //  */
+  // public async getScorerUnified(id: string): Promise<MastraScorer | null> {
+  //   // First, try to find in code-defined scorers
+  //   try {
+  //     const scorer = this.getScorerById(id);
+  //     return scorer;
+  //   } catch {
+  //     // Stored scorers will be added in PR2
+  //     return null;
+  //   }
+  // }
+
   /**
    * Retrieves a specific tool by registration key.
    *
@@ -2068,6 +2201,52 @@ export class Mastra<
   }
 
   /**
+   * Registers a processor configuration with agent context.
+   * This tracks which agents use which processors with what configuration.
+   *
+   * @param processor - The processor instance
+   * @param agentId - The ID of the agent that uses this processor
+   * @param type - Whether this is an input or output processor
+   */
+  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+    const processorId = processor.id;
+    if (!this.#processorConfigurations.has(processorId)) {
+      this.#processorConfigurations.set(processorId, []);
+    }
+    const configs = this.#processorConfigurations.get(processorId)!;
+
+    // Check if this exact configuration already exists
+    const exists = configs.some(c => c.agentId === agentId && c.type === type);
+    if (!exists) {
+      configs.push({ processor, agentId, type });
+    }
+  }
+
+  /**
+   * Gets all processor configurations for a specific processor ID.
+   *
+   * @param processorId - The ID of the processor
+   * @returns Array of configurations with agent context
+   */
+  public getProcessorConfigurations(
+    processorId: string,
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+    return this.#processorConfigurations.get(processorId) || [];
+  }
+
+  /**
+   * Gets all processor configurations.
+   *
+   * @returns Map of processor IDs to their configurations
+   */
+  public listProcessorConfigurations(): Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+  > {
+    return this.#processorConfigurations;
+  }
+
+  /**
    * Retrieves a registered memory instance by its registration key.
    *
    * @throws {MastraError} When the memory instance with the specified key is not found
@@ -2299,7 +2478,7 @@ export class Mastra<
    * });
    * ```
    */
-  public setStorage(storage: MastraStorage) {
+  public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
   }
 

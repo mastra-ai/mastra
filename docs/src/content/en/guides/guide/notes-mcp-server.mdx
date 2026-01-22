@@ -17,8 +17,8 @@ In this guide, you'll learn how to build a complete MCP (Model Context Protocol)
 ## Prerequisites
 
 - Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Adding necessary dependencies & files
 
@@ -30,15 +30,15 @@ Before you can create an MCP server you first need to install additional depende
 
 Add `@mastra/mcp` to your project:
 
-```bash
-npm install @mastra/mcp@beta
+```bash npm2yarn
+npm install @mastra/mcp@latest
 ```
 
 </StepItem>
 
 <StepItem>
 
-After following the default [installation guide](/guides/v1/getting-started/quickstart) your project will include files that are not relevant for this guide. You can safely remove them:
+After following the default [installation guide](/guides/getting-started/quickstart) your project will include files that are not relevant for this guide. You can safely remove them:
 
 ```bash
 rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
@@ -437,7 +437,7 @@ export const notes = new MCPServer({
 
 ## Run the Server
 
-Great, you've authored your first MCP server! Now you can try it out by starting the Mastra dev server and opening [Studio](/docs/v1/getting-started/studio):
+Great, you've authored your first MCP server! Now you can try it out by starting the Mastra dev server and opening [Studio](/docs/getting-started/studio):
 
 ```bash
 npm run dev

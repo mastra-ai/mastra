@@ -17,6 +17,7 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -199,6 +200,12 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCall method - returns object with fullStream property
   vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock approveToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'approveToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Mock declineToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
@@ -306,6 +313,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     name: 'Test Scorer',
     description: 'Test scorer for observability tests',
   });
+
+  // Create test processor
+  const testProcessor = createTestProcessor({ id: 'test-processor' });
 
   mockLogger.transports = new Map([
     ['console', {}],
@@ -417,6 +427,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
     },
+    processors: {
+      'test-processor': testProcessor,
+    },
   });
 
   await mockWorkflowRun(workflow);
@@ -449,7 +462,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      await agents.createAgent({
+      const storedAgent = await agents.createAgent({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -457,6 +470,42 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           instructions: 'Test instructions for stored agent',
           model: { provider: 'openai', name: 'gpt-4o' },
         },
+      });
+
+      // Create test versions for version-specific routes
+      // Version 1: Will be the active version
+      const version1 = await agents.createVersion({
+        id: 'test-version-1',
+        agentId: 'test-stored-agent',
+        versionNumber: 1,
+        name: 'Test Version 1',
+        snapshot: storedAgent,
+        changedFields: ['name', 'instructions'],
+        changeMessage: 'Initial test version',
+      });
+
+      // Update the agent to have some changes for version 2
+      const updatedAgent = await agents.updateAgent({
+        id: 'test-stored-agent',
+        instructions: 'Updated test instructions for version 2',
+      });
+
+      // Version 2: Non-active version that can be deleted or used in comparisons
+      await agents.createVersion({
+        id: 'test-version-id',
+        agentId: 'test-stored-agent',
+        versionNumber: 2,
+        name: 'Test Version 2',
+        snapshot: updatedAgent,
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+
+      // Update the agent's activeVersionId to version 1
+      // This leaves version 2 (test-version-id) as non-active and deletable
+      await agents.updateAgent({
+        id: 'test-stored-agent',
+        activeVersionId: version1.id,
       });
     }
 
@@ -598,6 +647,27 @@ export function createMockMemory() {
   const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
+}
+
+/**
+ * Creates a test processor for integration tests
+ */
+export function createTestProcessor(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+  } = {},
+): Processor {
+  return {
+    id: overrides.id || 'test-processor',
+    name: overrides.name || 'Test Processor',
+    description: overrides.description || 'A test processor for integration tests',
+    async processInput({ messages }: ProcessInputArgs): Promise<ProcessInputResult> {
+      // Simple pass-through processor
+      return messages;
+    },
+  };
 }
 
 /**

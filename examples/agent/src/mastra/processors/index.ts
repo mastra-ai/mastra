@@ -20,6 +20,8 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 export class PIIDetectionProcessor implements Processor<'pii-detection', { detectedPII: string[]; severity: string }> {
   readonly id = 'pii-detection' as const;
   readonly name = 'PII Detection Processor';
+  readonly description =
+    'Detects personally identifiable information (emails, phone numbers, SSNs, credit cards) and blocks the request';
 
   async processInput({
     messages,
@@ -75,6 +77,7 @@ export class ToxicityCheckProcessor implements Processor<
 > {
   readonly id = 'toxicity-check' as const;
   readonly name = 'Toxicity Check Processor';
+  readonly description = 'Detects potentially harmful or toxic content including hate speech, violence, and harassment';
 
   async processInput({
     messages,
@@ -126,6 +129,7 @@ export class ResponseQualityProcessor implements Processor<
 > {
   readonly id = 'response-quality' as const;
   readonly name = 'Response Quality Processor';
+  readonly description = 'Checks response quality and requests retries for short, placeholder, or repetitive responses';
 
   async processOutputStep({
     text,
@@ -189,6 +193,7 @@ export class ResponseQualityProcessor implements Processor<
 export class SensitiveTopicBlocker implements Processor<'sensitive-topic-blocker', { blockedTerms: string[] }> {
   readonly id = 'sensitive-topic-blocker' as const;
   readonly name = 'Sensitive Topic Blocker';
+  readonly description = 'Blocks requests containing sensitive topics like passwords, API keys, and secrets';
 
   async processInput({ messages, abort }: ProcessInputArgs<{ blockedTerms: string[] }>): Promise<ProcessInputResult> {
     const blockedTerms = ['password', 'api-key', 'secret', 'private-key'];
@@ -225,6 +230,7 @@ export class SensitiveTopicBlocker implements Processor<'sensitive-topic-blocker
 export class StepLoggerProcessor implements Processor<'step-logger'> {
   readonly id = 'step-logger' as const;
   readonly name = 'Step Logger Processor';
+  readonly description = 'Logs information about each LLM step for debugging and observability';
 
   async processOutputStep({
     stepNumber,

@@ -145,6 +145,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   summary: 'Get memory status',
   description: 'Returns the current status of the memory system including configuration and health information',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -177,6 +178,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   summary: 'Get memory configuration',
   description: 'Returns the memory configuration for a specific agent or the system default',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -202,17 +204,28 @@ export const LIST_THREADS_ROUTE = createRoute({
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
   summary: 'List memory threads',
-  description: 'Returns a paginated list of conversation threads filtered by resource ID',
+  description:
+    'Returns a paginated list of conversation threads with optional filtering by resource ID and/or metadata',
   tags: ['Memory'],
-  handler: async ({ mastra, agentId, resourceId, requestContext, page, perPage, orderBy }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, resourceId, metadata, requestContext, page, perPage, orderBy }) => {
     try {
-      validateBody({ resourceId });
+      // Build filter object dynamically based on provided parameters
+      const filter: { resourceId?: string; metadata?: Record<string, unknown> } | undefined =
+        resourceId || metadata ? {} : undefined;
+
+      if (resourceId) {
+        filter!.resourceId = resourceId;
+      }
+      if (metadata) {
+        filter!.metadata = metadata;
+      }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (memory) {
-        const result = await memory.listThreadsByResourceId({
-          resourceId: resourceId!,
+        const result = await memory.listThreads({
+          filter,
           page,
           perPage,
           orderBy,
@@ -226,8 +239,8 @@ export const LIST_THREADS_ROUTE = createRoute({
         if (storage) {
           const memoryStore = await storage.getStore('memory');
           if (memoryStore) {
-            const result = await memoryStore.listThreadsByResourceId({
-              resourceId: resourceId!,
+            const result = await memoryStore.listThreads({
+              filter,
               page,
               perPage,
               orderBy,
@@ -254,6 +267,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
   summary: 'Get thread by ID',
   description: 'Returns details for a specific conversation thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, requestContext }) => {
     try {
       validateBody({ threadId });
@@ -299,6 +313,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   summary: 'List thread messages',
   description: 'Returns a paginated list of messages in a conversation thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     agentId,
@@ -382,6 +397,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
   summary: 'Get working memory',
   description: 'Returns the working memory state for a thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext, memoryConfig }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -417,6 +433,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   summary: 'Save messages',
   description: 'Saves new messages to memory',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, messages, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -465,6 +482,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
   summary: 'Create thread',
   description: 'Creates a new conversation thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -499,6 +517,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
   summary: 'Update thread',
   description: 'Updates a conversation thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, title, metadata, resourceId, requestContext }) => {
     try {
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -546,6 +565,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
   summary: 'Delete thread',
   description: 'Deletes a conversation thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, requestContext }) => {
     try {
       validateBody({ threadId });
@@ -579,6 +599,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
   summary: 'Clone thread',
   description: 'Creates a copy of a conversation thread with all its messages',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, newThreadId, resourceId, title, metadata, options, requestContext }) => {
     try {
       validateBody({ threadId });
@@ -615,6 +636,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   summary: 'Update working memory',
   description: 'Updates the working memory state for a thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, requestContext }) => {
     try {
       validateBody({ threadId, workingMemory });
@@ -645,6 +667,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
   summary: 'Delete messages',
   description: 'Deletes specific messages from memory',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, messageIds, requestContext }) => {
     try {
       if (messageIds === undefined || messageIds === null) {
@@ -707,6 +730,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
   summary: 'Search memory',
   description: 'Searches across memory using semantic or text search',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, searchQuery, resourceId, threadId, limit = 20, requestContext, memoryConfig }) => {
     try {
       validateBody({ searchQuery, resourceId });
@@ -744,8 +768,8 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       // If no threadId provided, get one from the resource
       if (!threadId) {
-        const { threads } = await memory.listThreadsByResourceId({
-          resourceId,
+        const { threads } = await memory.listThreads({
+          filter: { resourceId },
           page: 0,
           perPage: 1,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -878,6 +902,7 @@ export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
   summary: 'Get memory status (network)',
   description: 'Returns the current status of the memory system (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: GET_MEMORY_STATUS_ROUTE.handler,
 });
 
@@ -890,6 +915,7 @@ export const LIST_THREADS_NETWORK_ROUTE = createRoute({
   summary: 'List memory threads (network)',
   description: 'Returns a paginated list of conversation threads (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: LIST_THREADS_ROUTE.handler,
 });
 
@@ -903,6 +929,7 @@ export const GET_THREAD_BY_ID_NETWORK_ROUTE = createRoute({
   summary: 'Get thread by ID (network)',
   description: 'Returns details for a specific conversation thread (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: GET_THREAD_BY_ID_ROUTE.handler,
 });
 
@@ -916,6 +943,7 @@ export const LIST_MESSAGES_NETWORK_ROUTE = createRoute({
   summary: 'List thread messages (network)',
   description: 'Returns a paginated list of messages in a conversation thread (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: LIST_MESSAGES_ROUTE.handler,
 });
 
@@ -929,6 +957,7 @@ export const SAVE_MESSAGES_NETWORK_ROUTE = createRoute({
   summary: 'Save messages (network)',
   description: 'Saves new messages to memory (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: SAVE_MESSAGES_ROUTE.handler,
 });
 
@@ -942,6 +971,7 @@ export const CREATE_THREAD_NETWORK_ROUTE = createRoute({
   summary: 'Create thread (network)',
   description: 'Creates a new conversation thread (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: CREATE_THREAD_ROUTE.handler,
 });
 
@@ -956,6 +986,7 @@ export const UPDATE_THREAD_NETWORK_ROUTE = createRoute({
   summary: 'Update thread (network)',
   description: 'Updates a conversation thread (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: UPDATE_THREAD_ROUTE.handler,
 });
 
@@ -969,6 +1000,7 @@ export const DELETE_THREAD_NETWORK_ROUTE = createRoute({
   summary: 'Delete thread (network)',
   description: 'Deletes a conversation thread (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: DELETE_THREAD_ROUTE.handler,
 });
 
@@ -982,5 +1014,6 @@ export const DELETE_MESSAGES_NETWORK_ROUTE = createRoute({
   summary: 'Delete messages (network)',
   description: 'Deletes specific messages from memory (network route)',
   tags: ['Memory - Network'],
+  requiresAuth: true,
   handler: DELETE_MESSAGES_ROUTE.handler,
 });

@@ -388,7 +388,7 @@ describe('Transformer Functions', () => {
       expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
       expect(result.output[0]?.content.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.output[0]?.content.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
     });
 

@@ -68,7 +68,8 @@ function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage
   });
 }
 
-async function getRoutingAgent({
+/** @internal Exported for testing purposes */
+export async function getRoutingAgent({
   requestContext,
   agent,
   routingConfig,
@@ -86,6 +87,12 @@ async function getRoutingAgent({
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
 
+  // Get only user-configured processors (not memory processors) for the routing agent.
+  // Memory processors (semantic recall, working memory) can interfere with routing decisions,
+  // but user-configured processors like token limiters should be applied.
+  const configuredInputProcessors = await agent.listConfiguredInputProcessors(requestContext);
+  const configuredOutputProcessors = await agent.listConfiguredOutputProcessors(requestContext);
+
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
       // Use agent name instead of description since description might not exist
@@ -96,7 +103,7 @@ async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema),
+        zodToJsonSchema(workflow.inputSchema ?? z.object({})),
       )}`;
     })
     .join('\n');
@@ -104,9 +111,9 @@ async function getRoutingAgent({
   const memoryTools = await memoryToUse?.listTools?.();
   const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema('inputSchema' in tool ? tool.inputSchema : z.object({})),
-      )}`;
+      // Use 'in' check for type narrowing, then nullish coalescing for undefined values
+      const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -144,7 +151,9 @@ async function getRoutingAgent({
     instructions,
     model: model,
     memory: memoryToUse,
-    // @ts-ignore
+    inputProcessors: configuredInputProcessors,
+    outputProcessors: configuredOutputProcessors,
+    // @ts-expect-error
     _agentNetworkAppend: true,
   });
 }
@@ -1793,6 +1802,7 @@ export async function networkLoop<OUTPUT = undefined>({
   // If validation fails, marks isComplete=false and adds feedback for next iteration
   const validationStep = createStep({
     id: 'validation-step',
+    // @ts-expect-error - will be fixed by standard schema
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: z.object({
       task: z.string(),

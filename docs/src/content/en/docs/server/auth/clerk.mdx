@@ -35,7 +35,7 @@ You can find these keys in your Clerk Dashboard under "API Keys".
 Before you can use the `MastraAuthClerk` class you have to install the `@mastra/auth-clerk` package.
 
 ```bash
-npm install @mastra/auth-clerk@beta
+npm install @mastra/auth-clerk@latest
 ```
 
 ## Usage example
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
 
 The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-Visit [MastraAuthClerk](/reference/v1/auth/clerk) for all available configuration options.
+Visit [MastraAuthClerk](/reference/auth/clerk) for all available configuration options.
 
 :::
 
@@ -111,7 +111,7 @@ export const mastraClient = new MastraClient({
 
 The access token must be prefixed with `Bearer` in the Authorization header.
 
-Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
 :::
 
@@ -122,7 +122,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 <Tabs>
   <TabItem value="react" label="React">
 
-    ```tsx title="src/components/test-agent.tsx" copy
+    ```tsx title="src/components/test-agent.tsx"
     "use client";
 
     import { useAuth } from "@clerk/nextjs";
@@ -152,7 +152,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
   </TabItem>
   <TabItem value="curl" label="cURL">
 
-    ```bash copy
+    ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer <your-clerk-access-token>" \

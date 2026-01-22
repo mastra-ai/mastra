@@ -476,9 +476,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
               const toolCallPayload = chunk.payload;
-              // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+              // @ts-expect-error TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
               if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
-                // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+                // @ts-expect-error TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
                 const finishPayload = toolCallPayload.output.payload;
                 if (finishPayload?.usage) {
                   self.updateUsageCount(finishPayload.usage);

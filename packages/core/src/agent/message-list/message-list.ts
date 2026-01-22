@@ -94,7 +94,7 @@ export class MessageList {
     threadId,
     resourceId,
     generateMessageId,
-    // @ts-ignore Flag for agent network messages
+    // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: { threadId?: string; resourceId?: string; generateMessageId?: (context?: IdGeneratorContext) => string } = {}) {
     if (threadId) {

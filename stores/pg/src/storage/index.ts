@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -55,7 +55,7 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  * const rows = await store.db.any('SELECT * FROM my_table');
  * ```
  */
-export class PostgresStore extends MastraStorage {
+export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
   #db: DbClient;
   #ownsPool: boolean;
@@ -147,6 +147,10 @@ export class PostgresStore extends MastraStorage {
       await super.init();
     } catch (error) {
       this.isInitialized = false;
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INIT', 'FAILED'),
