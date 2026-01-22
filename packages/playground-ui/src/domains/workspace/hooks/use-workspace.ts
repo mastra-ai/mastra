@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { toast } from '@/lib/toast';
 
 // =============================================================================
 // Type Definitions
@@ -36,10 +37,26 @@ export interface WorkspacesListResponse {
   workspaces: WorkspaceItem[];
 }
 
+/**
+ * Mount point metadata for displaying filesystem info in the UI.
+ */
+export interface MountInfo {
+  /** Filesystem provider type (e.g., 's3', 'local', 'gcs') */
+  provider: string;
+  /** Icon identifier for the UI */
+  icon?: string;
+  /** Human-friendly display name */
+  displayName?: string;
+  /** Description for tooltips */
+  description?: string;
+}
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** If this directory is a mount point, contains mount metadata */
+  mount?: MountInfo;
 }
 
 export interface FileReadResponse {
@@ -277,6 +294,12 @@ export const useWriteWorkspaceFileFromFile = () => {
       const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
+      toast.success(`Uploaded ${variables.path}`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(`Failed to upload ${variables.path}`, {
+        description: error.message,
+      });
     },
   });
 };
@@ -307,6 +330,12 @@ export const useDeleteWorkspaceFile = () => {
       const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
+      toast.success(`Deleted ${variables.path}`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(`Failed to delete ${variables.path}`, {
+        description: error.message,
+      });
     },
   });
 };
@@ -330,6 +359,12 @@ export const useCreateWorkspaceDirectory = () => {
     onSuccess: (_, variables) => {
       const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
+      toast.success(`Created ${variables.path}`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(`Failed to create ${variables.path}`, {
+        description: error.message,
+      });
     },
   });
 };

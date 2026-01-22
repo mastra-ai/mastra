@@ -66,6 +66,24 @@ export class VirtualFilesystem implements WorkspaceFilesystem {
     return this._mounts;
   }
 
+  /**
+   * Get the underlying filesystem for a given path.
+   * Returns undefined if the path doesn't resolve to any mount.
+   */
+  getFilesystemForPath(path: string): WorkspaceFilesystem | undefined {
+    const resolved = this.resolveMount(path);
+    return resolved?.fs;
+  }
+
+  /**
+   * Get the mount path for a given path.
+   * Returns undefined if the path doesn't resolve to any mount.
+   */
+  getMountPathForPath(path: string): string | undefined {
+    const resolved = this.resolveMount(path);
+    return resolved?.mountPath;
+  }
+
   private normalizeMountPath(path: string): string {
     let n = path.startsWith('/') ? path : `/${path}`;
     if (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
@@ -104,18 +122,34 @@ export class VirtualFilesystem implements WorkspaceFilesystem {
     const normalized = this.normalizePath(path);
     if (this.resolveMount(normalized)) return null;
 
-    const entries = new Set<string>();
-    for (const mountPath of this._mounts.keys()) {
+    const entriesMap = new Map<string, FileEntry>();
+    for (const [mountPath, fs] of this._mounts.entries()) {
       const isUnder = normalized === '/' ? mountPath.startsWith('/') : mountPath.startsWith(normalized + '/');
 
       if (isUnder) {
         const remaining = normalized === '/' ? mountPath.slice(1) : mountPath.slice(normalized.length + 1);
         const next = remaining.split('/')[0];
-        if (next) entries.add(next);
+        if (next && !entriesMap.has(next)) {
+          // Check if this is a direct mount point (e.g., listing '/' and mount is '/s3')
+          const isDirectMount = remaining === next;
+          const entry: FileEntry = { name: next, type: 'directory' as const };
+
+          // If it's a direct mount point, include filesystem metadata
+          if (isDirectMount) {
+            entry.mount = {
+              provider: fs.provider,
+              icon: fs.icon,
+              displayName: fs.displayName,
+              description: fs.description,
+            };
+          }
+
+          entriesMap.set(next, entry);
+        }
       }
     }
 
-    return entries.size > 0 ? Array.from(entries).map(name => ({ name, type: 'directory' as const })) : null;
+    return entriesMap.size > 0 ? Array.from(entriesMap.values()) : null;
   }
 
   private isVirtualPath(path: string): boolean {

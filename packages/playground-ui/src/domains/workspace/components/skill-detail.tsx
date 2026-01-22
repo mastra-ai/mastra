@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Wand2, FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown } from 'lucide-react';
+import { Wand2, FileText, Code, Image, Package, Home, Server, Cloud, ChevronRight, ChevronDown } from 'lucide-react';
 import type { Skill, SkillSource } from '../hooks/use-workspace-skills';
 
 export interface SkillDetailProps {
@@ -26,6 +26,12 @@ function getSourceInfo(source: SkillSource): { icon: React.ReactNode; label: str
         icon: <Server className="h-3.5 w-3.5" />,
         label: 'Managed',
         path: source.mastraPath,
+      };
+    case 'cloud':
+      return {
+        icon: <Cloud className="h-3.5 w-3.5" />,
+        label: source.displayName || `Cloud Storage (${source.provider})`,
+        path: source.cloudPath,
       };
   }
 }

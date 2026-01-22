@@ -10,6 +10,7 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import type {
   WorkspaceFilesystem,
   FilesystemMountConfig,
+  FilesystemIcon,
   FileContent,
   FileStat,
   FileEntry,
@@ -93,6 +94,12 @@ export interface S3FilesystemOptions {
   id?: string;
   /** S3 bucket name */
   bucket: string;
+  /** Human-friendly display name for the UI */
+  displayName?: string;
+  /** Icon identifier for the UI (defaults to 'aws-s3') */
+  icon?: FilesystemIcon;
+  /** Description shown in tooltips */
+  description?: string;
   /** AWS region (use 'auto' for R2) */
   region: string;
   /** AWS access key ID */
@@ -163,6 +170,11 @@ export class S3Filesystem implements WorkspaceFilesystem {
   readonly name = 'S3Filesystem';
   readonly provider = 's3';
 
+  // Display metadata for UI
+  readonly displayName?: string;
+  readonly icon: FilesystemIcon = 'aws-s3';
+  readonly description?: string;
+
   /**
    * S3Filesystem supports mounting into sandboxes that support s3fs-fuse.
    */
@@ -187,6 +199,11 @@ export class S3Filesystem implements WorkspaceFilesystem {
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
     this.prefix = options.prefix ? options.prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
+
+    // Display metadata
+    this.displayName = options.displayName;
+    this.icon = options.icon ?? 'aws-s3';
+    this.description = options.description;
   }
 
   /**
@@ -291,6 +308,13 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
+    // Check if this is a directory - if so, use rmdir instead
+    const isDir = await this.isDirectory(path);
+    if (isDir) {
+      await this.rmdir(path, { recursive: true, force: options?.force });
+      return;
+    }
+
     const client = await this.getClient();
     const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
 

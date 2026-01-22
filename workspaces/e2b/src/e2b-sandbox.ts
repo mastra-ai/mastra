@@ -22,12 +22,7 @@ import type {
   FilesystemMountConfig,
 } from '@mastra/core/workspace';
 import { SandboxNotReadyError } from '@mastra/core/workspace';
-
-// E2B Sandbox types - imported dynamically to avoid hard dependency
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type E2BSandboxInstance = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type E2BSandboxClass = { create: (options: any) => Promise<E2BSandboxInstance> };
+import { Sandbox } from '@e2b/code-interpreter';
 
 // =============================================================================
 // Mount Configuration Types
@@ -87,7 +82,10 @@ export interface E2BSandboxOptions {
   id?: string;
   /** Sandbox template ID */
   template?: string;
-  /** Execution timeout in milliseconds (default: 30000) */
+  /** Execution timeout in milliseconds
+   *
+   * @default 300_000 // 5 minutes
+   */
   timeout?: number;
   /** Environment variables to set in the sandbox */
   env?: Record<string, string>;
@@ -152,7 +150,7 @@ export class E2BSandbox implements WorkspaceSandbox {
   readonly supportsMounting = true;
 
   private _status: SandboxStatus = 'stopped';
-  private _sandbox: E2BSandboxInstance | null = null;
+  private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
 
   private readonly timeout: number;
@@ -166,7 +164,7 @@ export class E2BSandbox implements WorkspaceSandbox {
 
   constructor(options: E2BSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
-    this.timeout = options.timeout ?? 30000;
+    this.timeout = options.timeout ?? 300_000; // 5 minutes;
     this.template = options.template;
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
@@ -203,7 +201,8 @@ export class E2BSandbox implements WorkspaceSandbox {
     }
 
     const config = filesystem.getMountConfig();
-    // E2B can mount cloud storage via FUSE
+    // E2B can mount cloud storage via FUSE (s3fs, gcsfuse)
+    // Note: 'local' filesystems cannot be mounted into E2B since it's a remote sandbox
     return config.type === 's3' || config.type === 'gcs' || config.type === 'r2';
   }
 
@@ -212,6 +211,8 @@ export class E2BSandbox implements WorkspaceSandbox {
    * Uses FUSE tools (s3fs, gcsfuse) to mount cloud storage.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<void> {
+    console.log(`[E2B Mount] Starting mount for ${mountPath}`);
+
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
@@ -220,10 +221,31 @@ export class E2BSandbox implements WorkspaceSandbox {
       throw new Error('Filesystem does not support mounting');
     }
 
-    const config = filesystem.getMountConfig() as E2BMountConfig;
+    // Check if already mounted (e.g., when reconnecting to existing sandbox)
+    const mountCheck = await this._sandbox.commands.run(
+      `mountpoint -q "${mountPath}" && echo "mounted" || echo "not mounted"`,
+    );
+    if (mountCheck.stdout.trim() === 'mounted') {
+      console.log(`[E2B Mount] ${mountPath} is already mounted, skipping`);
+      const config = filesystem.getMountConfig() as E2BMountConfig;
+      this._mounts.set(mountPath, { filesystem, config });
+      return;
+    }
 
-    // Create mount directory
-    await this._sandbox.commands.run(`mkdir -p "${mountPath}"`);
+    const config = filesystem.getMountConfig() as E2BMountConfig;
+    console.log(`[E2B Mount] Config type: ${config.type}`);
+
+    // Create mount directory with sudo (for paths outside home dir like /data)
+    // Then chown to current user so mount works without issues
+    try {
+      const mkdirResult = await this._sandbox.commands.run(
+        `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`,
+      );
+      console.log(`[E2B Mount] mkdir result:`, mkdirResult);
+    } catch (mkdirError) {
+      console.log(`[E2B Mount] mkdir error:`, mkdirError);
+      throw mkdirError;
+    }
 
     switch (config.type) {
       case 's3':
@@ -240,15 +262,16 @@ export class E2BSandbox implements WorkspaceSandbox {
     }
 
     this._mounts.set(mountPath, { filesystem, config });
+    console.log(`[E2B Mount] Successfully mounted ${mountPath}`);
   }
 
   private async mountS3(mountPath: string, config: S3MountConfig): Promise<void> {
     if (!this._sandbox) throw new SandboxNotReadyError(this.id);
 
-    // Install s3fs if not present
+    // Install s3fs and fuse if not present
     const checkResult = await this._sandbox.commands.run('which s3fs || echo "not found"');
     if (checkResult.stdout.includes('not found')) {
-      // Update package list and install s3fs with sudo
+      console.log('[E2B Mount] Installing s3fs and fuse...');
       await this._sandbox.commands.run('sudo apt-get update 2>&1', { timeoutMs: 60000 });
 
       const installResult = await this._sandbox.commands.run(
@@ -261,57 +284,47 @@ export class E2BSandbox implements WorkspaceSandbox {
       }
     }
 
+    // Get user's uid/gid for proper file ownership
+    const idResult = await this._sandbox.commands.run('id -u && id -g');
+    const [uid, gid] = idResult.stdout.trim().split('\n');
+
     // Write credentials file
     const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
-    await this._sandbox.files.write('/tmp/.passwd-s3fs', credentialsContent);
-    await this._sandbox.commands.run('chmod 600 /tmp/.passwd-s3fs');
+    const credentialsPath = '/tmp/.passwd-s3fs';
+    await this._sandbox.files.write(credentialsPath, credentialsContent);
+    await this._sandbox.commands.run(`chmod 600 ${credentialsPath}`);
 
-    // Build mount command with common options
-    const mountOptions = [`passwd_file=/tmp/.passwd-s3fs`];
+    // Build mount options
+    const mountOptions = [
+      `passwd_file=${credentialsPath}`,
+      'allow_other', // Allow non-root users to access the mount
+    ];
+
+    // Set uid/gid so mounted files are owned by user, not root
+    if (uid && gid) {
+      mountOptions.push(`uid=${uid}`, `gid=${gid}`);
+    }
 
     if (config.endpoint) {
       // For S3-compatible storage (MinIO, R2, etc.)
-      // Remove trailing slash from endpoint if present
       const endpoint = config.endpoint.replace(/\/$/, '');
-      mountOptions.push(`url=${endpoint}`);
-      mountOptions.push(`use_path_request_style`);
-      // R2 and some S3-compatible storage may need these options
-      mountOptions.push(`sigv4`);
-      mountOptions.push(`nomultipart`);
+      mountOptions.push(`url=${endpoint}`, 'use_path_request_style', 'sigv4', 'nomultipart');
     }
 
-    const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+    // Mount with sudo (required for /dev/fuse access)
+    const mountCmd = `sudo s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+    console.log('[E2B Mount] Mounting S3:', mountCmd.replace(credentialsPath, '***'));
 
-    // Try mount, with fallback to sudo if FUSE permission issues
     try {
       const result = await this._sandbox.commands.run(mountCmd);
       if (result.exitCode !== 0) {
         throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
       }
-    } catch (mountError: unknown) {
-      // E2B throws CommandExitError with result property containing details
-      const errorObj = mountError as { result?: { exitCode: number; stdout: string; stderr: string } };
-      if (errorObj.result) {
-        // Check if it's a FUSE permission issue - try with sudo + allow_other
-        const needsSudo =
-          errorObj.result.stderr?.includes('fuse') ||
-          errorObj.result.stderr?.includes('Permission denied') ||
-          errorObj.result.stdout?.includes('fuse') ||
-          errorObj.result.exitCode === 1; // Generic failure, try sudo
-
-        if (needsSudo) {
-          const sudoMountCmd = `sudo ${mountCmd} -o allow_other`;
-          const sudoResult = await this._sandbox.commands.run(sudoMountCmd);
-
-          if (sudoResult.exitCode !== 0) {
-            throw new Error(`Failed to mount S3 bucket: ${sudoResult.stderr || sudoResult.stdout}`);
-          }
-          return; // Sudo mount succeeded
-        }
-
-        throw new Error(`Failed to mount S3 bucket: ${errorObj.result.stderr || errorObj.result.stdout || mountError}`);
-      }
-      throw mountError;
+    } catch (error: unknown) {
+      const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
+      const stderr = errorObj.result?.stderr || '';
+      const stdout = errorObj.result?.stdout || '';
+      throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
     }
   }
 
@@ -390,11 +403,21 @@ export class E2BSandbox implements WorkspaceSandbox {
     this._status = 'starting';
 
     try {
-      // Dynamic import to avoid requiring @e2b/code-interpreter at module load time
-      const { Sandbox } = (await import('@e2b/code-interpreter')) as unknown as { Sandbox: E2BSandboxClass };
+      // Try to find an existing sandbox with matching metadata first
+      const existingSandbox = await this.findExistingSandbox();
+      if (existingSandbox) {
+        this._sandbox = existingSandbox;
+        this._createdAt = new Date();
+        this._status = 'running';
+        console.log(`[E2BSandbox] Reconnected to existing sandbox for: ${this.id}`);
+        return;
+      }
 
-      this._sandbox = await Sandbox.create({
-        template: this.template,
+      // Create a new sandbox with our logical ID in metadata
+      // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+      console.log(`[E2BSandbox] Creating new sandbox for: ${this.id}`);
+      this._sandbox = await Sandbox.betaCreate(this.template ?? 'base', {
+        autoPause: true,
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
@@ -403,12 +426,47 @@ export class E2BSandbox implements WorkspaceSandbox {
         timeoutMs: this.timeout,
       });
 
+      console.log(`[E2BSandbox] Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
       this._createdAt = new Date();
       this._status = 'running';
     } catch (error) {
       this._status = 'error';
       throw error;
     }
+  }
+
+  /**
+   * Find an existing sandbox with matching mastra-sandbox-id metadata.
+   * Returns the connected sandbox if found, null otherwise.
+   */
+  private async findExistingSandbox(): Promise<Sandbox | null> {
+    try {
+      // Query E2B for existing sandbox with our logical ID in metadata
+      const paginator = Sandbox.list({
+        query: {
+          metadata: { 'mastra-sandbox-id': this.id },
+          state: ['running', 'paused'],
+        },
+      });
+
+      const sandboxes = await paginator.nextItems();
+
+      console.log('[findExistingSandbox] sandboxes:', sandboxes);
+
+      // Sandbox.list only returns running/paused sandboxes, so no need to filter
+      if (sandboxes.length > 0) {
+        const existingSandbox = sandboxes[0]!;
+        console.log(
+          `[E2BSandbox] Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
+        );
+        return await Sandbox.connect(existingSandbox.sandboxId);
+      }
+    } catch (e) {
+      console.log(`[E2BSandbox] Error querying for existing sandbox:`, e);
+      // Continue to create new sandbox
+    }
+
+    return null;
   }
 
   async stop(): Promise<void> {
@@ -466,7 +524,7 @@ export class E2BSandbox implements WorkspaceSandbox {
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
-  private async ensureSandbox(): Promise<E2BSandboxInstance> {
+  private async ensureSandbox(): Promise<Sandbox> {
     if (!this._sandbox) {
       await this.start();
     }

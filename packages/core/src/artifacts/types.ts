@@ -9,7 +9,7 @@
 /**
  * Source type identifier for content origin
  */
-export type ContentSourceType = 'external' | 'local' | 'managed';
+export type ContentSourceType = 'external' | 'local' | 'managed' | 'cloud';
 
 /**
  * Content source indicating where content comes from and its access level.
@@ -18,11 +18,13 @@ export type ContentSourceType = 'external' | 'local' | 'managed';
  * - external: From node_modules packages (read-only)
  * - local: From project source directory (read-write)
  * - managed: From .mastra directory, typically Studio-managed (read-write)
+ * - cloud: From cloud storage (S3, GCS, Azure Blob, etc.) via mounted filesystem (read-write)
  */
 export type ContentSource =
   | { type: 'external'; packagePath: string }
   | { type: 'local'; projectPath: string }
-  | { type: 'managed'; mastraPath: string };
+  | { type: 'managed'; mastraPath: string }
+  | { type: 'cloud'; cloudPath: string; provider: string; displayName?: string };
 
 /**
  * Options for listing content entities (skills or namespaces)

@@ -2,7 +2,7 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, FileCode, Package, Home, Server } from 'lucide-react';
+import { Wand2, BookOpen, FileCode, Package, Home, Server, Cloud } from 'lucide-react';
 import type { SkillMetadata, SkillSource } from '../hooks/use-workspace-skills';
 
 export interface SkillsTableProps {
@@ -16,7 +16,8 @@ export interface SkillsTableProps {
 const columns = [
   { name: 'name', label: 'Skill', size: '1fr' },
   { name: 'description', label: 'Description', size: '2fr' },
-  { name: 'tools', label: 'Allowed Tools', size: '8rem' },
+  { name: 'source', label: 'Source', size: '10rem' },
+  // { name: 'tools', label: 'Allowed Tools', size: '8rem' }, // Experimental feature - hidden for now
 ];
 
 function getSourceIcon(source?: SkillSource) {
@@ -29,6 +30,8 @@ function getSourceIcon(source?: SkillSource) {
       return <Home className="h-3 w-3" />;
     case 'managed':
       return <Server className="h-3 w-3" />;
+    case 'cloud':
+      return <Cloud className="h-3 w-3" />;
     default:
       return <Package className="h-3 w-3" />;
   }
@@ -44,6 +47,8 @@ function getSourceLabel(source?: SkillSource) {
       return 'Local';
     case 'managed':
       return 'Managed';
+    case 'cloud':
+      return source.displayName || `Cloud (${source.provider})`;
     default:
       return 'Unknown';
   }
@@ -97,6 +102,11 @@ export function SkillsTable({
                     <span className="font-medium text-icon6">{skill.name}</span>
                   </div>
                   <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
+                  <div className="flex items-center gap-1.5 text-icon4">
+                    {getSourceIcon(skill.source)}
+                    <span className="text-xs">{getSourceLabel(skill.source)}</span>
+                  </div>
+                  {/* Allowed Tools - Experimental feature, hidden for now
                   <div className="flex items-center gap-1.5">
                     {skill.allowedTools && skill.allowedTools.length > 0 ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6875rem] bg-green-500/10 text-green-400">
@@ -107,6 +117,7 @@ export function SkillsTable({
                       <span className="text-icon3 text-xs">None</span>
                     )}
                   </div>
+                  */}
                 </EntryList.Entry>
               );
             })}
@@ -132,7 +143,7 @@ function SkillsTableSkeleton() {
                 <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
               </div>
               <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
-              <div className="h-5 w-10 rounded bg-surface4 animate-pulse" />
+              <div className="h-4 w-16 rounded bg-surface4 animate-pulse" />
             </EntryList.Entry>
           ))}
         </EntryList.Entries>

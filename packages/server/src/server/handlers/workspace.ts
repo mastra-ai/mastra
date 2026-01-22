@@ -352,6 +352,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
           name: entry.name,
           type: entry.type,
           size: entry.size,
+          mount: entry.mount,
         })),
       };
     } catch (error) {
@@ -663,6 +664,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
           compatibility: skill.compatibility,
           metadata: skill.metadata,
           allowedTools: skill.allowedTools,
+          source: skill.source,
         })),
         isSkillsConfigured: true,
       };

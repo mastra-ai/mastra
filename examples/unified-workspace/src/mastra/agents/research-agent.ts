@@ -8,7 +8,6 @@ import { readonlyWorkspace } from '../workspaces';
  * Memory for the research agent - persists conversation history and findings.
  */
 const researchMemory = new Memory({
-  id: 'research-agent-memory',
   storage: new LibSQLStore({
     id: 'research-agent-memory-storage',
     url: 'file:./research-agent.db',

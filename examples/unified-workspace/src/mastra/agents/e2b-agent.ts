@@ -1,38 +1,20 @@
-import { Workspace } from '@mastra/core';
+import { LocalFilesystem, Workspace } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { E2BSandbox } from '@mastra/e2b';
 import { S3Filesystem } from '@mastra/s3';
 
-/**
- * E2B Cloud Sandbox workspace with S3 filesystem mounting.
- *
- * Required environment variables:
- * - E2B_API_KEY: E2B API key for cloud sandbox
- * - S3_BUCKET: S3 bucket name (or R2 bucket)
- * - S3_REGION: AWS region (use 'auto' for Cloudflare R2)
- * - S3_ACCESS_KEY_ID: AWS/R2 access key ID
- * - S3_SECRET_ACCESS_KEY: AWS/R2 secret access key
- * - S3_ENDPOINT: (optional) Custom endpoint for R2/MinIO
- *
- * This workspace uses:
- * - S3Filesystem for file storage (cloud storage)
- * - E2BSandbox for code execution (cloud sandbox)
- *
- * Mounting behavior:
- * - `mounts` specifies which filesystems to mount and where
- * - S3 is mountable into E2B via s3fs-fuse, providing a unified view
- * - Code running in the sandbox can access S3 files at /workspace
- * - The first mount becomes the primary filesystem for workspace operations
- */
-
-export const e2bWorkspace = new Workspace({
-  id: 'e2b-workspace',
-  name: 'E2B Cloud Workspace',
+export const cloudWorkspace = new Workspace({
+  id: 'cloud-workspace',
+  name: 'Cloud Workspace',
   sandbox: new E2BSandbox({
-    timeout: 120000, // 2 minutes
+    id: 'yay-testing-123',
+    timeout: 30_000, // 30 seconds
   }),
+  // ?? sandbox logs?
   mounts: {
-    '/home/user/s3': new S3Filesystem({
+    '/local': new LocalFilesystem({ basePath: '/Users/caleb/mastra/examples/unified-workspace/agent-files' }),
+    '/data': new S3Filesystem({
+      displayName: 'Cloudflare R2',
       bucket: process.env.S3_BUCKET!,
       region: process.env.S3_REGION ?? 'us-east-1',
       accessKeyId: process.env.S3_ACCESS_KEY_ID!,
@@ -40,13 +22,15 @@ export const e2bWorkspace = new Workspace({
       endpoint: process.env.S3_ENDPOINT,
     }),
   },
+  // TODO: better error messages (not just exit code) for execute_code and execute_command tools
+
+  skillsPaths: ['/local/skills', '/data/skills'],
   bm25: true,
   autoInit: true,
   safety: {
     requireReadBeforeWrite: false,
     requireSandboxApproval: 'none',
   },
-  skillsPaths: ['/home/user/s3/skills'],
 });
 
 /**
@@ -68,5 +52,5 @@ You can:
 When asked to run code, use the workspace_execute_code tool.
 Always show the output to the user.`,
   model: 'openai/gpt-5.1',
-  workspace: e2bWorkspace,
+  workspace: cloudWorkspace,
 });

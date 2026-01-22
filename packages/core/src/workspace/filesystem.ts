@@ -25,6 +25,22 @@
 
 export type FileContent = string | Buffer | Uint8Array;
 
+/**
+ * Known filesystem icon identifiers for UI rendering.
+ * Allows any string but provides autocomplete for common providers.
+ */
+export type FilesystemIcon =
+  | 'aws-s3'
+  | 'google-cloud'
+  | 'cloudflare'
+  | 'azure-blob'
+  | 'folder'
+  | 'folder-open'
+  | 'database'
+  | 'hard-drive'
+  | 'cloud'
+  | (string & {});
+
 // =============================================================================
 // Mount Configuration Types
 // =============================================================================
@@ -66,10 +82,27 @@ export interface FileStat {
   mimeType?: string;
 }
 
+/**
+ * Mount point metadata for UI display.
+ * Included in FileEntry when the entry represents a mount point.
+ */
+export interface MountInfo {
+  /** Filesystem provider type (e.g., 's3', 'local', 'gcs') */
+  provider: string;
+  /** Icon identifier for the UI */
+  icon?: FilesystemIcon;
+  /** Human-friendly display name */
+  displayName?: string;
+  /** Description for tooltips */
+  description?: string;
+}
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** If this directory is a mount point, contains mount metadata */
+  mount?: MountInfo;
 }
 
 export interface ReadOptions {
@@ -149,8 +182,33 @@ export interface WorkspaceFilesystem {
   /** Human-readable name (e.g., 'LocalFilesystem', 'AgentFS') */
   readonly name: string;
 
-  /** Provider type identifier */
+  /** Provider type identifier (e.g., 'local', 's3', 'gcs') */
   readonly provider: string;
+
+  // ---------------------------------------------------------------------------
+  // Display Metadata (optional - for UI rendering)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Human-friendly display name for the UI.
+   * If not provided, UI can fall back to `name`.
+   * @example "My Data Bucket", "Production Assets"
+   */
+  readonly displayName?: string;
+
+  /**
+   * Icon identifier for the UI.
+   * Can be a provider name (e.g., 'aws-s3', 'google-cloud'), emoji, or icon library name.
+   * If not provided, UI can derive from `provider`.
+   * @example "aws-s3", "folder", "🪣"
+   */
+  readonly icon?: FilesystemIcon;
+
+  /**
+   * Description shown in tooltips or info panels.
+   * @example "S3 bucket for storing agent outputs"
+   */
+  readonly description?: string;
 
   // ---------------------------------------------------------------------------
   // Mount Support (optional capability)

@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@e2b/code-interpreter": "^1.0.4"
+    "@e2b/code-interpreter": "^2.3.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

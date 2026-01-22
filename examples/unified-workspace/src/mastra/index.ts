@@ -12,7 +12,7 @@ import {
   // e2bAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
-import { e2bWorkspace } from './agents/e2b-agent';
+import { cloudWorkspace } from './agents/e2b-agent';
 
 // Re-export workspaces for demo scripts
 export {
@@ -25,7 +25,7 @@ export {
   commandApprovalWorkspace,
   testAgentWorkspace,
 } from './workspaces';
-export { e2bWorkspace } from './agents/e2b-agent';
+export { cloudWorkspace as e2bWorkspace } from './agents/e2b-agent';
 
 /**
  * Storage for Mastra (threads, memory, etc.)
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
     testAgent,
     // e2bAgent,
   },
-  workspace: e2bWorkspace,
+  workspace: cloudWorkspace,
   // workspace: globalWorkspace,
   storage,
 });

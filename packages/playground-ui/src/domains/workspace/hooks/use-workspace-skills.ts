@@ -8,7 +8,8 @@ import { useMastraClient } from '@mastra/react';
 export type SkillSource =
   | { type: 'external'; packagePath: string }
   | { type: 'local'; projectPath: string }
-  | { type: 'managed'; mastraPath: string };
+  | { type: 'managed'; mastraPath: string }
+  | { type: 'cloud'; cloudPath: string; provider: string; displayName?: string };
 
 export interface SkillMetadata {
   name: string;
@@ -17,6 +18,7 @@ export interface SkillMetadata {
   compatibility?: string;
   metadata?: Record<string, string>;
   allowedTools?: string[];
+  source?: SkillSource;
 }
 
 export interface Skill extends SkillMetadata {

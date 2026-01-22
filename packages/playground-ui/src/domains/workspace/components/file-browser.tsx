@@ -14,10 +14,17 @@ import {
   Upload,
   FolderPlus,
   Trash2,
+  HardDrive,
+  Cloud,
+  Database,
 } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { AlertDialog } from '@/ds/components/AlertDialog';
-import type { FileEntry } from '../hooks/use-workspace';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
+import { AmazonIcon } from '@/ds/icons/AmazonIcon';
+import { GoogleIcon } from '@/ds/icons/GoogleIcon';
+import { AzureIcon } from '@/ds/icons/AzureIcon';
+import type { FileEntry, MountInfo } from '../hooks/use-workspace';
 
 // =============================================================================
 // Type Definitions
@@ -31,16 +38,59 @@ export interface FileBrowserProps {
   onFileSelect?: (path: string) => void;
   onRefresh?: () => void;
   onUpload?: () => void;
-  onCreateDirectory?: (path: string) => void;
-  onDelete?: (path: string) => void;
+  onCreateDirectory?: (path: string) => void | Promise<void>;
+  onDelete?: (path: string) => void | Promise<void>;
+  /** Shows loading state on create directory button */
+  isCreatingDirectory?: boolean;
+  /** Shows loading state on delete confirmation */
+  isDeleting?: boolean;
 }
 
 // =============================================================================
 // File Icon Helper
 // =============================================================================
 
-function getFileIcon(name: string, type: 'file' | 'directory', isOpen = false) {
+/**
+ * Get icon for a mount point based on provider or icon field.
+ */
+function getMountIcon(mount: MountInfo) {
+  // First check explicit icon field
+  const iconKey = mount.icon || mount.provider;
+
+  switch (iconKey) {
+    case 'aws-s3':
+    case 's3':
+      return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
+    case 'google-cloud':
+    case 'gcs':
+      return <GoogleIcon className="h-4 w-4" />;
+    case 'azure-blob':
+    case 'azure':
+      return <AzureIcon className="h-4 w-4 text-[#0078D4]" />;
+    case 'cloudflare':
+    case 'r2':
+      return <Cloud className="h-4 w-4 text-[#F38020]" />;
+    case 'database':
+      return <Database className="h-4 w-4 text-emerald-400" />;
+    case 'local':
+    case 'folder':
+      return <Folder className="h-4 w-4 text-amber-400" />;
+    case 'hard-drive':
+      return <HardDrive className="h-4 w-4 text-slate-400" />;
+    case 'cloud':
+      return <Cloud className="h-4 w-4 text-sky-400" />;
+    default:
+      // Default to cloud icon for unknown providers
+      return <Cloud className="h-4 w-4 text-icon4" />;
+  }
+}
+
+function getFileIcon(name: string, type: 'file' | 'directory', isOpen = false, mount?: MountInfo) {
   if (type === 'directory') {
+    // If it's a mount point, show the provider icon
+    if (mount) {
+      return getMountIcon(mount);
+    }
     return isOpen ? <FolderOpen className="h-4 w-4 text-amber-400" /> : <Folder className="h-4 w-4 text-amber-400" />;
   }
 
@@ -130,6 +180,8 @@ export function FileBrowser({
   onUpload,
   onCreateDirectory,
   onDelete,
+  isCreatingDirectory,
+  isDeleting,
 }: FileBrowserProps) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
@@ -169,6 +221,7 @@ export function FileBrowser({
             <Button
               variant="ghost"
               size="md"
+              disabled={isCreatingDirectory}
               onClick={() => {
                 const name = prompt('Directory name:');
                 if (name) {
@@ -177,7 +230,7 @@ export function FileBrowser({
                 }
               }}
             >
-              <FolderPlus className="h-4 w-4" />
+              {isCreatingDirectory ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
             </Button>
           )}
           {onUpload && (
@@ -215,36 +268,59 @@ export function FileBrowser({
                 </button>
               </li>
             )}
-            {sortedEntries.map(entry => (
-              <li key={entry.name} className="group">
-                <div className="flex items-center hover:bg-surface4 transition-colors">
-                  <button
-                    onClick={() => handleEntryClick(entry)}
-                    className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
-                  >
-                    {getFileIcon(entry.name, entry.type)}
-                    <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
-                    {entry.type === 'file' && entry.size !== undefined && (
-                      <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
-                    )}
-                  </button>
-                  {onDelete && (
+            {sortedEntries.map(entry => {
+              const icon = getFileIcon(entry.name, entry.type, false, entry.mount);
+              const tooltipContent = entry.mount
+                ? `${entry.mount.displayName || entry.name}${entry.mount.description ? ` - ${entry.mount.description}` : ''}`
+                : undefined;
+
+              return (
+                <li key={entry.name} className="group">
+                  <div className="flex items-center hover:bg-surface4 transition-colors">
                     <button
-                      onClick={() => handleDelete(entry)}
-                      className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
+                      onClick={() => handleEntryClick(entry)}
+                      className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {tooltipContent ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="flex items-center">{icon}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>{tooltipContent}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        icon
+                      )}
+                      <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
+                      {entry.mount && (
+                        <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                          {entry.mount.provider}
+                        </span>
+                      )}
+                      {entry.type === 'file' && entry.size !== undefined && (
+                        <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
+                      )}
                     </button>
-                  )}
-                </div>
-              </li>
-            ))}
+                    {onDelete && (
+                      <button
+                        onClick={() => handleDelete(entry)}
+                        className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !isDeleting && !open && setDeleteTarget(null)}>
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>Delete Item</AlertDialog.Title>
@@ -253,16 +329,23 @@ export function FileBrowser({
             </AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action
-              onClick={() => {
+              disabled={isDeleting}
+              onClick={async () => {
                 if (deleteTarget && onDelete) {
-                  onDelete(deleteTarget);
+                  try {
+                    await onDelete(deleteTarget);
+                    setDeleteTarget(null);
+                  } catch {
+                    // Error toast is shown by the hook, just close dialog
+                    setDeleteTarget(null);
+                  }
                 }
-                setDeleteTarget(null);
               }}
             >
-              Delete
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

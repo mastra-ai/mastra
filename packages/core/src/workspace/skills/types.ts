@@ -38,6 +38,8 @@ export interface SkillMetadata {
    * @experimental Support may vary between agent implementations.
    */
   allowedTools?: string[];
+  /** Optional source info (included in list responses) */
+  source?: SkillSource;
 }
 
 /**

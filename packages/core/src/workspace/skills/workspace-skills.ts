@@ -10,6 +10,7 @@ import matter from 'gray-matter';
 
 import type { WorkspaceFilesystem } from '../filesystem';
 import type { SearchEngine } from '../search-engine';
+import { VirtualFilesystem } from '../virtual-filesystem';
 import { parseAllowedTools, validateSkillMetadata } from './schemas';
 import type {
   Skill,
@@ -21,6 +22,12 @@ import type {
   WorkspaceSkills,
   SkillSource,
 } from './types';
+
+/**
+ * Providers that are considered "cloud" storage.
+ * These should show "Cloud Storage" as the source type.
+ */
+const CLOUD_PROVIDERS = new Set(['s3', 'gcs', 'azure-blob', 'r2', 'cloudflare-r2', 'minio']);
 
 // =============================================================================
 // Internal Types
@@ -92,6 +99,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       compatibility: skill.compatibility,
       metadata: skill.metadata,
       allowedTools: skill.allowedTools,
+      source: skill.source,
     }));
   }
 
@@ -740,15 +748,42 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Determine the source type based on the path
+   * Determine the source type based on the path and underlying filesystem.
+   * If the filesystem is a VirtualFilesystem, checks the provider of the
+   * underlying mounted filesystem to detect cloud storage.
    */
   #determineSource(skillsPath: string): SkillSource {
+    // First check path-based heuristics
     if (skillsPath.includes('node_modules')) {
       return { type: 'external', packagePath: skillsPath };
     }
     if (skillsPath.includes('.mastra/skills')) {
       return { type: 'managed', mastraPath: skillsPath };
     }
+
+    // Check if the filesystem is a VirtualFilesystem with mounted cloud storage
+    if (this.#filesystem instanceof VirtualFilesystem) {
+      const underlyingFs = this.#filesystem.getFilesystemForPath(skillsPath);
+      if (underlyingFs && CLOUD_PROVIDERS.has(underlyingFs.provider)) {
+        return {
+          type: 'cloud',
+          cloudPath: skillsPath,
+          provider: underlyingFs.provider,
+          displayName: underlyingFs.displayName,
+        };
+      }
+    }
+
+    // Check if the direct filesystem is a cloud provider
+    if (CLOUD_PROVIDERS.has(this.#filesystem.provider)) {
+      return {
+        type: 'cloud',
+        cloudPath: skillsPath,
+        provider: this.#filesystem.provider,
+        displayName: this.#filesystem.displayName,
+      };
+    }
+
     return { type: 'local', projectPath: skillsPath };
   }
 

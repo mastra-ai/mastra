@@ -85,6 +85,7 @@ export type {
   FileContent,
   FileStat,
   FileEntry,
+  MountInfo,
   ReadOptions,
   WriteOptions,
   ListOptions,
@@ -96,6 +97,7 @@ export type {
   WatchHandle,
   FilesystemAuditEntry,
   FilesystemAuditOptions,
+  FilesystemIcon,
 } from './filesystem';
 
 export {

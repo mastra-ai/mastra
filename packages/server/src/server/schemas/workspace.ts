@@ -67,10 +67,20 @@ export const fsMkdirBodySchema = z.object({
 // Filesystem Response Schemas
 // =============================================================================
 
+export const mountInfoSchema = z
+  .object({
+    provider: z.string(),
+    icon: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .optional();
+
 export const fileEntrySchema = z.object({
   name: z.string(),
   type: z.enum(['file', 'directory']),
   size: z.number().optional(),
+  mount: mountInfoSchema,
 });
 
 export const fsReadResponseSchema = z.object({
@@ -245,6 +255,18 @@ export const searchSkillsQuerySchema = z.object({
 // Skills Response Schemas
 // =============================================================================
 
+export const skillSourceSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('external'), packagePath: z.string() }),
+  z.object({ type: z.literal('local'), projectPath: z.string() }),
+  z.object({ type: z.literal('managed'), mastraPath: z.string() }),
+  z.object({
+    type: z.literal('cloud'),
+    cloudPath: z.string(),
+    provider: z.string(),
+    displayName: z.string().optional(),
+  }),
+]);
+
 export const skillMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -252,13 +274,8 @@ export const skillMetadataSchema = z.object({
   compatibility: z.string().optional(),
   metadata: z.record(z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
+  source: skillSourceSchema.optional(),
 });
-
-export const skillSourceSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('external'), packagePath: z.string() }),
-  z.object({ type: z.literal('local'), projectPath: z.string() }),
-  z.object({ type: z.literal('managed'), mastraPath: z.string() }),
-]);
 
 export const skillSchema = skillMetadataSchema.extend({
   path: z.string(),

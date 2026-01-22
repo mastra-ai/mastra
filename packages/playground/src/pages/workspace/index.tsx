@@ -361,10 +361,12 @@ export default function Workspace() {
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
-                    onCreateDirectory={path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })}
+                    onCreateDirectory={path => createDirectory.mutateAsync({ path, workspaceId: effectiveWorkspaceId })}
                     onDelete={path =>
-                      deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
+                      deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
                     }
+                    isCreatingDirectory={createDirectory.isPending}
+                    isDeleting={deleteFile.isPending}
                   />
                   {selectedFile && (
                     <FileViewer
