@@ -117,34 +117,17 @@ const handleResume = async () => {
 
 ### Handling human rejection with `bail()`
 
-Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `bailed` status, and any logic after the call to `bail()` is skipped.
+Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
 
-**Important:** `bail()` must return a value that matches the step's `outputSchema`. You can use discriminated unions to handle different outcomes.
-
-```typescript {7-11,13-19,24-28}
+```typescript {6-10}
 const step1 = createStep({
-  id: "step-1",
-  inputSchema: z.object({
-    userEmail: z.string()
-  }),
-  outputSchema: z.object({
-    status: z.enum(['sent', 'rejected']),
-    message: z.string()
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean()
-  }),
-  suspendSchema: z.object({
-    reason: z.string()
-  }),
   execute: async ({ inputData, resumeData, suspend, bail }) => {
     const { userEmail } = inputData;
     const { approved } = resumeData ?? {};
 
     if (approved === false) {
       return bail({
-        status: 'rejected',
-        message: "User rejected the request."
+        reason: "User rejected the request."
       });
     }
 
@@ -155,7 +138,6 @@ const step1 = createStep({
     }
 
     return {
-      status: 'sent',
       message: `Email sent to ${userEmail}`
     };
   }
