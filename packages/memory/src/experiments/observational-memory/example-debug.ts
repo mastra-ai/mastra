@@ -43,11 +43,7 @@ the user. Use this information when answering questions about the user.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [
     customMessageHistory, // Load previous messages
-    om, // Inject observations
-  ],
-  outputProcessors: [
-    customMessageHistory, // Save new messages
-    om, // Track messages & trigger observer
+    om, // Inject observations, track messages & trigger observer
   ],
 });
 

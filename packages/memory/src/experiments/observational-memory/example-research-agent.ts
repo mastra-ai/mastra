@@ -62,7 +62,6 @@ Be thorough but concise. Cite specific numbers, dates, and sources when availabl
   model: 'google/gemini-2.5-flash',
   tools: { web_search: openai.tools.webSearch() },
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 // Create a RECALL-ONLY agent (NO tools) to prove OM works
@@ -80,7 +79,6 @@ Be specific - cite facts, numbers, dates from the observations.`,
   model: 'google/gemini-2.5-flash',
   // NO TOOLS! Must use observations only
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 const threadId = 'research-session-llm-architectures';

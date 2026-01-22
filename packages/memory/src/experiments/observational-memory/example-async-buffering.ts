@@ -48,7 +48,6 @@ IMPORTANT: You have access to <observations> containing key facts about the user
 Use this to provide personalized responses.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 const threadId = 'thread-buffering-test';

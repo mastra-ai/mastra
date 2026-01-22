@@ -69,6 +69,8 @@ export class TokenCounter {
                   overhead -= 12;
                 }
               }
+            } else {
+              throw new Error(`MISSING token counting for part ${part.type}`);
             }
           } else {
             tokenString += JSON.stringify(part);

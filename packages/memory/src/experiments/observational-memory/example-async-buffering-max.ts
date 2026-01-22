@@ -69,7 +69,6 @@ Use this information to provide personalized, context-aware responses.
 Be concise but accurate. When asked about facts, cite specific details.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 const threadId = 'thread-buffering-stress';

@@ -58,7 +58,6 @@ Use this cross-thread knowledge to:
 When answering recall questions, be specific and cite the facts you remember.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 // Same user, 5 different conversation threads

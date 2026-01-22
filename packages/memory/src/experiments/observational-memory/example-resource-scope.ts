@@ -49,7 +49,6 @@ When you see observations labeled with "Thread: xxx", those are from different
 conversations with the same user.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [messageHistory, om],
-  outputProcessors: [messageHistory, om],
 });
 
 // Same user, different thread IDs
