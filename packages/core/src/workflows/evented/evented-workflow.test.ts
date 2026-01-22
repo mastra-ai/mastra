@@ -5193,6 +5193,215 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('should not leak data between concurrent workflow runs with foreach', async () => {
+      // Track which parent each item was processed with
+      const processedItems: Array<{ parentId: string; itemId: string; data: string }> = [];
+
+      const processItemStep = createStep({
+        id: 'process-item',
+        inputSchema: z.object({
+          parentId: z.string(),
+          itemId: z.string(),
+          data: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          parentId: z.string(),
+          itemId: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          // Add a small delay to increase chance of race conditions
+          await new Promise(resolve => setTimeout(resolve, Math.random() * 50));
+
+          // Record what we received
+          processedItems.push({
+            parentId: inputData.parentId,
+            itemId: inputData.itemId,
+            data: inputData.data,
+          });
+
+          return {
+            result: `processed-${inputData.data}`,
+            parentId: inputData.parentId,
+            itemId: inputData.itemId,
+          };
+        },
+      });
+
+      const prepareItemsStep = createStep({
+        id: 'prepare-items',
+        inputSchema: z.object({
+          parentId: z.string(),
+          items: z.array(
+            z.object({
+              itemId: z.string(),
+              data: z.string(),
+            }),
+          ),
+        }),
+        outputSchema: z.array(
+          z.object({
+            parentId: z.string(),
+            itemId: z.string(),
+            data: z.string(),
+          }),
+        ),
+        execute: async ({ inputData }) => {
+          return inputData.items.map(item => ({
+            parentId: inputData.parentId,
+            itemId: item.itemId,
+            data: item.data,
+          }));
+        },
+      });
+
+      const collectResultsStep = createStep({
+        id: 'collect-results',
+        inputSchema: z.array(
+          z.object({
+            result: z.string(),
+            parentId: z.string(),
+            itemId: z.string(),
+          }),
+        ),
+        outputSchema: z.object({
+          results: z.array(
+            z.object({
+              result: z.string(),
+              parentId: z.string(),
+              itemId: z.string(),
+            }),
+          ),
+        }),
+        execute: async ({ inputData }) => {
+          return { results: inputData };
+        },
+      });
+
+      const parentWorkflow = createWorkflow({
+        id: 'parent-workflow',
+        inputSchema: z.object({
+          parentId: z.string(),
+          items: z.array(
+            z.object({
+              itemId: z.string(),
+              data: z.string(),
+            }),
+          ),
+        }),
+        outputSchema: z.object({
+          results: z.array(
+            z.object({
+              result: z.string(),
+              parentId: z.string(),
+              itemId: z.string(),
+            }),
+          ),
+        }),
+        steps: [prepareItemsStep, processItemStep, collectResultsStep],
+        options: { validateInputs: false },
+      });
+
+      parentWorkflow
+        .then(prepareItemsStep)
+        .foreach(processItemStep, { concurrency: 10 })
+        .then(collectResultsStep)
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { 'parent-workflow': parentWorkflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Run 3 parent workflows concurrently, each with distinct data
+      const [resultA, resultB, resultC] = await Promise.all([
+        parentWorkflow.createRun().then(run =>
+          run.start({
+            inputData: {
+              parentId: 'PARENT-A',
+              items: [
+                { itemId: 'A1', data: 'data-from-parent-A' },
+                { itemId: 'A2', data: 'data-from-parent-A' },
+                { itemId: 'A3', data: 'data-from-parent-A' },
+              ],
+            },
+          }),
+        ),
+        parentWorkflow.createRun().then(run =>
+          run.start({
+            inputData: {
+              parentId: 'PARENT-B',
+              items: [
+                { itemId: 'B1', data: 'data-from-parent-B' },
+                { itemId: 'B2', data: 'data-from-parent-B' },
+                { itemId: 'B3', data: 'data-from-parent-B' },
+              ],
+            },
+          }),
+        ),
+        parentWorkflow.createRun().then(run =>
+          run.start({
+            inputData: {
+              parentId: 'PARENT-C',
+              items: [
+                { itemId: 'C1', data: 'data-from-parent-C' },
+                { itemId: 'C2', data: 'data-from-parent-C' },
+                { itemId: 'C3', data: 'data-from-parent-C' },
+              ],
+            },
+          }),
+        ),
+      ]);
+
+      // Verify each workflow completed successfully
+      expect(resultA.status).toBe('success');
+      expect(resultB.status).toBe('success');
+      expect(resultC.status).toBe('success');
+
+      // Verify PARENT-A results only contain PARENT-A data
+      const resultsA = (resultA.steps as any)['collect-results']?.output?.results ?? [];
+      for (const result of resultsA) {
+        expect(result.parentId).toBe('PARENT-A');
+        expect(result.result).toContain('data-from-parent-A');
+      }
+
+      // Verify PARENT-B results only contain PARENT-B data
+      const resultsB = (resultB.steps as any)['collect-results']?.output?.results ?? [];
+      for (const result of resultsB) {
+        expect(result.parentId).toBe('PARENT-B');
+        expect(result.result).toContain('data-from-parent-B');
+      }
+
+      // Verify PARENT-C results only contain PARENT-C data
+      const resultsC = (resultC.steps as any)['collect-results']?.output?.results ?? [];
+      for (const result of resultsC) {
+        expect(result.parentId).toBe('PARENT-C');
+        expect(result.result).toContain('data-from-parent-C');
+      }
+
+      // Also verify the processedItems log shows no cross-contamination
+      // Each item should have been processed with matching parentId and data
+      for (const item of processedItems) {
+        if (item.parentId === 'PARENT-A') {
+          expect(item.data).toBe('data-from-parent-A');
+          expect(item.itemId).toMatch(/^A/);
+        } else if (item.parentId === 'PARENT-B') {
+          expect(item.data).toBe('data-from-parent-B');
+          expect(item.itemId).toMatch(/^B/);
+        } else if (item.parentId === 'PARENT-C') {
+          expect(item.data).toBe('data-from-parent-C');
+          expect(item.itemId).toMatch(/^C/);
+        }
+      }
+
+      // Verify we processed the expected number of items (3 items * 3 parents = 9)
+      expect(processedItems.length).toBe(9);
+
+      await mastra.stopEventEngine();
+    });
   });
 
   describe('if-else branching', () => {
