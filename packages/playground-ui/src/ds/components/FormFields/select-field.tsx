@@ -45,7 +45,7 @@ export function SelectField({
       {label && (
         <label
           htmlFor={`select-${name}`}
-          className={cn('text-ui-md text-neutral3 flex justify-between items-center shrink-0 ')}
+          className={cn('text-ui-md text-neutral3 flex justify-between items-center shrink-0')}
         >
           {label}
           {required && <i className="text-neutral2">(required)</i>}
