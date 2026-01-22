@@ -70,18 +70,12 @@ createDurableAgentTestSuite({
   eventPropagationDelay: 2000,
 
   // Skip domains that don't apply to InngestDurableAgent
-  // NOTE: Domains that use `new DurableAgent()` directly instead of `createAgent()`
-  // will create DurableAgent instances, NOT InngestDurableAgent instances!
-  // We must skip those until they are refactored to use the factory pattern.
   skip: {
     // PubSub tests are implementation-specific (EventEmitterPubSub vs InngestPubSub)
     pubsub: true,
     // Callbacks include error handling tests that cause NonRetriableError in Inngest
     callbacks: true,
-    // === Domains that use `new DurableAgent()` - SKIP until refactored ===
-    advanced: true, // Uses runRegistry, getWorkflow - needs special handling
-    toolApproval: true, // Uses new DurableAgent()
-    toolSuspension: true, // Uses new DurableAgent()
-    toolConcurrency: true, // Uses new DurableAgent()
+    // Advanced tests use DurableAgent-specific APIs (runRegistry, getWorkflow)
+    advanced: true,
   },
 });

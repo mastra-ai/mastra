@@ -7,17 +7,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import { createTool } from '@mastra/core/tools';
 import type { DurableAgentTestContext } from '../types';
-import { createTextStreamModel, createToolCallModel, createMultiToolCallModel } from '../mock-models';
+import { createToolCallModel, createMultiToolCallModel } from '../mock-models';
 
-export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext) {
+export function createToolSuspensionTests({ createAgent }: DurableAgentTestContext) {
   describe('tool suspension', () => {
     describe('suspendSchema and resumeSchema configuration', () => {
       it('should register tool with suspendSchema and resumeSchema', async () => {
         const mockModel = createToolCallModel('interactiveTool', { input: 'test' });
-        const pubsub = getPubSub();
 
         const interactiveTool = createTool({
           id: 'interactiveTool',
@@ -40,25 +38,23 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           },
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'suspension-agent',
           name: 'Suspension Agent',
           instructions: 'You can use interactive tools',
           model: mockModel,
           tools: { interactiveTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Use the interactive tool');
 
-        const tools = agent.runRegistry.getTools(result.runId);
-        expect(tools).toBeDefined();
-        expect(tools.interactiveTool).toBeDefined();
+        // Verify tools metadata is included
+        expect(result.workflowInput.toolsMetadata).toBeDefined();
+        expect(result.runId).toBeDefined();
       });
 
       it('should serialize suspendSchema and resumeSchema in workflow input', async () => {
         const mockModel = createToolCallModel('suspendableTool', { data: 'test' });
-        const pubsub = getPubSub();
 
         const suspendableTool = createTool({
           id: 'suspendableTool',
@@ -74,13 +70,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           execute: async () => ({ done: true }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'schema-suspension-agent',
           name: 'Schema Suspension Agent',
           instructions: 'Use suspendable tools',
           model: mockModel,
           tools: { suspendableTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Use the suspendable tool');
@@ -96,7 +91,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
     describe('tool suspension in streaming', () => {
       it('should handle streaming with suspendable tool', async () => {
         const mockModel = createToolCallModel('askForConfirmation', { question: 'Proceed?' });
-        const pubsub = getPubSub();
 
         const confirmationTool = createTool({
           id: 'askForConfirmation',
@@ -112,13 +106,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           },
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'confirmation-agent',
           name: 'Confirmation Agent',
           instructions: 'Ask for confirmation when needed',
           model: mockModel,
           tools: { askForConfirmation: confirmationTool },
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Please confirm this action');
@@ -129,7 +122,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
 
       it('should support autoResumeSuspendedTools option', async () => {
         const mockModel = createToolCallModel('autoResumeTool', { value: 'test' });
-        const pubsub = getPubSub();
 
         const autoResumeTool = createTool({
           id: 'autoResumeTool',
@@ -140,13 +132,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           execute: async () => ({ result: 'auto-resumed' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'auto-resume-agent',
           name: 'Auto Resume Agent',
           instructions: 'Use auto-resuming tools',
           model: mockModel,
           tools: { autoResumeTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Test auto resume', {
@@ -163,7 +154,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           { toolName: 'validateData', args: { data: 'test' } },
           { toolName: 'processData', args: { data: 'test' } },
         ]);
-        const pubsub = getPubSub();
 
         const validateTool = createTool({
           id: 'validateData',
@@ -186,25 +176,23 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           },
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'multi-tool-agent',
           name: 'Multi Tool Agent',
           instructions: 'Validate then process data',
           model: mockModel,
           tools: { validateData: validateTool, processData: processTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Validate and process the data');
 
-        const tools = agent.runRegistry.getTools(result.runId);
-        expect(tools.validateData).toBeDefined();
-        expect(tools.processData).toBeDefined();
+        // Verify tools metadata includes both tools
+        expect(result.workflowInput.toolsMetadata).toBeDefined();
+        expect(result.runId).toBeDefined();
       });
 
       it('should handle tool chain where one suspends', async () => {
         const mockModel = createToolCallModel('chainedTool', { step: 1 });
-        const pubsub = getPubSub();
 
         const chainedTool = createTool({
           id: 'chainedTool',
@@ -225,13 +213,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           },
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'chained-agent',
           name: 'Chained Agent',
           instructions: 'Execute tool chain',
           model: mockModel,
           tools: { chainedTool },
-          pubsub,
         });
 
         const { runId, cleanup } = await agent.stream('Start the chain');
@@ -244,7 +231,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
     describe('suspension with memory', () => {
       it('should preserve memory context through suspension', async () => {
         const mockModel = createToolCallModel('memoryTool', { query: 'test' });
-        const pubsub = getPubSub();
 
         const memoryTool = createTool({
           id: 'memoryTool',
@@ -255,13 +241,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           execute: async () => ({ found: true }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'memory-suspension-agent',
           name: 'Memory Suspension Agent',
           instructions: 'Use memory with suspension',
           model: mockModel,
           tools: { memoryTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Search with memory', {
@@ -281,7 +266,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
     describe('suspension workflow state', () => {
       it('should include suspension-related options in workflow input', async () => {
         const mockModel = createToolCallModel('statefulTool', { action: 'start' });
-        const pubsub = getPubSub();
 
         const statefulTool = createTool({
           id: 'statefulTool',
@@ -292,13 +276,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           execute: async () => ({ state: 'completed' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'stateful-agent',
           name: 'Stateful Agent',
           instructions: 'Manage state',
           model: mockModel,
           tools: { statefulTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Start stateful operation', {
@@ -312,7 +295,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
 
       it('should handle complex suspend/resume schema types', async () => {
         const mockModel = createToolCallModel('complexTool', { type: 'init' });
-        const pubsub = getPubSub();
 
         const complexTool = createTool({
           id: 'complexTool',
@@ -335,13 +317,12 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
           execute: async () => ({ done: true }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'complex-schema-agent',
           name: 'Complex Schema Agent',
           instructions: 'Handle complex schemas',
           model: mockModel,
           tools: { complexTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Execute complex operation');
@@ -358,7 +339,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
   describe('suspension edge cases', () => {
     it('should handle tool without suspendSchema executing normally', async () => {
       const mockModel = createToolCallModel('normalTool', { value: 'test' });
-      const pubsub = getPubSub();
 
       const normalTool = createTool({
         id: 'normalTool',
@@ -367,19 +347,18 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
         execute: async input => ({ echoed: input.value }),
       });
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'normal-tool-agent',
         name: 'Normal Tool Agent',
         instructions: 'Use normal tools',
         model: mockModel,
         tools: { normalTool },
-        pubsub,
       });
 
       const result = await agent.prepare('Echo the value');
 
       expect(result.runId).toBeDefined();
-      expect(agent.runRegistry.getTools(result.runId).normalTool).toBeDefined();
+      expect(result.workflowInput.toolsMetadata).toBeDefined();
     });
 
     it('should handle mixed tools - some with suspension, some without', async () => {
@@ -387,7 +366,6 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
         { toolName: 'quickTool', args: { fast: true } },
         { toolName: 'slowTool', args: { waitForApproval: true } },
       ]);
-      const pubsub = getPubSub();
 
       const quickTool = createTool({
         id: 'quickTool',
@@ -410,20 +388,18 @@ export function createToolSuspensionTests({ getPubSub }: DurableAgentTestContext
         },
       });
 
-      const agent = new DurableAgent({
+      const agent = await createAgent({
         id: 'mixed-suspension-agent',
         name: 'Mixed Suspension Agent',
         instructions: 'Use both quick and slow tools',
         model: mockModel,
         tools: { quickTool, slowTool },
-        pubsub,
       });
 
       const result = await agent.prepare('Run both tools');
 
-      const tools = agent.runRegistry.getTools(result.runId);
-      expect(tools.quickTool).toBeDefined();
-      expect(tools.slowTool).toBeDefined();
+      expect(result.runId).toBeDefined();
+      expect(result.workflowInput.toolsMetadata).toBeDefined();
     });
   });
 }

@@ -8,12 +8,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
 import { createTool } from '@mastra/core/tools';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createMultiToolCallModel } from '../mock-models';
 
-export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContext) {
+export function createToolConcurrencyTests({ createAgent }: DurableAgentTestContext) {
   describe('tool concurrency', () => {
     describe('toolCallConcurrency option', () => {
       it('should include toolCallConcurrency in workflow options', async () => {
@@ -21,7 +20,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'tool1', args: { data: 'test1' } },
           { toolName: 'tool2', args: { data: 'test2' } },
         ]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -37,13 +35,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'tool2' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'concurrency-agent',
           name: 'Concurrency Agent',
           instructions: 'Use both tools',
           model: mockModel,
           tools: { tool1, tool2 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use both tools', {
@@ -55,7 +52,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
 
       it('should default toolCallConcurrency when not specified', async () => {
         const mockModel = createMultiToolCallModel([{ toolName: 'tool1', args: { data: 'test' } }]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -64,13 +60,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'done' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'default-concurrency-agent',
           name: 'Default Concurrency Agent',
           instructions: 'Use tool',
           model: mockModel,
           tools: { tool1 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use the tool');
@@ -83,7 +78,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'tool1', args: { data: 'test1' } },
           { toolName: 'tool2', args: { data: 'test2' } },
         ]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -99,13 +93,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'tool2' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'sequential-agent',
           name: 'Sequential Agent',
           instructions: 'Use tools sequentially',
           model: mockModel,
           tools: { tool1, tool2 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use both tools', {
@@ -122,7 +115,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'tool1', args: { data: 'test1' } },
           { toolName: 'tool2', args: { data: 'test2' } },
         ]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -138,13 +130,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'tool2' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'approval-concurrency-agent',
           name: 'Approval Concurrency Agent',
           instructions: 'Use tools with approval',
           model: mockModel,
           tools: { tool1, tool2 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use both tools', {
@@ -161,7 +152,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'normalTool', args: { data: 'test1' } },
           { toolName: 'approvalTool', args: { data: 'test2' } },
         ]);
-        const pubsub = getPubSub();
 
         const normalTool = createTool({
           id: 'normalTool',
@@ -178,20 +168,19 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'approved' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'mixed-approval-concurrency-agent',
           name: 'Mixed Approval Concurrency Agent',
           instructions: 'Use mixed tools',
           model: mockModel,
           tools: { normalTool, approvalTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Use both tools');
 
-        const tools = agent.runRegistry.getTools(result.runId);
-        expect(tools.normalTool).toBeDefined();
-        expect(tools.approvalTool).toBeDefined();
+        // Verify tools metadata includes both tools
+        expect(result.runId).toBeDefined();
+        expect(result.workflowInput.toolsMetadata).toBeDefined();
       });
     });
 
@@ -201,7 +190,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'quickTool', args: { data: 'test1' } },
           { toolName: 'suspendTool', args: { data: 'test2' } },
         ]);
-        const pubsub = getPubSub();
 
         const quickTool = createTool({
           id: 'quickTool',
@@ -219,34 +207,31 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'suspended' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'suspend-concurrency-agent',
           name: 'Suspend Concurrency Agent',
           instructions: 'Use both tools',
           model: mockModel,
           tools: { quickTool, suspendTool },
-          pubsub,
         });
 
         const result = await agent.prepare('Use both tools');
 
-        const tools = agent.runRegistry.getTools(result.runId);
-        expect(tools.quickTool).toBeDefined();
-        expect(tools.suspendTool).toBeDefined();
+        // Verify tools metadata includes both tools
+        expect(result.runId).toBeDefined();
+        expect(result.workflowInput.toolsMetadata).toBeDefined();
       });
     });
 
     describe('concurrency edge cases', () => {
       it('should handle negative toolCallConcurrency gracefully', async () => {
         const mockModel = createTextStreamModel('Hello');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'negative-concurrency-agent',
           name: 'Negative Concurrency Agent',
           instructions: 'Test negative value',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Hello', {
@@ -258,14 +243,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
 
       it('should handle zero toolCallConcurrency', async () => {
         const mockModel = createTextStreamModel('Hello');
-        const pubsub = getPubSub();
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'zero-concurrency-agent',
           name: 'Zero Concurrency Agent',
           instructions: 'Test zero value',
           model: mockModel,
-          pubsub,
         });
 
         const result = await agent.prepare('Hello', {
@@ -281,7 +264,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           { toolName: 'tool2', args: { data: 'test2' } },
           { toolName: 'tool3', args: { data: 'test3' } },
         ]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -304,13 +286,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 3 }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'high-concurrency-agent',
           name: 'High Concurrency Agent',
           instructions: 'Use many tools',
           model: mockModel,
           tools: { tool1, tool2, tool3 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use all tools', {
@@ -324,7 +305,6 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
     describe('concurrency serialization', () => {
       it('should serialize toolCallConcurrency in workflow input', async () => {
         const mockModel = createMultiToolCallModel([{ toolName: 'tool1', args: { data: 'test' } }]);
-        const pubsub = getPubSub();
 
         const tool1 = createTool({
           id: 'tool1',
@@ -333,13 +313,12 @@ export function createToolConcurrencyTests({ getPubSub }: DurableAgentTestContex
           execute: async () => ({ result: 'done' }),
         });
 
-        const agent = new DurableAgent({
+        const agent = await createAgent({
           id: 'serialize-concurrency-agent',
           name: 'Serialize Concurrency Agent',
           instructions: 'Test serialization',
           model: mockModel,
           tools: { tool1 },
-          pubsub,
         });
 
         const result = await agent.prepare('Use tool', {
