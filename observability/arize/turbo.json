@@ -2,7 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build:lib": {
+    "build": {
       "dependsOn": ["^build"],
       "inputs": [
         "src/**",
@@ -14,16 +14,7 @@
         "!**/*.spec.ts",
         "!**/__tests__/**"
       ],
-      "outputs": ["dist/**", "!dist/docs/**"]
-    },
-    "build:docs": {
-      "dependsOn": ["build:lib"],
-      "inputs": ["src/**", "package.json", "!**/*.md"],
-      "outputs": ["dist/docs/**"]
-    },
-    "build": {
-      "dependsOn": ["build:lib", "build:docs"],
-      "inputs": []
+      "outputs": ["dist/**"]
     },
     "test": {
       "dependsOn": ["^build"],
