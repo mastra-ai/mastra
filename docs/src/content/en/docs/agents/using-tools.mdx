@@ -64,6 +64,32 @@ export const weatherAgent = new Agent({
 });
 ```
 
+## Controlling `toolName` in stream responses
+
+When the agent calls a tool, the `toolName` in the stream response is determined by the **object key** you use when passing tools to the agent, not the tool's `id` property.
+
+```typescript
+// Tool defined with id: "weather-tool"
+export const weatherTool = createTool({
+  id: "weather-tool",
+  // ...
+});
+
+// Using the variable name as the key
+tools: { weatherTool }
+// Stream returns: toolName: "weatherTool"
+
+// Using the tool's id as the key
+tools: { [weatherTool.id]: weatherTool }
+// Stream returns: toolName: "weather-tool"
+
+// Using a custom key
+tools: { "my-custom-name": weatherTool }
+// Stream returns: toolName: "my-custom-name"
+```
+
+This gives you full control over how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
+
 ## Calling an agent
 
 The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
