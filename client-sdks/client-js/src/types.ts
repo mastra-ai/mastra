@@ -373,54 +373,6 @@ export type GetLogsResponse = {
   hasMore: boolean;
 };
 
-// Audit types
-export interface AuditActor {
-  type: 'user' | 'system' | 'api-key';
-  id: string;
-  email?: string;
-  ip?: string;
-  userAgent?: string;
-}
-
-export interface AuditResource {
-  type: string;
-  id: string;
-  name?: string;
-}
-
-export interface AuditEvent {
-  id: string;
-  createdAt: string;
-  actor: AuditActor;
-  action: string;
-  resource?: AuditResource;
-  outcome: 'success' | 'failure' | 'denied';
-  metadata?: Record<string, unknown>;
-  duration?: number;
-}
-
-export interface ListAuditLogsParams {
-  page?: number;
-  perPage?: number;
-  actorId?: string;
-  actorType?: AuditActor['type'];
-  action?: string;
-  actionPrefix?: string;
-  resourceType?: string;
-  resourceId?: string;
-  outcome?: AuditEvent['outcome'];
-  startDate?: Date;
-  endDate?: Date;
-}
-
-export interface ListAuditLogsResponse {
-  events: AuditEvent[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
-
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 export interface GetVNextNetworkResponse {
   id: string;

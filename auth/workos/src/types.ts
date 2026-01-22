@@ -196,41 +196,6 @@ export interface WorkOSDirectorySyncOptions {
 }
 
 // ============================================================================
-// Audit Exporter Types
-// ============================================================================
-
-/**
- * Options for WorkOSAuditProvider.
- */
-export interface WorkOSAuditExporterOptions {
-  /**
-   * Default organization ID for events.
-   * If not provided, the org ID is taken from event.actor.organizationId.
-   */
-  organizationId?: string;
-  /**
-   * Map Mastra action names to WorkOS action names.
-   * If not provided, uses default mapping.
-   */
-  actionMapping?: Record<string, string>;
-}
-
-/**
- * Default action mapping from Mastra to WorkOS.
- */
-export const DEFAULT_AUDIT_ACTION_MAPPING: Record<string, string> = {
-  'auth.sign-in': 'user.logged_in',
-  'auth.sign-up': 'user.registered',
-  'auth.logout': 'user.logged_out',
-  'auth.sso-callback': 'user.sso_authenticated',
-  'agents.execute': 'agent.executed',
-  'agents.generate': 'agent.generated',
-  'workflows.execute': 'workflow.executed',
-  'workflows.trigger': 'workflow.triggered',
-  'tools.execute': 'tool.executed',
-};
-
-// ============================================================================
 // Admin Portal Types
 // ============================================================================
 

@@ -69,8 +69,6 @@ export interface CapabilityFlags {
   rbac: boolean;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
-  /** IAuditLogger is implemented and licensed */
-  audit: boolean;
 }
 
 /**
@@ -140,12 +138,6 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
-
-  /**
-   * Whether audit logging is enabled.
-   * Set to true if an audit provider or audit config is configured.
-   */
-  audit?: boolean;
 }
 
 /**
@@ -243,7 +235,6 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
-    audit: !!options?.audit && isLicensedOrCloud,
   };
 
   // Get roles/permissions from RBAC provider (if available)

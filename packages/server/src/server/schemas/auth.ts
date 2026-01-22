@@ -36,7 +36,6 @@ export const capabilityFlagsSchema = z.object({
   sso: z.boolean(),
   rbac: z.boolean(),
   acl: z.boolean(),
-  audit: z.boolean(),
 });
 
 export const userAccessSchema = z

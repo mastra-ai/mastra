@@ -4,15 +4,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
-export type { MastraAuthConfig, ContextWithMastra, ApiRoute, AuditConfig, MastraAuditProvider } from './types';
+export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';
 export { MastraServerBase } from './base';
 export { SimpleAuth } from './simple-auth';
 export type { SimpleAuthOptions } from './simple-auth';
-export { AuditService, getAuditService, normalizeAuditConfig } from './audit';
-export type { NormalizedAuditConfig, AuditEventCategory } from './audit';
 
 // Helper type for inferring parameters from a path
 type ParamsFromPath<P extends string> = {

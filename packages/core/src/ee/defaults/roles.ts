@@ -34,7 +34,6 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       'memory:*',
       'tools:*',
       'logs:read',
-      'audit:read',
       'users:read',
       'users:invite',
       'settings:read',
@@ -79,7 +78,6 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
  * - logs: Log viewing
  * - users: User management
  * - settings: Settings access
- * - audit: Audit log access
  *
  * Actions:
  * - read: View resource
@@ -130,10 +128,6 @@ export const STUDIO_PERMISSIONS = [
   // Settings
   'settings:read',
   'settings:write',
-
-  // Audit
-  'audit:read',
-  'audit:export',
 ] as const;
 
 /**

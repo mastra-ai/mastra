@@ -44,9 +44,6 @@ export { MastraRBACWorkos } from './rbac-provider';
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';
 
-// Audit provider for WorkOS Audit Logs
-export { WorkOSAuditProvider } from './audit-exporter';
-
 // Admin Portal helper
 export { WorkOSAdminPortal } from './admin-portal';
 
@@ -72,16 +69,10 @@ export type {
   DirectorySyncGroupData,
   WorkOSDirectorySyncOptions,
 
-  // Audit exporter types
-  WorkOSAuditExporterOptions,
-
   // Admin Portal types
   AdminPortalIntent,
   WorkOSAdminPortalOptions,
 } from './types';
-
-// Re-export constants
-export { DEFAULT_AUDIT_ACTION_MAPPING } from './types';
 
 // Re-export helper function
 export { mapWorkOSUserToEEUser } from './types';

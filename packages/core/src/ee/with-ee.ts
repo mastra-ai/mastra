@@ -3,14 +3,7 @@
  */
 
 import type { MastraAuthProvider } from '../server';
-import type {
-  IUserProvider,
-  ISessionProvider,
-  ISSOProvider,
-  IRBACProvider,
-  IACLProvider,
-  IAuditLogger,
-} from './interfaces';
+import type { IUserProvider, ISessionProvider, ISSOProvider, IRBACProvider, IACLProvider } from './interfaces';
 import { validateLicense } from './license';
 
 /**
@@ -29,15 +22,13 @@ export interface WithEEOptions {
   rbac?: IRBACProvider;
   /** ACL provider implementation */
   acl?: IACLProvider;
-  /** Audit logger implementation */
-  audit?: IAuditLogger;
 }
 
 /**
  * Combined type for auth provider with EE capabilities.
  */
 export type EEAuthProvider<TUser = unknown> = MastraAuthProvider<TUser> &
-  Partial<IUserProvider & ISessionProvider & ISSOProvider & IRBACProvider & IACLProvider & IAuditLogger>;
+  Partial<IUserProvider & ISessionProvider & ISSOProvider & IRBACProvider & IACLProvider>;
 
 /**
  * Wrap an existing auth provider with EE capabilities.
@@ -133,17 +124,6 @@ export function withEE<TUser>(baseAuth: MastraAuthProvider<TUser>, options: With
       eeAuth.canAccess = options.acl.canAccess.bind(options.acl);
       eeAuth.listAccessible = options.acl.listAccessible.bind(options.acl);
       eeAuth.filterAccessible = options.acl.filterAccessible.bind(options.acl);
-    }
-
-    // Audit logger
-    if (options.audit) {
-      eeAuth.log = options.audit.log.bind(options.audit);
-      if (options.audit.query) {
-        eeAuth.query = options.audit.query.bind(options.audit);
-      }
-      if (options.audit.export) {
-        eeAuth.export = options.audit.export.bind(options.audit);
-      }
     }
   }
 

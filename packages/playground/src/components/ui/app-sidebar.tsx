@@ -8,7 +8,6 @@ import {
   CloudUploadIcon,
   MessagesSquareIcon,
   Cpu,
-  ScrollTextIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -86,17 +85,6 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
-      },
-    ],
-  },
-  {
-    key: 'audit',
-    separator: true,
-    links: [
-      {
-        name: 'Audit Logs',
-        url: '/audit',
-        icon: <ScrollTextIcon />,
       },
     ],
   },

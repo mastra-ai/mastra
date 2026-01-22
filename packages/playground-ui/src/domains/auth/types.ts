@@ -51,7 +51,6 @@ export type CapabilityFlags = {
   sso: boolean;
   rbac: boolean;
   acl: boolean;
-  audit: boolean;
 };
 
 /**

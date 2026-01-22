@@ -36,44 +36,6 @@ export type ContextWithMastra = Context<{
   };
 }>;
 
-/**
- * Interface for audit providers.
- * Audit providers handle logging events to external systems (e.g., WorkOS, Datadog, local storage).
- */
-export interface MastraAuditProvider {
-  /** Log an audit event */
-  logEvent(event: import('../storage/domains/audit/types').AuditEvent): Promise<void>;
-}
-
-/**
- * Configuration for audit event logging.
- */
-export type AuditConfig = {
-  /**
-   * Which event types to log.
-   * If not specified, all events are logged.
-   */
-  events?: {
-    /** Log authentication events (login, logout, sign-up) */
-    auth?: boolean;
-    /** Log agent execution events */
-    agents?: boolean;
-    /** Log workflow execution events */
-    workflows?: boolean;
-    /** Log tool execution events */
-    tools?: boolean;
-    /** Log permission denial events */
-    permissions?: boolean;
-  };
-  /**
-   * Retention policy for audit events.
-   */
-  retention?: {
-    /** Number of days to keep audit events. Events older than this are auto-deleted. */
-    days?: number;
-  };
-};
-
 export type MastraAuthConfig<TUser = unknown> = {
   /**
    * Protected paths for the server
@@ -185,57 +147,6 @@ export type ServerConfig = {
    * For authorization (WHAT the user can do), use the `rbac` option.
    */
   auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
-
-  /**
-   * Audit logging configuration for EE (Enterprise Edition).
-   *
-   * Enables activity tracking for compliance, security monitoring,
-   * and debugging. Audit events are stored in Mastra's storage layer.
-   *
-   * Set to `true` to enable with defaults (logs all events to local storage).
-   * Pass a config object to customize what gets logged.
-   * Pass a MastraAuditProvider to use a custom audit backend (e.g., WorkOS).
-   *
-   * @example Enable with defaults (local storage)
-   * ```typescript
-   * const mastra = new Mastra({
-   *   server: {
-   *     audit: true,
-   *   },
-   * });
-   * ```
-   *
-   * @example Custom configuration
-   * ```typescript
-   * const mastra = new Mastra({
-   *   server: {
-   *     audit: {
-   *       events: {
-   *         auth: true,      // Login, logout, sign-up
-   *         agents: true,    // Agent executions
-   *         workflows: true, // Workflow runs
-   *         tools: false,    // Tool executions (disabled)
-   *       },
-   *       retention: {
-   *         days: 90,        // Auto-delete after 90 days
-   *       },
-   *     },
-   *   },
-   * });
-   * ```
-   *
-   * @example Custom audit provider (e.g., WorkOS)
-   * ```typescript
-   * import { WorkOSAuditProvider } from '@mastra/auth-workos';
-   *
-   * const mastra = new Mastra({
-   *   server: {
-   *     audit: new WorkOSAuditProvider({ ... }),
-   *   },
-   * });
-   * ```
-   */
-  audit?: true | AuditConfig | MastraAuditProvider;
 
   /**
    * Role-based access control (RBAC) provider for EE (Enterprise Edition).

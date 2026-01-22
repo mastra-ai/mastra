@@ -24,6 +24,3 @@ export type { RoleDefinition, RoleMapping, IRBACProvider, IRBACManager } from '.
 
 // ACL
 export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './acl';
-
-// Audit
-export type { AuditActor, AuditEvent, AuditFilter, IAuditLogger } from './audit';

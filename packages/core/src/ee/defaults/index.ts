@@ -21,6 +21,3 @@ export { CookieSessionProvider, type CookieSessionProviderOptions } from './sess
 
 // RBAC providers
 export { StaticRBACProvider, type StaticRBACProviderOptions } from './rbac';
-
-// Audit loggers
-export { ConsoleAuditLogger, type ConsoleAuditLoggerOptions } from './audit';
