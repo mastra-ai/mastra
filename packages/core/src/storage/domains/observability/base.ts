@@ -109,7 +109,6 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves a list of traces with optional filtering.
-   * Returns root spans with computed status.
    */
   async listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
     throw new MastraError({
