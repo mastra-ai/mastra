@@ -618,8 +618,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx > packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx"
       ],
       "dependencies": ["025"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "036",

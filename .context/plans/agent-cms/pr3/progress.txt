@@ -554,3 +554,40 @@
   - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
   - Consider completing Task 035 next to continue building the integration UI flow
 
+- Task 035: Copy Smithery browser component
+  - Copied smithery-browser.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx (249 lines)
+  - Provides SmitheryBrowser component for browsing and selecting MCP servers from the Smithery registry
+  - Features:
+    - Search functionality for filtering servers by name or description
+    - Grid layout displaying server cards with details
+    - Pagination/infinite scroll support with "Load More" button
+    - Server selection with visual indicators
+    - Fetches full server connection details on selection via getSmitheryServer()
+    - Loading, error, and empty states
+    - Verified badge, remote badge, usage count badge
+    - Server icons and homepage links
+    - Total count display showing number of servers found
+  - Includes SmitheryServerCard subcomponent with:
+    - Server icon, display name, and qualified name
+    - Description with line-clamp-2
+    - Verified badge with Shield icon for verified servers
+    - Remote badge for remote servers
+    - Usage count badge with Star icon (if available)
+    - Homepage link with ExternalLink icon
+    - Selection indicator with CheckCircle2 icon in corner
+    - Hover and selected states
+    - Keyboard navigation support (Enter/Space to select)
+  - File: packages/playground-ui/src/domains/integrations/components/smithery-browser.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 035 completed successfully - Smithery browser component is now in place
+- This component allows users to browse and search the Smithery MCP server registry
+- The component fetches detailed server connection information when a server is selected
+- Next logical high-priority task is Task 036 (P0): Copy add tools dialog
+- Task 036 is the main wizard dialog that combines all integration components into a multi-step flow
+- This is a critical component that orchestrates the entire integration creation experience
+- After Task 036, complete the remaining components (037, 038, 039) to finish the frontend layer
+
