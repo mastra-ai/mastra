@@ -3,8 +3,6 @@ title: "Manual Install | Getting Started"
 description: Set up a Mastra project manually without using the create mastra CLI.
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
@@ -26,46 +24,18 @@ Create a new project and change directory:
 mkdir my-first-agent && cd my-first-agent
 ```
 
-Initialize a TypeScript project and install the following dependencies:
+Generate a new `package.json` file:
 
-<Tabs>
-<TabItem value="npm" label="npm">
+```bash npm2yarn
+npm init
+```
 
-```bash
-npm init -y
+Install the following dependencies:
+
+```bash npm2yarn
 npm install -D typescript @types/node mastra@latest
 npm install @mastra/core@latest zod@^4
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm init
-pnpm add -D typescript @types/node mastra@latest
-pnpm add @mastra/core@latest zod@^4
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn init -y
-yarn add -D typescript @types/node mastra@latest
-yarn add @mastra/core@latest zod@^4
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun init -y
-bun add -d typescript @types/node mastra@latest
-bun add @mastra/core@latest zod@^4
-```
-
-</TabItem>
-</Tabs>
 
 Add `dev` and `build` scripts to your `package.json` file:
 
@@ -238,36 +208,9 @@ export const mastra = new Mastra({
 
 You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm run dev
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm run dev
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn run dev
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun run dev
-```
-
-</TabItem>
-</Tabs>
 
 </StepItem>
 
