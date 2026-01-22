@@ -373,12 +373,8 @@ export class ModelSpanTracker {
   #handleToolApprovalChunk<OUTPUT>(chunk: ChunkType<OUTPUT>) {
     if (chunk.type !== 'tool-call-approval') return;
 
-    const payload = chunk.payload as {
-      toolCallId: string;
-      toolName: string;
-      args: Record<string, any>;
-      resumeSchema: string;
-    };
+    // Use payload directly - ChunkType already types tool-call-approval chunks correctly
+    const payload = chunk.payload;
 
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
@@ -393,15 +389,8 @@ export class ModelSpanTracker {
       attributes: {
         chunkType: 'tool-call-approval',
         sequenceNumber: this.#chunkSequence,
-        toolCallId: payload.toolCallId,
-        toolName: payload.toolName,
       },
-      output: {
-        toolCallId: payload.toolCallId,
-        toolName: payload.toolName,
-        args: payload.args,
-        resumeSchema: payload.resumeSchema,
-      },
+      output: payload,
     });
 
     if (span) {

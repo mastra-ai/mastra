@@ -672,10 +672,9 @@ describe('ModelSpanTracker', () => {
       // Verify span attributes
       const span = approvalSpans[0]!;
       expect(span.type).toBe(SpanType.MODEL_CHUNK);
+      // MODEL_CHUNK attributes should only contain chunkType and sequenceNumber
       expect(span.attributes).toMatchObject({
         chunkType: 'tool-call-approval',
-        toolCallId,
-        toolName,
       });
 
       // Verify span output contains the full approval payload
