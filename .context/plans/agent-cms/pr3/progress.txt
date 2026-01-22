@@ -520,3 +520,37 @@
   - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
   - Consider completing Task 034 next to continue building the integration UI flow
 
+- Task 034: Copy MCP connection input component
+  - Copied mcp-connection-input.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/mcp-connection-input.tsx (511 lines)
+  - Provides MCPConnectionInput component for entering MCP server connection details
+  - Features:
+    - Tabbed interface for HTTP/SSE and Stdio transports
+    - HTTP transport: URL input with optional authentication headers
+    - Stdio transport: Command, arguments, and environment variables
+    - Name field for friendly server identification
+    - Expandable sections for optional headers and environment variables
+    - Add/remove functionality for headers and environment variables
+    - Password-type inputs for sensitive values (headers, env vars)
+    - Client-side validation for URL format and required fields
+    - External validation callback (onValidate) for server-side validation
+    - Loading state during validation with "Connecting..." button
+    - Success state showing tool count
+    - Error state with clear error messages
+    - Connect button with proper enabled/disabled logic
+  - Includes helper functions:
+    - parseArgs: Parses space-separated arguments respecting quoted strings
+    - isValidInput: Validates form state before submission
+  - File: packages/playground-ui/src/domains/integrations/components/mcp-connection-input.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 034 completed successfully - MCP connection input component is now in place
+- This component provides a comprehensive form for configuring both HTTP and Stdio MCP connections
+- The component handles validation, headers, environment variables, and provides clear feedback
+- Next logical high-priority tasks are the remaining UI components:
+  - Task 035 (P0): Copy Smithery browser component - HIGHEST PRIORITY
+  - Task 036 (P0): Copy add tools dialog (main wizard that combines all components)
+  - Consider completing Task 035 next to continue building the integration UI flow
+
