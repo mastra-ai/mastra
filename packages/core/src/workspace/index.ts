@@ -131,11 +131,33 @@ export {
 export type { InstallPackageResult } from './sandbox';
 
 // =============================================================================
+// Mount Configuration Types
+// =============================================================================
+
+export type { FilesystemMountConfig } from './filesystem';
+export type { LocalMountConfig } from './local-filesystem';
+
+// =============================================================================
 // Built-in Providers
 // =============================================================================
 
 export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
+
+// =============================================================================
+// E2B Providers (requires @e2b/code-interpreter)
+// =============================================================================
+
+export {
+  E2BSandbox,
+  type E2BSandboxOptions,
+  type S3MountConfig,
+  type GCSMountConfig,
+  type R2MountConfig,
+  type E2BMountConfig,
+} from './e2b-sandbox';
+
+export { E2BFilesystem, type E2BFilesystemOptions } from './e2b-filesystem';
 
 // =============================================================================
 // Workspace Tools (for agent auto-injection)
