@@ -641,3 +641,35 @@
   - Task 039 (P0): Copy components index - exports all components
   - Task 040 (P0): Copy integrations domain index - exports entire domain
   - Consider completing Tasks 037 and 038 to finish the integration management UI
+
+- Task 037: Copy integration card component
+  - Copied integration-card.tsx from total-cms:packages/playground-ui/src/domains/integrations/components/integration-card.tsx (171 lines)
+  - Provides IntegrationCard component for displaying individual integrations in a list
+  - Features:
+    - Card layout with integration icon (Wrench), name, provider badge
+    - Tool count display showing number of tools in the integration
+    - Refresh button with loading state - fetches latest tools from provider
+    - Delete button with confirmation dialog and loading state
+    - Edit functionality via onEdit callback
+    - Hover state shows actions with fade-in animations (group-hover:opacity-100)
+    - Click card to edit integration (if onEdit provided)
+    - ChevronRight icon indicates editability
+    - Toast notifications for success/error feedback
+  - Uses React Query mutations via useIntegrationMutations hook:
+    - deleteIntegration: Removes integration and all associated tools
+    - refreshTools: Fetches latest tools from provider API and updates cache
+  - Provider badge displays: Composio, Arcade, MCP, or Smithery
+  - Integration name is directly editable via edit dialog
+  - File: packages/playground-ui/src/domains/integrations/components/integration-card.tsx (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 037 completed successfully - Integration card component is now in place
+- This component displays individual integrations with management actions (refresh, delete, edit)
+- The card provides good UX with hover states, loading indicators, and toast feedback
+- Next logical high-priority task is Task 038 (P1): Copy integrations list component
+- Task 038 will use IntegrationCard to display all configured integrations
+- After Task 038, complete Tasks 039 and 040 to finish the frontend domain exports
+- Then move to verification tasks (041-043) to ensure everything works end-to-end
