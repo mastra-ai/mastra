@@ -1,3 +1,4 @@
+// Test change for CI validation
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
