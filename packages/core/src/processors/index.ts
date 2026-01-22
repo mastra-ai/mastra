@@ -60,8 +60,17 @@ export type ProcessorMessageResult = Promise<MessageList | MastraDBMessage[]> | 
 
 /**
  * Possible return types from processInput
+ * - MessageList: Return the same messageList instance passed in (indicates you've mutated it)
+ * - MastraDBMessage[]: Return transformed messages array (for simple transformations)
+ * - ProcessInputResultWithSystemMessages: Return both messages and modified system messages
+ * - void/undefined: No changes to messages (useful for side-effect-only processors)
  */
-export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputResultWithSystemMessages;
+export type ProcessInputResult =
+  | MessageList
+  | MastraDBMessage[]
+  | ProcessInputResultWithSystemMessages
+  | void
+  | undefined;
 
 /**
  * Arguments for processInput method
@@ -208,12 +217,14 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   processorIndex?: number;
 
   /**
-   * Process input messages before they are sent to the LLM
+   * Process input messages before they are sent to the LLM.
+   * Runs once at the start of the agent call, before the agentic loop begins.
    *
    * @returns Either:
    *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    *  - { messages, systemMessages }: Object with both messages and modified system messages
+   *  - void/undefined: No changes to messages (useful for side-effect-only processors)
    */
   processInput?(args: ProcessInputArgs<TTripwireMetadata>): Promise<ProcessInputResult> | ProcessInputResult;
 
