@@ -23,7 +23,7 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: ToolsInput;
+      registeredTools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
     }
@@ -75,7 +75,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Set context in res.locals
       res.locals.requestContext = requestContext;
       res.locals.mastra = this.mastra;
-      res.locals.tools = this.tools || {};
+      res.locals.registeredTools = this.tools || {};
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
@@ -363,7 +363,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
-          tools: res.locals.tools,
+          registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
         };
