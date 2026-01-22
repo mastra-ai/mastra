@@ -27,6 +27,9 @@ declare module 'koa' {
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
   }
+  interface Request {
+    body?: unknown;
+  }
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
@@ -352,6 +355,21 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       paramNames.forEach((name, index) => {
         ctx.params[name] = match[index + 1];
       });
+
+      // Check route-level authentication/authorization
+      const authError = await this.checkRouteAuth(route, {
+        path: String(ctx.path || '/'),
+        method: String(ctx.method || 'GET'),
+        getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+        getQuery: name => (ctx.query as Record<string, string>)[name],
+        requestContext: ctx.state.requestContext,
+      });
+
+      if (authError) {
+        ctx.status = authError.status;
+        ctx.body = { error: authError.error };
+        return;
+      }
 
       const params = await this.getParams(route, ctx);
 

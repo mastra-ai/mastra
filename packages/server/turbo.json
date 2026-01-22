@@ -16,13 +16,17 @@
       ],
       "outputs": ["dist/**", "!dist/docs/**"]
     },
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["./**/*.d.ts"]
+    },
     "build:docs": {
       "dependsOn": ["build:lib"],
       "inputs": ["src/**", "package.json", "!**/*.md"],
       "outputs": ["dist/docs/**"]
     },
     "build": {
-      "dependsOn": ["build:lib", "build:docs"],
+      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
       "inputs": []
     },
     "test": {
