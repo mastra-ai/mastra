@@ -348,8 +348,8 @@
       ],
       "lineCount": "~642 lines",
       "dependencies": ["002"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "020",
@@ -366,8 +366,8 @@
         "Add to domains object: integrations: new IntegrationsLibSQL(domainConfig)"
       ],
       "dependencies": ["019"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "021",
