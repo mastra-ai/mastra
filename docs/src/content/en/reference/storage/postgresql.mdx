@@ -112,6 +112,14 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
 
+### Observability
+
+PostgreSQL supports observability and can handle moderate trace volumes (tens of thousands of traces per day). For high-volume production environments, consider:
+
+- Using the `insert-only` [tracing strategy](/docs/observability/tracing/exporters/default#tracing-strategies) to reduce database write operations
+- Setting up table partitioning for efficient data retention
+- Migrating observability to [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) if you need to scale further
+
 ### Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:

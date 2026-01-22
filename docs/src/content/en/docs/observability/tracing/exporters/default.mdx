@@ -11,6 +11,10 @@ packages:
 
 The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
 
+:::warning[Production Observability]
+Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, we recommend using **ClickHouse** for the observability storage domain via [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
+:::
+
 ## Configuration
 
 ### Prerequisites
@@ -117,20 +121,53 @@ new DefaultExporter({
 
 ## Storage Provider Support
 
-Different storage providers support different tracing strategies.
+Different storage providers support different tracing strategies. Not all storage providers support observability—only those designed to handle high-volume telemetry data include the observability domain.
 
 If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
 
-| Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
+### Providers with Observability Support
+
+| Storage Provider                                | Preferred Strategy | Supported Strategies                      | Recommended Use                       |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **[libSQL](/reference/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
-| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
+| **ClickHouse** (`@mastra/clickhouse`)           | insert-only        | batch-with-updates, insert-only           | Production (high-volume)              |
+| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
+| **[MSSQL](/reference/storage/mssql)**           | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
+| **[MongoDB](/reference/storage/mongodb)**       | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
+| **[libSQL](/reference/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development                          |
+
+### Providers without Observability Support
+
+The following storage providers **do not support** the observability domain. If you're using one of these providers and need observability, use [composite storage](/reference/storage/composite) to route observability data to a supported provider:
+
+- [Convex](/reference/storage/convex)
+- [DynamoDB](/reference/storage/dynamodb)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/storage/cloudflare)
+- [Upstash](/reference/storage/upstash)
+- [LanceDB](/reference/storage/lance)
 
 ### Strategy Benefits
 
 - **realtime**: Immediate visibility, best for debugging
 - **batch-with-updates**: 10-100x throughput improvement, full span lifecycle
 - **insert-only**: Additional 70% reduction in database operations, perfect for analytics
+
+## Production Recommendations
+
+Observability data grows quickly in production environments. A single agent interaction can generate dozens of spans, and high-traffic applications can produce millions of traces per day. Most general-purpose databases aren't optimized for this write-heavy, append-only workload.
+
+### Recommended: ClickHouse for High-Volume Production
+
+[ClickHouse](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
+
+- **Optimized for writes**: Handles millions of inserts per second
+- **Efficient compression**: Reduces storage costs for trace data
+- **Fast queries**: Columnar storage enables quick trace lookups and aggregations
+- **Time-series native**: Built-in support for time-based data retention and partitioning
+
+### Using Composite Storage
+
+If you're using a provider without observability support (like Convex or DynamoDB) or want to optimize performance, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to ClickHouse while keeping other data in your primary database.
 
 ## Batching Behavior
 
@@ -181,4 +218,5 @@ new DefaultExporter({
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [CloudExporter](/docs/observability/tracing/exporters/cloud)
+- [Composite Storage](/reference/storage/composite) - Combine multiple storage providers
 - [Storage Configuration](/docs/memory/storage)

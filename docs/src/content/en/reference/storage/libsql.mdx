@@ -133,3 +133,9 @@ await storage.init();
 const memoryStore = await storage.getStore('memory');
 const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
+
+## Observability
+
+libSQL supports observability and is ideal for local development. Use the `realtime` [tracing strategy](/docs/observability/tracing/exporters/default#tracing-strategies) for immediate visibility while debugging.
+
+For production environments with higher trace volumes, consider using [PostgreSQL](/reference/storage/postgresql) or [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production).

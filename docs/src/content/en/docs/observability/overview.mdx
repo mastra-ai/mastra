@@ -23,6 +23,12 @@ Specialized tracing for AI operations that captures:
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Tracing with decorators
 
+## Storage Requirements
+
+The `DefaultExporter` persists traces to your configured storage backend. Not all storage providers support observability—for the full list, see [Storage Provider Support](/docs/observability/tracing/exporters/default#storage-provider-support).
+
+For production environments with high traffic, we recommend using **ClickHouse** for the observability domain via [composite storage](/reference/storage/composite). See [Production Recommendations](/docs/observability/tracing/exporters/default#production-recommendations) for details.
+
 ## Quick Start
 
 Configure Observability in your Mastra instance:
