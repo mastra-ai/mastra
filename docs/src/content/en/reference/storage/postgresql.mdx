@@ -43,7 +43,42 @@ const storage = new PostgresStore({
       name: "connectionString",
       type: "string",
       description:
-        "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname). Required unless using `pool` or host-based config.",
+        "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname). Required unless using `pool` or individual host-based parameters (`host`, `port`, `database`, `user`, `password`).",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description:
+        "Database server hostname or IP address. Used with other host-based parameters as an alternative to connectionString.",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description:
+        "Database server port number. Defaults to 5432 if not specified.",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description:
+        "Name of the database to connect to.",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description:
+        "Database user for authentication.",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description:
+        "Password for the database user.",
       isOptional: true,
     },
     {
@@ -64,7 +99,7 @@ const storage = new PostgresStore({
       name: "ssl",
       type: "boolean | ConnectionOptions",
       description:
-        "SSL configuration for the connection. Can be `true` for default SSL, or a ConnectionOptions object for custom SSL settings.",
+        "SSL configuration for the connection; set to true to use default SSL or provide a ConnectionOptions object for custom SSL settings.",
       isOptional: true,
     },
     {
