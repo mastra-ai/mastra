@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { ChevronRight, ChevronDown, Brain, Clock, RefreshCcw, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, Clock, RefreshCcw, ExternalLink, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useObservationalMemory, useMemoryWithOMStatus } from '@/domains/memory/hooks';
 import { Button } from '@/ds/components/Button/Button';
 import { useQueryClient } from '@tanstack/react-query';
+import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
 
 interface AgentObservationalMemoryProps {
   agentId: string;
@@ -19,6 +20,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
+  // Get real-time observation status from streaming context
+  const { isObservingFromStream } = useObservationalMemoryContext();
+
   // Get OM status to check if enabled (polls when observing/reflecting)
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
@@ -26,8 +30,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     threadId,
   });
 
-  // Check if OM is actively observing/reflecting
-  const isOMActive = statusData?.observationalMemory?.isObserving || statusData?.observationalMemory?.isReflecting || false;
+  // Check if OM is actively observing/reflecting (from server status OR streaming)
+  const isObservingFromServer = statusData?.observationalMemory?.isObserving || false;
+  const isReflecting = statusData?.observationalMemory?.isReflecting || false;
+  const isOMActive = isObservingFromStream || isObservingFromServer || isReflecting;
 
   // Get OM record and history (polls when active)
   const {
@@ -124,25 +130,26 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       </div>
 
       {/* Status Info */}
-      {statusData?.observationalMemory && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {statusData.observationalMemory.isObserving && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
-              Observing...
-            </span>
-          )}
-          {statusData.observationalMemory.isReflecting && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
-              Reflecting...
-            </span>
-          )}
-          {statusData.observationalMemory.tokenCount !== undefined && (
-            <span className="text-xs text-neutral3">
-              {statusData.observationalMemory.tokenCount.toLocaleString()} tokens
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {/* Show observing status from streaming (real-time) or server status */}
+        {(isObservingFromStream || isObservingFromServer) && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse inline-flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Observing...
+          </span>
+        )}
+        {isReflecting && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse inline-flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Reflecting...
+          </span>
+        )}
+        {statusData?.observationalMemory?.tokenCount !== undefined && (
+          <span className="text-xs text-neutral3">
+            {statusData.observationalMemory.tokenCount.toLocaleString()} tokens
+          </span>
+        )}
+      </div>
 
       {/* Observations Content */}
       {record ? (
@@ -161,14 +168,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               )}
             </button>
             {isExpanded && (
-              <div className="border-t border-border1" style={{ height: '300px' }}>
-                <ScrollArea className="h-full">
+              <div className="border-t border-border1 overflow-hidden" style={{ height: '300px' }}>
+                <ScrollArea className="h-full" autoScroll>
                   <div
                     className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                     onClick={handleCopy}
                   >
                     {observations ? (
-                      <MarkdownRenderer>{observations}</MarkdownRenderer>
+                      <ObservationRenderer observations={observations} maxHeight={undefined} />
                     ) : (
                       <p className="text-neutral3 italic">No observations yet</p>
                     )}

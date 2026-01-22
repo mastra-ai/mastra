@@ -16,7 +16,7 @@ import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
-import { useAgentPromptExperiment } from '@/domains/agents/context';
+import { useAgentPromptExperiment, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useQueryClient } from '@tanstack/react-query';
 
 const handleFinishReason = (finishReason: string) => {
@@ -317,9 +317,19 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
+  const { setIsObservingFromStream, signalObservationsUpdated } = useObservationalMemoryContext();
+
+  // Helper to signal observation started (from streaming)
+  const handleObservationStart = () => {
+    console.log('[OM-DEBUG] handleObservationStart called, setting isObservingFromStream=true');
+    setIsObservingFromStream(true);
+  };
 
   // Helper to refresh OM sidebar when observation completes
   const refreshObservationalMemory = () => {
+    console.log('[OM-DEBUG] refreshObservationalMemory called, setting isObservingFromStream=false');
+    setIsObservingFromStream(false);
+    signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
     queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
@@ -416,6 +426,11 @@ export function MastraRuntimeProvider({
                 refreshThreadList?.();
               }
 
+              // Signal observation started (for sidebar status)
+              if ((chunk as any).type === 'data-om-observation-start') {
+                handleObservationStart();
+              }
+
               // Refresh OM sidebar when observation completes (if OM chunks are passed through network mode)
               if ((chunk as any).type === 'data-om-observation-end' || (chunk as any).type === 'data-om-observation-failed') {
                 refreshObservationalMemory();
@@ -462,8 +477,15 @@ export function MastraRuntimeProvider({
                   refreshWorkingMemory?.();
                 }
 
+                // Signal observation started (for sidebar status)
+                if (chunk.type === 'data-om-observation-start') {
+                  console.log('[OM-DEBUG] stream chunk: data-om-observation-start received');
+                  handleObservationStart();
+                }
+
                 // Refresh OM sidebar when observation completes
                 if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
+                  console.log('[OM-DEBUG] stream chunk: data-om-observation-end/failed received');
                   refreshObservationalMemory();
                 }
               },

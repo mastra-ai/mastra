@@ -291,7 +291,7 @@ export interface ObservationRendererProps {
 export function ObservationRenderer({
   observations,
   className,
-  maxHeight = '300px',
+  maxHeight,
   showCurrentTask = false,
   showSuggestedResponse = false,
 }: ObservationRendererProps) {
@@ -311,8 +311,8 @@ export function ObservationRenderer({
   return (
     <div className={cn('text-sm', className)}>
       <div 
-        className="overflow-y-auto pr-1" 
-        style={{ maxHeight }}
+        className={maxHeight ? 'overflow-y-auto pr-1' : undefined}
+        style={maxHeight ? { maxHeight } : undefined}
       >
         {parsed.threads.map((thread, i) => (
           <ThreadSection 
