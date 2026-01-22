@@ -290,3 +290,40 @@
   - Task 029 (P1): Copy hooks index to export all hooks
   - Task 031 (P0): Copy provider list component
   - Consider completing OAuth hooks (026-028) and hooks index (029) before moving to components
+- Task 026: Copy OAuth callback hook
+  - Copied use-oauth-callback.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts
+  - Note: This task required Task 030 (Smithery OAuth provider utility) to be completed first due to dependency
+  - Also had to add @modelcontextprotocol/sdk v1.20.1 to packages/playground-ui/package.json dependencies
+  - The hook provides useOAuthCallback() for detecting and handling OAuth callback completion
+  - Returns: isReturningFromOAuth, authorizationCode, serverUrl, pendingState, clearOAuthState
+  - Used for Smithery MCP OAuth flow redirects
+  - File: packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts (created, 101 lines)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+- Task 030: Copy Smithery OAuth provider utility (completed as dependency for Task 026)
+  - Created packages/playground-ui/src/domains/integrations/lib/ directory
+  - Copied smithery-oauth-provider.ts from total-cms:packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts
+  - Added @modelcontextprotocol/sdk v1.20.1 to packages/playground-ui/package.json dependencies
+  - Installed new dependency via pnpm install
+  - Implements SmitheryBrowserOAuthProvider class for MCP OAuth authentication
+  - Provides localStorage-based OAuth state persistence for page reloads
+  - Includes helper functions: consumeOAuthCode, getPendingOAuthServer, getPendingOAuthState, clearPendingOAuthServer
+  - File: packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts (created, 8275 bytes)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Tasks 026 and 030 completed successfully - OAuth callback handling is now in place
+- Had to complete Task 030 first since Task 026 depends on the Smithery OAuth provider utility
+- Added @modelcontextprotocol/sdk as a new dependency to playground-ui package
+- The OAuth callback hook uses localStorage for persisting OAuth state across page reloads
+- Next logical high-priority tasks are the remaining OAuth hooks:
+  - Task 027 (P1): Copy Arcade auth hook (use-arcade-auth.ts)
+  - Task 028 (P1): Copy Composio auth hook (use-composio-auth.ts)
+  - Task 029 (P1): Copy hooks index to export all hooks
+  - Task 031 (P0): Copy provider list component
+  - Consider completing Tasks 027 and 028 to finish all OAuth hooks before moving to hooks index and components
+

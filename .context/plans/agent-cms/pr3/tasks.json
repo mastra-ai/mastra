@@ -472,8 +472,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts > packages/playground-ui/src/domains/integrations/hooks/use-oauth-callback.ts"
       ],
       "dependencies": [],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "027",
@@ -537,8 +537,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts > packages/playground-ui/src/domains/integrations/lib/smithery-oauth-provider.ts"
       ],
       "dependencies": [],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "031",
