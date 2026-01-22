@@ -171,7 +171,7 @@ export const spanRecordSchema = z
 export type SpanRecord = z.infer<typeof spanRecordSchema>;
 
 // ============================================================================
-// Trace List Item Schema (SpanRecord + computed status for list responses)
+// Trace Span Schema (SpanRecord + computed status for list responses)
 // ============================================================================
 
 /**
@@ -186,21 +186,21 @@ export function computeTraceStatus(span: SpanRecord): TraceStatus {
   return TraceStatus.SUCCESS;
 }
 
-/** Schema for a trace list item (root span with computed status) */
-export const traceListItemSchema = spanRecordSchema
+/** Schema for a trace span (root span with computed status) */
+export const traceSpanSchema = spanRecordSchema
   .extend({
     status: traceStatusField,
   })
-  .describe('Trace list item with computed status (root spans only)');
+  .describe('Trace span with computed status (root spans only)');
 
-/** Trace list item (root span with computed status) */
-export type TraceListItem = z.infer<typeof traceListItemSchema>;
+/** Trace span (root span with computed status) */
+export type TraceSpan = z.infer<typeof traceSpanSchema>;
 
 /**
- * Converts a SpanRecord to a TraceListItem by adding computed status.
+ * Converts a SpanRecord to a TraceSpan by adding computed status.
  * Used when returning root spans from listTraces.
  */
-export function toTraceSpan(span: SpanRecord): TraceListItem {
+export function toTraceSpan(span: SpanRecord): TraceSpan {
   return {
     ...span,
     status: computeTraceStatus(span),
@@ -208,10 +208,10 @@ export function toTraceSpan(span: SpanRecord): TraceListItem {
 }
 
 /**
- * Converts an array of SpanRecords to TraceListItems by adding computed status.
+ * Converts an array of SpanRecords to TraceSpans by adding computed status.
  * Used when returning root spans from listTraces.
  */
-export function toTraceSpans(spans: SpanRecord[]): TraceListItem[] {
+export function toTraceSpans(spans: SpanRecord[]): TraceSpan[] {
   return spans.map(toTraceSpan);
 }
 
@@ -376,7 +376,7 @@ export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 /** Schema for listTraces operation response */
 export const listTracesResponseSchema = z.object({
   pagination: paginationInfoSchema,
-  spans: z.array(traceListItemSchema),
+  spans: z.array(traceSpanSchema),
 });
 
 /** Response containing paginated root spans with computed status */
