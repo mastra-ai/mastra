@@ -220,7 +220,7 @@ export function AppSidebar() {
                     url: 'https://mastra.ai/cloud',
                     icon: <CloudUploadIcon />,
                     variant: 'featured',
-                    tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
+                    tooltipMsg: "You're running Mastra Studio locally. Want your team to collaborate?",
                     isOnMastraPlatform: false,
                   }}
                   state={state}

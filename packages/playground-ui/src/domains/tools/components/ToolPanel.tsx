@@ -11,12 +11,16 @@ import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect } from 'react';
 import { toast } from '@/lib/toast';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ToolPanelProps {
   toolId: string;
 }
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
+  const { canExecute } = usePermissions();
+  const canExecuteTool = canExecute('tools');
+
   const { data: agents = {} } = useAgents();
 
   // Check if tool exists in any agent's tools
@@ -77,6 +81,15 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       <div className="py-12 text-center px-6">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
+        </Txt>
+      </div>
+    );
+
+  if (!canExecuteTool)
+    return (
+      <div className="py-12 text-center px-6">
+        <Txt variant="ui-sm" className="text-neutral3">
+          You don't have permission to execute tools.
         </Txt>
       </div>
     );

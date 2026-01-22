@@ -101,7 +101,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
-  handler: async ({ mastra, runId, toolId, tools, requestContext, ...bodyParams }) => {
+  handler: async ctx => {
+    const { mastra, runId, toolId, tools, requestContext, ...bodyParams } = ctx as any;
+
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -128,25 +130,26 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       validateBody({ data });
 
+      let result;
       if (isVercelTool(tool)) {
-        const result = await (tool as any).execute(data);
-        return result;
+        result = await (tool as any).execute(data);
+      } else {
+        result = await tool.execute(data!, {
+          mastra,
+          requestContext,
+          // TODO: Pass proper tracing context when server API supports tracing
+          tracingContext: { currentSpan: undefined },
+          ...(runId
+            ? {
+                workflow: {
+                  runId,
+                  suspend: async () => {},
+                },
+              }
+            : {}),
+        });
       }
 
-      const result = await tool.execute(data!, {
-        mastra,
-        requestContext,
-        // TODO: Pass proper tracing context when server API supports tracing
-        tracingContext: { currentSpan: undefined },
-        ...(runId
-          ? {
-              workflow: {
-                runId,
-                suspend: async () => {},
-              },
-            }
-          : {}),
-      });
       return result;
     } catch (error) {
       return handleError(error, 'Error executing tool');
@@ -205,7 +208,9 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   summary: 'Execute agent tool',
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
-  handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
+  handler: async ctx => {
+    const { mastra, agentId, toolId, data, requestContext } = ctx as any;
+
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
