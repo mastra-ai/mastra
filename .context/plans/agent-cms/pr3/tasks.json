@@ -456,8 +456,8 @@
         "git show total-cms:packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts > packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts"
       ],
       "dependencies": ["022"],
-      "status": "pending",
-      "passing": false
+      "status": "completed",
+      "passing": true
     },
     {
       "id": "026",

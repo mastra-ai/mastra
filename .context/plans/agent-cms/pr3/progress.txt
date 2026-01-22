@@ -266,3 +266,27 @@
   - Task 029 (P1): Copy hooks index to export all hooks
   - Task 031 (P0): Copy provider list component
   - Consider completing remaining hooks (025-028) before moving to components
+
+- Task 025: Copy Smithery browsing hook
+  - Copied use-smithery.ts from total-cms:packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts
+  - Added useSmitheryServers hook for searching MCP servers with infinite scroll support
+  - Added useSmitheryServer hook for fetching detailed server information
+  - Both hooks use React Query and the Mastra client
+  - Total: ~55 lines of React Query hook implementations
+  - File: packages/playground-ui/src/domains/integrations/hooks/use-smithery.ts (created)
+  - Verified build passes (124/124 tasks successful)
+  - Verified typecheck passes
+  - Verified playground-ui tests pass (24 tests passed)
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 025 completed successfully - Smithery browsing hooks are now in place
+- The useSmitheryServers hook supports infinite scroll for browsing the Smithery MCP server registry
+- The useSmitheryServer hook fetches detailed information about a specific server
+- Next logical high-priority tasks are the remaining OAuth hooks and hooks index:
+  - Task 026 (P1): Copy OAuth callback hook (use-oauth-callback.ts)
+  - Task 027 (P1): Copy Arcade auth hook (use-arcade-auth.ts)
+  - Task 028 (P1): Copy Composio auth hook (use-composio-auth.ts)
+  - Task 029 (P1): Copy hooks index to export all hooks
+  - Task 031 (P0): Copy provider list component
+  - Consider completing OAuth hooks (026-028) and hooks index (029) before moving to components
