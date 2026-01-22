@@ -90,6 +90,38 @@ tools: { "my-custom-name": weatherTool }
 
 This gives you full control over how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
 
+### Sub-agents as tools
+
+The same pattern applies to sub-agents. When you pass agents via the `agents` property, they are converted to tools with a hardcoded `agent-` prefix followed by your object key:
+
+```typescript
+const weatherAgent = new Agent({
+  id: "weather-agent",
+  // ...
+});
+
+const orchestrator = new Agent({
+  // ...
+  agents: {
+    weather: weatherAgent,  // object key is "weather"
+  },
+});
+// Tool name becomes: "agent-" + "weather" = "agent-weather"
+```
+
+Note that you'll see two different identifiers in stream responses:
+- `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
+- `id: "weather-agent"` in `data-tool-agent` chunks — the sub-agent's actual `id` property
+
+To have these align more closely, use the agent's id as the object key:
+
+```typescript
+agents: {
+  "weather-agent": weatherAgent,
+}
+// toolName: "agent-weather-agent"
+```
+
 ## Calling an agent
 
 The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
