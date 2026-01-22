@@ -23,9 +23,10 @@ import {
   ScorerCombobox,
   toast,
   Spinner,
+  EditScorerDialog,
 } from '@mastra/playground-ui';
-import { useParams, Link, useSearchParams } from 'react-router';
-import { GaugeIcon } from 'lucide-react';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router';
+import { GaugeIcon, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ClientScoreRowData } from '@mastra/client-js';
@@ -33,10 +34,12 @@ import { ScoreRowData } from '@mastra/core/evals';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
   const [scoresPage, setScoresPage] = useState<number>(0);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
 
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
@@ -61,7 +64,7 @@ export default function Scorer() {
   const agentOptions: EntityOptions[] =
     scorer?.agentIds
       ?.filter(agentId => agents[agentId])
-      .map(agentId => {
+      ?.map(agentId => {
         return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
       }) || [];
 
@@ -177,6 +180,14 @@ export default function Scorer() {
           </HeaderGroup>
 
           <HeaderAction>
+            {scorer?.isRegistered && (
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
+                <Icon>
+                  <Pencil />
+                </Icon>
+                Edit
+              </Button>
+            )}
             <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />
@@ -235,6 +246,22 @@ export default function Scorer() {
         onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
+
+      {scorer?.isRegistered && (
+        <EditScorerDialog
+          scorerId={scorerId}
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          onSuccess={() => {
+            // Refresh the page to show updated scorer data
+            window.location.reload();
+          }}
+          onDelete={() => {
+            // Navigate back to scorers list after deletion
+            navigate('/scorers');
+          }}
+        />
+      )}
     </>
   );
 }
