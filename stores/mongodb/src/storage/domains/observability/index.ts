@@ -10,7 +10,6 @@ import {
 import type {
   SpanRecord,
   UpdateSpanRecord,
-  PaginationInfo,
   ListTracesArgs,
   ListTracesResponse,
   TracingStorageStrategy,

@@ -12,7 +12,6 @@ import type {
   SpanRecord,
   ListTracesArgs,
   ListTracesResponse,
-  PaginationInfo,
   TracingStorageStrategy,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,

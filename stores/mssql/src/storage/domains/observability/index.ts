@@ -10,7 +10,6 @@ import {
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
-  PaginationInfo,
   ListTracesArgs,
   ListTracesResponse,
   TracingStorageStrategy,
