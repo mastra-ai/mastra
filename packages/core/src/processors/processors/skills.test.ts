@@ -74,6 +74,7 @@ function createMockWorkspaceSkills(): WorkspaceSkills {
     get: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.get(name) || null)),
     has: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.has(name))),
     refresh: vi.fn().mockResolvedValue(undefined),
+    maybeRefresh: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
     update: vi.fn(),

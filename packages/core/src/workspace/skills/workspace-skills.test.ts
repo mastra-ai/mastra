@@ -105,12 +105,14 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
           path,
           type: 'file' as const,
           size: typeof content === 'string' ? content.length : content.length,
+          modifiedAt: new Date(),
         };
       }
       if (directories.has(path)) {
         return {
           path,
           type: 'directory' as const,
+          modifiedAt: new Date(),
         };
       }
       throw new Error(`Path not found: ${path}`);
@@ -888,6 +890,119 @@ describe('WorkspaceSkillsImpl', () => {
         call => call[0] === '/skills',
       );
       expect(readdirCalls.length).toBe(1);
+    });
+  });
+
+  describe('maybeRefresh', () => {
+    it('should not refresh when no changes have occurred', async () => {
+      const pastTime = new Date(Date.now() - 10000); // 10 seconds ago
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      // Override stat to return old modification time
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
+        path,
+        type: path.includes('.') ? ('file' as const) : ('directory' as const),
+        modifiedAt: pastTime,
+      }));
+
+      const skills = new WorkspaceSkillsImpl({
+        filesystem,
+        skillsPaths: ['/skills'],
+      });
+
+      // First call initializes
+      await skills.list();
+      const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // maybeRefresh should not trigger a refresh when nothing changed
+      await skills.maybeRefresh();
+      const afterMaybeRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // readFile should not be called again (no refresh - SKILL.md files not re-read)
+      expect(afterMaybeRefreshCalls).toBe(initialReadFileCalls);
+    });
+
+    it('should refresh when skillsPath has been modified', async () => {
+      let modifiedAt = new Date(Date.now() - 10000); // Start with old time
+
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      // Dynamic stat that returns current modifiedAt
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
+        path,
+        type: path.includes('.') ? ('file' as const) : ('directory' as const),
+        modifiedAt,
+      }));
+
+      const skills = new WorkspaceSkillsImpl({
+        filesystem,
+        skillsPaths: ['/skills'],
+      });
+
+      // First call initializes
+      await skills.list();
+      const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // Simulate directory modification (new file added)
+      modifiedAt = new Date(Date.now() + 1000); // Future time
+
+      // maybeRefresh should trigger a refresh
+      await skills.maybeRefresh();
+      const afterMaybeRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // readFile should be called again (refresh triggered - SKILL.md re-read)
+      expect(afterMaybeRefreshCalls).toBeGreaterThan(initialReadFileCalls);
+    });
+
+    it('should detect new skills after maybeRefresh', async () => {
+      let modifiedAt = new Date(Date.now() - 10000);
+      const filesMap: Record<string, string> = {
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      };
+
+      const filesystem = createMockFilesystem(filesMap);
+
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
+        path,
+        type: path.includes('.') ? ('file' as const) : ('directory' as const),
+        modifiedAt,
+      }));
+
+      const skills = new WorkspaceSkillsImpl({
+        filesystem,
+        skillsPaths: ['/skills'],
+      });
+
+      // Initial discovery
+      const initialList = await skills.list();
+      expect(initialList).toHaveLength(1);
+      expect(initialList[0]!.name).toBe('test-skill');
+
+      // Add a new skill to the filesystem
+      const newSkillMd = `---
+name: new-skill
+description: A newly added skill
+---
+
+# New Skill
+
+Instructions for the new skill.`;
+      filesMap['/skills/new-skill/SKILL.md'] = newSkillMd;
+      await filesystem.writeFile('/skills/new-skill/SKILL.md', newSkillMd);
+
+      // Update modification time
+      modifiedAt = new Date(Date.now() + 1000);
+
+      // maybeRefresh should pick up the new skill
+      await skills.maybeRefresh();
+      const updatedList = await skills.list();
+
+      expect(updatedList).toHaveLength(2);
+      expect(updatedList.map(s => s.name).sort()).toEqual(['new-skill', 'test-skill']);
     });
   });
 });
