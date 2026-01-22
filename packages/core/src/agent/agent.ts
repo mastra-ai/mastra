@@ -43,7 +43,7 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -3322,10 +3322,10 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(options ?? {}),
-    } as unknown as AgentExecutionOptions<any>;
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionOptions<any>;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -3412,10 +3412,10 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(streamOptions ?? {}),
-    } as unknown as AgentExecutionOptions<OUTPUT>;
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptions ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionOptions<OUTPUT>;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -3513,10 +3513,10 @@ export class Agent<
       requestContext: streamOptions?.requestContext,
     });
 
-    let mergedStreamOptions = {
-      ...defaultOptions,
-      ...streamOptions,
-    };
+    let mergedStreamOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptions ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions;
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -3591,10 +3591,10 @@ export class Agent<
       requestContext: options?.requestContext,
     });
 
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(options ?? {}),
-    };
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
