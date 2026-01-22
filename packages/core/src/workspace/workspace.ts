@@ -761,6 +761,16 @@ export class Workspace {
   // ---------------------------------------------------------------------------
 
   /**
+   * Ensure the workspace is initialized before sandbox operations.
+   * This enables lazy initialization when autoInit is false.
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this._status === 'pending') {
+      await this.init();
+    }
+  }
+
+  /**
    * Execute code in the sandbox.
    * @throws {SandboxNotAvailableError} if no sandbox is configured
    */
@@ -768,6 +778,7 @@ export class Workspace {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
     }
+    await this.ensureInitialized();
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCode(code, options);
   }
@@ -780,6 +791,7 @@ export class Workspace {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
     }
+    await this.ensureInitialized();
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCommand(command, args, options);
   }
@@ -953,6 +965,7 @@ export class Workspace {
     if (!this._fs || !this._sandbox) {
       throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
     }
+    await this.ensureInitialized();
 
     const synced: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
@@ -992,6 +1005,7 @@ export class Workspace {
     if (!this._fs || !this._sandbox) {
       throw new WorkspaceError('Both filesystem and sandbox are required for sync operations', 'SYNC_UNAVAILABLE');
     }
+    await this.ensureInitialized();
 
     const synced: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];

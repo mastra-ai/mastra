@@ -644,6 +644,7 @@ export class E2BSandbox implements WorkspaceSandbox {
     return (
       errorStr.includes('sandbox was not found') ||
       errorStr.includes('sandbox timeout') ||
+      errorStr.includes('Sandbox is probably not running') ||
       errorStr.includes('TimeoutError') ||
       (error instanceof Error && error.name === 'TimeoutError')
     );
