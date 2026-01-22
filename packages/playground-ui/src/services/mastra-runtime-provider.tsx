@@ -17,6 +17,7 @@ import { useTracingSettings } from '@/domains/observability/context/tracing-sett
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
+import { useQueryClient } from '@tanstack/react-query';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -315,6 +316,14 @@ export function MastraRuntimeProvider({
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
+
+  // Helper to refresh OM sidebar when observation completes
+  const refreshObservationalMemory = () => {
+    // Invalidate both the OM data and status queries to trigger refetch
+    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+  };
 
   const {
     frequencyPenalty,
@@ -406,6 +415,11 @@ export function MastraRuntimeProvider({
               if (chunk.type === 'network-execution-event-step-finish') {
                 refreshThreadList?.();
               }
+
+              // Refresh OM sidebar when observation completes (if OM chunks are passed through network mode)
+              if ((chunk as any).type === 'data-om-observation-end' || (chunk as any).type === 'data-om-observation-failed') {
+                refreshObservationalMemory();
+              }
             },
           });
         } else {
@@ -446,6 +460,11 @@ export function MastraRuntimeProvider({
                   chunk.payload.result?.success
                 ) {
                   refreshWorkingMemory?.();
+                }
+
+                // Refresh OM sidebar when observation completes
+                if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
+                  refreshObservationalMemory();
                 }
               },
               signal: controller.signal,

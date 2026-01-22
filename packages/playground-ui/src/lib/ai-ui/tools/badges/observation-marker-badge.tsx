@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { ObservationRenderer } from './observation-renderer';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -135,8 +136,8 @@ export const ObservationMarkerBadge = ({
                 <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
                   Current Task
                 </div>
-                <div className="text-[11px] text-green-800 whitespace-pre-wrap">
-                  {currentTask}
+                <div className="text-[11px] text-green-800 [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                  <MarkdownRenderer>{currentTask}</MarkdownRenderer>
                 </div>
               </div>
             )}
@@ -145,8 +146,8 @@ export const ObservationMarkerBadge = ({
                 <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
                   Suggested Response
                 </div>
-                <div className="text-[11px] text-green-800/80 italic whitespace-pre-wrap">
-                  {suggestedResponse}
+                <div className="text-[11px] text-green-800/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                  <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
                 </div>
               </div>
             )}
