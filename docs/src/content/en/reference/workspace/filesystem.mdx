@@ -1,0 +1,309 @@
+---
+title: "Reference: Filesystem Interface | Workspace"
+description: "Documentation for the WorkspaceFilesystem interface and LocalFilesystem provider."
+packages:
+  - "@mastra/core"
+---
+
+# Filesystem Interface
+
+The `WorkspaceFilesystem` interface defines how workspaces interact with file storage. Mastra includes `LocalFilesystem` for local disk storage.
+
+## LocalFilesystem
+
+Stores files in a directory on the local filesystem.
+
+### Usage
+
+```typescript
+import { LocalFilesystem } from '@mastra/core/workspace';
+
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+});
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "basePath",
+      type: "string",
+      description: "Root directory for the filesystem. All paths are relative to this directory.",
+    },
+  ]}
+/>
+
+### Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "string",
+      description: "Provider identifier ('local')",
+    },
+    {
+      name: "basePath",
+      type: "string",
+      description: "The configured base path",
+    },
+  ]}
+/>
+
+## WorkspaceFilesystem interface
+
+All filesystem providers implement this interface.
+
+### Methods
+
+#### `readFile(path, options?)`
+
+Read file contents.
+
+```typescript
+const content = await filesystem.readFile('/docs/guide.md');
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path relative to basePath",
+    },
+    {
+      name: "options.encoding",
+      type: "'utf-8' | 'binary'",
+      description: "Text or binary encoding",
+      isOptional: true,
+      defaultValue: "'utf-8'",
+    },
+  ]}
+/>
+
+**Returns:** `Promise<string | Buffer>`
+
+#### `writeFile(path, content, options?)`
+
+Write file contents.
+
+```typescript
+await filesystem.writeFile('/docs/new.md', '# New Document');
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path relative to basePath",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "File content",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Create parent directories if they don't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+#### `deleteFile(path, options?)`
+
+Delete a file.
+
+```typescript
+await filesystem.deleteFile('/docs/old.md');
+await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw if missing
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "Don't throw error if file doesn't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+#### `readdir(path, options?)`
+
+List directory contents.
+
+```typescript
+const entries = await filesystem.readdir('/docs');
+// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+```
+
+**Returns:** `Promise<FileEntry[]>`
+
+```typescript
+interface FileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modifiedAt?: Date;
+}
+```
+
+#### `mkdir(path, options?)`
+
+Create a directory.
+
+```typescript
+await filesystem.mkdir('/docs/api');
+await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "Directory path",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Create parent directories",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+#### `rmdir(path, options?)`
+
+Remove a directory.
+
+```typescript
+await filesystem.rmdir('/docs/old');
+await filesystem.rmdir('/docs/nested', { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "Directory path",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Remove contents recursively",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+#### `exists(path)`
+
+Check if a path exists.
+
+```typescript
+const exists = await filesystem.exists('/docs/guide.md');
+```
+
+**Returns:** `Promise<boolean>`
+
+#### `stat(path)`
+
+Get file or directory metadata.
+
+```typescript
+const stat = await filesystem.stat('/docs/guide.md');
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date }
+```
+
+**Returns:** `Promise<FileStat>`
+
+```typescript
+interface FileStat {
+  type: 'file' | 'directory';
+  size: number;
+  modifiedAt: Date;
+  createdAt: Date;
+}
+```
+
+### Optional methods
+
+#### `init()`
+
+Initialize the filesystem. Called by `workspace.init()`.
+
+```typescript
+await filesystem.init?.();
+```
+
+#### `destroy()`
+
+Clean up resources. Called by `workspace.destroy()`.
+
+```typescript
+await filesystem.destroy?.();
+```
+
+## Errors
+
+### FilesystemError
+
+Base error for filesystem operations.
+
+```typescript
+class FilesystemError extends Error {
+  code: string;
+  path?: string;
+}
+```
+
+Common error codes:
+- `ENOENT` - File or directory not found
+- `EEXIST` - File or directory already exists
+- `ENOTDIR` - Expected a directory
+- `EISDIR` - Expected a file
+- `EACCES` - Permission denied
+
+### FileReadRequiredError
+
+Thrown when `requireReadBeforeWrite` is enabled and a write is attempted without reading first.
+
+```typescript
+class FileReadRequiredError extends FilesystemError {
+  code: 'EREAD_REQUIRED';
+}
+```
+
+## Related
+
+- [Workspace Class](/reference/workspace/workspace-class)
+- [Sandbox Interface](/reference/workspace/sandbox)

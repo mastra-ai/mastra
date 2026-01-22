@@ -1,0 +1,350 @@
+---
+title: "Reference: Sandbox Interface | Workspace"
+description: "Documentation for the WorkspaceSandbox interface and LocalSandbox provider."
+packages:
+  - "@mastra/core"
+---
+
+# Sandbox Interface
+
+The `WorkspaceSandbox` interface defines how workspaces execute code and commands. Mastra includes `LocalSandbox` for local execution.
+
+## LocalSandbox
+
+Executes code and commands on the local system using installed interpreters.
+
+### Usage
+
+```typescript
+import { LocalSandbox } from '@mastra/core/workspace';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  scriptDirectory: './.mastra/sandbox',
+  inheritEnv: false,
+  env: {
+    NODE_ENV: 'development',
+  },
+});
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "Directory for command execution",
+      isOptional: true,
+      defaultValue: "process.cwd()",
+    },
+    {
+      name: "scriptDirectory",
+      type: "string",
+      description: "Directory where script files are written before execution. Enables __dirname resolution.",
+      isOptional: true,
+    },
+    {
+      name: "inheritEnv",
+      type: "boolean",
+      description: "Inherit environment variables from process.env",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      description: "Environment variables to set",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "provider",
+      type: "string",
+      description: "Provider identifier ('local')",
+    },
+    {
+      name: "supportedRuntimes",
+      type: "SandboxRuntime[]",
+      description: "['javascript', 'typescript', 'python']",
+    },
+  ]}
+/>
+
+## WorkspaceSandbox interface
+
+All sandbox providers implement this interface.
+
+### Methods
+
+#### `start()`
+
+Start the sandbox. Called by `workspace.init()`.
+
+```typescript
+await sandbox.start();
+```
+
+#### `stop()`
+
+Stop the sandbox. Called by `workspace.pause()`.
+
+```typescript
+await sandbox.stop?.();
+```
+
+#### `destroy()`
+
+Clean up sandbox resources. Called by `workspace.destroy()`.
+
+```typescript
+await sandbox.destroy();
+```
+
+#### `executeCode(code, options?)`
+
+Execute code in a specified runtime.
+
+```typescript
+const result = await sandbox.executeCode('console.log(2 + 2)', {
+  runtime: 'javascript',
+});
+console.log(result.stdout); // "4"
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "code",
+      type: "string",
+      description: "Code to execute",
+    },
+    {
+      name: "options.runtime",
+      type: "SandboxRuntime",
+      description: "'javascript' | 'typescript' | 'python'",
+      isOptional: true,
+      defaultValue: "'javascript'",
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "Execution timeout in milliseconds",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "Additional environment variables",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<CodeResult>`
+
+```typescript
+interface CodeResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  duration: number;
+  error?: string;
+}
+```
+
+#### `executeCommand(command, args?, options?)`
+
+Execute a shell command.
+
+```typescript
+const result = await sandbox.executeCommand('ls', ['-la', '/docs']);
+const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      description: "Command to execute",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      description: "Command arguments",
+      isOptional: true,
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "Execution timeout in milliseconds",
+      isOptional: true,
+    },
+    {
+      name: "options.cwd",
+      type: "string",
+      description: "Working directory for the command",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "Additional environment variables",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<CommandResult>`
+
+```typescript
+interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  duration: number;
+}
+```
+
+#### `installPackage(packageName, options?)`
+
+Install a package.
+
+```typescript
+await sandbox.installPackage('lodash');
+await sandbox.installPackage('requests', { runtime: 'python' });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "packageName",
+      type: "string",
+      description: "Package to install",
+    },
+    {
+      name: "options.runtime",
+      type: "SandboxRuntime",
+      description: "Runtime for package manager selection",
+      isOptional: true,
+      defaultValue: "'javascript'",
+    },
+  ]}
+/>
+
+#### `getInfo()`
+
+Get sandbox status and resource information.
+
+```typescript
+const info = await sandbox.getInfo();
+// { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
+```
+
+**Returns:** `Promise<SandboxInfo>`
+
+```typescript
+interface SandboxInfo {
+  status: 'starting' | 'running' | 'stopped' | 'error';
+  resources?: {
+    memoryMB?: number;
+    memoryUsedMB?: number;
+    cpuCores?: number;
+    cpuPercent?: number;
+    diskMB?: number;
+    diskUsedMB?: number;
+  };
+}
+```
+
+### Optional file operations
+
+Some sandbox providers support file operations within the sandbox environment.
+
+#### `readFile(path)`
+
+```typescript
+const content = await sandbox.readFile?.('/output/result.txt');
+```
+
+#### `writeFile(path, content)`
+
+```typescript
+await sandbox.writeFile?.('/input/data.json', JSON.stringify(data));
+```
+
+#### `listFiles(path)`
+
+```typescript
+const files = await sandbox.listFiles?.('/output');
+```
+
+## Runtimes
+
+<PropertiesTable
+  content={[
+    {
+      name: "javascript",
+      type: "SandboxRuntime",
+      description: "Node.js JavaScript execution",
+    },
+    {
+      name: "typescript",
+      type: "SandboxRuntime",
+      description: "TypeScript execution (compiled to JavaScript)",
+    },
+    {
+      name: "python",
+      type: "SandboxRuntime",
+      description: "Python 3 execution",
+    },
+  ]}
+/>
+
+## Environment isolation
+
+By default, `LocalSandbox` does not inherit environment variables from `process.env`. This prevents accidental exposure of API keys and secrets.
+
+```typescript
+// Secure: sandbox has no access to process.env
+const secureSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+});
+
+// Explicit: only pass specific variables
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: {
+    NODE_ENV: 'development',
+    API_URL: 'https://api.example.com',
+  },
+});
+
+// Inherit all (use with caution)
+const devSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  inheritEnv: true,
+});
+```
+
+## Related
+
+- [Workspace Class](/reference/workspace/workspace-class)
+- [Filesystem Interface](/reference/workspace/filesystem)
+- [Workspace Safety](/docs/workspace/safety)

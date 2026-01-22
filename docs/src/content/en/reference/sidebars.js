@@ -586,6 +586,27 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Workspace",
+      collapsed: true,
+      customProps: {
+        tags: ["new"],
+      },
+      items: [
+        {
+          type: "doc",
+          id: "workspace/workspace-class",
+          label: "Workspace Class",
+        },
+        {
+          type: "doc",
+          id: "workspace/filesystem",
+          label: "Filesystem Interface",
+        },
+        { type: "doc", id: "workspace/sandbox", label: "Sandbox Interface" },
+      ],
+    },
+    {
+      type: "category",
       label: "Streaming",
       collapsed: true,
       items: [

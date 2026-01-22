@@ -106,6 +106,30 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Workspace",
+      customProps: {
+        tags: ["new"],
+      },
+      items: [
+        {
+          type: "doc",
+          id: "workspace/overview",
+          label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "workspace/safety",
+          label: "Safety",
+        },
+        {
+          type: "doc",
+          id: "workspace/search",
+          label: "Search and Indexing",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Workflows",
       items: [
         {

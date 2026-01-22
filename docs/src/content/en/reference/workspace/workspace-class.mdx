@@ -1,0 +1,436 @@
+---
+title: "Reference: Workspace Class | Workspace"
+description: "Documentation for the Workspace class, the central API for filesystem access, sandbox execution, and search in Mastra."
+packages:
+  - "@mastra/core"
+---
+
+# Workspace Class
+
+The `Workspace` class combines a filesystem and sandbox to provide agents with file storage and code execution capabilities. It also supports BM25 and vector search for indexed content.
+
+## Usage example
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  name: 'My Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+    scriptDirectory: './.mastra/sandbox',
+    inheritEnv: true,
+  }),
+  bm25: true,
+  autoIndexPaths: ['/docs'],
+  safety: {
+    requireReadBeforeWrite: true,
+    requireSandboxApproval: 'commands',
+  },
+});
+
+await workspace.init();
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the workspace",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Human-readable name",
+      isOptional: true,
+      defaultValue: "workspace-{id}",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem",
+      description: "Filesystem provider instance (LocalFilesystem)",
+      isOptional: true,
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox",
+      description: "Sandbox provider instance (LocalSandbox)",
+      isOptional: true,
+    },
+    {
+      name: "bm25",
+      type: "boolean | BM25Config",
+      description: "Enable BM25 keyword search. Pass true for defaults or a config object.",
+      isOptional: true,
+      defaultValue: "undefined",
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector",
+      description: "Vector store for semantic search",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "(text: string) => Promise<number[]>",
+      description: "Embedder function for generating vectors. Required when vectorStore is provided.",
+      isOptional: true,
+    },
+    {
+      name: "autoIndexPaths",
+      type: "string[]",
+      description: "Paths to auto-index on init()",
+      isOptional: true,
+    },
+    {
+      name: "skillsPaths",
+      type: "string[]",
+      description: "Paths where SKILL.md files are located",
+      isOptional: true,
+      defaultValue: "['/skills']",
+    },
+    {
+      name: "autoInit",
+      type: "boolean",
+      description: "Initialize workspace on construction",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "autoSync",
+      type: "boolean",
+      description: "Auto-sync between filesystem and sandbox",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "operationTimeout",
+      type: "number",
+      description: "Timeout for operations in milliseconds",
+      isOptional: true,
+    },
+    {
+      name: "safety",
+      type: "WorkspaceSafetyConfig",
+      description: "Safety configuration for workspace operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Safety configuration
+
+<PropertiesTable
+  content={[
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "Block all write operations",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "requireReadBeforeWrite",
+      type: "boolean",
+      description: "Require files to be read before writing. Prevents overwrites of externally modified files.",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "requireSandboxApproval",
+      type: "'all' | 'commands' | 'none'",
+      description: "Require approval for sandbox operations",
+      isOptional: true,
+      defaultValue: "'all'",
+    },
+    {
+      name: "requireFilesystemApproval",
+      type: "'all' | 'write' | 'none'",
+      description: "Require approval for filesystem operations",
+      isOptional: true,
+      defaultValue: "'none'",
+    },
+  ]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Workspace identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Workspace name",
+    },
+    {
+      name: "status",
+      type: "WorkspaceStatus",
+      description: "'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed'",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem | undefined",
+      description: "The filesystem provider",
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox | undefined",
+      description: "The sandbox provider",
+    },
+    {
+      name: "skills",
+      type: "WorkspaceSkills | undefined",
+      description: "Skills interface for accessing SKILL.md files",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "Whether the workspace is in read-only mode",
+    },
+    {
+      name: "canBM25",
+      type: "boolean",
+      description: "Whether BM25 search is available",
+    },
+    {
+      name: "canVector",
+      type: "boolean",
+      description: "Whether vector search is available",
+    },
+    {
+      name: "canHybrid",
+      type: "boolean",
+      description: "Whether hybrid search is available",
+    },
+  ]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `init()`
+
+Initialize the workspace. Starts the sandbox and indexes files from `autoIndexPaths`.
+
+```typescript
+await workspace.init();
+```
+
+#### `pause()`
+
+Pause the workspace. Stops the sandbox but keeps state.
+
+```typescript
+await workspace.pause();
+```
+
+#### `resume()`
+
+Resume a paused workspace.
+
+```typescript
+await workspace.resume();
+```
+
+#### `destroy()`
+
+Destroy the workspace and clean up resources.
+
+```typescript
+await workspace.destroy();
+```
+
+### Filesystem operations
+
+#### `readFile(path, options?)`
+
+Read a file from the workspace filesystem.
+
+```typescript
+const content = await workspace.readFile('/docs/guide.md');
+const buffer = await workspace.readFile('/data/image.png', { encoding: 'binary' });
+```
+
+#### `writeFile(path, content, options?)`
+
+Write a file to the workspace filesystem.
+
+```typescript
+await workspace.writeFile('/docs/new.md', '# New Document');
+await workspace.writeFile('/docs/nested/file.md', content, { recursive: true });
+```
+
+#### `readdir(path, options?)`
+
+List directory contents.
+
+```typescript
+const entries = await workspace.readdir('/docs');
+// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+```
+
+#### `exists(path)`
+
+Check if a path exists.
+
+```typescript
+const exists = await workspace.exists('/docs/guide.md');
+```
+
+### Sandbox operations
+
+#### `executeCode(code, options?)`
+
+Execute code in the sandbox.
+
+```typescript
+const result = await workspace.executeCode('console.log(2 + 2)', {
+  runtime: 'javascript',
+});
+console.log(result.stdout); // "4"
+```
+
+#### `executeCommand(command, args?, options?)`
+
+Execute a shell command.
+
+```typescript
+const result = await workspace.executeCommand('ls', ['-la']);
+console.log(result.stdout);
+```
+
+### Search operations
+
+#### `index(path, content, options?)`
+
+Index content for search.
+
+```typescript
+await workspace.index('/docs/guide.md', 'Guide content...');
+```
+
+#### `indexMany(docs)`
+
+Index multiple documents.
+
+```typescript
+await workspace.indexMany([
+  { path: '/docs/a.md', content: 'Content A' },
+  { path: '/docs/b.md', content: 'Content B' },
+]);
+```
+
+#### `unindex(path)`
+
+Remove a document from the index.
+
+```typescript
+await workspace.unindex('/docs/deprecated.md');
+```
+
+#### `search(query, options?)`
+
+Search indexed content.
+
+```typescript
+const results = await workspace.search('password reset', {
+  topK: 10,
+  mode: 'hybrid',
+});
+```
+
+#### `rebuildIndex(paths?)`
+
+Rebuild the search index from filesystem paths.
+
+```typescript
+await workspace.rebuildIndex(['/docs']);
+```
+
+### Sync operations
+
+#### `syncToSandbox(paths?)`
+
+Sync files from filesystem to sandbox.
+
+```typescript
+const result = await workspace.syncToSandbox(['/src']);
+```
+
+#### `syncFromSandbox(paths?)`
+
+Sync files from sandbox back to filesystem.
+
+```typescript
+const result = await workspace.syncFromSandbox(['/output']);
+```
+
+### Snapshots
+
+#### `snapshot(options?)`
+
+Create a snapshot of workspace state.
+
+```typescript
+const snapshot = await workspace.snapshot({
+  name: 'before-changes',
+  paths: ['/src'],
+});
+```
+
+#### `restore(snapshot, options?)`
+
+Restore workspace from a snapshot.
+
+```typescript
+await workspace.restore(snapshot);
+```
+
+### Utility
+
+#### `getInfo()`
+
+Get workspace information.
+
+```typescript
+const info = await workspace.getInfo();
+// { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
+```
+
+#### `getPathContext()`
+
+Get information about filesystem and sandbox path mapping.
+
+```typescript
+const context = workspace.getPathContext();
+// { type, filesystem?, sandbox?, requiresSync, instructions }
+```
+
+#### `getSafetyConfig()`
+
+Get the safety configuration.
+
+```typescript
+const config = workspace.getSafetyConfig();
+```
+
+## Related
+
+- [Workspace Overview](/docs/workspace/overview)
+- [Workspace Safety](/docs/workspace/safety)
+- [Search and Indexing](/docs/workspace/search)
