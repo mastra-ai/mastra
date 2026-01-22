@@ -109,6 +109,13 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         </div>
       )}
 
+      {/* Observational Memory Section - moved above Semantic Recall */}
+      {isOMEnabled && (
+        <div className="border-b border-border1">
+          <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
+        </div>
+      )}
+
       {/* Memory Search Section */}
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
@@ -154,13 +161,6 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
           </div>
         )}
       </div>
-
-      {/* Observational Memory Section */}
-      {isOMEnabled && (
-        <div className="border-b border-border1">
-          <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
-        </div>
-      )}
 
       {/* Working Memory Section */}
       <div className="flex-1 overflow-y-auto">

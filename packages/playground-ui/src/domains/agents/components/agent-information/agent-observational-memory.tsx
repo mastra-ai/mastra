@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { ChevronRight, ChevronDown, Brain, Clock, RefreshCcw, ExternalLink, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, RefreshCcw, ExternalLink } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useObservationalMemory, useMemoryWithOMStatus } from '@/domains/memory/hooks';
@@ -53,22 +53,40 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const record = omData?.record;
   const history = omData?.history ?? [];
 
+  // Only show history if there are reflected records (more than just the current active one)
+  const reflectedHistory = useMemo(() => {
+    return history.filter(h => h.originType === 'reflection');
+  }, [history]);
+
   // Format the observations for display
   const observations = useMemo(() => {
     if (!record?.activeObservations) return '';
     return record.activeObservations;
   }, [record]);
 
+  const hasObservations = Boolean(observations);
+  const tokenCount = statusData?.observationalMemory?.tokenCount;
+
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: observations,
     copyMessage: 'Observations copied!',
   });
 
-  // Format dates for display
-  const formatDate = (date: Date | string | null | undefined) => {
+  // Format relative time
+  const formatRelativeTime = (date: Date | string | null | undefined) => {
     if (!date) return 'Never';
     const d = new Date(date);
-    return d.toLocaleString();
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
   };
 
   // Handle refresh
@@ -111,6 +129,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     );
   }
 
+  // Determine the status label to show in header
+  const isObserving = isObservingFromStream || isObservingFromServer;
+
   return (
     <div className="p-4">
       {/* Header */}
@@ -118,41 +139,35 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         <div className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-purple-400" />
           <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-          {record && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-              {record.originType === 'reflection' ? 'Reflected' : 'Active'}
+          {/* Status label in header */}
+          {isObserving ? (
+            <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
+              memorizing
             </span>
-          )}
+          ) : isReflecting ? (
+            <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
+              reflecting
+            </span>
+          ) : hasObservations ? (
+            <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+              active
+            </span>
+          ) : null}
         </div>
         <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-7 px-2">
           <RefreshCcw className="w-3 h-3" />
         </Button>
       </div>
 
-      {/* Status Info */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        {/* Show observing status from streaming (real-time) or server status */}
-        {(isObservingFromStream || isObservingFromServer) && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse inline-flex items-center gap-1">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Observing...
-          </span>
-        )}
-        {isReflecting && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse inline-flex items-center gap-1">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Reflecting...
-          </span>
-        )}
-        {statusData?.observationalMemory?.tokenCount !== undefined && (
-          <span className="text-xs text-neutral3">
-            {statusData.observationalMemory.tokenCount.toLocaleString()} tokens
-          </span>
-        )}
-      </div>
+      {/* No observations message - show when no observations exist */}
+      {!hasObservations && (
+        <p className="text-sm text-neutral3">
+          No observations yet, start a conversation to begin building memory.
+        </p>
+      )}
 
       {/* Observations Content */}
-      {record ? (
+      {hasObservations && (
         <div className="space-y-3">
           {/* Collapsible Observations Section */}
           <div className="border border-border1 rounded-lg bg-surface3">
@@ -160,25 +175,37 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               onClick={() => setIsExpanded(!isExpanded)}
               className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
             >
-              <span className="text-xs font-medium text-neutral5">Active Observations</span>
-              {isExpanded ? (
-                <ChevronDown className="w-3 h-3 text-neutral3" />
-              ) : (
-                <ChevronRight className="w-3 h-3 text-neutral3" />
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-neutral5">Observations</span>
+                {tokenCount !== undefined && (
+                  <span className="text-xs text-neutral3">
+                    {tokenCount.toLocaleString()} tokens
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-neutral3">
+                  {record?.lastObservedAt 
+                    ? formatRelativeTime(record.lastObservedAt)
+                    : record?.updatedAt 
+                      ? formatRelativeTime(record.updatedAt)
+                      : ''}
+                </span>
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3 text-neutral3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3 text-neutral3" />
+                )}
+              </div>
             </button>
             {isExpanded && (
-              <div className="border-t border-border1 overflow-hidden" style={{ height: '300px' }}>
+              <div className="border-t border-border1 overflow-hidden" style={{ height: '400px' }}>
                 <ScrollArea className="h-full" autoScroll>
                   <div
                     className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                     onClick={handleCopy}
                   >
-                    {observations ? (
-                      <ObservationRenderer observations={observations} maxHeight={undefined} />
-                    ) : (
-                      <p className="text-neutral3 italic">No observations yet</p>
-                    )}
+                    <ObservationRenderer observations={observations} maxHeight={undefined} />
                     {isCopied && (
                       <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
                         Copied!
@@ -193,19 +220,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             )}
           </div>
 
-          {/* Timestamps */}
-          <div className="flex flex-col gap-1 text-xs text-neutral3">
-            <div className="flex items-center gap-2">
-              <Clock className="w-3 h-3" />
-              <span>Last observed: {formatDate(record.lastObservedAt)}</span>
-            </div>
-            <div className="flex items-center gap-2 ml-5">
-              <span>Created: {formatDate(record.createdAt)}</span>
-            </div>
-          </div>
-
-          {/* History Toggle */}
-          {history.length > 0 && (
+          {/* History Toggle - only show if there are reflected records */}
+          {reflectedHistory.length > 0 && (
             <div className="border-t border-border1 pt-3">
               <button
                 onClick={() => setShowHistory(!showHistory)}
@@ -216,21 +232,26 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
-                <span>View history ({history.length} previous generations)</span>
+                <span>Previous reflections ({reflectedHistory.length})</span>
               </button>
               {showHistory && (
                 <div className="mt-2 space-y-2">
-                  {history.map((historyRecord) => (
-                    <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-neutral4">
-                          {historyRecord.originType === 'reflection' ? 'Reflected' : 'Observed'}
-                        </span>
-                        <span className="text-xs text-neutral3">{formatDate(historyRecord.createdAt)}</span>
+                  {reflectedHistory.map((historyRecord) => (
+                    <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
+                      <div className="px-3 py-2 border-b border-border1 flex items-center justify-between">
+                        <span className="text-xs font-medium text-neutral4">Reflection</span>
+                        <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
                       </div>
-                      <div className="text-xs text-neutral3 max-h-24 overflow-hidden">
-                        {historyRecord.activeObservations?.substring(0, 200)}
-                        {(historyRecord.activeObservations?.length ?? 0) > 200 && '...'}
+                      <div className="p-3 max-h-48 overflow-y-auto">
+                        {historyRecord.activeObservations ? (
+                          <ObservationRenderer 
+                            observations={historyRecord.activeObservations} 
+                            maxHeight={undefined}
+                            className="text-neutral3"
+                          />
+                        ) : (
+                          <span className="text-xs text-neutral3 italic">No observations</span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -238,12 +259,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               )}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="bg-surface3 border border-border1 rounded-lg p-4">
-          <p className="text-sm text-neutral3">
-            No observations yet. Start a conversation to begin building observational memory.
-          </p>
         </div>
       )}
     </div>

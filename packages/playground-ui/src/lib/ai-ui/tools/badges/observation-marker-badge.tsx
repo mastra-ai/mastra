@@ -93,10 +93,21 @@ export const ObservationMarkerBadge = ({
       ? Math.round(tokensObserved / observationTokens) 
       : null;
     
+    const handleToggle = (e: React.MouseEvent) => {
+      // Prevent scroll jump by preserving scroll position
+      const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
+      const scrollTop = scrollContainer.scrollTop;
+      setIsExpanded(!isExpanded);
+      // Restore scroll position after React updates
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    };
+
     return (
       <div className="my-1">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={handleToggle}
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs font-medium hover:bg-green-500/20 transition-colors cursor-pointer"
         >
           {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -126,8 +137,8 @@ export const ObservationMarkerBadge = ({
               <div className="mt-1 pt-1 border-t border-green-500/10">
                 <ObservationRenderer 
                   observations={observations} 
-                  maxHeight="200px"
-                  className="text-green-800"
+                  maxHeight="500px"
+                  className="text-green-800 max-w-2xl"
                 />
               </div>
             )}
