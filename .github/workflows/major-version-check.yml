@@ -31,8 +31,8 @@ jobs:
 
             const { owner, repo } = context.repo;
 
-            // Get list of files changed in the PR
-            const { data: files } = await github.rest.pulls.listFiles({
+            // Get all files changed in the PR (paginated to handle large PRs)
+            const files = await github.paginate(github.rest.pulls.listFiles, {
               owner,
               repo,
               pull_number: prNumber,
@@ -104,8 +104,8 @@ jobs:
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
             const { owner, repo } = context.repo;
 
-            // Get all comments on the PR (use default token for this - no special perms needed)
-            const { data: comments } = await github.rest.issues.listComments({
+            // Get all comments on the PR (paginated to handle PRs with many comments)
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
               repo,
               issue_number: prNumber,
