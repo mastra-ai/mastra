@@ -862,3 +862,406 @@ export interface ExecuteProcessorResponse {
   tripwire?: ProcessorTripwireResult;
   error?: string;
 }
+
+// ============================================================================
+// Integration Types
+// ============================================================================
+
+/**
+ * Integration provider type
+ */
+export type IntegrationProvider = 'composio' | 'arcade' | 'mcp' | 'smithery';
+
+/**
+ * MCP-specific integration metadata
+ */
+export interface MCPIntegrationMetadata {
+  /** MCP server URL (HTTP/SSE endpoint) */
+  url: string;
+  /** Optional authentication headers */
+  headers?: Record<string, string>;
+  /** Transport type hint */
+  transport?: 'http' | 'sse';
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+}
+
+/**
+ * Integration configuration
+ */
+export interface IntegrationConfig {
+  id: string;
+  provider: IntegrationProvider;
+  name: string;
+  enabled: boolean;
+  selectedToolkits: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Actual count of cached tools for this integration */
+  toolCount?: number;
+  /** Names of toolkits in this integration (e.g., ["hackernews"]) */
+  toolkitNames?: string[];
+}
+
+/**
+ * Cached tool definition
+ */
+export interface CachedTool {
+  id: string;
+  integrationId: string;
+  provider: IntegrationProvider;
+  toolkitSlug: string;
+  toolSlug: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  rawDefinition?: Record<string, unknown>;
+  cachedAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Provider connection status
+ */
+export interface ProviderStatus {
+  provider: IntegrationProvider;
+  connected: boolean;
+  name: string;
+  description: string;
+  icon?: string;
+}
+
+/**
+ * Toolkit from provider API
+ */
+export interface ProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  toolCount?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Tool from provider API
+ */
+export interface ProviderTool {
+  slug: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  toolkit?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing integrations
+ */
+export interface ListIntegrationsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  ownerId?: string;
+  provider?: IntegrationProvider;
+  enabled?: boolean;
+}
+
+/**
+ * Response for listing integrations
+ */
+export interface ListIntegrationsResponse {
+  integrations: IntegrationConfig[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating an integration
+ */
+export interface CreateIntegrationParams {
+  id?: string;
+  name: string;
+  provider: IntegrationProvider;
+  enabled?: boolean;
+  selectedToolkits: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+}
+
+/**
+ * Parameters for updating an integration
+ */
+export interface UpdateIntegrationParams {
+  name?: string;
+  provider?: IntegrationProvider;
+  enabled?: boolean;
+  selectedToolkits?: string[];
+  selectedTools?: string[];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+}
+
+/**
+ * Response for deleting an integration
+ */
+export interface DeleteIntegrationResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Response for listing providers
+ */
+export interface ListProvidersResponse {
+  providers: ProviderStatus[];
+}
+
+/**
+ * Parameters for listing toolkits from a provider
+ */
+export interface ListProviderToolkitsParams {
+  search?: string;
+  category?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+/**
+ * Response for listing toolkits from a provider
+ */
+export interface ListProviderToolkitsResponse {
+  toolkits: ProviderToolkit[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for listing tools from a provider
+ */
+export interface ListProviderToolsParams {
+  toolkitSlug?: string;
+  toolkitSlugs?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
+  // MCP HTTP transport parameters
+  /** MCP server URL (required for MCP HTTP transport) */
+  url?: string;
+  /** MCP server auth headers as JSON string (for MCP HTTP transport) */
+  headers?: string;
+  // MCP Stdio transport parameters
+  /** Command to execute (required for MCP Stdio transport) */
+  command?: string;
+  /** Arguments as JSON array string (for MCP Stdio transport) */
+  args?: string;
+  /** Environment variables as JSON object string (for MCP Stdio transport) */
+  env?: string;
+}
+
+/**
+ * Response for listing tools from a provider
+ */
+export interface ListProviderToolsResponse {
+  tools: ProviderTool[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+/**
+ * Response for refreshing integration tools
+ */
+export interface RefreshIntegrationResponse {
+  success: boolean;
+  message: string;
+  toolsUpdated: number;
+}
+
+/**
+ * Parameters for validating MCP connection
+ *
+ * Supports two transport types:
+ * - HTTP: Remote MCP servers accessed via URL
+ * - Stdio: Local MCP servers spawned as subprocesses
+ */
+export interface ValidateMCPParams {
+  /** Transport type: 'http' for remote servers, 'stdio' for local subprocess */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config (when transport === 'http')
+  /** MCP server URL (HTTP/SSE endpoint) - required for HTTP transport */
+  url?: string;
+  /** Optional authentication headers for HTTP transport */
+  headers?: Record<string, string>;
+
+  // Stdio transport config (when transport === 'stdio')
+  /** Command to execute (e.g., 'npx', 'node', 'python') - required for stdio transport */
+  command?: string;
+  /** Arguments to pass to the command */
+  args?: string[];
+  /** Environment variables for the subprocess */
+  env?: Record<string, string>;
+}
+
+/**
+ * Response for MCP validation
+ */
+export interface ValidateMCPResponse {
+  /** Whether the connection is valid */
+  valid: boolean;
+  /** Number of tools available on the server */
+  toolCount: number;
+  /** Error message if validation failed */
+  error?: string;
+}
+
+// ============================================================================
+// Smithery Registry Types
+// ============================================================================
+
+/**
+ * Smithery server from the registry
+ */
+export interface SmitheryServer {
+  /** Unique qualified name (e.g., "@anthropics/mcp-server-filesystem") */
+  qualifiedName: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Server description */
+  description?: string;
+  /** Icon URL */
+  iconUrl?: string;
+  /** Whether the server is verified */
+  verified?: boolean;
+  /** Usage count */
+  useCount?: number;
+  /** Whether this is a remote (HTTP) server */
+  remote?: boolean;
+  /** Repository URL */
+  homepage?: string;
+  /** Security information */
+  security?: {
+    scanPassed?: boolean;
+  };
+  /** Connection information (available after fetching full server details) */
+  connections?: SmitheryConnectionInfo[];
+  /** Deployment URL for remote servers */
+  deploymentUrl?: string;
+}
+
+/**
+ * Connection info from Smithery API
+ */
+export interface SmitheryConnectionInfo {
+  /** Connection type */
+  type: 'stdio' | 'http' | 'sse' | 'websocket';
+  /** URL for remote connections */
+  url?: string;
+  /** Deployment URL for remote connections (Smithery specific) */
+  deploymentUrl?: string;
+  /** Configuration schema */
+  configSchema?: Record<string, unknown>;
+  /** Command for stdio connections */
+  command?: string;
+  /** Arguments for stdio connections */
+  args?: string[];
+  /** Environment variables for stdio connections */
+  env?: Record<string, string>;
+}
+
+/**
+ * Smithery server connection details (normalized for MCP transport)
+ *
+ * Note: Smithery API returns 'sse' or 'websocket' types which are
+ * normalized to 'http' since they're all URL-based connections.
+ */
+export interface SmitheryServerConnection {
+  /** Transport type (normalized: sse/websocket -> http) */
+  type: 'http' | 'stdio';
+
+  // HTTP transport (includes SSE/WebSocket)
+  url?: string;
+  configSchema?: Record<string, unknown>;
+
+  // Stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+/**
+ * Parameters for searching Smithery servers
+ */
+export interface SearchSmitheryServersParams {
+  /** Search query */
+  q?: string;
+  /** Page number (1-indexed) */
+  page?: number;
+  /** Results per page */
+  pageSize?: number;
+}
+
+/**
+ * Response for searching Smithery servers
+ */
+export interface SearchSmitheryServersResponse {
+  servers: SmitheryServer[];
+  pagination: {
+    currentPage: number;
+    pageSize: number;
+    totalPages: number;
+    totalCount: number;
+  };
+}
+
+/**
+ * Response for getting Smithery server details
+ */
+export interface GetSmitheryServerResponse extends SmitheryServer {
+  connection?: SmitheryServerConnection;
+}
+
+/**
+ * Smithery-specific integration metadata
+ */
+export interface SmitheryIntegrationMetadata {
+  /** Smithery server qualified name */
+  smitheryQualifiedName: string;
+  /** Display name from Smithery registry */
+  smitheryDisplayName?: string;
+  /** Whether the server is verified on Smithery */
+  verified?: boolean;
+
+  /** MCP connection details */
+  transport: 'http' | 'stdio';
+
+  // HTTP transport config
+  url?: string;
+  headers?: Record<string, string>;
+
+  // Stdio transport config
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+
+  /** Server info cached after successful connection */
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+}

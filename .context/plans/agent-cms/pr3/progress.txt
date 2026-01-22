@@ -192,3 +192,29 @@
   - Task 023 (P1): Copy integrations React Query hooks
   - Task 031 (P0): Copy provider list component
   - Consider starting with Task 022 to begin the frontend implementation
+
+- Task 022: Copy integrations domain types
+  - Created packages/playground-ui/src/domains/integrations/types.ts with type re-exports from @mastra/client-js
+  - Added integration types to client-sdks/client-js/src/types.ts:
+    - IntegrationProvider, IntegrationConfig, CachedTool
+    - ProviderStatus, ProviderToolkit, ProviderTool
+    - All CRUD parameter types: CreateIntegrationParams, UpdateIntegrationParams, ListIntegrationsParams
+    - All response types: ListIntegrationsResponse, DeleteIntegrationResponse, etc.
+    - MCP validation types: ValidateMCPParams, ValidateMCPResponse, MCPIntegrationMetadata
+    - Smithery registry types: SmitheryServer, SmitheryConnectionInfo, SmitheryServerConnection, etc.
+  - Total: 450+ lines of integration types added to client-js
+  - Files modified:
+    - client-sdks/client-js/src/types.ts (added integration and Smithery types)
+    - packages/playground-ui/src/domains/integrations/types.ts (created with re-exports)
+  - Verified build passes (124/124 tasks successful)
+  - Verified client-js tests pass (237 tests passed)
+  - Status: Complete ✓
+
+## Next Engineer Notes:
+- Task 022 completed successfully - integration types are now available in both client-js and playground-ui
+- The types re-export pattern keeps the UI code DRY by importing from the client SDK
+- Next logical high-priority tasks are the React Query hooks and components:
+  - Task 023 (P1): Copy integrations React Query hooks
+  - Task 024 (P1): Copy provider discovery hooks  
+  - Task 031 (P0): Copy provider list component
+  - Consider starting with Task 023 to implement the data fetching layer
