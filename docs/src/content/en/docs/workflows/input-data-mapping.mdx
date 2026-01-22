@@ -58,14 +58,14 @@ Use `getStepResult` to access the full output of a specific step by referencing 
   })
 ```
 
-## Using `getInitData()`
+## Using `getInitData<any>()`
 
-Use `getInitData` to access the initial input data provided to the workflow:
+Use `getInitData<any>` to access the initial input data provided to the workflow:
 
 ```typescript {3} title="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getInitData }) => {
-      console.log(getInitData());
+      console.log(getInitData<any>());
   })
 ```
 

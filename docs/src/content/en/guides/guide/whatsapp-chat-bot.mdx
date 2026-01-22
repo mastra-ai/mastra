@@ -280,7 +280,7 @@ export const chatWorkflow = createWorkflow({
   .then(breakIntoMessages)
   .map(async ({ inputData, getInitData }) => {
     // Parse the original stringified input to get user phone
-    const initData = getInitData();
+    const initData = getInitData<typeof chatWorkflow>();
     const webhookData = JSON.parse(initData.userMessage);
     const userPhone =
       webhookData.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ||
