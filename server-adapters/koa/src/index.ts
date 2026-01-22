@@ -27,6 +27,9 @@ declare module 'koa' {
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
   }
+  interface Request {
+    body?: unknown;
+  }
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
