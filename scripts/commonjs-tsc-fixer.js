@@ -12,11 +12,10 @@ async function cleanupDtsFiles() {
 }
 
 async function writeDtsFiles() {
-  const packageJson = JSON.parse(await readFile(join(process.cwd(), 'package.json')));
+  const rootPath = process.cwd();
+  const packageJson = JSON.parse(await readFile(join(rootPath, 'package.json')));
 
   const exports = packageJson.exports;
-
-  const rootPath = process.cwd();
 
   // Handle specific path exports
   for (const [key, value] of Object.entries(exports)) {
