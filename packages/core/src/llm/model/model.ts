@@ -290,6 +290,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger?.trackException(mastraError);
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -392,6 +393,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger?.trackException(mastraError);
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -621,6 +623,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger?.trackException(mastraError);
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -764,6 +767,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger?.trackException(mastraError);
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
