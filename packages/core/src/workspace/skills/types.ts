@@ -134,6 +134,16 @@ export interface UpdateSkillInput {
  */
 export interface WorkspaceSkills {
   // ===========================================================================
+  // Properties
+  // ===========================================================================
+
+  /**
+   * Whether this skills instance supports write operations (create/update/delete).
+   * Returns false when using a read-only source like LocalSkillSource.
+   */
+  readonly isWritable: boolean;
+
+  // ===========================================================================
   // Discovery
   // ===========================================================================
 

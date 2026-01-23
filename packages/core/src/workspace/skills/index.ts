@@ -44,6 +44,16 @@ export {
 } from './schemas';
 
 // =============================================================================
+// Skill Source Abstraction
+// =============================================================================
+
+export type { SkillSource as SkillFileSource, SkillSourceStat, SkillSourceEntry } from './skill-source';
+
+export { isWritableSource } from './skill-source';
+
+export { LocalSkillSource, type LocalSkillSourceOptions } from './local-skill-source';
+
+// =============================================================================
 // Implementation
 // =============================================================================
 

@@ -1,14 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
-import type { SearchEngine, SearchResult, IndexInput } from '../search-engine';
+import type { SearchResult, IndexDocument } from '../search-engine';
+import type { SkillSource, SkillSourceEntry } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
 
+/**
+ * Writable skill source - SkillSource with write methods for CRUD operations.
+ */
+type WritableSkillSource = SkillSource & {
+  writeFile(path: string, content: string | Buffer): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  deleteFile(path: string, options?: { force?: boolean }): Promise<void>;
+};
+
 // =============================================================================
-// Mock Filesystem
+// Mock Skill Source (Writable)
 // =============================================================================
 
-function createMockFilesystem(files: Record<string, string | Buffer> = {}): WorkspaceFilesystem {
+function createMockFilesystem(files: Record<string, string | Buffer> = {}): WritableSkillSource {
   const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
   const directories = new Set<string>();
 
@@ -41,8 +51,8 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
     exists: vi.fn(async (path: string) => {
       return fileSystem.has(path) || directories.has(path);
     }),
-    readdir: vi.fn(async (path: string): Promise<FileEntry[]> => {
-      const entries: FileEntry[] = [];
+    readdir: vi.fn(async (path: string): Promise<SkillSourceEntry[]> => {
+      const entries: SkillSourceEntry[] = [];
       const prefix = path === '/' ? '/' : `${path}/`;
 
       // Find immediate children
@@ -58,7 +68,6 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
             entries.push({
               name,
               type: isDir ? 'directory' : 'file',
-              path: `${prefix}${name}`,
             });
           }
         }
@@ -75,7 +84,6 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
             entries.push({
               name,
               type: 'directory',
-              path: `${prefix}${name}`,
             });
           }
         }
@@ -101,24 +109,13 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
     stat: vi.fn(async (path: string) => {
       const content = fileSystem.get(path);
       if (content) {
-        return {
-          path,
-          type: 'file' as const,
-          size: typeof content === 'string' ? content.length : content.length,
-          modifiedAt: new Date(),
-        };
+        return { modifiedAt: new Date() };
       }
       if (directories.has(path)) {
-        return {
-          path,
-          type: 'directory' as const,
-          modifiedAt: new Date(),
-        };
+        return { modifiedAt: new Date() };
       }
       throw new Error(`Path not found: ${path}`);
     }),
-    isFile: vi.fn(async (path: string) => fileSystem.has(path)),
-    isDirectory: vi.fn(async (path: string) => directories.has(path)),
   };
 }
 
@@ -126,12 +123,24 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Work
 // Mock Search Engine
 // =============================================================================
 
-function createMockSearchEngine(): SearchEngine & { indexedDocs: IndexInput[] } {
-  const indexedDocs: IndexInput[] = [];
+/**
+ * Minimal search engine interface for testing.
+ */
+interface MockSearchEngine {
+  index(doc: IndexDocument): Promise<void>;
+  search(query: string, options?: { topK?: number }): Promise<SearchResult[]>;
+  clear(): void;
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+}
+
+function createMockSearchEngine(): MockSearchEngine & { indexedDocs: IndexDocument[] } {
+  const indexedDocs: IndexDocument[] = [];
 
   return {
     indexedDocs,
-    index: vi.fn(async (input: IndexInput) => {
+    index: vi.fn(async (input: IndexDocument) => {
       indexedDocs.push(input);
     }),
     search: vi.fn(async (query: string, options?: { topK?: number }): Promise<SearchResult[]> => {
@@ -216,7 +225,7 @@ describe('WorkspaceSkillsImpl', () => {
     it('should return empty array when no skills exist', async () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -231,7 +240,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -247,7 +256,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -265,7 +274,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -280,7 +289,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills', '/custom-skills'],
       });
 
@@ -293,7 +302,7 @@ describe('WorkspaceSkillsImpl', () => {
     it('should return null for non-existent skill', async () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -307,7 +316,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -328,7 +337,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -343,7 +352,7 @@ describe('WorkspaceSkillsImpl', () => {
     it('should return false for non-existent skill', async () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -357,7 +366,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -373,7 +382,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -403,7 +412,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -420,7 +429,7 @@ describe('WorkspaceSkillsImpl', () => {
       const searchEngine = createMockSearchEngine();
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
         searchEngine,
       });
@@ -440,7 +449,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -456,7 +465,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -470,7 +479,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -496,7 +505,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -515,7 +524,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -544,7 +553,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -564,7 +573,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -579,7 +588,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -598,7 +607,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -614,7 +623,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -630,7 +639,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -644,7 +653,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -656,7 +665,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -673,7 +682,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -691,7 +700,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -711,7 +720,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -727,7 +736,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -745,7 +754,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -764,7 +773,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -781,7 +790,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
         validateOnLoad: true,
       });
@@ -797,7 +806,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
         validateOnLoad: false,
       });
@@ -812,7 +821,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
         validateOnLoad: true,
       });
@@ -830,7 +839,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -844,7 +853,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/node_modules/@company/skills'],
       });
 
@@ -858,7 +867,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/.mastra/skills'],
       });
 
@@ -874,7 +883,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -908,7 +917,7 @@ describe('WorkspaceSkillsImpl', () => {
       }));
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -939,7 +948,7 @@ describe('WorkspaceSkillsImpl', () => {
       }));
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -973,7 +982,7 @@ describe('WorkspaceSkillsImpl', () => {
       }));
 
       const skills = new WorkspaceSkillsImpl({
-        filesystem,
+        source: filesystem,
         skillsPaths: ['/skills'],
       });
 
@@ -1003,6 +1012,236 @@ Instructions for the new skill.`;
 
       expect(updatedList).toHaveLength(2);
       expect(updatedList.map(s => s.name).sort()).toEqual(['new-skill', 'test-skill']);
+    });
+  });
+
+  describe('read-only mode (SkillSource)', () => {
+    // Create a mock read-only source (no write methods)
+    function createMockReadOnlySource(files: Record<string, string | Buffer> = {}) {
+      const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
+      const directories = new Set<string>();
+
+      // Initialize directories from file paths
+      for (const path of Object.keys(files)) {
+        let dir = path;
+        while (dir.includes('/')) {
+          dir = dir.substring(0, dir.lastIndexOf('/'));
+          if (dir) directories.add(dir);
+        }
+      }
+
+      return {
+        readFile: vi.fn(async (path: string) => {
+          const content = fileSystem.get(path);
+          if (content === undefined) {
+            throw new Error(`File not found: ${path}`);
+          }
+          return content;
+        }),
+        exists: vi.fn(async (path: string) => {
+          return fileSystem.has(path) || directories.has(path);
+        }),
+        readdir: vi.fn(async (path: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>> => {
+          const entries: Array<{ name: string; type: 'file' | 'directory' }> = [];
+          const prefix = path === '/' ? '/' : `${path}/`;
+
+          for (const [filePath] of fileSystem) {
+            if (filePath.startsWith(prefix)) {
+              const relativePath = filePath.substring(prefix.length);
+              const parts = relativePath.split('/');
+              const name = parts[0]!;
+
+              if (!entries.some(e => e.name === name)) {
+                const isDir = parts.length > 1;
+                entries.push({
+                  name,
+                  type: isDir ? 'directory' : 'file',
+                });
+              }
+            }
+          }
+
+          for (const dir of directories) {
+            if (dir.startsWith(prefix)) {
+              const relativePath = dir.substring(prefix.length);
+              const parts = relativePath.split('/');
+              const name = parts[0]!;
+
+              if (!entries.some(e => e.name === name)) {
+                entries.push({
+                  name,
+                  type: 'directory',
+                });
+              }
+            }
+          }
+
+          return entries;
+        }),
+        stat: vi.fn(async (path: string) => {
+          const content = fileSystem.get(path);
+          if (content) {
+            return { modifiedAt: new Date() };
+          }
+          if (directories.has(path)) {
+            return { modifiedAt: new Date() };
+          }
+          throw new Error(`Path not found: ${path}`);
+        }),
+        // NOTE: No writeFile, mkdir, rmdir - this is a read-only source
+      };
+    }
+
+    it('should report isWritable as true when using writable source (filesystem)', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: ['/skills'],
+      });
+
+      expect(skills.isWritable).toBe(true);
+    });
+
+    it('should report isWritable as false when using read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      expect(skills.isWritable).toBe(false);
+    });
+
+    it('should list skills from read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name)).toContain('test-skill');
+      expect(result.map(s => s.name)).toContain('api-skill');
+    });
+
+    it('should get skill from read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/test-skill/references/doc.md': REFERENCE_CONTENT,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      const skill = await skills.get('test-skill');
+      expect(skill).not.toBeNull();
+      expect(skill?.name).toBe('test-skill');
+      expect(skill?.references).toContain('doc.md');
+    });
+
+    it('should search skills from read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      const results = await skills.search('API');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.skillName).toBe('api-skill');
+    });
+
+    it('should throw on create() when using read-only source', async () => {
+      const source = createMockReadOnlySource({});
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      await expect(
+        skills.create({
+          metadata: { name: 'new-skill', description: 'Test' },
+          instructions: 'Instructions',
+        }),
+      ).rejects.toThrow('read-only');
+    });
+
+    it('should throw on update() when using read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      await expect(
+        skills.update('test-skill', {
+          metadata: { description: 'Updated' },
+        }),
+      ).rejects.toThrow('read-only');
+    });
+
+    it('should throw on delete() when using read-only source', async () => {
+      const source = createMockReadOnlySource({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source,
+        skillsPaths: ['/skills'],
+      });
+
+      await expect(skills.delete('test-skill')).rejects.toThrow('read-only');
+    });
+
+    it('should still allow CRUD when using filesystem via source config', async () => {
+      const filesystem = createMockFilesystem({});
+
+      // Use new 'source' config instead of deprecated 'filesystem'
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: ['/skills'],
+      });
+
+      // Create should work
+      await skills.create({
+        metadata: { name: 'new-skill', description: 'Test' },
+        instructions: 'Instructions',
+      });
+
+      expect(await skills.has('new-skill')).toBe(true);
+
+      // Update should work
+      await skills.update('new-skill', {
+        metadata: { description: 'Updated' },
+      });
+
+      const updated = await skills.get('new-skill');
+      expect(updated?.description).toBe('Updated');
+
+      // Delete should work
+      await skills.delete('new-skill');
+      expect(await skills.has('new-skill')).toBe(false);
     });
   });
 });

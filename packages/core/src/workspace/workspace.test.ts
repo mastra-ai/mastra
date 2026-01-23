@@ -341,8 +341,8 @@ describe('Workspace', () => {
       expect(workspace.name).toBe('Custom Workspace');
     });
 
-    it('should throw when neither filesystem nor sandbox provided', () => {
-      expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem or sandbox provider');
+    it('should throw when neither filesystem nor sandbox nor skillsPaths provided', () => {
+      expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem, sandbox, or skillsPaths');
     });
 
     it('should auto-initialize when autoInit is true', async () => {
@@ -829,14 +829,15 @@ Line 3 conclusion`;
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should throw when skillsPaths configured without filesystem', () => {
-      expect(
-        () =>
-          new Workspace({
-            sandbox: mockSandbox,
-            skillsPaths: ['/skills'],
-          }),
-      ).toThrow('Skills require a filesystem provider');
+    it('should allow skills without filesystem (read-only mode)', () => {
+      const workspace = new Workspace({
+        sandbox: mockSandbox,
+        skillsPaths: ['/skills'],
+      });
+
+      // Skills should be available via LocalSkillSource (read-only)
+      expect(workspace.skills).toBeDefined();
+      expect(workspace.skills?.isWritable).toBe(false);
     });
 
     it('should return undefined when no skillsPaths configured', () => {

@@ -63,7 +63,7 @@ import type {
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills } from './skills';
-import { WorkspaceSkillsImpl } from './skills';
+import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import { FilesystemState } from './state';
 import type { WorkspaceStatus } from './types';
 
@@ -425,16 +425,9 @@ export class Workspace {
     }
 
     // Validate at least one provider is given
-    if (!this._fs && !this._sandbox) {
-      throw new WorkspaceError('Workspace requires at least a filesystem or sandbox provider', 'NO_PROVIDERS');
-    }
-
-    // Validate skills require filesystem
-    if (config.skillsPaths && config.skillsPaths.length > 0 && !this._fs) {
-      throw new WorkspaceError(
-        'Skills require a filesystem provider. Configure filesystem or remove skillsPaths.',
-        'SKILLS_REQUIRE_FILESYSTEM',
-      );
+    // Note: skillsPaths alone is also valid - uses LocalSkillSource for read-only skills
+    if (!this._fs && !this._sandbox && (!config.skillsPaths || config.skillsPaths.length === 0)) {
+      throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skillsPaths', 'NO_PROVIDERS');
     }
 
     // Auto-initialize if requested
@@ -516,25 +509,36 @@ export class Workspace {
    * Access skills stored in this workspace.
    * Skills are SKILL.md files discovered from the configured skillsPaths.
    *
-   * Returns undefined if no skillsPaths are configured or no filesystem is available.
+   * Returns undefined if no skillsPaths are configured.
+   *
+   * When filesystem is available, skills support full CRUD operations.
+   * Without filesystem, skills are loaded read-only via LocalSkillSource.
    *
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
    * const skill = await workspace.skills?.get('brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
+   *
+   * // CRUD operations (only available with filesystem)
+   * if (workspace.skills?.isWritable) {
+   *   await workspace.skills.create({ ... });
+   * }
    * ```
    */
   get skills(): WorkspaceSkills | undefined {
-    // Skills require filesystem and skillsPaths
-    if (!this._fs || !this._config.skillsPaths || this._config.skillsPaths.length === 0) {
+    // Skills require skillsPaths
+    if (!this._config.skillsPaths || this._config.skillsPaths.length === 0) {
       return undefined;
     }
 
     // Lazy initialization
     if (!this._skills) {
+      // Use filesystem if available (full CRUD), otherwise use LocalSkillSource (read-only)
+      const source = this._fs ?? new LocalSkillSource();
+
       this._skills = new WorkspaceSkillsImpl({
-        filesystem: this._fs,
+        source,
         skillsPaths: this._config.skillsPaths,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
