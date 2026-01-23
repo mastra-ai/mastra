@@ -67,6 +67,14 @@ export interface HttpResponse {
 }
 
 /**
+ * Options for adapter setup
+ */
+export interface AdapterSetupOptions {
+  /** Route prefix (e.g., '/v2' or '/api/v2') */
+  prefix?: string;
+}
+
+/**
  * Configuration for adapter integration test suite
  */
 export interface AdapterTestSuiteConfig {
@@ -76,8 +84,13 @@ export interface AdapterTestSuiteConfig {
   /**
    * Setup adapter and app for testing
    * Called once before all tests
+   * @param context - Test context with Mastra instance
+   * @param options - Optional adapter options (e.g., prefix)
    */
-  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
+  setupAdapter: (
+    context: AdapterTestContext,
+    options?: AdapterSetupOptions,
+  ) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)
@@ -462,7 +475,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      await agents.createAgent({
+      const storedAgent = await agents.createAgent({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -470,6 +483,42 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           instructions: 'Test instructions for stored agent',
           model: { provider: 'openai', name: 'gpt-4o' },
         },
+      });
+
+      // Create test versions for version-specific routes
+      // Version 1: Will be the active version
+      const version1 = await agents.createVersion({
+        id: 'test-version-1',
+        agentId: 'test-stored-agent',
+        versionNumber: 1,
+        name: 'Test Version 1',
+        snapshot: storedAgent,
+        changedFields: ['name', 'instructions'],
+        changeMessage: 'Initial test version',
+      });
+
+      // Update the agent to have some changes for version 2
+      const updatedAgent = await agents.updateAgent({
+        id: 'test-stored-agent',
+        instructions: 'Updated test instructions for version 2',
+      });
+
+      // Version 2: Non-active version that can be deleted or used in comparisons
+      await agents.createVersion({
+        id: 'test-version-id',
+        agentId: 'test-stored-agent',
+        versionNumber: 2,
+        name: 'Test Version 2',
+        snapshot: updatedAgent,
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+
+      // Update the agent's activeVersionId to version 1
+      // This leaves version 2 (test-version-id) as non-active and deletable
+      await agents.updateAgent({
+        id: 'test-stored-agent',
+        activeVersionId: version1.id,
       });
     }
 
@@ -830,11 +879,14 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
+  /** Prefix to prepend to the route path (defaults to '/api') */
+  prefix?: string;
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  let path = route.path;
+  const prefix = overrides.prefix ?? '/api';
+  let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {
     const defaults = getDefaultValidPathParams(route);

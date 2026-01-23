@@ -42,8 +42,9 @@ describe('ESM Shim Plugin', () => {
     const code = result?.output[0].code;
 
     // Count occurrences of __filename declarations
-    const filenameDeclarations = (code.match(/const __filename\s*=/g) || []).length;
-    const dirnameDeclarations = (code.match(/const __dirname\s*=/g) || []).length;
+    // Note: rollup may rename variables (e.g., __filename -> __filename$1) to avoid conflicts
+    const filenameDeclarations = (code.match(/const __filename(\$\d+)?\s*=/g) || []).length;
+    const dirnameDeclarations = (code.match(/const __dirname(\$\d+)?\s*=/g) || []).length;
 
     // There should be exactly ONE declaration of each (the user's own)
     // If the shim is incorrectly injected, there will be TWO declarations
@@ -60,8 +61,9 @@ describe('ESM Shim Plugin', () => {
     const code = result?.output[0].code;
 
     // Count occurrences of __filename declarations
-    const filenameDeclarations = (code.match(/const __filename\s*=/g) || []).length;
-    const dirnameDeclarations = (code.match(/const __dirname\s*=/g) || []).length;
+    // Note: rollup may rename variables (e.g., __filename -> __filename$1) to avoid conflicts
+    const filenameDeclarations = (code.match(/const __filename(\$\d+)?\s*=/g) || []).length;
+    const dirnameDeclarations = (code.match(/const __dirname(\$\d+)?\s*=/g) || []).length;
 
     // There should be exactly ONE declaration of each (from the shim)
     expect(filenameDeclarations).toBe(1);
@@ -77,7 +79,8 @@ describe('ESM Shim Plugin', () => {
     const code = result?.output[0].code;
 
     // Count occurrences of __filename declarations
-    const filenameDeclarations = (code.match(/const __filename\s*=/g) || []).length;
+    // Note: rollup may rename variables (e.g., __filename -> __filename$1) to avoid conflicts
+    const filenameDeclarations = (code.match(/const __filename(\$\d+)?\s*=/g) || []).length;
 
     // There should be exactly ONE declaration (the user's own)
     // If the shim is incorrectly injected, there will be TWO declarations
@@ -85,7 +88,7 @@ describe('ESM Shim Plugin', () => {
 
     // Since the shim is skipped when __filename is declared,
     // __dirname should also NOT be injected (should be 0 if not used in fixture)
-    const dirnameDeclarations = (code.match(/const __dirname\s*=/g) || []).length;
+    const dirnameDeclarations = (code.match(/const __dirname(\$\d+)?\s*=/g) || []).length;
     expect(dirnameDeclarations).toBe(0);
 
     // The code should NOT contain the shim comment
@@ -98,7 +101,8 @@ describe('ESM Shim Plugin', () => {
     const code = result?.output[0].code;
 
     // Count occurrences of __dirname declarations
-    const dirnameDeclarations = (code.match(/const __dirname\s*=/g) || []).length;
+    // Note: rollup may rename variables (e.g., __dirname -> __dirname$1) to avoid conflicts
+    const dirnameDeclarations = (code.match(/const __dirname(\$\d+)?\s*=/g) || []).length;
 
     // There should be exactly ONE declaration (the user's own)
     // If the shim is incorrectly injected, there will be TWO declarations
@@ -106,7 +110,7 @@ describe('ESM Shim Plugin', () => {
 
     // Since the shim is skipped when __dirname is declared,
     // __filename should also NOT be injected (should be 0 if not used in fixture)
-    const filenameDeclarations = (code.match(/const __filename\s*=/g) || []).length;
+    const filenameDeclarations = (code.match(/const __filename(\$\d+)?\s*=/g) || []).length;
     expect(filenameDeclarations).toBe(0);
 
     // The code should NOT contain the shim comment

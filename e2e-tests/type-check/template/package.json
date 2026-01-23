@@ -19,13 +19,14 @@
   },
   "dependencies": {
     "@mastra/core": "type-check-test",
+    "@mastra/client-js": "type-check-test",
     "zod": "^3.25.76",
     "openai-v4": "npm:@ai-sdk/openai@^1.0.0",
     "openai-v5": "npm:@ai-sdk/openai@^2.0.0"
   },
   "devDependencies": {
-    "vitest": "^4.0.15",
-    "@types/node": "22.13.17",
+    "vitest": "^4.0.17",
+    "@types/node": "22.19.7",
     "typescript": "^5.9.3"
   }
 }

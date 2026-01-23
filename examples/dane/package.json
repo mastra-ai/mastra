@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "1.0.0-beta.25",
+  "version": "1.0.1",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -23,10 +23,10 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
-    "tsx": "^4.19.3"
+    "tsx": "^4.21.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

@@ -13,17 +13,17 @@
   "description": "One Agent, one Workflow, one Tool, and some Scorers to bring you the weather in your city.",
   "type": "module",
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/evals": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^22.15.29",
-    "mastra": "beta",
+    "@types/node": "^22.19.7",
+    "mastra": "latest",
     "typescript": "^5.9.3"
   }
 }

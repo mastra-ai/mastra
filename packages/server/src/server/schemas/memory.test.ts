@@ -31,7 +31,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: orderBy was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
+       * Example URL: /memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
        */
       it('should parse orderBy when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify({ field: 'createdAt', direction: 'ASC' });
@@ -90,7 +90,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: include was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?include=[{"role":"user","withPreviousMessages":5}]
+       * Example URL: /memory/threads/abc/messages?include=[{"role":"user","withPreviousMessages":5}]
        */
       it('should parse include when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify([
@@ -133,7 +133,7 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test for #11761: filter was failing when passed as a JSON string from URL query params.
        *
-       * Example URL: /api/memory/threads/abc/messages?filter={"roles":["user","assistant"]}
+       * Example URL: /memory/threads/abc/messages?filter={"roles":["user","assistant"]}
        */
       it('should parse filter when passed as a JSON string (from URL query params)', () => {
         const jsonString = JSON.stringify({ roles: ['user', 'assistant'] });

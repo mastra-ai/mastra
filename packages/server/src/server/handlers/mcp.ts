@@ -22,15 +22,17 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/v0/servers',
+  path: '/mcp/v0/servers',
   responseType: 'json',
   queryParamSchema: listMcpServersQuerySchema,
   responseSchema: listMcpServersResponseSchema,
   summary: 'List MCP servers',
   description: 'Returns a list of registered MCP servers with pagination support',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({
     mastra,
+    routePrefix,
     page,
     perPage,
     limit,
@@ -76,11 +78,12 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       if (actualOffset + finalPerPage < totalCount) {
         const nextPage = (finalPage ?? 0) + 1;
         // Return next URL in same format as request (legacy limit/offset or page/perPage)
+        const prefix = routePrefix ?? '';
         if (useLegacyFormat) {
           const nextOffset = actualOffset + finalPerPage;
-          nextUrl = `/api/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+          nextUrl = `${prefix}/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
         } else {
-          nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+          nextUrl = `${prefix}/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
         }
       }
     }
@@ -98,7 +101,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
 
 export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/v0/servers/:id',
+  path: '/mcp/v0/servers/:id',
   responseType: 'json',
   pathParamSchema: mcpServerDetailPathParams,
   queryParamSchema: getMcpServerDetailQuerySchema,
@@ -106,6 +109,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server details',
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -132,13 +136,14 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
 
 export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/:serverId/tools',
+  path: '/mcp/:serverId/tools',
   responseType: 'json',
   pathParamSchema: mcpServerIdPathParams,
   responseSchema: listMcpServerToolsResponseSchema,
   summary: 'List MCP server tools',
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -160,13 +165,14 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
 
 export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/mcp/:serverId/tools/:toolId',
+  path: '/mcp/:serverId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
   responseSchema: mcpToolInfoSchema,
   summary: 'Get MCP server tool details',
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -193,7 +199,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
 
 export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/mcp/:serverId/tools/:toolId/execute',
+  path: '/mcp/:serverId/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: mcpServerToolPathParams,
   bodySchema: executeToolBodySchema,
@@ -201,6 +207,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   summary: 'Execute MCP server tool',
   description: 'Executes a tool on the specified MCP server with the provided arguments',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     serverId,
@@ -251,12 +258,13 @@ export interface MCPSseTransportResult {
 
 export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   method: 'ALL',
-  path: '/api/mcp/:serverId/mcp',
+  path: '/mcp/:serverId/mcp',
   responseType: 'mcp-http',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP HTTP Transport',
   description: 'Streamable HTTP transport endpoint for MCP protocol communication',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -270,19 +278,20 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
 
     return {
       server,
-      httpPath: `/api/mcp/${serverId}/mcp`,
+      httpPath: `/mcp/${serverId}/mcp`,
     };
   },
 });
 
 export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   method: 'ALL',
-  path: '/api/mcp/:serverId/sse',
+  path: '/mcp/:serverId/sse',
   responseType: 'mcp-sse',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP SSE Transport',
   description: 'SSE transport endpoint for MCP protocol communication',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -296,19 +305,20 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
 
     return {
       server,
-      ssePath: `/api/mcp/${serverId}/sse`,
-      messagePath: `/api/mcp/${serverId}/messages`,
+      ssePath: `/mcp/${serverId}/sse`,
+      messagePath: `/mcp/${serverId}/messages`,
     };
   },
 });
 
 export const MCP_SSE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/mcp/:serverId/messages',
+  path: '/mcp/:serverId/messages',
   responseType: 'mcp-sse',
   pathParamSchema: mcpServerIdPathParams,
   summary: 'MCP SSE Messages',
   description: 'Message endpoint for SSE transport (posts messages to active SSE streams)',
   tags: ['MCP'],
+  requiresAuth: true,
   handler: MCP_SSE_TRANSPORT_ROUTE.handler,
 });

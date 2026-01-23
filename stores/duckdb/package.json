@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -35,12 +35,12 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "rimraf": "^5.0.7",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

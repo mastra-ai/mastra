@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "1.0.0-beta.11",
+  "version": "1.0.0",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -38,13 +38,13 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.0.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
     "miniflare": "^4.20251109.0",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

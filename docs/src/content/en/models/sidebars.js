@@ -249,12 +249,22 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/minimax",
-          label: "MiniMax",
+          label: "MiniMax (minimax.io)",
         },
         {
           type: "doc",
           id: "providers/minimax-cn",
-          label: "MiniMax (China)",
+          label: "MiniMax (minimaxi.com)",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-coding-plan",
+          label: "MiniMax Coding Plan (minimax.io)",
+        },
+        {
+          type: "doc",
+          id: "providers/minimax-cn-coding-plan",
+          label: "MiniMax Coding Plan (minimaxi.com)",
         },
         {
           type: "doc",
@@ -370,11 +380,6 @@ const sidebars = {
           type: "doc",
           id: "providers/upstage",
           label: "Upstage",
-        },
-        {
-          type: "doc",
-          id: "providers/venice",
-          label: "Venice AI",
         },
         {
           type: "doc",

@@ -1,11 +1,12 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.0-beta.25",
+  "version": "1.0.4",
   "description": "",
   "type": "module",
   "files": [
     "dist",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "./**/*.d.ts"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -74,6 +75,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/server",
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
@@ -95,12 +97,12 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"

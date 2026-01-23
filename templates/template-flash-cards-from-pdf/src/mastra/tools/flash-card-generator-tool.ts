@@ -34,7 +34,7 @@ export const flashCardGeneratorTool = createTool({
     subjectArea: z.string(),
   }),
   execute: async input => {
-    const { concepts, definitions, facts, numberOfCards, subjectArea } = input;
+    const { concepts, definitions, facts, numberOfCards = 10, subjectArea } = input;
 
     console.log(`🃏 Generating ${numberOfCards} flash cards for ${subjectArea}...`);
 

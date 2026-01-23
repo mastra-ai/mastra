@@ -245,7 +245,16 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
           return {
             success: true,
             bodyKeys: Object.keys(params).filter(
-              k => !['mastra', 'requestContext', 'tools', 'taskStore', 'abortSignal'].includes(k),
+              k =>
+                ![
+                  'mastra',
+                  'requestContext',
+                  'tools',
+                  'taskStore',
+                  'abortSignal',
+                  'registeredTools',
+                  'routePrefix',
+                ].includes(k),
             ),
           };
         },

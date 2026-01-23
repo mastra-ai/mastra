@@ -3,8 +3,6 @@ title: "Using CopilotKit | Frameworks"
 description: "Learn how to integrate CopilotKit with Mastra"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
@@ -36,7 +34,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
 
 Set up your directory structure. A possible directory structure could look like this:
 
-```shell
+```bash
 project-root
 ├── mastra-server
 │   ├── src
@@ -48,7 +46,7 @@ project-root
 
 Bootstrap your Mastra server:
 
-```bash
+```bash npm2yarn
 npx create-mastra@latest
 ```
 
@@ -62,7 +60,7 @@ cd mastra-server # Replace with the actual directory name you provided
 
 You now have a basic Mastra server project ready. You should have the following files and folders:
 
-```shell
+```bash
 src
 └── mastra
     ├── agents
@@ -88,8 +86,8 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
 
-```bash
-npm install --legacy-peer-deps @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client @ag-ui/encoder @ag-ui/langgraph @ag-ui/proto
+```bash npm2yarn
+npm install @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client @ag-ui/encoder @ag-ui/langgraph @ag-ui/proto
 ```
 
 In your `src/mastra/index.ts` file, register the chat route:

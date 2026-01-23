@@ -119,7 +119,7 @@ const EmptyScorersTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/scorers/overview"
+          href="https://mastra.ai/en/docs/evals/overview"
           target="_blank"
         >
           <Icon>

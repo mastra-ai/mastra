@@ -14,7 +14,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraModelOutput } from '@mastra/core/stream';
+import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
@@ -283,7 +283,7 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-ignore
+          // @ts-expect-error
           return this.generate({
             ...params,
             messages: updatedMessages,
@@ -295,27 +295,17 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate(
-    messages: MessageListInput,
-    options?: StreamParamsBaseWithoutMessages,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: StreamParamsBaseWithoutMessages<OUTPUT> & {
       structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
     },
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  // Catch-all overload to handle conditional types when OUTPUT is generic
+  ): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT>(
     messages: MessageListInput,
-    options?: StreamParamsBaseWithoutMessages<any> & {
-      structuredOutput?: SerializableStructuredOutputOptions<any>;
-    },
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  async generate<OUTPUT = any>(
-    messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
+  ): Promise<FullOutput<OUTPUT>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
       ...options,
@@ -1224,7 +1214,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error
                   toolInvocation.result = result;
                 }
 
@@ -1423,7 +1413,7 @@ export class Agent extends BaseResource {
 
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
-    streamOptions: Omit<StreamParams<OUTPUT>, 'messages' | 'structuredOutput'> & {
+    streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
       structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<
@@ -1451,7 +1441,7 @@ export class Agent extends BaseResource {
   // >;
   async stream(
     messages: MessageListInput,
-    streamOptions?: Omit<StreamParams, 'messages'>,
+    streamOptions?: StreamParamsBaseWithoutMessages,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1461,7 +1451,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async stream<OUTPUT = undefined>(
+  async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
@@ -1738,7 +1728,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error
                   toolInvocation.result = result;
                 }
 
