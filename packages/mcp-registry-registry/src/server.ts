@@ -2,8 +2,7 @@ import fs from 'node:fs/promises';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z, toJSONSchema } from 'zod';
 
 import { listTool, listInputSchema } from './tools/list';
 import { serversTool, serversInputSchema } from './tools/servers';
@@ -27,12 +26,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'registryList',
       description: listTool.description,
-      inputSchema: zodToJsonSchema(listInputSchema),
+      inputSchema: toJSONSchema(listInputSchema),
     },
     {
       name: 'registryServers',
       description: serversTool.description,
-      inputSchema: zodToJsonSchema(serversInputSchema),
+      inputSchema: toJSONSchema(serversInputSchema),
     },
   ],
 }));

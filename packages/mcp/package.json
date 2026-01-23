@@ -65,8 +65,7 @@
     "tsx": "^4.21.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -130,3 +130,27 @@ export function isStandardJSONSchema(value: unknown): value is StandardJSONSchem
 export function isStandardSchemaWithJSON(value: unknown): value is StandardSchemaWithJSON {
   return isStandardSchema(value) && isStandardJSONSchema(value);
 }
+
+/**
+ * Converts a StandardSchemaWithJSON to a JSON Schema.
+ *
+ * Uses the built-in jsonSchema.output() method from the StandardJSONSchemaV1 interface.
+ *
+ * @param schema - The StandardSchemaWithJSON schema to convert
+ * @param target - The JSON Schema target version (default: 'draft-07')
+ * @returns The JSON Schema representation
+ *
+ * @example
+ * ```typescript
+ * import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema/standard-schema';
+ * import { z } from 'zod';
+ *
+ * const zodSchema = z.object({ name: z.string() });
+ * const standardSchema = toStandardSchema(zodSchema);
+ * const jsonSchema = standardSchemaToJSONSchema(standardSchema);
+ * // { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] }
+ * ```
+ */
+export function standardSchemaToJSONSchema(schema: StandardSchemaWithJSON, target: StandardJSONSchemaV1.Target = 'draft-07'): JSONSchema7 {
+    return schema['~standard'].jsonSchema.output({ target }) as JSONSchema7;
+}

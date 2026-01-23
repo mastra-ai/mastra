@@ -16,7 +16,7 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { ZodSchema, z } from 'zod-v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
@@ -155,7 +155,9 @@ export class MastraLLMV1 extends MastraBase {
           schema = getZodDef(schema).type as z.ZodType<inferOutput<Z>>;
         }
 
-        const jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7');
+        // Convert Zod schema to JSON Schema via standard schema interface
+        const standardSchema = toStandardSchema(schema as any);
+        const jsonSchemaToUse = standardSchemaToJSONSchema(standardSchema);
 
         schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {

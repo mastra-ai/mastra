@@ -1,4 +1,4 @@
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodTypeAny, ZodObject } from 'zod';
 import z from 'zod';
@@ -228,11 +228,8 @@ export class MockMemory extends MastraMemory {
         let convertedSchema: JSONSchema7;
 
 
-        if (isZodObject(schema as ZodTypeAny)) {
-          convertedSchema = zodToJsonSchema(schema as any);
-        } else {
-          convertedSchema = schema as JSONSchema7;
-        }
+        // Convert any schema type to JSON Schema using the standard schema interface
+        convertedSchema = standardSchemaToJSONSchema(toStandardSchema(schema as any));
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
       } catch (error) {

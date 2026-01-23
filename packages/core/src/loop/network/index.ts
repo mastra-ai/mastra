@@ -20,7 +20,7 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
-import { zodToJsonSchema } from '../../zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
@@ -1294,16 +1294,15 @@ export async function createNetworkLoop({
 
       if (toolRequiresApproval) {
         if (!resumeData) {
+          const approvalSchema = z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          });
           const requireApprovalResumeSchema = JSON.stringify(
-            zodToJsonSchema(
-              z.object({
-                approved: z
-                  .boolean()
-                  .describe(
-                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                  ),
-              }) as any,
-            ),
+            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
