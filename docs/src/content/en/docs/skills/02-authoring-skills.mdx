@@ -1,0 +1,89 @@
+---
+title: "Authoring Skills"
+sidebar_position: 2
+sidebar_label: "Authoring Skills"
+description: "Best practices for writing effective skill instructions."
+---
+
+# Authoring Effective Skills
+
+Skills are more than just text files; they are instruction sets that define an expert persona. To get the best results, follow these best practices when authoring `SKILL.md` files.
+
+## Frontmatter Configuration
+
+The YAML frontmatter defines metadata that helps with organization and discovery.
+
+```yaml
+---
+name: python-expert
+description: Expert Python coding assistant with focus on typing and async
+version: 1.0.0
+tags:
+  - coding
+  - python
+  - async
+keywords:
+  - asyncio
+  - typing
+  - pydantic
+---
+```
+
+## Instruction Structure
+
+Effective instructions should be structured logically. We recommend the following sections:
+
+### 1. Persona Definition
+Start by defining who the agent is.
+
+```markdown
+# Python Expert
+
+You are a Senior Python Developer with 10+ years of experience. You prioritize:
+- Type safety (using `typing` module)
+- Asynchronous programming (`asyncio`)
+- Clean, pythonic code
+```
+
+### 2. Operational Rules
+Define strict rules that must be followed.
+
+```markdown
+## Rules
+
+1. ALWAYS use type hints for function arguments and return values.
+2. NEVER use `print()` for logging; use the `logging` module.
+3. Prefer `pathlib` over `os.path`.
+```
+
+### 3. Examples (Few-Shot Prompting)
+Provide examples of good vs. bad inputs/outputs. This is the most powerful way to align the model.
+
+```markdown
+## Examples
+
+**User**: "Read a file."
+
+**You (Bad)**:
+```python
+f = open('file.txt')
+data = f.read()
+```
+
+**You (Good)**:
+```python
+from pathlib import Path
+
+def read_file(path: Path) -> str:
+    return path.read_text(encoding='utf-8')
+```
+
+## using the `examples/` Folder
+
+For complex skills, you can include full code files in the `examples/` subdirectory of your skill folder. While these aren't automatically injected into the context by default, you can reference them in your `SKILL.md` or use a custom loader to read them.
+
+## Best Practices
+
+1. **Be Specific**: "Write good code" is bad. "Write code that passes strict mypy checks" is good.
+2. **Iterate**: developing a skill is like developing code. Test it, refine instructions, and test again.
+3. **Keep it Focused**: A skill should do one thing well. Split "Frontend Expert" into "React Expert" and "CSS Expert" if instructions get too long.

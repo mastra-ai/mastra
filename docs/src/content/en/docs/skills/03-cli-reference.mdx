@@ -1,0 +1,83 @@
+---
+title: "Skills CLI Reference"
+sidebar_position: 3
+sidebar_label: "CLI Reference"
+description: "Reference guide for Mastra Skills CLI commands."
+---
+
+# CLI Reference
+
+Mastra provides a set of CLI commands to manage skills within your project.
+
+## `mastra skill create`
+
+Creates a new skill directory with a standard structure.
+
+```bash
+mastra skill create [name] [options]
+```
+
+### Arguments
+
+| Argument | Description |
+| :--- | :--- |
+| `name` | Name of the skill (kebab-case). If omitted, an interactive prompt will appear. |
+
+### Options
+
+| Option | Alias | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--dir <path>` | `-d` | Target directory to create the skill in. | `.mastra/skills` |
+
+### Example
+
+```bash
+mastra skill create code-review
+```
+
+---
+
+## `mastra skill validate`
+
+Validates a skill directory to ensure it meets the Mastra Skills specification. Checks for:
+- Valid `SKILL.md` existence
+- Valid YAML frontmatter (name, description)
+- Non-empty instructions
+
+```bash
+mastra skill validate [path] [options]
+```
+
+### Arguments
+
+| Argument | Description |
+| :--- | :--- |
+| `path` | Path to the skill directory. If omitted, an interactive prompt will appear. |
+
+### Example
+
+```bash
+mastra skill validate .mastra/skills/code-review
+```
+
+---
+
+## `mastra skill list`
+
+Lists all valid skills found in a directory.
+
+```bash
+mastra skill list [options]
+```
+
+### Options
+
+| Option | Alias | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--dir <path>` | `-d` | Directory to search for skills. | `.mastra/skills` |
+
+### Example
+
+```bash
+mastra skill list
+```

@@ -106,6 +106,27 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Skills",
+      items: [
+        {
+          type: "doc",
+          id: "skills/01-overview",
+          label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "skills/02-authoring-skills",
+          label: "Authoring Skills",
+        },
+        {
+          type: "doc",
+          id: "skills/03-cli-reference",
+          label: "CLI Reference",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Workflows",
       items: [
         {

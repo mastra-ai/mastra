@@ -1,0 +1,108 @@
+---
+title: "Skills Overview"
+sidebar_position: 1
+sidebar_label: "Overview"
+description: "Skills are instruction sets that extend agent capabilities dynamically."
+---
+
+# Skills
+
+Skills are **folders of reusable instructions, scripts, and resources** that can be loaded dynamically into your agents. They allow you to package specific capabilities (like "Code Review", "Documentation Writer", or "SQL Expert") and equip your agents with them on-demand or conditionally.
+
+## Why use Skills?
+
+1. **Separation of Concerns**: Instead of one massive system prompt, break instructions into manageable, improved "skills".
+2. **Reusability**: Use the same "Code Review" skill across multiple agents.
+3. **Dynamic Loading**: Load skills only when needed (e.g. only load "Admin Skill" for admin users).
+4. **Interoperability**: Mastra skills follow the industry-standard folder format compatible with other agent frameworks.
+
+## Structure of a Skill
+
+A skill is simply a folder with a `SKILL.md` file:
+
+```bash
+.mastra/skills/
+└── my-skill/
+    ├── SKILL.md       # Required: Frontmatter + Instructions
+    ├── examples/      # Optional: Usage examples
+    ├── resources/     # Optional: Reference files
+    └── scripts/       # Optional: Helper scripts
+```
+
+### SKILL.md
+
+The `SKILL.md` file contains YAML configuration and the actual instructions:
+
+```markdown
+---
+name: code-review
+description: Expert at reviewing TypeScript code for best practices
+version: 1.0.0
+tags: [coding, quality]
+---
+
+# Code Review Instructions
+
+You are an expert code reviewer. When reviewing code, follow these guidelines:
+
+1. Check for type safety
+2. Ensure proper error handling
+3. Verify test coverage
+```
+
+## Using Skills with Agents
+
+You can add skills to an agent using the `skills` configuration option.
+
+### Method 1: Static Skills
+
+Pass an array of file paths to skill directories.
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  name: 'Code Reviewer',
+  instructions: 'You are a helpful assistant.',
+  model: { provider: 'OPENAI', name: 'gpt-4' },
+  skills: [
+    './.mastra/skills/code-review',
+    './.mastra/skills/typescript-best-practices'
+  ]
+});
+```
+
+### Method 2: Dynamic Skills
+
+Pass a function that returns skill paths based on context.
+
+```typescript
+const agent = new Agent({
+  // ...
+  skills: async ({ requestContext }) => {
+    const userRole = requestContext.get('userRole');
+    
+    // Only admins get the "System Admin" skill
+    if (userRole === 'admin') {
+      return ['./skills/system-admin'];
+    }
+    
+    return ['./skills/basic-user'];
+  }
+});
+```
+
+## Creating Skills via CLI
+
+Mastra provides CLI tools to generate skills quickly.
+
+```bash
+# Create a new skill
+mastra skill create my-new-skill
+
+# Validate a skill
+mastra skill validate .mastra/skills/my-new-skill
+
+# List available skills
+mastra skill list
+```
