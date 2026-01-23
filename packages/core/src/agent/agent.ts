@@ -1153,7 +1153,7 @@ export class Agent<
     const first = arr[0];
     return (
       typeof first.id === 'string' &&
-      first.model !== undefined &&
+      typeof first.model !== 'undefined' &&
       typeof first.maxRetries === 'number' &&
       typeof first.enabled === 'boolean'
     );
