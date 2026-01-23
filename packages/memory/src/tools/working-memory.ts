@@ -75,7 +75,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     // Convert the schema to StandardSchemaWithJSON first
     const standardSchema: StandardSchemaWithJSON = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
 
-    // Get JSON schema and convert to Zod for the input schema
+    // Get JSON schema using .output() since this describes the structure the LLM should produce,
+    // then convert to Zod for runtime validation of the tool's inputSchema
     const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as any;
     const memorySchema = convertSchemaToZod(jsonSchema).describe(`The JSON formatted working memory content to store.`);
 

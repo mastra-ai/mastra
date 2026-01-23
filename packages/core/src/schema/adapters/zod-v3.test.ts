@@ -75,6 +75,19 @@ describe('zod-v3 standard-schema adapter', () => {
       expect(jsonSchema).toMatchSnapshot();
     });
 
+    it('should convert input to JSON Schema', () => {
+      const zodSchema = z.object({
+        name: z.string(),
+      });
+
+      const standardSchema = toStandardSchema(zodSchema);
+      const inputJsonSchema = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' });
+      const outputJsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
+
+      // For Zod schemas, input and output JSON schemas are typically the same
+      expect(inputJsonSchema).toEqual(outputJsonSchema);
+    });
+
     it('should throw for unsupported targets', () => {
       const zodSchema = z.object({
         name: z.string(),

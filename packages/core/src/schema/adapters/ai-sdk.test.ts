@@ -57,10 +57,9 @@ describe('ai-sdk standard-schema adapter', () => {
       // Test invalid data - negative age
       const invalidResult = await standardSchema['~standard'].validate({ name: 'John', age: -5 });
       expect('issues' in invalidResult).toBe(true);
-      if ('issues' in invalidResult && invalidResult.issues) {
-        expect(invalidResult.issues.length).toBeGreaterThan(0);
-        expect(invalidResult.issues[0].message).toContain('non-negative');
-      }
+      expect(invalidResult.issues).toBeDefined();
+      expect(invalidResult.issues?.length).toBeGreaterThan(0);
+      expect(invalidResult.issues?.[0].message).toContain('non-negative');
     });
 
     it('should pass through values when schema has no validate method', async () => {

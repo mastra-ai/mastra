@@ -89,7 +89,12 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
-  private _applySchemaCompat(schema: StandardSchemaWithJSON | undefined): Schema {
+  private _applySchemaCompat(schema: StandardSchemaWithJSON | undefined): Schema | undefined {
+    // Guard against undefined schemas - return undefined early
+    if (!schema) {
+      return undefined;
+    }
+
     const model = this.#firstModel.model;
 
     const schemaCompatLayers = [];

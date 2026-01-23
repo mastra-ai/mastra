@@ -115,7 +115,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
-          schema: this.schema!,
+          schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,
         },
         providerOptions: this.providerOptions,

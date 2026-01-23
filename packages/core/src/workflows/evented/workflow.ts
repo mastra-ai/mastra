@@ -466,8 +466,8 @@ function createStepFromProcessor<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  z.infer<typeof ProcessorStepSchema>,
-  z.infer<typeof ProcessorStepOutputSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType

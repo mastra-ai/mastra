@@ -39,9 +39,13 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
     return toStandardSchemaAiSdk(schema as Schema<T>);
   }
 
-  return toStandardSchemaJsonSchema(schema as JSONSchema7);
+  // At this point, assume it's a plain JSON Schema object
+  // JSON Schema objects are plain objects with properties like 'type', 'properties', etc.
+  if (typeof schema !== 'object' || schema === null) {
+    throw new Error(`Unsupported schema type: ${typeof schema}`);
+  }
 
-  // throw new Error('Unsupported schema type');
+  return toStandardSchemaJsonSchema(schema as JSONSchema7);
 }
 
 /**
