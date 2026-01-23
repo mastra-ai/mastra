@@ -21,7 +21,7 @@ import { validateBody } from './utils';
 
 export const GET_SPEAKERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/voice/speakers',
+  path: '/agents/:agentId/voice/speakers',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
@@ -62,12 +62,12 @@ export const GET_SPEAKERS_ROUTE = createRoute({
 
 export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/speakers',
+  path: '/agents/:agentId/speakers',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
   summary: 'Get available speakers for an agent',
-  description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
+  description: '[DEPRECATED] Use /agents/:agentId/voice/speakers instead. Get available speakers for an agent',
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: GET_SPEAKERS_ROUTE.handler,
@@ -75,7 +75,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
 
 export const GENERATE_SPEECH_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/voice/speak',
+  path: '/agents/:agentId/voice/speak',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
@@ -127,14 +127,14 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 
 export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/speak',
+  path: '/agents/:agentId/speak',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
   summary: 'Convert text to speech',
   description:
-    "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
+    "[DEPRECATED] Use /agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: GENERATE_SPEECH_ROUTE.handler,
@@ -142,7 +142,7 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
 
 export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/voice/listen',
+  path: '/agents/:agentId/voice/listen',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
@@ -187,14 +187,14 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
 
 export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/listen',
+  path: '/agents/:agentId/listen',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
   responseSchema: transcribeSpeechResponseSchema,
   summary: 'Convert speech to text',
   description:
-    "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+    "[DEPRECATED] Use /agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
   tags: ['Agents', 'Voice'],
   requiresAuth: true,
   handler: TRANSCRIBE_SPEECH_ROUTE.handler,
@@ -202,7 +202,7 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
 
 export const GET_LISTENER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/voice/listener',
+  path: '/agents/:agentId/voice/listener',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: getListenerResponseSchema,

@@ -193,7 +193,7 @@ interface RouteConfig<
  * ```typescript
  * export const getAgentRoute = createRoute({
  *   method: 'GET',
- *   path: '/api/agents/:agentId',
+ *   path: '/agents/:agentId',
  *   responseType: 'json',
  *   pathParamSchema: z.object({ agentId: z.string() }),
  *   responseSchema: serializedAgentSchema,
