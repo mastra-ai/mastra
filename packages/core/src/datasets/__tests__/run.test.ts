@@ -182,7 +182,7 @@ describe('runDataset', () => {
     // Last updateDatasetRun call should set status to 'completed'
     const updateCalls = (mockStorage.updateDatasetRun as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = updateCalls[updateCalls.length - 1];
-    expect(lastCall[1]).toMatchObject({
+    expect(lastCall[0].payload).toMatchObject({
       status: 'completed',
       completedAt: expect.any(Date),
     });
@@ -329,7 +329,7 @@ describe('runDataset', () => {
     // Run should complete, not fail
     const updateCalls = (mockStorage.updateDatasetRun as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = updateCalls[updateCalls.length - 1];
-    expect(lastCall[1]).toMatchObject({ status: 'completed' });
+    expect(lastCall[0].payload).toMatchObject({ status: 'completed' });
   });
 
   // --------------------------------------------------------------------------
@@ -356,7 +356,7 @@ describe('runDataset', () => {
 
     const updateCalls = (mockStorage.updateDatasetRun as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = updateCalls[updateCalls.length - 1];
-    expect(lastCall[1]).toMatchObject({ status: 'failed' });
+    expect(lastCall[0].payload).toMatchObject({ status: 'failed' });
   });
 
   // --------------------------------------------------------------------------
@@ -424,10 +424,10 @@ describe('runDataset', () => {
       storage: mockStorage,
     });
 
-    expect(mockStorage.listDatasetItems).toHaveBeenCalledWith(
-      { datasetId: 'dataset-1', asOf: asOfDate },
-      { page: 1, perPage: false },
-    );
+    expect(mockStorage.listDatasetItems).toHaveBeenCalledWith({
+      options: { datasetId: 'dataset-1', asOf: asOfDate },
+      pagination: { page: 1, perPage: false },
+    });
   });
 
   // --------------------------------------------------------------------------
@@ -455,7 +455,7 @@ describe('runDataset', () => {
     // Empty dataset should complete (not fail)
     const updateCalls = (mockStorage.updateDatasetRun as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = updateCalls[updateCalls.length - 1];
-    expect(lastCall[1]).toMatchObject({ status: 'completed' });
+    expect(lastCall[0].payload).toMatchObject({ status: 'completed' });
   });
 
   it('throws error when agent not found', async () => {

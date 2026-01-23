@@ -56,11 +56,11 @@ export class DatasetsInMemory extends DatasetsStorage {
     return dataset;
   }
 
-  async getDatasetById(id: string): Promise<Dataset | null> {
+  async getDatasetById({ id }: { id: string }): Promise<Dataset | null> {
     return this.db.datasets.get(id) ?? null;
   }
 
-  async getDatasetByName(name: string): Promise<Dataset | null> {
+  async getDatasetByName({ name }: { name: string }): Promise<Dataset | null> {
     for (const dataset of this.db.datasets.values()) {
       if (dataset.name === name) {
         return dataset;
@@ -69,7 +69,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return null;
   }
 
-  async updateDataset(id: string, payload: UpdateDatasetPayload): Promise<Dataset> {
+  async updateDataset({ id, payload }: { id: string; payload: UpdateDatasetPayload }): Promise<Dataset> {
     const existing = this.db.datasets.get(id);
     if (!existing) {
       throw new Error(`Dataset not found: ${id}`);
@@ -83,7 +83,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return updated;
   }
 
-  async deleteDataset(id: string): Promise<void> {
+  async deleteDataset({ id }: { id: string }): Promise<void> {
     this.db.datasets.delete(id);
   }
 
@@ -131,11 +131,11 @@ export class DatasetsInMemory extends DatasetsStorage {
     return items;
   }
 
-  async getDatasetItemById(id: string): Promise<DatasetItem | null> {
+  async getDatasetItemById({ id }: { id: string }): Promise<DatasetItem | null> {
     return this.db.datasetItems.get(id) ?? null;
   }
 
-  async updateDatasetItem(id: string, payload: UpdateDatasetItemPayload): Promise<DatasetItem> {
+  async updateDatasetItem({ id, payload }: { id: string; payload: UpdateDatasetItemPayload }): Promise<DatasetItem> {
     const existing = this.db.datasetItems.get(id);
     if (!existing) {
       throw new Error(`DatasetItem not found: ${id}`);
@@ -149,7 +149,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return updated;
   }
 
-  async archiveDatasetItem(id: string): Promise<void> {
+  async archiveDatasetItem({ id }: { id: string }): Promise<void> {
     const existing = this.db.datasetItems.get(id);
     if (!existing) {
       throw new Error(`DatasetItem not found: ${id}`);
@@ -162,10 +162,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     this.db.datasetItems.set(id, updated);
   }
 
-  async listDatasetItems(
-    options: ListDatasetItemsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetItemsResponse> {
+  async listDatasetItems({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetItemsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetItemsResponse> {
     const { datasetId, asOf, includeArchived = false } = options;
 
     // Filter items
@@ -228,11 +231,11 @@ export class DatasetsInMemory extends DatasetsStorage {
     return run;
   }
 
-  async getDatasetRunById(id: string): Promise<DatasetRun | null> {
+  async getDatasetRunById({ id }: { id: string }): Promise<DatasetRun | null> {
     return this.db.datasetRuns.get(id) ?? null;
   }
 
-  async updateDatasetRun(id: string, payload: UpdateDatasetRunPayload): Promise<DatasetRun> {
+  async updateDatasetRun({ id, payload }: { id: string; payload: UpdateDatasetRunPayload }): Promise<DatasetRun> {
     const existing = this.db.datasetRuns.get(id);
     if (!existing) {
       throw new Error(`DatasetRun not found: ${id}`);
@@ -245,10 +248,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     return updated;
   }
 
-  async listDatasetRuns(
-    options: ListDatasetRunsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetRunsResponse> {
+  async listDatasetRuns({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetRunsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetRunsResponse> {
     const { datasetId, status } = options;
 
     const filtered = Array.from(this.db.datasetRuns.values()).filter(run => {
@@ -300,10 +306,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     return results;
   }
 
-  async listDatasetRunResults(
-    options: ListDatasetRunResultsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetRunResultsResponse> {
+  async listDatasetRunResults({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetRunResultsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetRunResultsResponse> {
     const { runId, status } = options;
 
     const filtered = Array.from(this.db.datasetRunResults.values()).filter(result => {

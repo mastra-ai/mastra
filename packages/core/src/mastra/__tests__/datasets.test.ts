@@ -58,7 +58,7 @@ describe('Mastra Dataset Methods', () => {
       expect(created.name).toBe('test-dataset');
       expect(created.description).toBe('A test dataset');
 
-      const retrieved = await store.getDatasetById(created.id);
+      const retrieved = await store.getDatasetById({ id: created.id });
       expect(retrieved).not.toBeNull();
       expect(retrieved?.id).toBe(created.id);
     });

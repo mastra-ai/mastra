@@ -54,12 +54,12 @@ describe('Datasets', () => {
   describe('getDatasetById', () => {
     it('returns dataset when found', async () => {
       const created = await storage.createDataset({ name: 'find-me' });
-      const found = await storage.getDatasetById(created.id);
+      const found = await storage.getDatasetById({ id: created.id });
       expect(found).toEqual(created);
     });
 
     it('returns null when not found', async () => {
-      const found = await storage.getDatasetById('nonexistent-id');
+      const found = await storage.getDatasetById({ id: 'nonexistent-id' });
       expect(found).toBeNull();
     });
   });
@@ -67,12 +67,12 @@ describe('Datasets', () => {
   describe('getDatasetByName', () => {
     it('returns dataset when found', async () => {
       const created = await storage.createDataset({ name: 'unique-name' });
-      const found = await storage.getDatasetByName('unique-name');
+      const found = await storage.getDatasetByName({ name: 'unique-name' });
       expect(found).toEqual(created);
     });
 
     it('returns null when not found', async () => {
-      const found = await storage.getDatasetByName('nonexistent-name');
+      const found = await storage.getDatasetByName({ name: 'nonexistent-name' });
       expect(found).toBeNull();
     });
 
@@ -81,7 +81,7 @@ describe('Datasets', () => {
       await storage.createDataset({ name: 'target-dataset' });
       await storage.createDataset({ name: 'third-dataset' });
 
-      const found = await storage.getDatasetByName('target-dataset');
+      const found = await storage.getDatasetByName({ name: 'target-dataset' });
       expect(found?.name).toBe('target-dataset');
     });
   });
@@ -97,9 +97,12 @@ describe('Datasets', () => {
       // Wait a small amount to ensure timestamp differs
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const updated = await storage.updateDataset(created.id, {
-        name: 'updated-name',
-        metadata: { updated: true },
+      const updated = await storage.updateDataset({
+        id: created.id,
+        payload: {
+          name: 'updated-name',
+          metadata: { updated: true },
+        },
       });
 
       expect(updated.name).toBe('updated-name');
@@ -109,7 +112,7 @@ describe('Datasets', () => {
     });
 
     it('throws error when dataset not found', async () => {
-      await expect(storage.updateDataset('nonexistent', { name: 'new' })).rejects.toThrow(
+      await expect(storage.updateDataset({ id: 'nonexistent', payload: { name: 'new' } })).rejects.toThrow(
         'Dataset not found: nonexistent',
       );
     });
@@ -120,12 +123,12 @@ describe('Datasets', () => {
       const created = await storage.createDataset({ name: 'to-delete' });
       expect(db.datasets.has(created.id)).toBe(true);
 
-      await storage.deleteDataset(created.id);
+      await storage.deleteDataset({ id: created.id });
       expect(db.datasets.has(created.id)).toBe(false);
     });
 
     it('does not throw when deleting nonexistent dataset', async () => {
-      await expect(storage.deleteDataset('nonexistent')).resolves.toBeUndefined();
+      await expect(storage.deleteDataset({ id: 'nonexistent' })).resolves.toBeUndefined();
     });
   });
 
@@ -233,12 +236,12 @@ describe('DatasetItems', () => {
         datasetId,
         input: 'find-me',
       });
-      const found = await storage.getDatasetItemById(created.id);
+      const found = await storage.getDatasetItemById({ id: created.id });
       expect(found).toEqual(created);
     });
 
     it('returns null when not found', async () => {
-      const found = await storage.getDatasetItemById('nonexistent');
+      const found = await storage.getDatasetItemById({ id: 'nonexistent' });
       expect(found).toBeNull();
     });
   });
@@ -254,9 +257,12 @@ describe('DatasetItems', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const updated = await storage.updateDatasetItem(created.id, {
-        input: 'updated-input',
-        metadata: { updated: true },
+      const updated = await storage.updateDatasetItem({
+        id: created.id,
+        payload: {
+          input: 'updated-input',
+          metadata: { updated: true },
+        },
       });
 
       expect(updated.input).toBe('updated-input');
@@ -266,7 +272,7 @@ describe('DatasetItems', () => {
     });
 
     it('throws error when item not found', async () => {
-      await expect(storage.updateDatasetItem('nonexistent', { input: 'new' })).rejects.toThrow(
+      await expect(storage.updateDatasetItem({ id: 'nonexistent', payload: { input: 'new' } })).rejects.toThrow(
         'DatasetItem not found: nonexistent',
       );
     });
@@ -281,14 +287,16 @@ describe('DatasetItems', () => {
 
       expect(created.archivedAt).toBeNull();
 
-      await storage.archiveDatasetItem(created.id);
+      await storage.archiveDatasetItem({ id: created.id });
 
-      const archived = await storage.getDatasetItemById(created.id);
+      const archived = await storage.getDatasetItemById({ id: created.id });
       expect(archived?.archivedAt).toBeInstanceOf(Date);
     });
 
     it('throws error when item not found', async () => {
-      await expect(storage.archiveDatasetItem('nonexistent')).rejects.toThrow('DatasetItem not found: nonexistent');
+      await expect(storage.archiveDatasetItem({ id: 'nonexistent' })).rejects.toThrow(
+        'DatasetItem not found: nonexistent',
+      );
     });
   });
 
@@ -299,7 +307,7 @@ describe('DatasetItems', () => {
       await storage.createDatasetItem({ datasetId, input: 'item-2' });
       await storage.createDatasetItem({ datasetId: otherDataset.id, input: 'other-item' });
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 10 } });
 
       expect(result.items).toHaveLength(2);
       expect(result.items.every(item => item.datasetId === datasetId)).toBe(true);
@@ -308,9 +316,9 @@ describe('DatasetItems', () => {
     it('excludes archived items by default', async () => {
       await storage.createDatasetItem({ datasetId, input: 'active-item' });
       const toArchive = await storage.createDatasetItem({ datasetId, input: 'to-archive' });
-      await storage.archiveDatasetItem(toArchive.id);
+      await storage.archiveDatasetItem({ id: toArchive.id });
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 10 } });
 
       expect(result.items).toHaveLength(1);
       expect(result.items[0].input).toBe('active-item');
@@ -319,9 +327,12 @@ describe('DatasetItems', () => {
     it('includes archived items when includeArchived is true', async () => {
       await storage.createDatasetItem({ datasetId, input: 'active-item' });
       const toArchive = await storage.createDatasetItem({ datasetId, input: 'archived-item' });
-      await storage.archiveDatasetItem(toArchive.id);
+      await storage.archiveDatasetItem({ id: toArchive.id });
 
-      const result = await storage.listDatasetItems({ datasetId, includeArchived: true }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetItems({
+        options: { datasetId, includeArchived: true },
+        pagination: { page: 0, perPage: 10 },
+      });
 
       expect(result.items).toHaveLength(2);
     });
@@ -336,14 +347,17 @@ describe('DatasetItems', () => {
         const afterCreate = new Date();
 
         // Query for items at time before creation
-        const resultBefore = await storage.listDatasetItems(
-          { datasetId, asOf: beforeCreate },
-          { page: 0, perPage: 10 },
-        );
+        const resultBefore = await storage.listDatasetItems({
+          options: { datasetId, asOf: beforeCreate },
+          pagination: { page: 0, perPage: 10 },
+        });
         expect(resultBefore.items).toHaveLength(0);
 
         // Query for items at time after creation
-        const resultAfter = await storage.listDatasetItems({ datasetId, asOf: afterCreate }, { page: 0, perPage: 10 });
+        const resultAfter = await storage.listDatasetItems({
+          options: { datasetId, asOf: afterCreate },
+          pagination: { page: 0, perPage: 10 },
+        });
         expect(resultAfter.items).toHaveLength(1);
       });
 
@@ -354,20 +368,23 @@ describe('DatasetItems', () => {
         const beforeArchive = new Date();
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        await storage.archiveDatasetItem(item.id);
+        await storage.archiveDatasetItem({ id: item.id });
         await new Promise(resolve => setTimeout(resolve, 50));
 
         const afterArchive = new Date();
 
         // Query before archiving - should include item
-        const resultBefore = await storage.listDatasetItems(
-          { datasetId, asOf: beforeArchive },
-          { page: 0, perPage: 10 },
-        );
+        const resultBefore = await storage.listDatasetItems({
+          options: { datasetId, asOf: beforeArchive },
+          pagination: { page: 0, perPage: 10 },
+        });
         expect(resultBefore.items).toHaveLength(1);
 
         // Query after archiving - should exclude item
-        const resultAfter = await storage.listDatasetItems({ datasetId, asOf: afterArchive }, { page: 0, perPage: 10 });
+        const resultAfter = await storage.listDatasetItems({
+          options: { datasetId, asOf: afterArchive },
+          pagination: { page: 0, perPage: 10 },
+        });
         expect(resultAfter.items).toHaveLength(0);
       });
     });
@@ -431,12 +448,12 @@ describe('DatasetRuns', () => {
         scorerIds: [],
         itemCount: 5,
       });
-      const found = await storage.getDatasetRunById(created.id);
+      const found = await storage.getDatasetRunById({ id: created.id });
       expect(found).toEqual(created);
     });
 
     it('returns null when not found', async () => {
-      const found = await storage.getDatasetRunById('nonexistent');
+      const found = await storage.getDatasetRunById({ id: 'nonexistent' });
       expect(found).toBeNull();
     });
   });
@@ -450,9 +467,12 @@ describe('DatasetRuns', () => {
         itemCount: 10,
       });
 
-      const updated = await storage.updateDatasetRun(created.id, {
-        status: 'running',
-        completedCount: 5,
+      const updated = await storage.updateDatasetRun({
+        id: created.id,
+        payload: {
+          status: 'running',
+          completedCount: 5,
+        },
       });
 
       expect(updated.status).toBe('running');
@@ -468,10 +488,13 @@ describe('DatasetRuns', () => {
       });
 
       const completedAt = new Date();
-      const updated = await storage.updateDatasetRun(created.id, {
-        status: 'completed',
-        completedCount: 10,
-        completedAt,
+      const updated = await storage.updateDatasetRun({
+        id: created.id,
+        payload: {
+          status: 'completed',
+          completedCount: 10,
+          completedAt,
+        },
       });
 
       expect(updated.status).toBe('completed');
@@ -480,7 +503,7 @@ describe('DatasetRuns', () => {
     });
 
     it('throws error when run not found', async () => {
-      await expect(storage.updateDatasetRun('nonexistent', { status: 'running' })).rejects.toThrow(
+      await expect(storage.updateDatasetRun({ id: 'nonexistent', payload: { status: 'running' } })).rejects.toThrow(
         'DatasetRun not found: nonexistent',
       );
     });
@@ -493,7 +516,7 @@ describe('DatasetRuns', () => {
       await storage.createDatasetRun({ datasetId, targetType: 'AGENT', scorerIds: [], itemCount: 2 });
       await storage.createDatasetRun({ datasetId: otherDataset.id, targetType: 'AGENT', scorerIds: [], itemCount: 3 });
 
-      const result = await storage.listDatasetRuns({ datasetId }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRuns({ options: { datasetId }, pagination: { page: 0, perPage: 10 } });
 
       expect(result.runs).toHaveLength(2);
       expect(result.runs.every(run => run.datasetId === datasetId)).toBe(true);
@@ -503,9 +526,12 @@ describe('DatasetRuns', () => {
       const run1 = await storage.createDatasetRun({ datasetId, targetType: 'AGENT', scorerIds: [], itemCount: 1 });
       await storage.createDatasetRun({ datasetId, targetType: 'AGENT', scorerIds: [], itemCount: 2 });
 
-      await storage.updateDatasetRun(run1.id, { status: 'running' });
+      await storage.updateDatasetRun({ id: run1.id, payload: { status: 'running' } });
 
-      const result = await storage.listDatasetRuns({ status: 'running' }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRuns({
+        options: { status: 'running' },
+        pagination: { page: 0, perPage: 10 },
+      });
 
       expect(result.runs).toHaveLength(1);
       expect(result.runs[0].status).toBe('running');
@@ -517,9 +543,12 @@ describe('DatasetRuns', () => {
       await storage.createDatasetRun({ datasetId, targetType: 'AGENT', scorerIds: [], itemCount: 2 });
       await storage.createDatasetRun({ datasetId: otherDataset.id, targetType: 'AGENT', scorerIds: [], itemCount: 3 });
 
-      await storage.updateDatasetRun(run1.id, { status: 'completed' });
+      await storage.updateDatasetRun({ id: run1.id, payload: { status: 'completed' } });
 
-      const result = await storage.listDatasetRuns({ datasetId, status: 'completed' }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRuns({
+        options: { datasetId, status: 'completed' },
+        pagination: { page: 0, perPage: 10 },
+      });
 
       expect(result.runs).toHaveLength(1);
       expect(result.runs[0].datasetId).toBe(datasetId);
@@ -530,7 +559,7 @@ describe('DatasetRuns', () => {
       await storage.createDatasetRun({ datasetId, targetType: 'AGENT', scorerIds: [], itemCount: 1 });
       await storage.createDatasetRun({ datasetId, targetType: 'WORKFLOW', scorerIds: [], itemCount: 2 });
 
-      const result = await storage.listDatasetRuns({}, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRuns({ options: {}, pagination: { page: 0, perPage: 10 } });
 
       expect(result.runs).toHaveLength(2);
     });
@@ -646,7 +675,7 @@ describe('DatasetRunResults', () => {
       await storage.createDatasetRunResult({ runId, itemId, actualOutput: 'b', status: 'success' });
       await storage.createDatasetRunResult({ runId: otherRun.id, itemId, actualOutput: 'c', status: 'success' });
 
-      const result = await storage.listDatasetRunResults({ runId }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRunResults({ options: { runId }, pagination: { page: 0, perPage: 10 } });
 
       expect(result.results).toHaveLength(2);
       expect(result.results.every(r => r.runId === runId)).toBe(true);
@@ -657,7 +686,10 @@ describe('DatasetRunResults', () => {
       await storage.createDatasetRunResult({ runId, itemId, actualOutput: null, status: 'error', error: 'fail' });
       await storage.createDatasetRunResult({ runId, itemId, actualOutput: 'c', status: 'success' });
 
-      const result = await storage.listDatasetRunResults({ runId, status: 'error' }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRunResults({
+        options: { runId, status: 'error' },
+        pagination: { page: 0, perPage: 10 },
+      });
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].status).toBe('error');
@@ -681,7 +713,10 @@ describe('DatasetRunResults', () => {
         error: 'x',
       });
 
-      const result = await storage.listDatasetRunResults({ runId, status: 'error' }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetRunResults({
+        options: { runId, status: 'error' },
+        pagination: { page: 0, perPage: 10 },
+      });
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].runId).toBe(runId);
@@ -726,7 +761,7 @@ describe('Pagination', () => {
         { datasetId, input: '4' },
       ]);
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 2 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 2 } });
 
       expect(result.pagination.total).toBe(4);
       expect(result.items).toHaveLength(2);
@@ -741,7 +776,7 @@ describe('Pagination', () => {
         { datasetId, input: '3' },
       ]);
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 2 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 2 } });
 
       expect(result.pagination.hasMore).toBe(true);
     });
@@ -752,7 +787,7 @@ describe('Pagination', () => {
         { datasetId, input: '2' },
       ]);
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 10 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 10 } });
 
       expect(result.pagination.hasMore).toBe(false);
     });
@@ -765,7 +800,7 @@ describe('Pagination', () => {
       ]);
 
       // Page 1 (second page, 0-indexed) with perPage 2 should have 1 item (items 3)
-      const result = await storage.listDatasetItems({ datasetId }, { page: 1, perPage: 2 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 1, perPage: 2 } });
 
       expect(result.pagination.hasMore).toBe(false);
       expect(result.items).toHaveLength(1);
@@ -781,7 +816,7 @@ describe('Pagination', () => {
         { datasetId, input: '4' },
       ]);
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 2 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 2 } });
 
       expect(result.items).toHaveLength(2);
       expect(result.pagination.page).toBe(0);
@@ -797,7 +832,7 @@ describe('Pagination', () => {
       ]);
 
       // Page 1 (second page, 0-indexed) should return items 3 and 4
-      const result = await storage.listDatasetItems({ datasetId }, { page: 1, perPage: 2 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 1, perPage: 2 } });
 
       expect(result.items).toHaveLength(2);
       expect(result.pagination.page).toBe(1);
@@ -806,7 +841,7 @@ describe('Pagination', () => {
     it('returns empty array for page beyond data', async () => {
       await storage.createDatasetItem({ datasetId, input: '1' });
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 5, perPage: 10 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 5, perPage: 10 } });
 
       expect(result.items).toHaveLength(0);
       expect(result.pagination.total).toBe(1);
@@ -818,7 +853,7 @@ describe('Pagination', () => {
         { datasetId, input: '2' },
       ]);
 
-      const result = await storage.listDatasetItems({ datasetId }, { page: 0, perPage: 100 });
+      const result = await storage.listDatasetItems({ options: { datasetId }, pagination: { page: 0, perPage: 100 } });
 
       expect(result.items).toHaveLength(2);
       expect(result.pagination.hasMore).toBe(false);

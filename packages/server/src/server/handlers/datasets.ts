@@ -99,7 +99,7 @@ export const GET_DATASET_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Datasets storage not configured' });
       }
 
-      const dataset = await store.getDatasetById(datasetId);
+      const dataset = await store.getDatasetById({ id: datasetId });
       if (!dataset) {
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
@@ -128,7 +128,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Datasets storage not configured' });
       }
 
-      const dataset = await store.updateDataset(datasetId, { name, description, metadata });
+      const dataset = await store.updateDataset({ id: datasetId, payload: { name, description, metadata } });
       return { dataset };
     } catch (error) {
       return handleError(error, 'Error updating dataset');
@@ -152,7 +152,7 @@ export const DELETE_DATASET_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Datasets storage not configured' });
       }
 
-      await store.deleteDataset(datasetId);
+      await store.deleteDataset({ id: datasetId });
       return { success: true as const };
     } catch (error) {
       return handleError(error, 'Error deleting dataset');
@@ -186,14 +186,14 @@ export const LIST_DATASET_ITEMS_ROUTE = createRoute({
         perPage: perPage ?? 10,
       };
 
-      const result = await store.listDatasetItems(
-        {
+      const result = await store.listDatasetItems({
+        options: {
           datasetId,
           asOf,
           includeArchived,
         },
         pagination,
-      );
+      });
 
       return result;
     } catch (error) {
@@ -251,7 +251,7 @@ export const UPDATE_DATASET_ITEM_ROUTE = createRoute({
       }
 
       // Verify item belongs to this dataset
-      const existing = await store.getDatasetItemById(itemId);
+      const existing = await store.getDatasetItemById({ id: itemId });
       if (!existing) {
         throw new HTTPException(404, { message: `Dataset item not found: ${itemId}` });
       }
@@ -259,7 +259,7 @@ export const UPDATE_DATASET_ITEM_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset item not found in dataset: ${datasetId}` });
       }
 
-      const item = await store.updateDatasetItem(itemId, { input, expectedOutput, metadata });
+      const item = await store.updateDatasetItem({ id: itemId, payload: { input, expectedOutput, metadata } });
       return { item };
     } catch (error) {
       return handleError(error, 'Error updating dataset item');
@@ -284,7 +284,7 @@ export const ARCHIVE_DATASET_ITEM_ROUTE = createRoute({
       }
 
       // Verify item belongs to this dataset
-      const existing = await store.getDatasetItemById(itemId);
+      const existing = await store.getDatasetItemById({ id: itemId });
       if (!existing) {
         throw new HTTPException(404, { message: `Dataset item not found: ${itemId}` });
       }
@@ -292,7 +292,7 @@ export const ARCHIVE_DATASET_ITEM_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset item not found in dataset: ${datasetId}` });
       }
 
-      await store.archiveDatasetItem(itemId);
+      await store.archiveDatasetItem({ id: itemId });
       return { success: true as const };
     } catch (error) {
       return handleError(error, 'Error archiving dataset item');
@@ -326,13 +326,13 @@ export const LIST_DATASET_RUNS_ROUTE = createRoute({
         perPage: perPage ?? 10,
       };
 
-      const result = await store.listDatasetRuns(
-        {
+      const result = await store.listDatasetRuns({
+        options: {
           datasetId,
           status,
         },
         pagination,
-      );
+      });
 
       return result;
     } catch (error) {
@@ -359,7 +359,7 @@ export const CREATE_DATASET_RUN_ROUTE = createRoute({
       }
 
       // Verify dataset exists
-      const dataset = await store.getDatasetById(datasetId);
+      const dataset = await store.getDatasetById({ id: datasetId });
       if (!dataset) {
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
@@ -400,7 +400,7 @@ export const GET_DATASET_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Datasets storage not configured' });
       }
 
-      const run = await store.getDatasetRunById(runId);
+      const run = await store.getDatasetRunById({ id: runId });
       if (!run) {
         throw new HTTPException(404, { message: `Dataset run not found: ${runId}` });
       }
@@ -435,7 +435,7 @@ export const LIST_DATASET_RUN_RESULTS_ROUTE = createRoute({
       }
 
       // Verify run exists and belongs to this dataset
-      const run = await store.getDatasetRunById(runId);
+      const run = await store.getDatasetRunById({ id: runId });
       if (!run) {
         throw new HTTPException(404, { message: `Dataset run not found: ${runId}` });
       }
@@ -448,14 +448,14 @@ export const LIST_DATASET_RUN_RESULTS_ROUTE = createRoute({
         perPage: perPage ?? 10,
       };
 
-      const result = await store.listDatasetRunResults({ runId, status }, pagination);
+      const result = await store.listDatasetRunResults({ options: { runId, status }, pagination });
 
       // Fetch items to get inputs - include archived since items may have been archived after run
       const itemIds = result.results.map(r => r.itemId);
-      const itemsResponse = await store.listDatasetItems(
-        { datasetId, includeArchived: true },
-        { page: 0, perPage: false },
-      );
+      const itemsResponse = await store.listDatasetItems({
+        options: { datasetId, includeArchived: true },
+        pagination: { page: 0, perPage: false },
+      });
       const itemsMap = new Map(itemsResponse.items.map(item => [item.id, item]));
 
       // Enrich results with item inputs

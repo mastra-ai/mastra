@@ -67,7 +67,10 @@ export async function runDataset(options: RunDatasetInternalOptions): Promise<Ru
   if (existingItems) {
     items = existingItems;
   } else {
-    const itemsResponse = await storage.listDatasetItems({ datasetId, asOf }, { page: 1, perPage: false });
+    const itemsResponse = await storage.listDatasetItems({
+      options: { datasetId, asOf },
+      pagination: { page: 1, perPage: false },
+    });
     items = itemsResponse.items;
   }
 
@@ -109,7 +112,7 @@ export async function runDataset(options: RunDatasetInternalOptions): Promise<Ru
       });
 
       completedCount++;
-      run = await storage.updateDatasetRun(run.id, { completedCount });
+      run = await storage.updateDatasetRun({ id: run.id, payload: { completedCount } });
       onProgress?.(completedCount, items.length);
     }
   } else {
@@ -135,7 +138,7 @@ export async function runDataset(options: RunDatasetInternalOptions): Promise<Ru
         });
 
         completedCount++;
-        run = await storage.updateDatasetRun(run.id, { completedCount });
+        run = await storage.updateDatasetRun({ id: run.id, payload: { completedCount } });
         onProgress?.(completedCount, items.length);
       }
     };
@@ -152,9 +155,12 @@ export async function runDataset(options: RunDatasetInternalOptions): Promise<Ru
   const allFailed = results.length > 0 && results.every(r => r.status === 'error');
   const finalStatus = allFailed ? 'failed' : 'completed';
 
-  run = await storage.updateDatasetRun(run.id, {
-    status: finalStatus,
-    completedAt: new Date(),
+  run = await storage.updateDatasetRun({
+    id: run.id,
+    payload: {
+      status: finalStatus,
+      completedAt: new Date(),
+    },
   });
 
   return { run, results };
@@ -175,7 +181,10 @@ export async function startDatasetRunAsync(options: StartDatasetRunAsyncOptions)
   const { datasetId, target, scorerIds = [], name, metadata, storage, logger } = options;
 
   // Fetch items to get count for run record
-  const itemsResponse = await storage.listDatasetItems({ datasetId, asOf: options.asOf }, { page: 1, perPage: false });
+  const itemsResponse = await storage.listDatasetItems({
+    options: { datasetId, asOf: options.asOf },
+    pagination: { page: 1, perPage: false },
+  });
   const items = itemsResponse.items;
 
   // Resolve target type and ID for storage

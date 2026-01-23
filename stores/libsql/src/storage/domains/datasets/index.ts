@@ -89,7 +89,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     };
   }
 
-  async getDatasetById(id: string): Promise<Dataset | null> {
+  async getDatasetById({ id }: { id: string }): Promise<Dataset | null> {
     const result = await this.#client.execute({
       sql: `SELECT id, name, description, json(metadata) as metadata, createdAt, updatedAt FROM ${TABLE_DATASETS} WHERE id = ?`,
       args: [id],
@@ -103,7 +103,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return this.transformDatasetRow(row);
   }
 
-  async getDatasetByName(name: string): Promise<Dataset | null> {
+  async getDatasetByName({ name }: { name: string }): Promise<Dataset | null> {
     const result = await this.#client.execute({
       sql: `SELECT id, name, description, json(metadata) as metadata, createdAt, updatedAt FROM ${TABLE_DATASETS} WHERE name = ?`,
       args: [name],
@@ -117,8 +117,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return this.transformDatasetRow(row);
   }
 
-  async updateDataset(id: string, payload: UpdateDatasetPayload): Promise<Dataset> {
-    const existing = await this.getDatasetById(id);
+  async updateDataset({ id, payload }: { id: string; payload: UpdateDatasetPayload }): Promise<Dataset> {
+    const existing = await this.getDatasetById({ id });
     if (!existing) {
       throw new Error(`Dataset not found: ${id}`);
     }
@@ -143,7 +143,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     };
   }
 
-  async deleteDataset(id: string): Promise<void> {
+  async deleteDataset({ id }: { id: string }): Promise<void> {
     await this.#db.delete({
       tableName: TABLE_DATASETS,
       keys: { id },
@@ -257,7 +257,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return items;
   }
 
-  async getDatasetItemById(id: string): Promise<DatasetItem | null> {
+  async getDatasetItemById({ id }: { id: string }): Promise<DatasetItem | null> {
     const result = await this.#client.execute({
       sql: `SELECT id, datasetId, json(input) as input, json(expectedOutput) as expectedOutput, json(metadata) as metadata, archivedAt, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE id = ?`,
       args: [id],
@@ -271,8 +271,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return this.transformDatasetItemRow(row);
   }
 
-  async updateDatasetItem(id: string, payload: UpdateDatasetItemPayload): Promise<DatasetItem> {
-    const existing = await this.getDatasetItemById(id);
+  async updateDatasetItem({ id, payload }: { id: string; payload: UpdateDatasetItemPayload }): Promise<DatasetItem> {
+    const existing = await this.getDatasetItemById({ id });
     if (!existing) {
       throw new Error(`DatasetItem not found: ${id}`);
     }
@@ -297,8 +297,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     };
   }
 
-  async archiveDatasetItem(id: string): Promise<void> {
-    const existing = await this.getDatasetItemById(id);
+  async archiveDatasetItem({ id }: { id: string }): Promise<void> {
+    const existing = await this.getDatasetItemById({ id });
     if (!existing) {
       throw new Error(`DatasetItem not found: ${id}`);
     }
@@ -314,10 +314,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
     });
   }
 
-  async listDatasetItems(
-    options: ListDatasetItemsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetItemsResponse> {
+  async listDatasetItems({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetItemsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetItemsResponse> {
     const { datasetId, asOf, includeArchived = false } = options;
     const { page, perPage: perPageInput } = pagination;
 
@@ -411,7 +414,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     };
   }
 
-  async getDatasetRunById(id: string): Promise<DatasetRun | null> {
+  async getDatasetRunById({ id }: { id: string }): Promise<DatasetRun | null> {
     const result = await this.#client.execute({
       sql: `SELECT id, datasetId, name, targetType, targetId, json(scorerIds) as scorerIds, status, itemCount, completedCount, json(metadata) as metadata, createdAt, completedAt FROM ${TABLE_DATASET_RUNS} WHERE id = ?`,
       args: [id],
@@ -425,8 +428,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return this.transformDatasetRunRow(row);
   }
 
-  async updateDatasetRun(id: string, payload: UpdateDatasetRunPayload): Promise<DatasetRun> {
-    const existing = await this.getDatasetRunById(id);
+  async updateDatasetRun({ id, payload }: { id: string; payload: UpdateDatasetRunPayload }): Promise<DatasetRun> {
+    const existing = await this.getDatasetRunById({ id });
     if (!existing) {
       throw new Error(`DatasetRun not found: ${id}`);
     }
@@ -453,10 +456,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
     };
   }
 
-  async listDatasetRuns(
-    options: ListDatasetRunsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetRunsResponse> {
+  async listDatasetRuns({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetRunsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetRunsResponse> {
     const { datasetId, status } = options;
     const { page, perPage: perPageInput } = pagination;
 
@@ -579,10 +585,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return results;
   }
 
-  async listDatasetRunResults(
-    options: ListDatasetRunResultsOptions,
-    pagination: StoragePagination,
-  ): Promise<ListDatasetRunResultsResponse> {
+  async listDatasetRunResults({
+    options,
+    pagination,
+  }: {
+    options: ListDatasetRunResultsOptions;
+    pagination: StoragePagination;
+  }): Promise<ListDatasetRunResultsResponse> {
     const { runId, status } = options;
     const { page, perPage: perPageInput } = pagination;
 
