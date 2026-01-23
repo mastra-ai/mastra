@@ -110,20 +110,20 @@ cd packages/playground && pnpm test:e2e
 7. **Verify Tests Pass**
 
    ```sh
-   cd packages/playground && npx playwright test -c e2e/playwright.config.ts e2e/tests/<path-to-spec>
+   cd packages/playground && pnpm test:e2e
    ```
 
    If tests fail, fix them and re-run until green.
 
 ## Quick Reference
 
-| Step         | Command/Action                                                                               |
-| ------------ | -------------------------------------------------------------------------------------------- |
-| Build        | `pnpm build:cli`                                                                             |
-| Start        | `cd packages/playground && pnpm test:e2e`                                                    |
-| App URL      | http://localhost:4111                                                                        |
-| Routes       | `@packages/playground/src/App.tsx`                                                           |
-| Run tests    | `cd packages/playground && npx playwright test -c e2e/playwright.config.ts e2e/tests/<path>` |
-| Test dir     | `packages/playground/e2e/tests/`                                                             |
-| Fixtures     | `packages/playground/e2e/kitchen-sink/fixtures/`                                             |
-| Kitchen-sink | `packages/playground/e2e/kitchen-sink/src/mastra/`                                           |
+| Step         | Command/Action                                     |
+| ------------ | -------------------------------------------------- |
+| Build        | `pnpm build:cli`                                   |
+| Start        | `cd packages/playground && pnpm test:e2e`          |
+| App URL      | http://localhost:4111                              |
+| Routes       | `@packages/playground/src/App.tsx`                 |
+| Run tests    | `cd packages/playground && pnpm test:e2e`          |
+| Test dir     | `packages/playground/e2e/tests/`                   |
+| Fixtures     | `packages/playground/e2e/kitchen-sink/fixtures/`   |
+| Kitchen-sink | `packages/playground/e2e/kitchen-sink/src/mastra/` |
