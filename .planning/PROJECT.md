@@ -95,6 +95,7 @@ Catch quality regressions before they reach users — when you modify a prompt o
 | Scorer/processor as valid targets | Unique Mastra capability, test components in isolation | ✓ Confirmed |
 | Item selection via `itemIds[]` param | Quick iteration on subsets before full runs, cost control | ✓ Confirmed |
 | Defer virtual folders to v1.1 | Organizational polish, not core workflow | ✓ Confirmed |
+| Input stored as `unknown` (any JSON) | Flexibility: string for simple prompts, objects for structured. Target adapter normalizes at execution time | ✓ Confirmed |
 
 ## References
 
