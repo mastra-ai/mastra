@@ -88,9 +88,23 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
   #validate(value: unknown): StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>> {
     try {
       const validateFn = this.#getAjvValidator();
-      const valid = validateFn(value);
+      const result = validateFn(value);
 
-      if (valid) {
+      // Handle async validators (when schema uses $async: true)
+      if ((validateFn as any).$async) {
+        return (result as Promise<void>)
+          .then(() => ({ value: value as Output }))
+          .catch(err => {
+            const errors = (err as any)?.errors ?? [];
+            const issues: StandardSchemaV1.Issue[] = errors.map((e: any) => ({
+              message: e.message ?? 'Validation error',
+              path: this.#ajvPathToStandardPath(e.instancePath),
+            }));
+            return { issues };
+          });
+      }
+
+      if (result) {
         return { value: value as Output };
       }
 
