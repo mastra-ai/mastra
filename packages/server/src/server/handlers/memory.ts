@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
@@ -47,45 +46,12 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import { validateBody } from './utils';
-
-/**
- * Gets the effective resourceId, preferring the reserved key from requestContext
- * over client-provided values for security.
- */
-function getEffectiveResourceId(
-  requestContext: RequestContext | undefined,
-  clientResourceId: string | undefined,
-): string | undefined {
-  const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  return contextResourceId || clientResourceId;
-}
-
-/**
- * Gets the effective threadId, preferring the reserved key from requestContext
- * over client-provided values for security.
- */
-function getEffectiveThreadId(
-  requestContext: RequestContext | undefined,
-  clientThreadId: string | undefined,
-): string | undefined {
-  const contextThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-  return contextThreadId || clientThreadId;
-}
-
-/**
- * Validates that a thread belongs to the specified resourceId.
- * Throws 403 if the thread exists but belongs to a different resource.
- * Returns the thread if valid, or undefined if not found.
- */
-async function validateThreadOwnership(
-  thread: { resourceId?: string | null } | null | undefined,
-  effectiveResourceId: string | undefined,
-): Promise<void> {
-  if (thread && effectiveResourceId && thread.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
-  }
-}
+import {
+  validateBody,
+  getEffectiveResourceId,
+  getEffectiveThreadId,
+  validateThreadOwnership,
+} from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;
