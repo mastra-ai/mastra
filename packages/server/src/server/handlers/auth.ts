@@ -269,8 +269,7 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
 export const POST_LOGOUT_ROUTE = createRoute({
   method: 'POST',
   path: '/api/auth/logout',
-  responseType: 'json',
-  responseSchema: logoutResponseSchema,
+  responseType: 'datastream-response',
   summary: 'Logout',
   description: 'Destroys the current session and returns logout redirect URL if available.',
   tags: ['Auth'],
@@ -281,7 +280,10 @@ export const POST_LOGOUT_ROUTE = createRoute({
       const auth = getAuthProvider(mastra);
 
       if (!auth) {
-        return { success: true };
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Get session ID and destroy it
@@ -295,13 +297,27 @@ export const POST_LOGOUT_ROUTE = createRoute({
       // Get logout URL if available
       let redirectTo: string | undefined;
       if (implementsInterface<ISSOProvider>(auth, 'getLogoutUrl') && auth.getLogoutUrl) {
-        redirectTo = auth.getLogoutUrl('/');
+        // WorkOS requires absolute URL for redirect_uri and session from request
+        const requestUrl = new URL(request.url);
+        const logoutUrl = await auth.getLogoutUrl(requestUrl.origin, request);
+        redirectTo = logoutUrl ?? undefined;
       }
 
-      return {
-        success: true,
-        redirectTo,
-      };
+      // Build response with session clearing headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+
+      // Clear session cookie
+      if (implementsInterface<ISessionProvider>(auth, 'getClearSessionHeaders')) {
+        const clearHeaders = auth.getClearSessionHeaders();
+        for (const [key, value] of Object.entries(clearHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, redirectTo }), {
+        status: 200,
+        headers,
+      });
     } catch (error) {
       return handleError(error, 'Error logging out');
     }
