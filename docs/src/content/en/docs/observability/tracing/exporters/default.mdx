@@ -121,7 +121,7 @@ new DefaultExporter({
 
 ## Storage Provider Support
 
-Different storage providers support different tracing strategies. Not all storage providers support observability—only those designed to handle high-volume telemetry data include the observability domain.
+Different storage providers support different tracing strategies. Some providers support observability for production workloads, while others are intended primarily for local development.
 
 If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
 
@@ -129,11 +129,11 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 | Storage Provider                                | Preferred Strategy | Supported Strategies                      | Recommended Use                       |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **ClickHouse** (`@mastra/clickhouse`)           | insert-only        | batch-with-updates, insert-only           | Production (high-volume)              |
-| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
-| **[MSSQL](/reference/storage/mssql)**           | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
-| **[MongoDB](/reference/storage/mongodb)**       | batch-with-updates | batch-with-updates, insert-only           | Production (moderate volume)          |
-| **[libSQL](/reference/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development                          |
+| **ClickHouse** (`@mastra/clickhouse`)           | insert-only        | insert-only                               | Production (high-volume)              |
+| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
+| **[MSSQL](/reference/storage/mssql)**           | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
+| **[MongoDB](/reference/storage/mongodb)**       | batch-with-updates | batch-with-updates, insert-only           | Production (low volume)               |
+| **[libSQL](/reference/storage/libsql)**         | batch-with-updates | batch-with-updates, insert-only           | Default storage, good for development |
 
 ### Providers without Observability Support
 
@@ -154,7 +154,7 @@ The following storage providers **do not support** the observability domain. If 
 
 ## Production Recommendations
 
-Observability data grows quickly in production environments. A single agent interaction can generate dozens of spans, and high-traffic applications can produce millions of traces per day. Most general-purpose databases aren't optimized for this write-heavy, append-only workload.
+Observability data grows quickly in production environments. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day. Most general-purpose databases aren't optimized for this write-heavy, append-only workload.
 
 ### Recommended: ClickHouse for High-Volume Production
 

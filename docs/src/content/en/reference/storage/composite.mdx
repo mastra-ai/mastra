@@ -222,7 +222,7 @@ const storage = new MastraCompositeStore({
 
 ### Specialized storage for observability
 
-Observability data can quickly overwhelm general-purpose databases in production. A single agent interaction generates multiple spans, and high-traffic applications can produce millions of traces per day.
+Observability data can quickly overwhelm general-purpose databases in production. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day.
 
 **ClickHouse** is recommended for production observability because it's optimized for high-volume, write-heavy analytics workloads. Use composite storage to route observability to ClickHouse while keeping other data in your primary database:
 

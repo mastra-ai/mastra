@@ -204,7 +204,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 ### Observability
 
-PostgreSQL supports observability and can handle moderate trace volumes (tens of thousands of traces per day). For high-volume production environments, consider:
+PostgreSQL supports observability and can handle low trace volumes. Throughput capacity depends on deployment factors such as hardware, schema design, indexing, and retention policies, and should be validated for your specific environment. For high-volume production environments, consider:
 
 - Using the `insert-only` [tracing strategy](/docs/observability/tracing/exporters/default#tracing-strategies) to reduce database write operations
 - Setting up table partitioning for efficient data retention
