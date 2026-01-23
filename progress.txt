@@ -337,7 +337,7 @@ Created comprehensive E2E tests that verify the **server** properly enforces RBA
 
 ### Files Created
 
-1. **packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts**
+1. **packages/playground/e2e/tests/auth-server/server-permission-enforcement.spec.ts**
    - 23 E2E tests organized in 7 test groups
    - Tests unauthenticated access returns 401
    - Tests admin role has full access
@@ -505,18 +505,27 @@ Created comprehensive E2E tests that verify users cannot bypass UI restrictions 
 
 ### Technical Approach
 
-- Tests run with E2E_TEST_AUTH=true via playwright.auth-server.config.ts
+- Tests are in `tests/auth-server/` folder which automatically uses playwright.auth-server.config.ts
+- Server runs with E2E_TEST_AUTH=true to enable TestAuthProvider
 - Uses Bearer token authentication with TestAuthProvider
 - Makes direct API calls to test server-side enforcement
 - Combines UI navigation tests with API verification
 - Tests work alongside F011 tests (44 total auth-server tests)
+
+### Folder Structure (Refactored)
+
+Tests are now organized by folder for intuitive config management:
+- `tests/auth/` - UI tests (mocked auth via route interception)
+- `tests/auth-server/` - Server permission tests (real auth with E2E_TEST_AUTH=true)
+
+Adding new tests: just put them in the right folder and they automatically use the correct config.
 
 ### Test Commands
 
 ```bash
 # Run F012 tests individually
 cd packages/playground/e2e
-CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth/api-bypass-prevention.spec.ts
+CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth-server/api-bypass-prevention.spec.ts
 
 # Run all auth-server tests (F011 + F012)
 CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list

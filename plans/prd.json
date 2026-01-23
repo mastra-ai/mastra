@@ -280,12 +280,12 @@
       "notes": "CRITICAL: These tests must NOT use route interception for auth endpoints. They should test actual server-side permission enforcement by making real API calls and verifying the server rejects unauthorized actions.",
       "implementation": {
         "files": [
-          "packages/playground/e2e/tests/auth/server-permission-enforcement.spec.ts",
+          "packages/playground/e2e/tests/auth-server/server-permission-enforcement.spec.ts",
           "packages/playground/e2e/kitchen-sink/src/mastra/test-auth.ts",
           "packages/playground/e2e/playwright.auth-server.config.ts"
         ],
         "testsAdded": 23,
-        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Uses SEPARATE playwright config (playwright.auth-server.config.ts) that starts server with E2E_TEST_AUTH=true. This keeps UI tests fast (no server auth overhead) while server permission tests verify real RBAC enforcement. Direct API tests send Bearer tokens manually to verify 401/403 responses."
+        "approach": "Created TestAuthProvider that authenticates based on Bearer token value as role. Tests are in tests/auth-server/ folder which automatically uses playwright.auth-server.config.ts with E2E_TEST_AUTH=true. This keeps UI tests fast (no server auth overhead) while server permission tests verify real RBAC enforcement. Direct API tests send Bearer tokens manually to verify 401/403 responses."
       }
     },
     {
@@ -311,12 +311,12 @@
       ],
       "implementation": {
         "files": [
-          "packages/playground/e2e/tests/auth/api-bypass-prevention.spec.ts",
+          "packages/playground/e2e/tests/auth-server/api-bypass-prevention.spec.ts",
           "packages/playground/e2e/playwright.auth-server.config.ts",
           "packages/playground/e2e/playwright.config.ts"
         ],
         "testsAdded": 21,
-        "approach": "Created comprehensive API bypass prevention tests that verify users cannot bypass UI restrictions. Tests cover direct URL access to protected pages, direct API calls with wrong role, cross-role bypass attempts, error response security, and multiple sequential bypass attempts. Tests run with E2E_TEST_AUTH=true via playwright.auth-server.config.ts. Note: Some PRD tasks (workflow run, agent delete, agent settings) are not testable because those routes don't have requiresPermission configured or don't exist - tests focus on currently enforceable permissions (agents:read, agents:execute)."
+        "approach": "Created comprehensive API bypass prevention tests that verify users cannot bypass UI restrictions. Tests cover direct URL access to protected pages, direct API calls with wrong role, cross-role bypass attempts, error response security, and multiple sequential bypass attempts. Tests are in tests/auth-server/ folder which automatically uses playwright.auth-server.config.ts with E2E_TEST_AUTH=true. Note: Some PRD tasks (workflow run, agent delete, agent settings) are not testable because those routes don't have requiresPermission configured or don't exist - tests focus on currently enforceable permissions (agents:read, agents:execute)."
       },
       "notes": "Some tasks from original PRD could not be implemented as specified because: (1) Workflow routes don't have requiresPermission configured, (2) DELETE /api/agents/{id} endpoint doesn't exist, (3) PUT /api/agents/{id}/settings endpoint doesn't exist. Tests verify all currently enforceable permissions."
     },
@@ -353,16 +353,21 @@
     "workingDirectory": "packages/playground/e2e",
     "baseUrl": "http://localhost:4111",
     "typecheckCommand": "pnpm typecheck",
+    "folderStructure": {
+      "note": "Tests are organized by folder to simplify config management. No need to maintain explicit include/exclude lists.",
+      "tests/auth/": "UI tests with mocked auth via route interception (playwright.config.ts)",
+      "tests/auth-server/": "Server-side permission tests with real auth (playwright.auth-server.config.ts)"
+    },
     "configs": {
       "uiTests": {
         "config": "playwright.config.ts",
         "description": "UI tests with mocked auth via route interception. Server runs WITHOUT E2E_TEST_AUTH for faster execution.",
-        "excludes": ["server-permission-enforcement.spec.ts", "api-bypass-prevention.spec.ts"]
+        "testDir": "tests/ (excludes auth-server/ folder)"
       },
       "serverPermissionTests": {
         "config": "playwright.auth-server.config.ts",
-        "description": "Server-side permission enforcement and API bypass prevention tests. Server runs WITH E2E_TEST_AUTH=true to enable TestAuthProvider.",
-        "includes": ["server-permission-enforcement.spec.ts", "api-bypass-prevention.spec.ts"]
+        "description": "Server-side permission enforcement tests. Server runs WITH E2E_TEST_AUTH=true to enable TestAuthProvider.",
+        "testDir": "tests/auth-server/"
       }
     },
     "runIndividualSuites": {
@@ -372,8 +377,8 @@
       "adminRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/admin-role.spec.ts",
       "memberRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/member-role.spec.ts",
       "viewerRole": "CI=true npx playwright test -c playwright.config.ts --reporter=list tests/auth/viewer-role.spec.ts",
-      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth/server-permission-enforcement.spec.ts",
-      "apiBypassPrevention": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth/api-bypass-prevention.spec.ts"
+      "serverPermissionEnforcement": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth-server/server-permission-enforcement.spec.ts",
+      "apiBypassPrevention": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list tests/auth-server/api-bypass-prevention.spec.ts"
     },
     "runAllAuthTests": {
       "WARNING": "DO NOT USE THESE COMMANDS. They are provided for CI pipelines only. Claude and developers should ALWAYS run individual spec files using runIndividualSuites above.",
@@ -381,13 +386,16 @@
       "ciOnly_serverTests": "CI=true npx playwright test -c playwright.auth-server.config.ts --reporter=list"
     },
     "debugSingleTest": "CI=true npx playwright test -c playwright.config.ts --reporter=list --debug tests/auth/{spec-file}.spec.ts",
+    "addingNewTests": {
+      "uiTests": "Add new UI test files to tests/auth/ folder - they will automatically use playwright.config.ts",
+      "serverTests": "Add new server permission test files to tests/auth-server/ folder - they will automatically use playwright.auth-server.config.ts"
+    },
     "warnings": [
       "NEVER run the full test suite - ALWAYS run individual spec files one at a time",
       "Running multiple spec files together causes timeouts, flakiness, and unclear failures",
       "Always use --reporter=list to avoid HTML report hanging in CI",
       "Always prefix with CI=true to ensure consistent behavior",
-      "Run from packages/playground/e2e directory",
-      "Use playwright.auth-server.config.ts for server-permission-enforcement.spec.ts and api-bypass-prevention.spec.ts"
+      "Run from packages/playground/e2e directory"
     ]
   },
   "qaReview": {

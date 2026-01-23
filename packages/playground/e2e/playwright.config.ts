@@ -24,9 +24,9 @@ if (PORT) {
 
 export default defineConfig({
   testDir: './tests',
-  // Exclude server-side permission and API bypass tests - they need E2E_TEST_AUTH=true
-  // Run those separately with: npx playwright test -c playwright.auth-server.config.ts
-  testIgnore: ['**/server-permission-enforcement.spec.ts', '**/api-bypass-prevention.spec.ts'],
+  // Exclude auth-server folder - those tests need E2E_TEST_AUTH=true
+  // Run those with: npx playwright test -c playwright.auth-server.config.ts
+  testIgnore: '**/auth-server/**',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
