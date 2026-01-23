@@ -108,24 +108,15 @@ test.describe('Member Role', () => {
       await expect(createButton).not.toBeVisible();
     });
 
-    test('member cannot access agent settings with write permissions', async ({ page }) => {
+    test('member cannot execute agents - sees disabled chat input', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents/weather-agent/chat');
 
-      // Look for settings section
-      const settingsSection = page
-        .locator('[data-testid="agent-settings"]')
-        .or(page.getByRole('group').filter({ hasText: /settings|temperature|model/i }));
-
-      // If settings exist, controls should be disabled for member
-      if ((await settingsSection.count()) > 0) {
-        const controls = settingsSection.locator('input, select, button').first();
-        if ((await controls.count()) > 0) {
-          // Member should have read-only or disabled controls
-          // The exact behavior depends on implementation
-          await expect(settingsSection.first()).toBeVisible();
-        }
-      }
+      // Member has agents:read but NOT agents:execute
+      // The chat input should be disabled with permission message as placeholder
+      const chatInput = page.locator('textarea[placeholder="You don\'t have permission to execute agents"]');
+      await expect(chatInput).toBeVisible();
+      await expect(chatInput).toBeDisabled();
     });
   });
 
@@ -368,19 +359,22 @@ test.describe('Member Role', () => {
       // Settings link might not be visible for member
     });
 
-    test('member agent page shows read-only state where applicable', async ({ page }) => {
+    test('member agent page shows disabled chat and viewable content', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents/weather-agent/chat');
 
       // Page should load without errors
       await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
 
-      // Member should be able to interact with agent (chat)
-      // but not modify agent configuration
-      const chatInput = page.locator('textarea, input[type="text"]').filter({ hasText: '' }).first();
-      if ((await chatInput.count()) > 0) {
-        await expect(chatInput).toBeVisible();
-      }
+      // Member has agents:read but NOT agents:execute
+      // The chat input should be disabled
+      const chatInput = page.locator('textarea[placeholder="You don\'t have permission to execute agents"]');
+      await expect(chatInput).toBeVisible();
+      await expect(chatInput).toBeDisabled();
+
+      // Member can still view agent content (agents:read permission)
+      const agentContent = page.getByText(/weather/i);
+      await expect(agentContent.first()).toBeVisible();
     });
   });
 });

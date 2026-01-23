@@ -96,23 +96,15 @@ test.describe('Viewer Role', () => {
       await expect(createButton).not.toBeVisible();
     });
 
-    test('viewer cannot modify agent settings', async ({ page }) => {
+    test('viewer cannot execute agents - sees disabled chat input', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents/weather-agent/chat');
 
-      // Look for settings section
-      const settingsSection = page
-        .locator('[data-testid="agent-settings"]')
-        .or(page.getByRole('group').filter({ hasText: /settings|temperature|model/i }));
-
-      // If settings exist, controls should be disabled or read-only for viewer
-      if ((await settingsSection.count()) > 0) {
-        const controls = settingsSection.locator('input, select, button').first();
-        if ((await controls.count()) > 0) {
-          // Viewer should have read-only or disabled controls
-          await expect(settingsSection.first()).toBeVisible();
-        }
-      }
+      // Viewer has agents:read but NOT agents:execute
+      // The chat input should be disabled with permission message as placeholder
+      const chatInput = page.locator('textarea[placeholder="You don\'t have permission to execute agents"]');
+      await expect(chatInput).toBeVisible();
+      await expect(chatInput).toBeDisabled();
     });
   });
 
@@ -144,20 +136,18 @@ test.describe('Viewer Role', () => {
       await expect(page).toHaveURL(/\/workflows\//);
     });
 
-    test('viewer sees workflow execution controls as disabled or hidden', async ({ page }) => {
+    test('viewer sees permission denied message for workflow execution', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
 
-      // Look for run/execute button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      // Viewer has workflows:read but NOT workflows:execute
+      // The UI shows a permission denied message instead of the run button
+      const permissionDenied = page.getByText("You don't have permission to execute workflows.");
+      await expect(permissionDenied).toBeVisible();
 
-      // Viewer should either not see the button or see it disabled
-      // Since viewer has workflows:read but NOT workflows:execute
-      if (await runButton.isVisible()) {
-        // If visible, it should be disabled
-        await expect(runButton).toBeDisabled();
-      }
-      // If not visible, that's also acceptable for read-only access
+      // The run/trigger button should NOT be visible for viewers
+      const runButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      await expect(runButton).not.toBeVisible();
     });
 
     test('viewer cannot create new workflows', async ({ page }) => {
@@ -172,24 +162,22 @@ test.describe('Viewer Role', () => {
       await expect(createButton).not.toBeVisible();
     });
 
-    test('viewer workflow page shows read-only state', async ({ page }) => {
+    test('viewer workflow page shows read-only state with permission message', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Page should load without errors
       await expect(page).toHaveURL(/\/workflows\/lessComplexWorkflow/);
 
-      // Viewer should not see edit/delete controls enabled
-      const editButton = page.getByRole('button', { name: /edit/i });
-      const deleteButton = page.getByRole('button', { name: /delete/i });
+      // Viewer should see the permission denied message for workflow execution
+      const permissionDenied = page.getByText("You don't have permission to execute workflows.");
+      await expect(permissionDenied).toBeVisible();
 
-      // These buttons should either not be visible or be disabled
-      if (await editButton.isVisible()) {
-        await expect(editButton).toBeDisabled();
-      }
-      if (await deleteButton.isVisible()) {
-        await expect(deleteButton).toBeDisabled();
-      }
+      // Edit/delete buttons should NOT be visible for viewers (workflows:read only)
+      const editButton = page.getByRole('button', { name: /^edit$/i });
+      const deleteButton = page.getByRole('button', { name: /^delete$/i });
+      await expect(editButton).not.toBeVisible();
+      await expect(deleteButton).not.toBeVisible();
     });
   });
 
@@ -312,19 +300,19 @@ test.describe('Viewer Role', () => {
     });
 
     test('viewer has fewer permissions than member for workflows', async ({ page }) => {
-      // Viewer can only read workflows
+      // Viewer can only read workflows (no execute permission)
       await setupViewerAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
 
-      // Look for run button
-      const viewerRunButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      // Viewer should see permission denied message (no run button)
+      const viewerPermissionDenied = page.getByText("You don't have permission to execute workflows.");
+      await expect(viewerPermissionDenied).toBeVisible();
 
-      // Viewer should see button disabled or not visible
-      if (await viewerRunButton.isVisible()) {
-        await expect(viewerRunButton).toBeDisabled();
-      }
+      // Run button should NOT be visible for viewer
+      const viewerRunButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      await expect(viewerRunButton).not.toBeVisible();
 
-      // Now check as member
+      // Now check as member (who has workflows:* permission)
       await setupMockAuth(page, {
         role: 'member',
         permissions: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
@@ -332,10 +320,13 @@ test.describe('Viewer Role', () => {
 
       await page.reload();
 
-      // Member should have workflows:* permission, so button should be enabled
+      // Member should have workflows:* permission, so button should be visible and enabled
       const memberRunButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
       await expect(memberRunButton).toBeVisible();
       await expect(memberRunButton).not.toBeDisabled();
+
+      // Permission denied message should NOT be visible for member
+      await expect(viewerPermissionDenied).not.toBeVisible();
     });
 
     test('viewer has fewer permissions than member for tools', async ({ page }) => {
@@ -361,24 +352,24 @@ test.describe('Viewer Role', () => {
   });
 
   test.describe('Read-Only UI State', () => {
-    test('viewer sees UI elements indicating read-only access', async ({ page }) => {
+    test('viewer sees read-only agent chat with disabled input', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents/weather-agent/chat');
 
       // Page should load without errors
       await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
 
-      // Viewer should be able to view but not modify
-      // Check that no write/edit controls are enabled
-      const writeControls = page.getByRole('button', { name: /save|create|edit|delete|add/i });
+      // Viewer has agents:read but NOT agents:execute
+      // The chat input should be disabled with permission message as placeholder
+      const chatInput = page.locator('textarea[placeholder="You don\'t have permission to execute agents"]');
+      await expect(chatInput).toBeVisible();
+      await expect(chatInput).toBeDisabled();
 
-      // If write controls exist, they should be disabled or hidden
-      for (const control of await writeControls.all()) {
-        if (await control.isVisible()) {
-          // Visible write controls should be disabled for viewer
-          await expect(control).toBeDisabled();
-        }
-      }
+      // Save/create buttons should NOT be visible for viewer
+      const saveButton = page.getByRole('button', { name: /^save$/i });
+      const createButton = page.getByRole('button', { name: /^create$/i });
+      await expect(saveButton).not.toBeVisible();
+      await expect(createButton).not.toBeVisible();
     });
 
     test('viewer agent page shows read-only state', async ({ page }) => {
@@ -433,17 +424,18 @@ test.describe('Viewer Role', () => {
       await expect(createButton).not.toBeVisible();
     });
 
-    test('run button is disabled on workflow detail page', async ({ page }) => {
+    test('viewer sees permission message instead of run button on workflow detail page', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/workflows/lessComplexWorkflow');
 
-      // Look for run/execute button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      // Viewer has workflows:read but NOT workflows:execute
+      // The run button should NOT be visible; permission message should be shown instead
+      const runButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      await expect(runButton).not.toBeVisible();
 
-      // Either not visible or disabled
-      if (await runButton.isVisible()) {
-        await expect(runButton).toBeDisabled();
-      }
+      // Permission denied message should be visible
+      const permissionDenied = page.getByText("You don't have permission to execute workflows.");
+      await expect(permissionDenied).toBeVisible();
     });
   });
 });

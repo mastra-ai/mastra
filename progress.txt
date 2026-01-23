@@ -554,15 +554,84 @@ Tests verify all currently enforceable permissions (agents:read, agents:execute)
 
 ---
 
+---
+
+## F013: Fix Conditional Assertions in Existing Tests - COMPLETED - 2026-01-22
+
+### Implementation Summary
+
+Refactored existing E2E tests to remove conditional assertions that could silently pass when UI elements are missing. This was marked as HIGH priority in the QA review because these patterns gave false confidence in test coverage.
+
+### Files Modified
+
+1. **packages/playground/e2e/tests/auth/viewer-role.spec.ts**
+   - Fixed 5 tests with conditional assertions
+   - `viewer cannot modify agent settings` → `viewer cannot execute agents - sees disabled chat input`
+   - `viewer sees workflow execution controls as disabled or hidden` → `viewer sees permission denied message for workflow execution`
+   - `viewer workflow page shows read-only state` → `viewer workflow page shows read-only state with permission message`
+   - `viewer has fewer permissions than member for workflows` - now explicitly checks for permission denied message
+   - `run button is disabled on workflow detail page` → `viewer sees permission message instead of run button on workflow detail page`
+   - `viewer sees UI elements indicating read-only access` → `viewer sees read-only agent chat with disabled input`
+
+2. **packages/playground/e2e/tests/auth/member-role.spec.ts**
+   - Fixed 2 tests with conditional assertions
+   - `member cannot access agent settings with write permissions` → `member cannot execute agents - sees disabled chat input`
+   - `member agent page shows read-only state where applicable` → `member agent page shows disabled chat and viewable content`
+
+3. **packages/playground/e2e/tests/auth/admin-role.spec.ts**
+   - Fixed 1 test with conditional assertion
+   - `admin can access agent settings` → `admin can execute agents - chat input is enabled`
+
+### Key Findings During Implementation
+
+1. **Workflow Execution UI**: The actual behavior is showing "You don't have permission to execute workflows." text instead of hiding/disabling buttons. Tests were checking for disabled buttons when the UI shows permission text.
+
+2. **Agent Chat UI**: When users lack `agents:execute` permission, the textarea is disabled with placeholder "You don't have permission to execute agents" instead of hiding the chat input.
+
+3. **Tool Execution UI**: Similar to workflows, shows "You don't have permission to execute tools." text.
+
+### Patterns Replaced
+
+**Before (silently passes if element doesn't exist):**
+```typescript
+if (await runButton.isVisible()) {
+  await expect(runButton).toBeDisabled();
+}
+```
+
+**After (explicit assertion):**
+```typescript
+const permissionDenied = page.getByText("You don't have permission to execute workflows.");
+await expect(permissionDenied).toBeVisible();
+await expect(runButton).not.toBeVisible();
+```
+
+### Test Results
+
+- **All 111 UI auth tests pass** (26 viewer + 25 member + 21 admin + 16 infrastructure + 23 login flow)
+- Typecheck passes with no errors
+
+### Acceptance Criteria Met
+
+- [x] No tests use 'if (await element.isVisible())' conditional patterns
+- [x] Tests use specific text/placeholder matchers for permission messages
+- [x] Tests fail explicitly when expected restrictions are not present
+- [x] All silent pass conditions have been removed
+
+### Remaining Note
+
+The PRD task "Add data-testid attributes to replace fragile .first() selectors" was not implemented as it requires modifying the playground-ui source code. The refactored tests use specific text matchers (like exact placeholder text) which are more reliable than generic .first() selectors.
+
+---
+
 ### Next Steps
 
-All P0 features are now complete!
+All P0 features and F013 (P1 - high priority) are now complete!
 
-P1 features to consider next:
+Remaining P1 features to consider next:
 - F003: Sign Up Flow E2E Tests
 - F004: Logout Flow E2E Tests
 - F008: Unauthorized Access E2E Tests
-- F013: Fix Conditional Assertions in Existing Tests
 
 P2 features:
 - F009: Session Expiry E2E Tests

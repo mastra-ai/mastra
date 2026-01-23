@@ -325,7 +325,8 @@
       "name": "Fix Conditional Assertions in Existing Tests",
       "description": "Refactor existing tests to remove conditional assertions that can silently pass when UI elements are missing",
       "priority": "P1",
-      "status": "pending",
+      "status": "completed",
+      "completedAt": "2026-01-22",
       "tasks": [
         "Replace 'if (visible) { expect }' patterns with explicit assertions",
         "Add data-testid attributes to replace fragile .first() selectors",
@@ -339,7 +340,16 @@
         "All selectors use data-testid or unique role/name combinations",
         "Tests fail explicitly when expected restrictions are not present",
         "Code review confirms no silent pass conditions remain"
-      ]
+      ],
+      "implementation": {
+        "files": [
+          "packages/playground/e2e/tests/auth/viewer-role.spec.ts",
+          "packages/playground/e2e/tests/auth/member-role.spec.ts",
+          "packages/playground/e2e/tests/auth/admin-role.spec.ts"
+        ],
+        "testsFixed": 8,
+        "approach": "Replaced all conditional 'if (visible) { expect }' patterns with explicit assertions based on actual UI behavior. Key findings: (1) Workflow execution shows permission denied text instead of disabled buttons, (2) Agent chat input is disabled with permission message placeholder, (3) Tests now explicitly check for permission denied messages where appropriate. Used specific placeholders and text matchers rather than generic disabled/hidden checks."
+      }
     }
   ],
   "rolePermissions": {

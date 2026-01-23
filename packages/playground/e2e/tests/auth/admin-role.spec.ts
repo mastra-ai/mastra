@@ -76,23 +76,19 @@ test.describe('Admin Role', () => {
       await expect(page).toHaveURL(/\/agents\/weather-agent/);
     });
 
-    test('admin can access agent settings', async ({ page }) => {
+    test('admin can execute agents - chat input is enabled', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/agents/weather-agent/chat');
 
-      // Look for a settings toggle or similar control
-      // Admin should have settings controls enabled (not disabled)
-      const settingsSection = page
-        .locator('[data-testid="agent-settings"]')
-        .or(page.getByRole('group').filter({ hasText: /settings|temperature|model/i }));
+      // Admin has wildcard permissions, so agents:execute is granted
+      // The chat input should be enabled with normal placeholder
+      const chatInput = page.locator('textarea[placeholder="Enter your message..."]');
+      await expect(chatInput).toBeVisible();
+      await expect(chatInput).not.toBeDisabled();
 
-      // If settings section exists, verify controls are not disabled
-      if ((await settingsSection.count()) > 0) {
-        // Check that settings controls are interactive (not disabled)
-        const disabledControls = settingsSection.locator('[disabled]');
-        // Admin should have enabled controls
-        await expect(disabledControls).toHaveCount(0);
-      }
+      // Permission denied message should NOT be visible
+      const permissionDenied = page.getByText("You don't have permission to execute agents");
+      await expect(permissionDenied).not.toBeVisible();
     });
 
     test('admin can view agent tools', async ({ page }) => {
