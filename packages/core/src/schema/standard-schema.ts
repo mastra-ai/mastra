@@ -1,7 +1,7 @@
 import type { Schema } from '@internal/ai-sdk-v5';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { JSONSchema7 } from 'json-schema';
-import z3 from 'zod-v3';
+import z3, { type ZodType } from 'zod-v3';
 import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
@@ -30,9 +30,9 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
     return schema;
   }
 
-  if (schema instanceof z3.ZodAny) {
+  if (schema instanceof z3.ZodType) {
     // @ts-ignore - Type instantiation is excessively deep and possibly infinite.
-    return toStandardSchemaZodV3(schema);
+    return toStandardSchemaZodV3(schema as ZodType);
   }
 
   if (isVercelSchema(schema)) {
@@ -151,6 +151,9 @@ export function isStandardSchemaWithJSON(value: unknown): value is StandardSchem
  * // { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] }
  * ```
  */
-export function standardSchemaToJSONSchema(schema: StandardSchemaWithJSON, target: StandardJSONSchemaV1.Target = 'draft-07'): JSONSchema7 {
-    return schema['~standard'].jsonSchema.output({ target }) as JSONSchema7;
+export function standardSchemaToJSONSchema(
+  schema: StandardSchemaWithJSON,
+  target: StandardJSONSchemaV1.Target = 'draft-07',
+): JSONSchema7 {
+  return schema['~standard'].jsonSchema.output({ target }) as JSONSchema7;
 }
