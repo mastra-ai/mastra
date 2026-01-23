@@ -978,7 +978,7 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/v1/mcp/publishing-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/mcp/publishing-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1191,44 +1191,286 @@ type ElicitResult = {
 };
 ```
 
+## OAuth Protection
+
+To protect your MCP server with OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
+
+```typescript
+import http from "node:http";
+import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from "@mastra/mcp";
+
+const mcpServer = new MCPServer({
+  id: "protected-server",
+  name: "Protected MCP Server",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+// Create OAuth middleware
+const oauthMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    scopesSupported: ["mcp:read", "mcp:write"],
+    resourceName: "My Protected MCP Server",
+    validateToken: createStaticTokenValidator(["allowed-token-1"]),
+  },
+  mcpPath: "/mcp",
+});
+
+// Create HTTP server with OAuth protection
+const httpServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || "", "https://mcp.example.com");
+
+  // Apply OAuth middleware first
+  const result = await oauthMiddleware(req, res, url);
+  if (!result.proceed) return; // Middleware handled response (401, metadata, etc.)
+
+  // Token is valid, proceed to MCP handler
+  await mcpServer.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+
+httpServer.listen(3000);
+```
+
+The middleware automatically:
+
+- Serves **Protected Resource Metadata** at `/.well-known/oauth-protected-resource` (RFC 9728)
+- Returns `401 Unauthorized` with proper `WWW-Authenticate` headers when authentication is required
+- Validates bearer tokens using your provided validator
+
+### Token Validation
+
+For production, use proper token validation:
+
+```typescript
+import { createOAuthMiddleware, createIntrospectionValidator } from "@mastra/mcp";
+
+// Option 1: Token introspection (RFC 7662)
+const middleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: createIntrospectionValidator(
+      "https://auth.example.com/oauth/introspect",
+      { clientId: "mcp-server", clientSecret: "secret" }
+    ),
+  },
+});
+
+// Option 2: Custom validation (JWT, database lookup, etc.)
+const customMiddleware = createOAuthMiddleware({
+  oauth: {
+    resource: "https://mcp.example.com/mcp",
+    authorizationServers: ["https://auth.example.com"],
+    validateToken: async (token, resource) => {
+      const decoded = await verifyJWT(token);
+      if (!decoded) {
+        return { valid: false, error: "invalid_token" };
+      }
+      return {
+        valid: true,
+        scopes: decoded.scope?.split(" ") || [],
+        subject: decoded.sub,
+      };
+    },
+  },
+});
+```
+
+### OAuth Middleware Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "oauth.resource",
+      type: "string",
+      description: "The canonical URL of your MCP server. This is returned in Protected Resource Metadata.",
+    },
+    {
+      name: "oauth.authorizationServers",
+      type: "string[]",
+      description: "URLs of authorization servers that can issue tokens for this resource.",
+    },
+    {
+      name: "oauth.scopesSupported",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['mcp:read', 'mcp:write']",
+      description: "Scopes supported by this MCP server.",
+    },
+    {
+      name: "oauth.resourceName",
+      type: "string",
+      isOptional: true,
+      description: "Human-readable name for this resource server.",
+    },
+    {
+      name: "oauth.validateToken",
+      type: "(token: string, resource: string) => Promise<TokenValidationResult>",
+      isOptional: true,
+      description: "Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).",
+    },
+    {
+      name: "mcpPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "'/mcp'",
+      description: "Path where the MCP endpoint is served. Only requests to this path require authentication.",
+    },
+  ]}
+/>
+
 ## Authentication Context
 
-Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
+
+### How It Works
+
+Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools:
+
+```
+req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
+```
+
+### Setting Up Authentication Middleware
+
+To pass data to your tools, populate `req.auth` on the Node.js request object in your HTTP server middleware before calling `server.startHTTP()`.
+
+```typescript
+import express from "express";
+
+const app = express();
+
+// Auth middleware - set req.auth before the MCP handler
+app.use("/mcp", (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const user = verifyToken(token);
+
+  // This entire object becomes context.mcp.extra.authInfo
+  // @ts-ignore - req.auth is read by the MCP SDK
+  req.auth = {
+    token,
+    userId: user.userId,
+    email: user.email,
+  };
+  next();
+});
+
+app.all("/mcp", async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  await server.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+```
+
+### Accessing Auth Data in Tools
+
+The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool's execute function:
 
 ```typescript
 execute: async (inputData, context) => {
-  if (!context.mcp?.extra?.authInfo?.token) {
-    return "Authentication required";
+  // Access the auth data you set in middleware
+  const authInfo = context?.mcp?.extra?.authInfo;
+
+  if (!authInfo?.extra?.userId) {
+    return { error: "Authentication required" };
   }
 
-  // Use the auth token
+  // Use the auth data
+  console.log("User ID:", authInfo.extra.userId);
+  console.log("Email:", authInfo.extra.email);
+
   const response = await fetch("/api/data", {
-    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
-    signal: context.mcp.extra.signal,
+    headers: { Authorization: `Bearer ${authInfo.token}` },
+    signal: context?.mcp?.extra?.signal,
   });
 
   return response.json();
 };
 ```
 
-The `extra` object contains:
+### The `extra` Object
 
-- `authInfo`: Authentication info (when provided by server middleware)
-- `sessionId`: Session identifier
-- `signal`: AbortSignal for cancellation
-- `sendNotification`/`sendRequest`: MCP protocol functions
+The full `context.mcp.extra` object contains:
 
-> Note: To enable authentication, your HTTP server needs middleware that populates `req.auth` before calling `server.startHTTP()`. For example:
->
-> ```typescript
-> httpServer.createServer((req, res) => {
->   // Add auth middleware
->   req.auth = validateAuthToken(req.headers.authorization);
->
->   // Then pass to MCP server
->   await server.startHTTP({ url, httpPath, req, res });
-> });
-> ```
+| Property | Description |
+|----------|-------------|
+| `authInfo` | Whatever you set on `req.auth` in your middleware |
+| `sessionId` | Session identifier for the MCP connection |
+| `signal` | AbortSignal for request cancellation |
+| `sendNotification` | MCP protocol function for sending notifications |
+| `sendRequest` | MCP protocol function for sending requests |
+
+### Complete Example
+
+Here's a complete example showing the data flow from middleware to tool:
+
+```typescript
+import express from "express";
+import { MCPServer } from "@mastra/mcp";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const verifyToken = (token: string) => {
+  // TODO: Implement token verification
+  return {
+    userId: "123",
+    email: "test@test.com",
+  };
+};
+
+// 1. Define your tool that uses auth context
+const getUserData = createTool({
+  id: "get-user-data",
+  description: "Fetches data for the authenticated user",
+  inputSchema: z.object({}),
+  execute: async (inputData, context) => {
+    const authInfo = context?.mcp?.extra?.authInfo;
+
+    if (!authInfo?.extra?.userId) {
+      return { error: "Authentication required" };
+    }
+
+    // Access the data you set in middleware
+    return {
+      userId: authInfo.extra.userId,
+      email: authInfo.extra.email,
+    };
+  },
+});
+
+// 2. Create the MCP server with your tools
+const server = new MCPServer({
+  id: "my-server",
+  name: "My Server",
+  version: "1.0.0",
+  tools: { getUserData },
+});
+
+// 3. Set up Express with auth middleware
+const app = express();
+
+app.use("/mcp", (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  const user = verifyToken(token);
+
+  // This entire object becomes context.mcp.extra.authInfo
+  // @ts-ignore - req.auth is read by the MCP SDK
+  req.auth = {
+    token,
+    userId: user.userId,
+    email: user.email,
+  };
+  next();
+});
+
+app.all("/mcp", async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  await server.startHTTP({ url, httpPath: "/mcp", req, res });
+});
+
+app.listen(3000);
+```
 
 ## Related Information
 

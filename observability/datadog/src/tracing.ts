@@ -325,6 +325,32 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs) return;
+
+    // Flush any pending data to Datadog
+    if (tracer.llmobs?.flush) {
+      try {
+        await tracer.llmobs.flush();
+        this.logger.debug('Datadog llmobs flushed');
+      } catch (e) {
+        this.logger.error('Error flushing llmobs', { error: e });
+      }
+    } else if ((tracer as any).flush) {
+      try {
+        await (tracer as any).flush();
+        this.logger.debug('Datadog tracer flushed');
+      } catch (e) {
+        this.logger.error('Error flushing tracer', { error: e });
+      }
+    }
+  }
+
+  /**
    * Gracefully shuts down the exporter.
    */
   async shutdown(): Promise<void> {
@@ -347,19 +373,7 @@ export class DatadogExporter extends BaseExporter {
     this.traceState.clear();
 
     // Flush any pending data
-    if (tracer.llmobs?.flush) {
-      try {
-        await tracer.llmobs.flush();
-      } catch (e) {
-        this.logger.error('Error flushing llmobs', { error: e });
-      }
-    } else if ((tracer as any).flush) {
-      try {
-        await (tracer as any).flush();
-      } catch (e) {
-        this.logger.error('Error flushing tracer', { error: e });
-      }
-    }
+    await this.flush();
 
     // Disable LLM Observability
     if (tracer.llmobs?.disable) {

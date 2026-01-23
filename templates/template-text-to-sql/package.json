@@ -17,11 +17,11 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "ai": "^5.0.111",
     "csv-parse": "^5.6.0",
     "dotenv": "^17.2.3",
@@ -31,7 +31,7 @@
   "devDependencies": {
     "@types/node": "22.13.17",
     "@types/pg": "^8.16.0",
-    "mastra": "beta",
+    "mastra": "latest",
     "typescript": "^5.9.3"
   }
 }

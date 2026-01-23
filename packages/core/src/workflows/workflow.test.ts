@@ -7523,9 +7523,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
 
@@ -7596,9 +7596,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
   });
@@ -8515,9 +8515,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toEqual({ newValue: 2 });
     });
 
@@ -8629,9 +8629,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.start.output).toEqual({ newValue: 7 });
     });
   });
@@ -8796,7 +8796,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9470,14 +9470,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Required',
       );
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -9760,7 +9760,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9773,7 +9773,7 @@ describe('Workflow', () => {
         }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       const step2 = createStep({
         id: 'step2',
         execute: vi.fn().mockResolvedValue({ result: 'step2 success' }),
@@ -9790,7 +9790,7 @@ describe('Workflow', () => {
 
       const step3 = createStep({
         id: 'step3',
-        // @ts-ignore
+        // @ts-expect-error
         execute: vi.fn().mockResolvedValue({ result: 'step3 success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9805,9 +9805,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: triggerSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9817,14 +9817,14 @@ describe('Workflow', () => {
 
       const parallelWorkflow = createWorkflow({
         id: 'parallel-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
             value: zv4.number(),
           }),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9882,7 +9882,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async ({ inputData }) => {
           return inputData;
         },
@@ -9892,9 +9892,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: triggerSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: triggerSchema,
         steps: [step1],
         options: { validateInputs: true },
@@ -9918,7 +9918,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9929,7 +9929,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9941,7 +9941,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9953,11 +9953,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10022,7 +10022,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async () => {
           return {};
         },
@@ -10036,7 +10036,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string().optional().default('test'),
@@ -10048,11 +10048,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10062,7 +10062,7 @@ describe('Workflow', () => {
       workflow
         .then(step1)
         .map({
-          // @ts-ignore
+          // @ts-expect-error
           start: mapVariable({
             step: step1,
             path: 'start',
@@ -10109,7 +10109,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-ignore
+        // @ts-expect-error
         execute: async ({ inputData }) => {
           return { start: inputData.start };
         },
@@ -10123,7 +10123,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-ignore
+        // @ts-expect-error
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -10135,11 +10135,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           start: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10208,13 +10208,13 @@ describe('Workflow', () => {
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         resumeSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10229,11 +10229,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10246,9 +10246,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10257,9 +10257,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-ignore
+            // @ts-expect-error
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-ignore
+            // @ts-expect-error
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10300,13 +10300,13 @@ describe('Workflow', () => {
     it('should use default value from resumeSchema when resuming a workflow', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         resumeSchema: zv4.object({ value: zv4.number().optional().default(21) }),
-        // @ts-ignore
+        // @ts-expect-error
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10321,11 +10321,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10338,9 +10338,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10349,9 +10349,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-ignore
+            // @ts-expect-error
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-ignore
+            // @ts-expect-error
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10400,9 +10400,9 @@ describe('Workflow', () => {
       });
       const startStep = createStep({
         id: 'start',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ startValue: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           newValue: zv4.number(),
         }),
@@ -10414,9 +10414,9 @@ describe('Workflow', () => {
       });
       const otherStep = createStep({
         id: 'other',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ newValue: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
         execute: other,
       });
@@ -10431,20 +10431,20 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ success: zv4.boolean() }),
         execute: final,
       });
 
       const counterWorkflow = createWorkflow({
         id: 'counter-workflow',
-        // @ts-ignore
+        // @ts-expect-error
         inputSchema: zv4.object({
           startValue: zv4.number(),
         }),
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({
           success: zv4.boolean(),
         }),
@@ -10454,7 +10454,7 @@ describe('Workflow', () => {
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
@@ -10464,17 +10464,17 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-ignore
+        // @ts-expect-error
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
         .map({
-          // @ts-ignore
+          // @ts-expect-error
           other: mapVariable({
             step: startStep,
             path: 'newValue',
           }),
-          // @ts-ignore
+          // @ts-expect-error
           newValue: mapVariable({
             step: startStep,
             path: 'newValue',
@@ -10485,10 +10485,10 @@ describe('Workflow', () => {
       counterWorkflow
         .parallel([wfA, wfB])
         .then(
-          // @ts-ignore
+          // @ts-expect-error
           createStep({
             id: 'last-step',
-            // @ts-ignore
+            // @ts-expect-error
             execute: last,
             inputSchema: zv4.object({
               'nested-workflow-a': zv4.object({ finalValue: zv4.number() }),
@@ -10508,14 +10508,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -10807,7 +10807,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       const toolAction = vi.fn().mockImplementation(async (input, _context) => {
         return { name: input.name };
       });
@@ -10835,7 +10835,7 @@ describe('Workflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.step1).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -10843,7 +10843,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['random-tool']).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -11720,7 +11720,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-ignore
+      // @ts-expect-error
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -11791,7 +11791,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, requestContext });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-ignore
+      // @ts-expect-error
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -17476,12 +17476,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17604,12 +17604,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a-clone'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17702,7 +17702,7 @@ describe('Workflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-ignore
+          // @ts-expect-error
           [async () => true, finalStep],
         ])
         .map({
@@ -17734,12 +17734,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17880,7 +17880,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18025,7 +18025,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18206,7 +18206,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18348,12 +18348,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18475,12 +18475,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: 'nested-workflow-a', resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18813,7 +18813,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -18979,7 +18979,7 @@ describe('Workflow', () => {
         },
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps['last-step']).toEqual(undefined);
 
       if (result.status !== 'suspended') {
@@ -18988,7 +18988,7 @@ describe('Workflow', () => {
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
         finalValue: 26 + 1,
       });
@@ -19547,7 +19547,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
       const result = await run.start({ requestContext });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -19601,7 +19601,7 @@ describe('Workflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-ignore
+      // @ts-expect-error
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 

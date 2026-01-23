@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { StorageDomains } from '@mastra/core/storage';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
 import { DatasetsLibSQL } from './domains/datasets';
@@ -79,7 +79,7 @@ export type LibSQLConfig =
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class LibSQLStore extends MastraStorage {
+export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;

@@ -127,6 +127,9 @@
   --ifm-menu-color: var(--mastra-text-secondary);
   --ifm-menu-color-active: var(--mastra-text-primary);
   --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 24 24"><path fill="rgba(95,95,95,1)" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"></path></svg>');
+
+  /* Chat Sidebar */
+  --doc-sidebar-hidden-width: 30px;
 }
 
 /* ==================== DARK MODE ==================== */
@@ -744,30 +747,6 @@ kbd {
     justify-content: space-between;
   }
 
-  .pagination-nav a {
-    text-decoration: none;
-  }
-
-  .pagination-nav__link:not(.pagination-nav__link--next) {
-    padding-inline-start: 0px;
-  }
-
-  .pagination-nav__link--next:is(.pagination-nav__link--next) {
-    padding-inline-end: 0px;
-  }
-
-  .pagination-nav__label.pagination-nav__label {
-    padding-inline-start: 0px;
-
-    &::before {
-      content: "";
-    }
-
-    &::after {
-      content: "";
-    }
-  }
-
   /* Highlighted lines in code blocks */
   .theme-code-block-highlighted-line {
     box-shadow: 2px 0 var(--mastra-green-accent-2) inset;
@@ -828,10 +807,9 @@ kbd {
   article p code,
   article li code,
   article td code {
-    font-size: 0.875rem;
+    font-size: 0.875em;
     padding: 0.12em 0.25em;
-    border-radius: 0.375rem;
-    white-space: nowrap;
+    border-radius: 0.375em;
     background: color-mix(in oklab, #000 3%, transparent);
     border: 1px solid color-mix(in oklab, #000 4%, transparent);
   }
@@ -1278,14 +1256,16 @@ kbd {
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
     position: static !important;
+    overflow-y: unset !important;
+    max-height: none !important;
   }
 
-  .toc-wrapper,
   #toc-column {
     position: sticky;
     overflow-y: auto;
     top: calc(var(--ifm-navbar-height) + 2rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 8rem);
+    scrollbar-width: thin;
   }
 
   .menu__link--sublist {

@@ -13,6 +13,7 @@ import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
+import { PROCESSORS_ROUTES } from './processors';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
@@ -91,6 +92,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...AGENTS_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
+  ...PROCESSORS_ROUTES,
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
   ...DATASETS_ROUTES,

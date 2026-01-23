@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-better-auth",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0",
   "description": "Mastra Better Auth integration - self-hosted authentication",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.2.0"
+    "better-auth": "^1.4.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

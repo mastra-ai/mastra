@@ -9,7 +9,7 @@ packages:
 
 # Agent Approval
 
-Agents sometimes require the same [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call and provide feedback to the user, or approve or decline a tool call based on targeted application conditions.
+Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or performing running long processes. With agent approval you can suspend a tool call and provide feedback to the user, or approve or decline a tool call based on targeted application conditions.
 
 ## Tool call approval
 
@@ -71,6 +71,67 @@ const handleDecline = async () => {
   process.stdout.write("\n");
 };
 ```
+
+## Tool approval with generate()
+
+Tool approval also works with the `generate()` method for non-streaming use cases. When using `generate()` with `requireToolApproval: true`, the method returns immediately when a tool requires approval instead of executing it.
+
+### How it works
+
+When a tool requires approval during a `generate()` call, the response includes:
+
+- `finishReason: 'suspended'` - indicates the agent is waiting for approval
+- `suspendPayload` - contains tool call details (`toolCallId`, `toolName`, `args`)
+- `runId` - needed to approve or decline the tool call
+
+### Approving tool calls
+
+To approve a tool call with `generate()`, use the `approveToolCallGenerate` method:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  console.log("Tool requires approval:", output.suspendPayload.toolName);
+  console.log("Arguments:", output.suspendPayload.args);
+
+  // Approve the tool call and get the final result
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log("Final result:", result.text);
+}
+```
+
+### Declining tool calls
+
+To decline a tool call, use the `declineToolCallGenerate` method:
+
+```typescript
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  // Agent will respond acknowledging the declined tool
+  console.log(result.text);
+}
+```
+
+### Stream vs Generate comparison
+
+| Aspect | `stream()` | `generate()` |
+|--------|-----------|--------------|
+| Response type | Streaming chunks | Complete response |
+| Approval detection | `tool-call-approval` chunk | `finishReason: 'suspended'` |
+| Approve method | `approveToolCall({ runId })` | `approveToolCallGenerate({ runId, toolCallId })` |
+| Decline method | `declineToolCall({ runId })` | `declineToolCallGenerate({ runId, toolCallId })` |
+| Result | Stream to iterate | Full output object |
 
 ## Tool-level approval
 
@@ -322,4 +383,4 @@ Both approaches work with the same tool definitions. Automatic resumption trigge
 - [Agent Overview](./overview)
 - [Tools Overview](../mcp/overview)
 - [Agent Memory](./agent-memory)
-- [Request Context](/docs/v1/server/request-context)
+- [Request Context](/docs/server/request-context)

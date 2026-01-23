@@ -3,15 +3,8 @@ import { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-import { captureSpanToDataset, captureTraceToDataset, runDataset, startDatasetRunAsync } from '../datasets';
-import type {
-  CaptureToDatasetOptions,
-  DatasetItem,
-  DatasetRun,
-  RunDatasetOptions,
-  RunDatasetResult,
-} from '../datasets/types';
-import type { CaptureSpan } from '../datasets/trace-capture';
+import { runDataset, startDatasetRunAsync } from '../datasets';
+import type { DatasetItem, DatasetRun, RunDatasetOptions, RunDatasetResult } from '../datasets/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
@@ -29,7 +22,8 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+// import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type { MastraCompositeStore, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import type { DatasetsStorage } from '../storage/domains/datasets/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -123,7 +117,7 @@ export interface Config<
    * Storage provider for persisting data, conversation history, and workflow state.
    * Required for agent memory and workflow persistence.
    */
-  storage?: MastraStorage;
+  storage?: MastraCompositeStore;
 
   /**
    * Vector stores for semantic search and retrieval-augmented generation (RAG).
@@ -305,10 +299,12 @@ export class Mastra<
     path: string;
   }> = [];
 
-  #storage?: MastraStorage;
+  #storage?: MastraCompositeStore;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
+  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
+    new Map();
   #memory?: TMemory;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
@@ -2078,6 +2074,52 @@ export class Mastra<
   }
 
   /**
+   * Registers a processor configuration with agent context.
+   * This tracks which agents use which processors with what configuration.
+   *
+   * @param processor - The processor instance
+   * @param agentId - The ID of the agent that uses this processor
+   * @param type - Whether this is an input or output processor
+   */
+  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+    const processorId = processor.id;
+    if (!this.#processorConfigurations.has(processorId)) {
+      this.#processorConfigurations.set(processorId, []);
+    }
+    const configs = this.#processorConfigurations.get(processorId)!;
+
+    // Check if this exact configuration already exists
+    const exists = configs.some(c => c.agentId === agentId && c.type === type);
+    if (!exists) {
+      configs.push({ processor, agentId, type });
+    }
+  }
+
+  /**
+   * Gets all processor configurations for a specific processor ID.
+   *
+   * @param processorId - The ID of the processor
+   * @returns Array of configurations with agent context
+   */
+  public getProcessorConfigurations(
+    processorId: string,
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+    return this.#processorConfigurations.get(processorId) || [];
+  }
+
+  /**
+   * Gets all processor configurations.
+   *
+   * @returns Map of processor IDs to their configurations
+   */
+  public listProcessorConfigurations(): Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+  > {
+    return this.#processorConfigurations;
+  }
+
+  /**
    * Retrieves a registered memory instance by its registration key.
    *
    * @throws {MastraError} When the memory instance with the specified key is not found
@@ -2309,7 +2351,7 @@ export class Mastra<
    * });
    * ```
    */
-  public setStorage(storage: MastraStorage) {
+  public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
   }
 
@@ -3157,111 +3199,6 @@ export class Mastra<
    */
   public getDatasetsStore(): DatasetsStorage | undefined {
     return this.#storage?.stores?.datasets;
-  }
-
-  /**
-   * Captures a single span as a dataset item for evaluation.
-   *
-   * @param options - Configuration for capturing the span
-   * @param options.span - The span data to capture (spanId, traceId, input, output, metadata)
-   * @param options.datasetId - Target dataset ID
-   * @param options.transform - Optional transform function to modify span data before saving
-   * @returns The created dataset item
-   * @throws {MastraError} When datasets storage is not configured
-   *
-   * @example
-   * ```typescript
-   * const item = await mastra.captureSpanToDataset({
-   *   span: { spanId: 'span-1', traceId: 'trace-1', input: 'hello', output: 'world' },
-   *   datasetId: 'my-dataset',
-   * });
-   * ```
-   */
-  public async captureSpanToDataset(options: {
-    span: CaptureSpan;
-    datasetId: string;
-    transform?: CaptureToDatasetOptions['transform'];
-  }): Promise<DatasetItem> {
-    const storage = this.getDatasetsStore();
-    if (!storage) {
-      const error = new MastraError({
-        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
-        details: { status: 500 },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    return captureSpanToDataset({
-      storage,
-      span: options.span,
-      datasetId: options.datasetId,
-      transform: options.transform,
-    });
-  }
-
-  /**
-   * Captures all matching spans from a trace as dataset items.
-   *
-   * Fetches spans for the given trace, applies optional filtering,
-   * and creates dataset items for each matching span.
-   *
-   * @param traceId - The trace ID to capture spans from
-   * @param options - Capture configuration
-   * @param options.datasetId - Target dataset ID
-   * @param options.spanFilter - Optional filter to select specific spans
-   * @param options.transform - Optional transform function
-   * @returns Array of created dataset items
-   * @throws {MastraError} When datasets or observability storage is not configured
-   * @throws Error if trace is not found
-   *
-   * @example
-   * ```typescript
-   * const items = await mastra.captureTraceToDataset('trace-123', {
-   *   datasetId: 'my-dataset',
-   *   spanFilter: (span) => span.spanType === 'TOOL_CALL',
-   * });
-   * ```
-   */
-  public async captureTraceToDataset(
-    traceId: string,
-    options: Omit<CaptureToDatasetOptions, 'datasetId'> & { datasetId: string },
-  ): Promise<DatasetItem[]> {
-    const storage = this.getDatasetsStore();
-    if (!storage) {
-      const error = new MastraError({
-        id: 'MASTRA_DATASETS_STORAGE_NOT_CONFIGURED',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Datasets storage is not configured. Ensure storage is set up with datasets support.',
-        details: { status: 500 },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    const observabilityStorage = this.#storage?.stores?.observability;
-    if (!observabilityStorage) {
-      const error = new MastraError({
-        id: 'MASTRA_OBSERVABILITY_STORAGE_NOT_CONFIGURED',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Observability storage is not configured. Ensure storage is set up with observability support.',
-        details: { status: 500 },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    return captureTraceToDataset({
-      storage,
-      observabilityStorage,
-      traceId,
-      captureOptions: options,
-    });
   }
 
   /**

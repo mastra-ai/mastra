@@ -198,31 +198,6 @@ export type ListDatasetRunResultsOptions = {
 };
 
 // ============================================================================
-// Trace Capture Types
-// ============================================================================
-
-export type SpanFilterFn = (span: {
-  spanId: string;
-  spanType?: string;
-  name?: string;
-  input?: unknown;
-  output?: unknown;
-  metadata?: Record<string, unknown>;
-}) => boolean;
-
-export type CaptureToDatasetOptions = {
-  datasetId: string;
-  /** Filter which spans to capture */
-  spanFilter?: SpanFilterFn;
-  /** Transform span data before saving */
-  transform?: (span: { input: unknown; output: unknown; metadata?: Record<string, unknown> }) => {
-    input: unknown;
-    expectedOutput?: unknown;
-    metadata?: Record<string, unknown>;
-  };
-};
-
-// ============================================================================
 // Run Dataset Types
 // ============================================================================
 

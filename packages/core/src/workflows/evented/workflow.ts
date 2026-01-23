@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent/message-list';
@@ -1103,7 +1103,6 @@ export class EventedWorkflow<
           waitingPaths: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });

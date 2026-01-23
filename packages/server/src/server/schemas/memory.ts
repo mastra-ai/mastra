@@ -76,7 +76,8 @@ const includeSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.array will reject string type)
+        return val;
       }
     }
     return val;
@@ -102,7 +103,8 @@ const filterSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.object will reject string type)
+        return val;
       }
     }
     return val;
@@ -115,6 +117,7 @@ const filterSchema = z.preprocess(
           end: z.coerce.date().optional(),
         })
         .optional(),
+      roles: z.array(z.string()).optional(),
     })
     .optional(),
 );
@@ -127,7 +130,8 @@ const memoryConfigSchema = z.preprocess(val => {
     try {
       return JSON.parse(val);
     } catch {
-      return undefined;
+      // Return invalid string to fail validation (z.record will reject string type)
+      return val;
     }
   }
   return val;
@@ -174,10 +178,26 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 
@@ -220,10 +240,26 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/network/threads
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 

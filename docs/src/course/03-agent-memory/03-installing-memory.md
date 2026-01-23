@@ -3,7 +3,7 @@
 Let's start by installing the Mastra memory package:
 
 ```bash
-npm install @mastra/memory@beta @mastra/libsql@beta
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 The `@mastra/memory` package provides all the functionality you need to add memory capabilities to your Mastra agents. It includes support for conversation history, semantic recall, and working memory.

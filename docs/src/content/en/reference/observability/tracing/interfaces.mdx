@@ -34,6 +34,9 @@ interface ObservabilityInstance {
     options: StartSpanOptions<TType>,
   ): Span<TType>;
 
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
+
   /** Shutdown observability and clean up resources */
   shutdown(): Promise<void>;
 }
@@ -153,6 +156,9 @@ interface ObservabilityExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void>;
+
+  /** Force flush any buffered spans without shutting down */
+  flush(): Promise<void>;
 
   /** Shutdown exporter */
   shutdown(): Promise<void>;
@@ -580,6 +586,18 @@ interface TracingOptions {
    * Note: Tags are only applied to the root span of a trace.
    */
   tags?: string[];
+
+  /**
+   * When true, input data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideInput?: boolean;
+
+  /**
+   * When true, output data will be hidden from all spans in this trace.
+   * Useful for protecting sensitive data from being logged.
+   */
+  hideOutput?: boolean;
 }
 ```
 
@@ -729,12 +747,12 @@ enum InternalSpans {
 
 ### Documentation
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview) - Complete guide to Tracing
-- [Creating Child Spans](/docs/v1/observability/tracing/overview#creating-child-spans) - Working with span hierarchies
-- [Adding Custom Metadata](/docs/v1/observability/tracing/overview#adding-custom-metadata) - Enriching traces
+- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide to Tracing
+- [Creating Child Spans](/docs/observability/tracing/overview#creating-child-spans) - Working with span hierarchies
+- [Adding Custom Metadata](/docs/observability/tracing/overview#adding-custom-metadata) - Enriching traces
 
 ### Reference
 
-- [Configuration](/reference/v1/observability/tracing/configuration) - Registry and configuration
-- [Tracing Classes](/reference/v1/observability/tracing/instances) - Core implementations
-- [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle methods
+- [Configuration](/reference/observability/tracing/configuration) - Registry and configuration
+- [Tracing Classes](/reference/observability/tracing/instances) - Core implementations
+- [Spans Reference](/reference/observability/tracing/spans) - Span lifecycle methods

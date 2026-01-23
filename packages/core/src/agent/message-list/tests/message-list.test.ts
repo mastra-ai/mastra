@@ -2010,7 +2010,7 @@ describe('MessageList', () => {
       ];
       const newUIMessages5 = appendResponseMessages({
         messages: newUIMessages3,
-        // @ts-ignore
+        // @ts-expect-error
         responseMessages: responseMessages2,
       });
 
@@ -3997,6 +3997,78 @@ describe('MessageList', () => {
       const result = list.replaceAllSystemMessages([{ role: 'system', content: 'Test' }]);
 
       expect(result).toBe(list);
+    });
+  });
+
+  describe('mastraDBMessageToAIV4UIMessage', () => {
+    it('should handle MastraDBMessage with undefined parts (issue #11526)', () => {
+      // This test reproduces the bug where ModerationProcessor crashes when
+      // mastraDBMessageToAIV4UIMessage receives a message with undefined parts.
+      // The MastraMessageContentV2 type only requires format: 2, not parts.
+      const messageWithUndefinedParts: MastraDBMessage = {
+        id: 'test-id',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'This is text content without parts',
+        } as any, // Cast to any to simulate runtime scenario where parts is undefined
+      };
+
+      const list = new MessageList();
+      list.add(messageWithUndefinedParts, 'input');
+
+      // This should not throw "Cannot read properties of undefined (reading 'reduce')"
+      // or "Cannot read properties of undefined (reading 'length')"
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('This is text content without parts');
+    });
+
+    it('should handle MastraDBMessage with null parts', () => {
+      const messageWithNullParts: MastraDBMessage = {
+        id: 'test-id-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: null as any, // Explicitly null parts
+          content: 'Assistant response',
+        },
+      };
+
+      const list = new MessageList();
+      list.add(messageWithNullParts, 'response');
+
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('Assistant response');
+    });
+
+    it('should handle MastraDBMessage with empty parts array', () => {
+      const messageWithEmptyParts: MastraDBMessage = {
+        id: 'test-id-3',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [],
+          content: 'Content with empty parts',
+        },
+      };
+
+      const list = new MessageList();
+      list.add(messageWithEmptyParts, 'input');
+
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('Content with empty parts');
     });
   });
 });
