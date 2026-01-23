@@ -1354,7 +1354,6 @@
         "gemini-3-flash",
         "gemini-3-pro",
         "glm-4.6",
-        "glm-4.7-free",
         "gpt-5",
         "gpt-5-codex",
         "gpt-5-nano",
@@ -1367,7 +1366,6 @@
         "grok-code",
         "kimi-k2",
         "kimi-k2-thinking",
-        "minimax-m2.1-free",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -3547,7 +3545,6 @@
       "gemini-3-flash",
       "gemini-3-pro",
       "glm-4.6",
-      "glm-4.7-free",
       "gpt-5",
       "gpt-5-codex",
       "gpt-5-nano",
@@ -3560,7 +3557,6 @@
       "grok-code",
       "kimi-k2",
       "kimi-k2-thinking",
-      "minimax-m2.1-free",
       "qwen3-coder"
     ],
     "fastrouter": [
