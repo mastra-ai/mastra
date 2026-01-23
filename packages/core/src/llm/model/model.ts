@@ -17,7 +17,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
-import type { ZodSchema, z } from 'zod-v3';
+import type { ZodSchema, z } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';

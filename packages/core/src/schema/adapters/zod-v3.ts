@@ -1,6 +1,6 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
-import type { ZodType, ZodTypeDef } from 'zod-v3';
+import type { ZodType, ZodTypeDef } from 'zod/v3';
 import type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,

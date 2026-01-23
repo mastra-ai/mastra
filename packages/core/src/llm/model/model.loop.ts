@@ -10,7 +10,7 @@ import {
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod-v3';
+import type { ZodSchema } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';

@@ -4,7 +4,7 @@ import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mast
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
-import type { ZodSchema, z as z3 } from 'zod-v3';
+import type { ZodSchema, z as z3 } from 'zod/v3';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';

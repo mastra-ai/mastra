@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { z as zv4 } from 'zod';
-import { z } from 'zod-v3';
+import { z } from 'zod/v3';
 
 import { createTool } from './tool';
 
