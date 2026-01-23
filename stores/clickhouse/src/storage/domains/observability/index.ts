@@ -655,7 +655,11 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       });
 
       const rows = (await result.json()) as any[];
-      const spans = transformRows(rows) as SpanRecord[];
+      // ClickHouse normalizes null to empty string, so normalize back for status computation
+      const spans = (transformRows(rows) as SpanRecord[]).map(span => ({
+        ...span,
+        error: span.error === '' ? null : span.error,
+      }));
 
       return {
         pagination: {
