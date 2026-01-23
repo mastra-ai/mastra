@@ -23,7 +23,7 @@
     },
     "build": {
       "dependsOn": ["build:lib", "build:docs"],
-      "inputs": []
+      "inputs": ["package.json"]
     },
     "test": {
       "dependsOn": ["^build"],

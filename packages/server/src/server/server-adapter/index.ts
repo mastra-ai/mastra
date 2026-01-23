@@ -3,6 +3,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { InMemoryTaskStore } from '../a2a/store';
+import { defaultAuthConfig } from '../auth/defaults';
+import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
@@ -104,7 +106,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     mastra,
     bodyLimitOptions,
     tools,
-    prefix = '',
+    prefix = '/api',
     openapiPath = '',
     taskStore,
     customRouteAuthConfig,
@@ -153,6 +155,132 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
     }
     return requestContext;
+  }
+
+  /**
+   * Check if the current request should be authenticated/authorized.
+   * Returns null if auth passes, or an error response if it fails.
+   *
+   * This method encapsulates the complete auth flow:
+   * 1. Check if route requires auth (route.requiresAuth)
+   * 2. Check if it's a dev playground request
+   * 3. Check if path is publicly accessible
+   * 4. Perform authentication (verify token)
+   * 5. Perform authorization (check rules, authorizeUser, authorize)
+   */
+  protected async checkRouteAuth(
+    route: ServerRoute,
+    context: {
+      path: string;
+      method: string;
+      getHeader: (name: string) => string | undefined;
+      getQuery: (name: string) => string | undefined;
+      requestContext: RequestContext;
+    },
+  ): Promise<{ status: number; error: string } | null> {
+    const authConfig = this.mastra.getServer()?.auth;
+
+    // No auth config means no auth required
+    if (!authConfig) {
+      return null;
+    }
+
+    // Check route-level requiresAuth flag first (explicit per-route setting)
+    // Default to true (protected) if not specified for backwards compatibility
+    if (route.requiresAuth === false) {
+      return null; // Route explicitly opts out of auth
+    }
+
+    // Dev playground bypass
+    if (isDevPlaygroundRequest(context.path, context.method, context.getHeader, authConfig)) {
+      return null;
+    }
+
+    // Check if path is publicly accessible via auth config patterns
+    if (canAccessPublicly(context.path, context.method, authConfig)) {
+      return null;
+    }
+
+    // --- Authentication ---
+    const authHeader = context.getHeader('authorization');
+    let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+
+    if (!token) {
+      token = context.getQuery('apiKey') || null;
+    }
+
+    if (!token) {
+      return { status: 401, error: 'Authentication required' };
+    }
+
+    let user: unknown;
+    try {
+      if (typeof authConfig.authenticateToken === 'function') {
+        // Note: We pass null as request since adapters have different request types
+        // If specific request is needed, authenticateToken can use data from token
+        user = await authConfig.authenticateToken(token, null as any);
+      } else {
+        return { status: 401, error: 'No token verification method configured' };
+      }
+
+      if (!user) {
+        return { status: 401, error: 'Invalid or expired token' };
+      }
+
+      context.requestContext.set('user', user);
+    } catch (err) {
+      console.error(err);
+      return { status: 401, error: 'Invalid or expired token' };
+    }
+
+    // --- Authorization ---
+
+    // Check authorizeUser (simplified authorization)
+    if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
+      try {
+        const isAuthorized = await authConfig.authorizeUser(user, null as any);
+        if (!isAuthorized) {
+          return { status: 403, error: 'Access denied' };
+        }
+        return null; // Authorization passed
+      } catch (err) {
+        console.error(err);
+        return { status: 500, error: 'Authorization error' };
+      }
+    }
+
+    // Check authorize (path/method-based authorization)
+    if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+      try {
+        const isAuthorized = await authConfig.authorize(context.path, context.method, user, null as any);
+        if (!isAuthorized) {
+          return { status: 403, error: 'Access denied' };
+        }
+        return null; // Authorization passed
+      } catch (err) {
+        console.error(err);
+        return { status: 500, error: 'Authorization error' };
+      }
+    }
+
+    // Check custom rules
+    if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+      const isAuthorized = await checkRules(authConfig.rules, context.path, context.method, user);
+      if (isAuthorized) {
+        return null; // Authorization passed
+      }
+      return { status: 403, error: 'Access denied' };
+    }
+
+    // Check default rules
+    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+      const isAuthorized = await checkRules(defaultAuthConfig.rules, context.path, context.method, user);
+      if (isAuthorized) {
+        return null; // Authorization passed
+      }
+    }
+
+    return { status: 403, error: 'Access denied' };
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;

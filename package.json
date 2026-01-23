@@ -9,12 +9,14 @@
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
     "dotenv": "17.2.0",
+    "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
     "npm-run-all2": "^8.0.4",
     "path-to-regexp": "^8.3.0",
     "prettier": "^3.6.2",
     "semver": "^7.7.2",
+    "tsc-files": "^1.1.4",
     "turbo": "^2.5.8",
     "typescript": "catalog:",
     "vite": "^7.3.0",
@@ -87,11 +89,6 @@
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install && pnpm run build",
     "cleanup": "find . -type d \\( -name 'node_modules' -o -name 'dist' -o -name '.turbo' -o -name '.mastra' \\) -prune -exec rm -rf {} +"
-  },
-  "lint-staged": {
-    "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
-      "prettier --write"
-    ]
   },
   "engines": {
     "pnpm": ">=10.18.0"

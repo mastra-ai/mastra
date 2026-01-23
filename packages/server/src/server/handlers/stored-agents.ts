@@ -20,17 +20,18 @@ import { handleError } from './error';
 // ============================================================================
 
 /**
- * GET /api/stored/agents - List all stored agents
+ * GET /stored/agents - List all stored agents
  */
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, page, perPage, orderBy, ownerId, metadata }) => {
     try {
       const storage = mastra.getStorage();
@@ -60,17 +61,18 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:storedAgentId - Get a stored agent by ID
+ * GET /stored/agents/:storedAgentId - Get a stored agent by ID
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
   description: 'Returns a specific agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -99,17 +101,18 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents - Create a new stored agent
+ * POST /stored/agents - Create a new stored agent
  */
 export const CREATE_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
   summary: 'Create stored agent',
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     id,
@@ -180,11 +183,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * PATCH /api/stored/agents/:storedAgentId - Update a stored agent
+ * PATCH /stored/agents/:storedAgentId - Update a stored agent
  */
 export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -192,6 +195,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Update stored agent',
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     storedAgentId,
@@ -267,17 +271,18 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:storedAgentId - Delete a stored agent
+ * DELETE /stored/agents/:storedAgentId - Delete a stored agent
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: deleteStoredAgentResponseSchema,
   summary: 'Delete stored agent',
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
