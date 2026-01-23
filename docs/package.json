@@ -62,7 +62,7 @@
     "@docusaurus/tsconfig": "^3.9.1",
     "@docusaurus/types": "^3.9.1",
     "@tailwindcss/postcss": "^4.0.7",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "baseline-browser-mapping": "^2.9.12",
     "postcss": "^8.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",

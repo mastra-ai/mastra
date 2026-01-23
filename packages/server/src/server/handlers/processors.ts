@@ -74,7 +74,7 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
 
 export const LIST_PROCESSORS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/processors',
+  path: '/processors',
   responseType: 'json',
   responseSchema: listProcessorsResponseSchema,
   summary: 'List all processors',
@@ -134,7 +134,7 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
 
 export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/processors/:processorId',
+  path: '/processors/:processorId',
   responseType: 'json',
   pathParamSchema: processorIdPathParams,
   responseSchema: serializedProcessorDetailSchema,
@@ -189,7 +189,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
 
 export const EXECUTE_PROCESSOR_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/processors/:processorId/execute',
+  path: '/processors/:processorId/execute',
   responseType: 'json',
   pathParamSchema: processorIdPathParams,
   bodySchema: executeProcessorBodySchema,

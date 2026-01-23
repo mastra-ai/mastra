@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -309,8 +309,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -422,6 +422,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
+        routePrefix: this.prefix,
       };
 
       try {

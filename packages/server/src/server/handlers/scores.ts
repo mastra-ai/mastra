@@ -143,7 +143,7 @@ function getTraceDetails(traceIdWithSpanId?: string) {
 
 export const LIST_SCORERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers',
+  path: '/scores/scorers',
   responseType: 'json',
   responseSchema: listScorersResponseSchema,
   summary: 'List all scorers',
@@ -161,7 +161,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
 
 export const GET_SCORER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers/:scorerId',
+  path: '/scores/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   responseSchema: scorerEntrySchema.nullable(),
@@ -187,7 +187,7 @@ export const GET_SCORER_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/run/:runId',
+  path: '/scores/run/:runId',
   responseType: 'json',
   pathParamSchema: runIdSchema,
   queryParamSchema: listScoresByRunIdQuerySchema,
@@ -220,7 +220,7 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorer/:scorerId',
+  path: '/scores/scorer/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   queryParamSchema: listScoresByScorerIdQuerySchema,
@@ -251,7 +251,7 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/entity/:entityType/:entityId',
+  path: '/scores/entity/:entityType/:entityId',
   responseType: 'json',
   pathParamSchema: entityPathParams,
   queryParamSchema: listScoresByEntityIdQuerySchema,
@@ -297,7 +297,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
 export const SAVE_SCORE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/scores',
+  path: '/scores',
   responseType: 'json',
   bodySchema: saveScoreBodySchema,
   responseSchema: saveScoreResponseSchema,
