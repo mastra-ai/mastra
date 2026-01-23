@@ -408,7 +408,11 @@ export function createTool<
   TSuspend = unknown,
   TResume = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<TSuspend, TResume, TRequestContext>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
 >(
   opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
 ): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId> {

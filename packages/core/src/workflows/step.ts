@@ -20,7 +20,15 @@ declare const SuspendBrand: unique symbol;
 // Create a branded type that can ONLY be produced by suspend()
 export type InnerOutput = void & { readonly [SuspendBrand]: never };
 
-export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSuspend, EngineType, TRequestContext extends Record<string, any> | unknown = unknown> = {
+export type ExecuteFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   runId: string;
   resourceId?: string;
   workflowId: string;
@@ -56,21 +64,77 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   validateSchemas?: boolean;
 };
 
-export type ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext extends Record<string, any> | unknown = unknown> = Omit<
+export type ConditionFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = Omit<
   ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
   'setState' | 'suspend'
 >;
 
-export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext extends Record<string, any> | unknown = unknown> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
+export type ExecuteFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ExecuteFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
 ) => Promise<TStepOutput | InnerOutput>;
 
-export type ConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext extends Record<string, any> | unknown = unknown> = (
-  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
+export type ConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
 ) => Promise<boolean>;
 
-export type LoopConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext extends Record<string, any> | unknown = unknown> = (
-  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext> & {
+export type LoopConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  > & {
     iterationCount: number;
   },
 ) => Promise<boolean>;

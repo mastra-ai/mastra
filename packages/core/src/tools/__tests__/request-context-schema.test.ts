@@ -193,10 +193,7 @@ describe('Tool requestContextSchema', () => {
 
       const result = await tool.execute!({ query: 'test search' }, { requestContext });
 
-      expect(executeFn).toHaveBeenCalledWith(
-        { query: 'test search' },
-        expect.objectContaining({ requestContext }),
-      );
+      expect(executeFn).toHaveBeenCalledWith({ query: 'test search' }, expect.objectContaining({ requestContext }));
       expect(result).toEqual({ result: 'found' });
     });
 

@@ -99,7 +99,7 @@ describe('Workflow requestContextSchema', () => {
 
       const requestContext = new RequestContext<z.infer<typeof requestContextSchema>>();
       //@ts-expect-error - intentionally testing validation with wrong type
-      requestContext.set('userId', 123); 
+      requestContext.set('userId', 123);
       requestContext.set('tenantId', 'tenant-456');
 
       const run = await workflow.createRun();

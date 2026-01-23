@@ -161,7 +161,15 @@ export function createStep<
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
   TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema, TRequestContextSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -249,7 +257,15 @@ export function createStep<
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
   TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema, TRequestContextSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -1350,7 +1366,16 @@ export class Workflow<
       },
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1380,7 +1405,16 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TPrevSchema,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1409,7 +1443,16 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TPrevSchema,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1476,7 +1519,16 @@ export class Workflow<
               : mappingConfig.toString(),
         },
       });
-      return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext>;
+      return this as unknown as Workflow<
+        TEngineType,
+        TSteps,
+        TWorkflowId,
+        TState,
+        TInput,
+        TOutput,
+        any,
+        TRequestContext
+      >;
     }
 
     const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
@@ -1577,7 +1629,16 @@ export class Workflow<
             : JSON.stringify(newMappingConfig, null, 2),
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, MappedOutputSchema, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      MappedOutputSchema,
+      TRequestContext
+    >;
   }
 
   // TODO: make typing better here
@@ -1708,7 +1769,16 @@ export class Workflow<
       loopType: 'dowhile',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
@@ -1735,7 +1805,16 @@ export class Workflow<
       loopType: 'dountil',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   foreach<
@@ -1766,7 +1845,16 @@ export class Workflow<
       opts: opts ?? { concurrency: 1 },
     });
     this.steps[(step as any).id] = step as any;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut[], TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut[],
+      TRequestContext
+    >;
   }
 
   /**
@@ -1788,7 +1876,16 @@ export class Workflow<
   commit() {
     this.executionGraph = this.buildExecutionGraph();
     this.committed = true;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput, TRequestContext>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TOutput,
+      TRequestContext
+    >;
   }
 
   get stepGraph() {
@@ -3631,7 +3728,10 @@ export class Run<
     initialState?: TState;
     step:
       | Step<string, any, TInput, any, any, any, TEngineType, any>
-      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, TInput, any, any, any, TEngineType, any>]
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInput, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -3749,7 +3849,10 @@ export class Run<
     initialState?: TState;
     step:
       | Step<string, any, TInput, any, any, any, TEngineType, any>
-      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, TInput, any, any, any, TEngineType, any>]
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInput, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -3785,7 +3888,10 @@ export class Run<
     resumeData?: any;
     step:
       | Step<string, any, any, any, any, any, TEngineType, any>
-      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, any, any, any, any, TEngineType, any>]
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;

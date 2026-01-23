@@ -45,35 +45,20 @@ export function AutoForm<T extends Record<string, any>>({
   ...props
 }: AutoFormProps<T> & { readOnly?: boolean }) {
   // Memoize UI components to prevent unnecessary re-renders
-  const mergedUiComponents = useMemo(
-    () => ({ ...ShadcnUIComponents, ...uiComponents }),
-    [uiComponents],
-  );
+  const mergedUiComponents = useMemo(() => ({ ...ShadcnUIComponents, ...uiComponents }), [uiComponents]);
 
   // Memoize form components with readOnly prop to prevent focus loss on re-renders
   const mergedFormComponents = useMemo(
     () => ({
-      string: (fieldProps: any) => (
-        <StringField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
-      number: (fieldProps: any) => (
-        <NumberField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
+      string: (fieldProps: any) => <StringField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+      number: (fieldProps: any) => <NumberField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
       boolean: (fieldProps: any) => (
         <BooleanField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
       ),
-      date: (fieldProps: any) => (
-        <DateField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
-      select: (fieldProps: any) => (
-        <SelectField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
-      record: (fieldProps: any) => (
-        <RecordField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
-      union: (fieldProps: any) => (
-        <UnionField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
-      ),
+      date: (fieldProps: any) => <DateField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+      select: (fieldProps: any) => <SelectField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+      record: (fieldProps: any) => <RecordField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+      union: (fieldProps: any) => <UnionField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
       'discriminated-union': (fieldProps: any) => (
         <DiscriminatedUnionField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
       ),
@@ -82,11 +67,5 @@ export function AutoForm<T extends Record<string, any>>({
     [readOnly, formComponents],
   );
 
-  return (
-    <CustomAutoForm
-      {...props}
-      uiComponents={mergedUiComponents}
-      formComponents={mergedFormComponents}
-    />
-  );
+  return <CustomAutoForm {...props} uiComponents={mergedUiComponents} formComponents={mergedFormComponents} />;
 }

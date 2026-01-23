@@ -3,7 +3,13 @@ import type { RequestContext } from '../request-context';
 
 export type DynamicArgument<T, TRequestContext extends Record<string, any> | unknown = unknown> =
   | T
-  | (({ requestContext, mastra }: { requestContext: RequestContext<TRequestContext>; mastra?: Mastra }) => Promise<T> | T);
+  | (({
+      requestContext,
+      mastra,
+    }: {
+      requestContext: RequestContext<TRequestContext>;
+      mastra?: Mastra;
+    }) => Promise<T> | T);
 
 export type NonEmpty<T extends string> = T extends '' ? never : T;
 
