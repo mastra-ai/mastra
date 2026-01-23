@@ -57,9 +57,8 @@ You can:
 - Run shell commands
 - Read and write files
 
-When asked to run code, use the workspace_execute_code tool.
-Always show the output to the user.`,
-  model: 'openai/gpt-5.1',
+When asked to run code, use the workspace_execute_code or workspace_execute_command tools.`,
+  model: 'anthropic/claude-opus-4-5',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'e2b-agent-memory-storage',
