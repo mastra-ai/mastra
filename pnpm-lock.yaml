@@ -3044,7 +3044,7 @@ importers:
         version: 7.9.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
     devDependencies:
       '@eslint/js':
-        specifier: ^9.37.0
+        specifier: ^9.39.2
         version: 9.39.2
       '@playwright/test':
         specifier: ^1.56.0
