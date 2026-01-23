@@ -15,6 +15,9 @@ import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { createSkill } from './commands/actions/create-skill';
+import { validateSkill } from './commands/actions/validate-skill';
+import { listSkills } from './commands/actions/list-skills';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
@@ -175,6 +178,25 @@ scorersCommand
   .action(addScorer);
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
+
+const skillsCommand = program.command('skill').description('Manage agent skills');
+
+skillsCommand
+  .command('create [name]')
+  .description('Create a new skill')
+  .option('-d, --dir <path>', 'Directory to create the skill in (default: .mastra/skills)')
+  .action(createSkill);
+
+skillsCommand
+  .command('validate [path]')
+  .description('Validate a skill directory')
+  .action(validateSkill);
+
+skillsCommand
+  .command('list')
+  .description('List available skills')
+  .option('-d, --dir <path>', 'Directory to list skills from (default: .mastra/skills)')
+  .action(listSkills);
 
 program.parse(process.argv);
 
