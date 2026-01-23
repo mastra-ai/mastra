@@ -188,13 +188,13 @@ interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, T
 type PreprocessStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
   | (PromptObject<TStepOutput, TAccumulated, 'preprocess', TInput, TRunOutput, unknown> & {
-      outputSchema: { '~standard': { types: { output: TStepOutput } } } | z.ZodType<TStepOutput>;
+      outputSchema: PublicSchema<TStepOutput>;
     });
 
 type AnalyzeStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
   | (PromptObject<TStepOutput, TAccumulated, 'analyze', TInput, TRunOutput, unknown> & {
-      outputSchema: { '~standard': { types: { output: TStepOutput } } } | z.ZodType<TStepOutput>;
+      outputSchema: PublicSchema<TStepOutput>;
     });
 
 // Conditional type for generateScore step definition
