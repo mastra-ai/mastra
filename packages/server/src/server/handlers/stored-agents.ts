@@ -12,6 +12,7 @@ import {
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
 
 // ============================================================================
@@ -19,18 +20,19 @@ import { handleError } from './error';
 // ============================================================================
 
 /**
- * GET /api/stored/agents - List all stored agents
+ * GET /stored/agents - List all stored agents
  */
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, page, perPage, orderBy }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, page, perPage, orderBy, ownerId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -47,6 +49,8 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        ownerId,
+        metadata,
       });
 
       return result;
@@ -57,17 +61,18 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:storedAgentId - Get a stored agent by ID
+ * GET /stored/agents/:storedAgentId - Get a stored agent by ID
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
   description: 'Returns a specific agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -81,7 +86,8 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getAgentById({ id: storedAgentId });
+      // Use getAgentByIdResolved to automatically resolve from active version
+      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -95,17 +101,18 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents - Create a new stored agent
+ * POST /stored/agents - Create a new stored agent
  */
 export const CREATE_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
   summary: 'Create stored agent',
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     id,
@@ -117,11 +124,13 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -143,6 +152,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       const agent = await agentsStore.createAgent({
         agent: {
@@ -155,11 +165,13 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           defaultOptions,
           workflows,
           agents,
+          integrationTools: integrationToolsFromBody,
           inputProcessors,
           outputProcessors,
           memory,
           scorers,
           metadata,
+          ownerId,
         },
       });
 
@@ -171,11 +183,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * PATCH /api/stored/agents/:storedAgentId - Update a stored agent
+ * PATCH /stored/agents/:storedAgentId - Update a stored agent
  */
 export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -183,6 +195,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Update stored agent',
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     storedAgentId,
@@ -194,11 +207,13 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
     metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -218,10 +233,11 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools if it's actually an array from the body (not {} from adapter)
+      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      const agent = await agentsStore.updateAgent({
+      const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
         name,
         description,
@@ -231,12 +247,21 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
+        integrationTools: integrationToolsFromBody,
         inputProcessors,
         outputProcessors,
         memory,
         scorers,
         metadata,
+        ownerId,
       });
+
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a version if there are meaningful changes and updates activeVersionId
+      const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
+
+      // Clear the cached agent instance so the next request gets the updated config
+      mastra.clearStoredAgentCache(storedAgentId);
 
       return agent;
     } catch (error) {
@@ -246,17 +271,18 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:storedAgentId - Delete a stored agent
+ * DELETE /stored/agents/:storedAgentId - Delete a stored agent
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: deleteStoredAgentResponseSchema,
   summary: 'Delete stored agent',
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -277,6 +303,9 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
 
       await agentsStore.deleteAgent({ id: storedAgentId });
+
+      // Clear the cached agent instance
+      mastra.clearStoredAgentCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

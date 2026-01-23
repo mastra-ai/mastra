@@ -122,7 +122,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 <Tabs>
   <TabItem value="react" label="React">
 
-    ```tsx title="src/components/test-agent.tsx" copy
+    ```tsx title="src/components/test-agent.tsx"
     "use client";
 
     import { useAuth } from "@clerk/nextjs";
@@ -152,7 +152,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
   </TabItem>
   <TabItem value="curl" label="cURL">
 
-    ```bash copy
+    ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer <your-clerk-access-token>" \

@@ -3,9 +3,6 @@ title: "Astro | Frameworks"
 description: "Get started with Mastra and Astro"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # Integrate Mastra in your Astro project
 
 In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Astro by importing and calling the agent directly from your routes.
@@ -33,28 +30,9 @@ If you already have an Astro app, skip to the next step. Your Astro app should b
 
 To support [on-demand rendering](https://docs.astro.build/en/guides/on-demand-rendering/) this guide will use the [Node.js adapter](https://docs.astro.build/en/guides/integrations-guide/node/) but any of the supported server adapters will work.
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-```bash
+```bash npm2yarn
 npm create astro@latest mastra-astro -- --add node --add react --add tailwind --install --skip-houston --template minimal --git
 ```
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-```bash
-pnpm create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
-```
-</TabItem>
-<TabItem value="yarn" label="yarn">
-```bash
-yarn create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
-```
-</TabItem>
-<TabItem value="bun" label="bun">
-```bash
-bun create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
-```
-</TabItem>
-</Tabs>
 
 This creates a project called `mastra-astro`, but you can replace it with any name you want.
 
@@ -104,36 +82,9 @@ Lastly, edit the `tsconfig.json` to resolve paths:
 
 Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx mastra@latest init
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bunx mastra@latest init
-```
-
-</TabItem>
-</Tabs>
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
@@ -147,69 +98,15 @@ You'll call `weather-agent.ts` from your Astro routes in the next steps.
 
 Install AI SDK UI along with the Mastra adapter:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-</Tabs>
-
 Next, initialize AI Elements. When prompted, choose the default options:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx ai-elements@latest
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bunx ai-elements@latest
-```
-
-</TabItem>
-</Tabs>
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 

@@ -122,7 +122,7 @@ describe('Memory Handlers', () => {
    * https://github.com/mastra-ai/mastra/issues/11765
    *
    * When the playground UI loads messages for a sub-agent without memory configured,
-   * it calls GET /api/memory/threads/:threadId/messages?agentId=<subAgentId>.
+   * it calls GET /memory/threads/:threadId/messages?agentId=<subAgentId>.
    * This should return empty messages instead of throwing HTTPException(400).
    */
   describe('listMessagesHandler - Issue #11765', () => {

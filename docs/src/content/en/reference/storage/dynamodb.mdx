@@ -24,7 +24,7 @@ The DynamoDB storage implementation provides a scalable and performant NoSQL dat
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/dynamodb@latest
 ```
 
@@ -74,7 +74,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
-    ```typescript copy
+    ```typescript
     import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({
