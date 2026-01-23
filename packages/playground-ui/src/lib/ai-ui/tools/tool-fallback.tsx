@@ -1,6 +1,7 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import { ToolBadge } from './badges/tool-badge';
+import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
@@ -79,6 +80,29 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolName={toolName}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Use custom terminal UI for sandbox execution tools
+  const isSandboxExecution = toolName === 'workspace_execute_command' || toolName === 'workspace_execute_code';
+
+  if (isSandboxExecution) {
+    // During streaming, result might be an array of output chunks
+    // After completion, it's the final tool result object
+    const streamingOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
+    return (
+      <SandboxExecutionBadge
+        toolName={toolName}
+        args={args}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+        toolOutput={streamingOutput}
       />
     );
   }
