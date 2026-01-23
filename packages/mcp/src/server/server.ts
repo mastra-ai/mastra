@@ -35,7 +35,8 @@ import {
   PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
-  ResourceContents,
+  TextResourceContents,
+  BlobResourceContents,
   Resource,
   ResourceTemplate,
   ServerCapabilities,
@@ -241,8 +242,7 @@ export class MCPServer extends MCPServerBase {
 
     const capabilities: ServerCapabilities = {
       tools: {},
-      logging: { enabled: true },
-      elicitation: {},
+      logging: {},
     };
 
     if (opts.resources) {
@@ -375,8 +375,7 @@ export class MCPServer extends MCPServerBase {
   private createServerInstance(): Server {
     const capabilities: ServerCapabilities = {
       tools: {},
-      logging: { enabled: true },
-      elicitation: {},
+      logging: {},
     };
 
     if (this.resourceOptions) {
@@ -645,20 +644,31 @@ export class MCPServer extends MCPServerBase {
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
-          const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
-            const contentItem: ResourceContents = {
+          const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
+            if ('text' in resourceContent && resourceContent.text !== undefined) {
+              const textContent: TextResourceContents = {
+                uri: resource.uri,
+                mimeType: resource.mimeType,
+                text: resourceContent.text,
+              };
+              return textContent;
+            }
+
+            if ('blob' in resourceContent && resourceContent.blob !== undefined) {
+              const blobContent: BlobResourceContents = {
+                uri: resource.uri,
+                mimeType: resource.mimeType,
+                blob: resourceContent.blob,
+              };
+              return blobContent;
+            }
+
+            // Fallback to text content with empty string
+            return {
               uri: resource.uri,
               mimeType: resource.mimeType,
-            };
-            if ('text' in resourceContent) {
-              contentItem.text = resourceContent.text;
-            }
-
-            if ('blob' in resourceContent) {
-              contentItem.blob = resourceContent.blob;
-            }
-
-            return contentItem;
+              text: '',
+            } as TextResourceContents;
           });
           const duration = Date.now() - startTime;
           this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
@@ -722,7 +732,7 @@ export class MCPServer extends MCPServerBase {
         this.logger.debug('Handling ListPrompts request');
         if (this.definedPrompts) {
           return {
-            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+            prompts: this.definedPrompts,
           };
         } else {
           try {
@@ -733,7 +743,7 @@ export class MCPServer extends MCPServerBase {
             this.definedPrompts = prompts;
             this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
             return {
-              prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+              prompts: this.definedPrompts,
             };
           } catch (error) {
             this.logger.error('Error fetching prompts via listPrompts():', {
@@ -749,23 +759,17 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
         GetPromptRequestSchema,
-        async (request: { params: { name: string; version?: string; arguments?: any } }, extra) => {
+        async (request: { params: { name: string; arguments?: Record<string, string> } }, extra) => {
           const startTime = Date.now();
-          const { name, version, arguments: args } = request.params;
+          const { name, arguments: args } = request.params;
           if (!this.definedPrompts) {
             const prompts = await this.promptOptions?.listPrompts?.({ extra });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
-          // Select prompt by name and version (if provided)
-          let prompt;
-          if (version) {
-            prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
-          } else {
-            // Select the first matching name if no version is provided.
-            prompt = this.definedPrompts?.find(p => p.name === name);
-          }
-          if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
+          // Select prompt by name
+          const prompt = this.definedPrompts?.find(p => p.name === name);
+          if (!prompt) throw new Error(`Prompt "${name}" not found`);
           // Validate required arguments
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
@@ -777,12 +781,10 @@ export class MCPServer extends MCPServerBase {
           try {
             let messages: any[] = [];
             if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({ name, version, args, extra });
+              messages = await capturedPromptOptions.getPromptMessages({ name, args, extra });
             }
             const duration = Date.now() - startTime;
-            this.logger.info(
-              `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
-            );
+            this.logger.info(`Prompt '${name}' retrieved successfully in ${duration}ms.`);
             return { prompt, messages };
           } catch (error) {
             const duration = Date.now() - startTime;

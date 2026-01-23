@@ -38,7 +38,7 @@ export class PromptClientActions {
      * ```typescript
      * const prompts = await client.prompts.list();
      * prompts.forEach(prompt => {
-     *   console.log(`${prompt.name} (v${prompt.version}): ${prompt.description}`);
+     *   console.log(`${prompt.name}: ${prompt.description}`);
      * });
      * ```
      */
@@ -46,7 +46,7 @@ export class PromptClientActions {
         try {
             const response = await this.client.listPrompts();
             if (response && response.prompts && Array.isArray(response.prompts)) {
-                return response.prompts.map(prompt => ({ ...prompt, version: prompt.version || '' }));
+                return response.prompts;
             } else {
                 this.logger.warn(`Prompts response from server ${this.client.name} did not have expected structure.`, {
                     response,

@@ -15,6 +15,7 @@ import type {
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
+  ResourceUpdatedNotification,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
@@ -629,7 +630,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   setResourceUpdatedNotificationHandler(
-    handler: (params: z.infer<typeof ResourceUpdatedNotificationSchema>['params']) => void,
+    handler: (params: ResourceUpdatedNotification['params']) => void,
   ): void {
     this.log('debug', 'Setting resource updated notification handler');
     this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, notification => {
