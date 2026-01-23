@@ -50,7 +50,7 @@
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
-    "@babel/types": "^7.28.5",
+    "@babel/types": "^7.28.6",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
