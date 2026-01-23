@@ -31,9 +31,9 @@ if (PORT) {
 }
 
 export default defineConfig({
-  // Only run server-side auth enforcement tests
+  // Run server-side auth enforcement tests and API bypass prevention tests
   testDir: './tests',
-  testMatch: '**/server-permission-enforcement.spec.ts',
+  testMatch: ['**/server-permission-enforcement.spec.ts', '**/api-bypass-prevention.spec.ts'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
