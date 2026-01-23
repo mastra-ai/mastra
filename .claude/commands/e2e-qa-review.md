@@ -49,6 +49,12 @@ If no argument is provided or it's unclear, ask the user what scope they want to
    - Error states are handled gracefully
    - Session/auth state is properly maintained
 
+5. **Test Architecture Awareness**: Evaluate whether tests are at the right level:
+   - **Test Pyramid**: E2E tests are expensive and slow - they should focus on user flows, not comprehensive API testing
+   - **Ownership**: Tests should live where the code they test lives (API permission tests belong in server package, not playground E2E)
+   - **Speed**: Flag tests that could run faster at a lower level (unit/integration vs E2E)
+   - **Awkward Approaches**: Identify misuse of tools (e.g., using Playwright's `request` fixture as a glorified HTTP client)
+
 ## Review Checklist
 
 When reviewing E2E tests, evaluate:
@@ -82,6 +88,14 @@ When reviewing E2E tests, evaluate:
 - [ ] Tests verify user-visible outcomes
 - [ ] Tests account for loading states
 
+### Test Architecture (Test Pyramid)
+
+- [ ] Tests are at the appropriate level (E2E vs integration vs unit)
+- [ ] API permission tests live in server package, not E2E
+- [ ] E2E tests focus on user flows, not comprehensive API coverage
+- [ ] No misuse of E2E tools for non-E2E purposes
+- [ ] Tests are owned by the package that owns the code being tested
+
 ## When Reviewing Test Files
 
 Provide:
@@ -94,6 +108,8 @@ Provide:
 
 ## Common Anti-Patterns to Flag
 
+### Test Quality Anti-Patterns
+
 - Tests that only check mock data returns correctly (testing your mocks, not your code)
 - Conditional assertions that silently pass when elements don't exist
 - Missing negative test cases (verifying denied access)
@@ -101,6 +117,14 @@ Provide:
 - Hardcoded waits instead of proper async handling
 - Tests that pass regardless of feature state
 - Role/permission tests that only check UI, not server enforcement
+
+### Test Architecture Anti-Patterns
+
+- **Using Playwright as an HTTP client**: Making raw API calls with `request.get()` / `request.post()` without any browser interaction - these should be server integration tests using supertest/vitest
+- **Comprehensive API permission matrices in E2E**: Testing every role × endpoint × method combination in E2E is slow; this belongs in server integration tests
+- **Testing server logic in the wrong package**: API permission enforcement tests in `packages/playground/e2e/` instead of `packages/server/`
+- **Duplicating server tests at E2E level**: If server already tests permissions, E2E should only have 1-2 smoke tests to verify integration
+- **E2E tests that don't need a browser**: If a test never calls `page.goto()` or interacts with UI elements, it shouldn't be an E2E test
 
 ## Output Format
 
@@ -126,6 +150,12 @@ Structure your response as:
 #### Security Concerns (if applicable)
 - [Auth/RBAC specific issues]
 
+#### Architecture Concerns
+- [Tests at wrong level of the test pyramid]
+- [Tests in wrong package/ownership issues]
+- [Awkward tool usage (e.g., Playwright as HTTP client)]
+- [Suggestions for where tests should live instead]
+
 ### Recommendations
 | Priority | Issue | Recommendation |
 |----------|-------|----------------|
@@ -140,10 +170,40 @@ Structure your response as:
 | Security Enforcement | ⭐⭐ | ... |
 | Test Reliability | ⭐⭐⭐ | ... |
 | Real-World Scenarios | ⭐⭐⭐ | ... |
+| Test Architecture | ⭐⭐⭐ | Are tests at the right level? In the right package? |
 
 ### Verdict
 [Overall assessment: Does this provide real safety for users?]
 ```
+
+## Test Location Reference
+
+Use this guide to evaluate whether tests are in the right place:
+
+| Test Type                            | Correct Location                     | Wrong Location             |
+| ------------------------------------ | ------------------------------------ | -------------------------- |
+| API permission enforcement (401/403) | `packages/server/` integration tests | `packages/playground/e2e/` |
+| Permission middleware unit tests     | `packages/server/` unit tests        | E2E tests                  |
+| UI shows/hides elements by role      | `packages/playground/e2e/`           | Server tests               |
+| UI handles 401/403 gracefully        | `packages/playground/e2e/`           | Server tests               |
+| Login/logout user flows              | `packages/playground/e2e/`           | Server tests               |
+| Role × endpoint × method matrix      | `packages/server/`                   | E2E (too slow)             |
+| Integration smoke test (1-2 cases)   | `packages/playground/e2e/`           | N/A                        |
+
+### What E2E Tests SHOULD Do
+
+- Simulate real user journeys (click, navigate, fill forms)
+- Verify UI reflects backend state correctly
+- Test error handling when server returns errors
+- Verify navigation and routing works
+- 1-2 smoke tests for critical integrations
+
+### What E2E Tests Should NOT Do
+
+- Comprehensive API testing (use server integration tests)
+- Test every permission combination (use server tests)
+- Make raw HTTP requests without browser interaction
+- Test server-side logic that doesn't affect UI
 
 ## Example Invocations
 

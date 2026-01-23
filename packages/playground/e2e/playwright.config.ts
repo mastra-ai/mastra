@@ -6,7 +6,7 @@ const BASE_URL = `http://localhost:${PORT || '4111'}`;
 const webservers: PlaywrightTestConfig['webServer'] = [
   {
     // UI tests use route interception for auth mocking - no server auth needed
-    // For server-side permission tests, use playwright.auth-server.config.ts
+    // Server-side permission tests are in server-adapters/hono
     command: `pnpm -C ./kitchen-sink dev`,
     url: `http://localhost:4111`,
     timeout: 120_000,
@@ -24,9 +24,6 @@ if (PORT) {
 
 export default defineConfig({
   testDir: './tests',
-  // Exclude auth-server folder - those tests need E2E_TEST_AUTH=true
-  // Run those with: npx playwright test -c playwright.auth-server.config.ts
-  testIgnore: '**/auth-server/**',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,

@@ -26,7 +26,6 @@
     "test:e2e": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts --ui",
     "test:e2e:dev:ui": "pnpm test:e2e:setup && E2E_PORT=5173 playwright test -c e2e/playwright.config.ts --ui",
-    "test:e2e:server": "pnpm test:e2e:setup && playwright test -c e2e/playwright.auth-server.config.ts",
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --ignore-workspace --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {

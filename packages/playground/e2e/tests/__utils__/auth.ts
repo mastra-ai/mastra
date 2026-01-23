@@ -211,8 +211,8 @@ export function buildCurrentUserResponse(config: MockAuthConfig): MockUser | nul
  * to return mock data based on the provided configuration.
  *
  * Note: This is for UI testing only. It uses route interception to mock
- * auth responses. For server-side permission enforcement tests, use
- * playwright.auth-server.config.ts which enables the TestAuthProvider.
+ * auth responses. Server-side permission enforcement tests are in
+ * server-adapters/hono/src/__tests__/rbac-permissions.test.ts.
  *
  * @example Basic usage with admin role
  * ```typescript
