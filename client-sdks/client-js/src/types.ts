@@ -108,6 +108,8 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   source?: 'code' | 'stored';
   activeVersionId?: string;
 }
@@ -170,6 +172,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema?: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -219,6 +222,8 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
   stateSchema: string;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
