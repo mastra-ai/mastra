@@ -19,7 +19,7 @@ catalogs:
 overrides:
   typescript: ^5.9.3
   '@types/node': 22.19.7
-  cookie: '>=0.7.2'
+  cookie: '>=1.1.1'
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
