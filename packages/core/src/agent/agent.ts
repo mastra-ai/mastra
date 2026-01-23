@@ -299,9 +299,9 @@ export class Agent<
    * console.log(skills.map(s => s.id)); // ['code-review', 'docs']
    * ```
    */
-  public async listSkills({
-    requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<LoadedSkill[]> {
+  public async listSkills({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
+    LoadedSkill[]
+  > {
     if (!this.#skills || !this.#skillsManager) {
       return [];
     }
@@ -365,9 +365,7 @@ ${skill.content.instructions}
 
     // Combine base instructions with skills
     const baseText =
-      typeof baseInstructions === 'string'
-        ? baseInstructions
-        : this.#convertInstructionsToString(baseInstructions);
+      typeof baseInstructions === 'string' ? baseInstructions : this.#convertInstructionsToString(baseInstructions);
 
     return `${baseText}\n\n---\n\n# Active Skills\n\n${skillsSection}`;
   }
@@ -2104,11 +2102,11 @@ ${skill.content.instructions}
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                      memory: {
-                        resource: subAgentResourceId,
-                        thread: subAgentThreadId,
-                      },
-                    }
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
                     : {}),
                 });
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
@@ -2133,11 +2131,11 @@ ${skill.content.instructions}
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                      memory: {
-                        resource: subAgentResourceId,
-                        thread: subAgentThreadId,
-                      },
-                    }
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
                     : {}),
                 });
 
@@ -2340,16 +2338,16 @@ ${skill.content.instructions}
               } else if (methodType === 'stream') {
                 const streamResult = resumeData
                   ? run.resumeStream({
-                    resumeData,
-                    requestContext,
-                    tracingContext: context?.tracingContext,
-                  })
+                      resumeData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                    })
                   : run.stream({
-                    inputData: workflowInputData,
-                    requestContext,
-                    tracingContext: context?.tracingContext,
-                    ...(initialState && { initialState }),
-                  });
+                      inputData: workflowInputData,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(initialState && { initialState }),
+                    });
 
                 if (context?.writer) {
                   await streamResult.fullStream.pipeTo(context.writer);
@@ -2646,8 +2644,8 @@ ${skill.content.instructions}
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
@@ -2867,11 +2865,11 @@ ${skill.content.instructions}
     const threadFromArgs = threadIdFromContext
       ? { id: threadIdFromContext }
       : resolveThreadIdFromArgs({
-        memory: {
-          ...options.memory,
-          thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
-        },
-      });
+          memory: {
+            ...options.memory,
+            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+          },
+        });
 
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
@@ -3923,10 +3921,10 @@ ${skill.content.instructions}
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-        ? z.infer<OUTPUT>
-        : EXPERIMENTAL_OUTPUT extends ZodSchema
-        ? z.infer<EXPERIMENTAL_OUTPUT>
-        : unknown
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;

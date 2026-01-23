@@ -1,15 +1,15 @@
 {
-    "name": "agent-with-skills",
-    "version": "1.0.0",
-    "scripts": {
-        "start": "tsx src/index.ts"
-    },
-    "dependencies": {
-        "@mastra/core": "workspace:*",
-        "dotenv": "^16.4.5"
-    },
-    "devDependencies": {
-        "tsx": "^4.7.1",
-        "typescript": "^5.3.3"
-    }
+  "name": "agent-with-skills",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
 }

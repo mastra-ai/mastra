@@ -187,10 +187,7 @@ skillsCommand
   .option('-d, --dir <path>', 'Directory to create the skill in (default: .mastra/skills)')
   .action(createSkill);
 
-skillsCommand
-  .command('validate [path]')
-  .description('Validate a skill directory')
-  .action(validateSkill);
+skillsCommand.command('validate [path]').description('Validate a skill directory').action(validateSkill);
 
 skillsCommand
   .command('list')
