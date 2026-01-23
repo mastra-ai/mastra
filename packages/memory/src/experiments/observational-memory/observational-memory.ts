@@ -1202,94 +1202,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * For end/failed markers, this should be called AFTER writer.custom() has added the part,
    * so we just find the part and add sealing metadata.
    */
-  private async insertObservationMarker(
-    message: MastraDBMessage,
-    marker: DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart,
-    options?: { skipPush?: boolean },
-  ): Promise<void> {
-    if (!message.id) {
-      omWarn(`[OM] Cannot insert observation marker: message has no ID`);
-      return;
-    }
 
-    // Mutate the message's parts array directly - this updates the in-memory messageList
-    if (!message.content?.parts) {
-      omWarn(`[OM] Message ${message.id.slice(-8)} has no content.parts, cannot insert marker`);
-      return;
-    }
-
-    // For start markers, we push directly (no streaming involved yet)
-    // For end/failed markers, the part is already added by writer.custom() -> stream handler
-    if (!options?.skipPush) {
-      message.content.parts.push(marker as any);
-    }
-
-    // For end/failed markers, seal the message to prevent future merging
-    // This ensures observation markers are preserved when new content is added
-    const isEndOrFailedMarker =
-      marker.type === 'data-om-observation-end' || marker.type === 'data-om-observation-failed';
-
-    if (isEndOrFailedMarker) {
-      // Initialize metadata structure if needed
-      if (!message.content.metadata) {
-        message.content.metadata = {};
-      }
-      const metadata = message.content.metadata as { mastra?: { sealed?: boolean } };
-      if (!metadata.mastra) {
-        metadata.mastra = {};
-      }
-      metadata.mastra.sealed = true;
-
-      // Find the marker part we need to seal (it may have been added by writer.custom())
-      // Look for the part with matching cycleId
-      const cycleId = (marker as { data?: { cycleId?: string } }).data?.cycleId;
-      let markerPart: { metadata?: { mastra?: { sealedAt?: number } } } | undefined;
-
-      if (cycleId) {
-        // Find by cycleId for precise matching
-        markerPart = message.content.parts.find((p: any) => p.type === marker.type && p.data?.cycleId === cycleId) as
-          | { metadata?: { mastra?: { sealedAt?: number } } }
-          | undefined;
-      }
-
-      // Fallback to last part if not found by cycleId
-      if (!markerPart) {
-        markerPart = message.content.parts[message.content.parts.length - 1] as {
-          metadata?: { mastra?: { sealedAt?: number } };
-        };
-      }
-
-      if (markerPart) {
-        if (!markerPart.metadata) {
-          markerPart.metadata = {};
-        }
-        if (!markerPart.metadata.mastra) {
-          markerPart.metadata.mastra = {};
-        }
-        markerPart.metadata.mastra.sealedAt = Date.now();
-      }
-
-      omDebug(`[OM] Sealed message ${message.id.slice(-8)} after ${marker.type}`);
-    }
-
-    omDebug(`[OM] Inserted ${marker.type} marker into message ${message.id.slice(-8)}`);
-
-    // Persist the marker (and seal status) to storage so it survives page refresh
-    try {
-      await this.storage.updateMessages({
-        messages: [
-          {
-            id: message.id,
-            content: message.content,
-          },
-        ],
-      });
-      omDebug(`[OM] Persisted ${marker.type} marker to storage for message ${message.id.slice(-8)}`);
-    } catch (error) {
-      omWarn(`[OM] Failed to persist ${marker.type} marker to storage: ${error}`);
-      // Don't throw - the marker is still in memory and will work for the current session
-    }
-  }
 
   /**
    * Get unobserved parts from a message.
@@ -2577,7 +2490,6 @@ ${formattedMessages}
       }
 
       // Then add to message (skipPush since writer.custom already added the part)
-      // await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
     }
 
     try {
@@ -2692,7 +2604,6 @@ ${formattedMessages}
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
-        // await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
       }
 
       // Emit debug event for observation complete
@@ -2733,7 +2644,6 @@ ${formattedMessages}
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
-        // await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
       }
       throw error;
     } finally {
@@ -3023,7 +2933,6 @@ ${formattedMessages}
           }
 
           // Then add to message (skipPush since writer.custom already added the part)
-          // await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
         }
       }
 
@@ -3339,7 +3248,6 @@ ${formattedMessages}
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
-          // await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
         }
       }
 
@@ -3380,7 +3288,6 @@ ${formattedMessages}
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
-          // await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
         }
       }
       throw error;
