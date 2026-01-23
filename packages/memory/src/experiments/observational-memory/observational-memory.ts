@@ -2096,8 +2096,10 @@ ${suggestedResponse}
         });
 
         // Save messages with markers
-        const newInput = messageList.clear.input.db();
-        const newOutput = messageList.clear.response.db();
+        // Use .get instead of .clear - we don't want to remove messages from messageList
+        // since the agent may continue using them in subsequent steps
+        const newInput = messageList.get.input.db();
+        const newOutput = messageList.get.response.db();
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
