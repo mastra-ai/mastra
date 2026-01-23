@@ -63,7 +63,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
         const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
+        const contentLength = c.req.header('content-length');
+        // Only parse if content-type is JSON and body is not empty
+        if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
             const clonedReq = c.req.raw.clone();
             const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
@@ -178,10 +180,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
       } else {
-        try {
-          body = await request.json();
-        } catch (error) {
-          console.error('Failed to parse JSON body:', error);
+        // Skip JSON parsing if body is empty (Content-Length: 0)
+        const contentLength = request.header('content-length');
+        if (contentLength !== '0') {
+          try {
+            body = await request.json();
+          } catch (error) {
+            console.error('Failed to parse JSON body:', error);
+          }
         }
       }
     }
