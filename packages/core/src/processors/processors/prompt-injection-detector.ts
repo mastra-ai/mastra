@@ -256,6 +256,9 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           tracingContext,
         });
 
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
         result = response.object as PromptInjectionResult;
       }
 
