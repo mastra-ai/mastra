@@ -78,6 +78,7 @@ import type {
   DataOmObservationStartPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
+  DataOmProgressPart,
   ObservationMarkerConfig,
 } from './types';
 
@@ -1970,6 +1971,9 @@ ${suggestedResponse}
         this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
       );
 
+      const reflectionThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+      const reflectionThresholdPercent = Math.round((currentObservationTokens / reflectionThreshold) * 100);
+
       omDebug(
         `[OM processInputStep] Token check: ${totalPendingTokens}/${threshold} (${Math.round((totalPendingTokens / threshold) * 100)}%)`,
       );
@@ -1988,6 +1992,28 @@ ${suggestedResponse}
         willSave: totalPendingTokens >= threshold,
         willObserve: totalPendingTokens >= threshold,
       });
+
+      // Stream progress part to UI for real-time feedback
+      if (writer) {
+        const progressPart: DataOmProgressPart = {
+          type: 'data-om-progress',
+          data: {
+            pendingTokens: totalPendingTokens,
+            threshold,
+            thresholdPercent: Math.round((totalPendingTokens / threshold) * 100),
+            observationTokens: currentObservationTokens,
+            reflectionThreshold,
+            reflectionThresholdPercent,
+            willObserve: totalPendingTokens >= threshold,
+            recordId: record.id,
+            threadId,
+            stepNumber,
+          },
+        };
+        await writer.custom(progressPart).catch(() => {
+          // Ignore errors if stream is closed
+        });
+      }
 
       if (totalPendingTokens >= threshold) {
         omDebug(`[OM processInputStep] Threshold reached, triggering observation`);

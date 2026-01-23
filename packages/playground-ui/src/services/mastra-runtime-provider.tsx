@@ -317,16 +317,33 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
-  const { setIsObservingFromStream, signalObservationsUpdated } = useObservationalMemoryContext();
+  const { setIsObservingFromStream, signalObservationsUpdated, setStreamProgress } = useObservationalMemoryContext();
 
   // Helper to signal observation started (from streaming)
   const handleObservationStart = () => {
     setIsObservingFromStream(true);
   };
 
+  // Helper to update progress from streamed data-om-progress parts
+  const handleProgressUpdate = (data: any) => {
+    setStreamProgress({
+      pendingTokens: data.pendingTokens,
+      threshold: data.threshold,
+      thresholdPercent: data.thresholdPercent,
+      observationTokens: data.observationTokens,
+      reflectionThreshold: data.reflectionThreshold,
+      reflectionThresholdPercent: data.reflectionThresholdPercent,
+      willObserve: data.willObserve,
+      recordId: data.recordId,
+      threadId: data.threadId,
+      stepNumber: data.stepNumber,
+    });
+  };
+
   // Helper to refresh OM sidebar when observation completes
   const refreshObservationalMemory = () => {
     setIsObservingFromStream(false);
+    setStreamProgress(null); // Clear progress when observation completes
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
@@ -429,6 +446,11 @@ export function MastraRuntimeProvider({
                 handleObservationStart();
               }
 
+              // Update progress from streamed data-om-progress parts
+              if ((chunk as any).type === 'data-om-progress') {
+                handleProgressUpdate((chunk as any).data);
+              }
+
               // Refresh OM sidebar when observation completes (if OM chunks are passed through network mode)
               if ((chunk as any).type === 'data-om-observation-end' || (chunk as any).type === 'data-om-observation-failed') {
                 refreshObservationalMemory();
@@ -478,6 +500,11 @@ export function MastraRuntimeProvider({
                 // Signal observation started (for sidebar status)
                 if (chunk.type === 'data-om-observation-start') {
                   handleObservationStart();
+                }
+
+                // Update progress from streamed data-om-progress parts
+                if (chunk.type === 'data-om-progress') {
+                  handleProgressUpdate((chunk as any).data);
                 }
 
                 // Refresh OM sidebar when observation completes

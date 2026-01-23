@@ -2,6 +2,20 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
+/** Progress data streamed from OM in real-time */
+export interface OmProgressData {
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  willObserve: boolean;
+  recordId: string;
+  threadId: string;
+  stepNumber: number;
+}
+
 interface ObservationalMemoryContextValue {
   /** Whether an observation is currently in progress (from streaming) */
   isObservingFromStream: boolean;
@@ -11,6 +25,10 @@ interface ObservationalMemoryContextValue {
   observationsUpdatedAt: number;
   /** Signal that observations were updated (triggers scroll) */
   signalObservationsUpdated: () => void;
+  /** Real-time progress data from streaming */
+  streamProgress: OmProgressData | null;
+  /** Update progress data from stream */
+  setStreamProgress: (data: OmProgressData | null) => void;
 }
 
 const ObservationalMemoryContext = createContext<ObservationalMemoryContextValue | null>(null);
@@ -18,6 +36,7 @@ const ObservationalMemoryContext = createContext<ObservationalMemoryContextValue
 export function ObservationalMemoryProvider({ children }: { children: ReactNode }) {
   const [isObservingFromStream, setIsObservingFromStream] = useState(false);
   const [observationsUpdatedAt, setObservationsUpdatedAt] = useState(0);
+  const [streamProgress, setStreamProgress] = useState<OmProgressData | null>(null);
 
   const signalObservationsUpdated = useCallback(() => {
     setObservationsUpdatedAt(Date.now());
@@ -30,6 +49,8 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
         setIsObservingFromStream,
         observationsUpdatedAt,
         signalObservationsUpdated,
+        streamProgress,
+        setStreamProgress,
       }}
     >
       {children}
@@ -46,6 +67,8 @@ export function useObservationalMemoryContext() {
       setIsObservingFromStream: () => {},
       observationsUpdatedAt: 0,
       signalObservationsUpdated: () => {},
+      streamProgress: null,
+      setStreamProgress: () => {},
     };
   }
   return context;

@@ -315,12 +315,52 @@ export interface DataOmObservationFailedPart {
 }
 
 /**
+ * Progress marker streamed during agent execution to provide real-time
+ * token progress updates for UI feedback.
+ */
+export interface DataOmProgressPart {
+  type: 'data-om-progress';
+  data: {
+    /** Current pending tokens (unobserved message tokens) */
+    pendingTokens: number;
+
+    /** Current observation threshold */
+    threshold: number;
+
+    /** Percentage of threshold reached */
+    thresholdPercent: number;
+
+    /** Current observation tokens (for reflection progress) */
+    observationTokens: number;
+
+    /** Reflection threshold */
+    reflectionThreshold: number;
+
+    /** Percentage of reflection threshold reached */
+    reflectionThresholdPercent: number;
+
+    /** Whether observation will trigger */
+    willObserve: boolean;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** Thread ID */
+    threadId: string;
+
+    /** Step number in the agent loop */
+    stepNumber: number;
+  };
+}
+
+/**
  * Union of all observation marker types.
  */
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
-  | DataOmObservationFailedPart;
+  | DataOmObservationFailedPart
+  | DataOmProgressPart;
 
 /**
  * @deprecated Use DataOmObservationStartPart and DataOmObservationEndPart instead.

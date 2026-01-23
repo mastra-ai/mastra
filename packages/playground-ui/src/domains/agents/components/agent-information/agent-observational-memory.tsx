@@ -1,13 +1,52 @@
 import { useState, useMemo } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { ChevronRight, ChevronDown, Brain, RefreshCcw, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, ExternalLink } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useObservationalMemory, useMemoryWithOMStatus } from '@/domains/memory/hooks';
-import { Button } from '@/ds/components/Button/Button';
-import { useQueryClient } from '@tanstack/react-query';
+import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
+
+// Progress bar component with improved styling
+const ProgressBar = ({ 
+  value, 
+  max, 
+  label, 
+  colorClass = 'bg-purple-500',
+  glowClass = ''
+}: { 
+  value: number; 
+  max: number; 
+  label: string;
+  colorClass?: string;
+  glowClass?: string;
+}) => {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  const formatTokens = (n: number) => {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+    return n.toString();
+  };
+  
+  return (
+    <div className="flex items-center gap-3">
+      {/* Label on left */}
+      <span className="text-xs text-neutral4 whitespace-nowrap min-w-[90px]">{label}</span>
+      
+      {/* Progress bar in middle */}
+      <div className="flex-1 h-2 bg-surface2 rounded-full overflow-hidden">
+        <div 
+          className={`h-full ${colorClass} ${glowClass} transition-all duration-300 ease-out rounded-full`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      
+      {/* Tokens + percentage on right */}
+      <span className="text-xs text-neutral3 whitespace-nowrap tabular-nums">
+        {formatTokens(value)}/{formatTokens(max)} ({Math.round(percentage)}%)
+      </span>
+    </div>
+  );
+};
 
 interface AgentObservationalMemoryProps {
   agentId: string;
@@ -16,12 +55,14 @@ interface AgentObservationalMemoryProps {
 }
 
 export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: AgentObservationalMemoryProps) => {
-  const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Get real-time observation status from streaming context
-  const { isObservingFromStream } = useObservationalMemoryContext();
+  // Get real-time observation status and progress from streaming context
+  const { isObservingFromStream, streamProgress } = useObservationalMemoryContext();
+
+  // Get OM config to get thresholds
+  const { data: configData } = useMemoryConfig(agentId);
 
   // Get OM status to check if enabled (polls when observing/reflecting)
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
@@ -39,7 +80,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const {
     data: omData,
     isLoading: isOMLoading,
-    refetch,
   } = useObservationalMemory({
     agentId,
     resourceId,
@@ -52,6 +92,27 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isEnabled = statusData?.observationalMemory?.enabled ?? false;
   const record = omData?.record;
   const history = omData?.history ?? [];
+
+  // Extract threshold values from config (handle both number and {min, max} formats)
+  // The config response includes observationalMemory when OM is enabled
+  const omConfig = (configData?.config as { observationalMemory?: {
+    enabled: boolean;
+    scope?: 'thread' | 'resource';
+    observationThreshold?: number | { min: number; max: number };
+    reflectionThreshold?: number | { min: number; max: number };
+  }})?.observationalMemory;
+  const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
+    if (!threshold) return defaultValue;
+    if (typeof threshold === 'number') return threshold;
+    return threshold.max; // Use max for progress display
+  };
+  // Use stream progress thresholds when available (real-time), fallback to config
+  const observationThreshold = streamProgress?.threshold ?? getThresholdValue(omConfig?.observationThreshold, 10000);
+  const reflectionThreshold = streamProgress?.reflectionThreshold ?? getThresholdValue(omConfig?.reflectionThreshold, 30000);
+
+  // Use stream progress token counts when available (real-time), fallback to record
+  const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
+  const observationTokenCount = streamProgress?.observationTokens ?? record?.observationTokenCount ?? 0;
 
   // Only show history if there are reflected records (more than just the current active one)
   const reflectedHistory = useMemo(() => {
@@ -87,12 +148,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     return d.toLocaleDateString();
-  };
-
-  // Handle refresh
-  const handleRefresh = () => {
-    refetch();
-    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId, resourceId, threadId] });
   };
 
   if (isLoading) {
@@ -135,28 +190,43 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   return (
     <div className="p-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-purple-400" />
-          <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-          {/* Status label in header */}
-          {isObserving ? (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
-              memorizing
-            </span>
-          ) : isReflecting ? (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
-              reflecting
-            </span>
-          ) : hasObservations ? (
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-              active
-            </span>
-          ) : null}
-        </div>
-        <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-7 px-2">
-          <RefreshCcw className="w-3 h-3" />
-        </Button>
+      <div className="flex items-center gap-2 mb-3">
+        <Brain className="w-4 h-4 text-purple-400" />
+        <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
+        {/* Status label in header */}
+        {isObserving ? (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
+            memorizing
+          </span>
+        ) : isReflecting ? (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
+            reflecting
+          </span>
+        ) : hasObservations ? (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+            active
+          </span>
+        ) : null}
+      </div>
+
+      {/* Progress Bars for Thresholds */}
+      <div className="space-y-2.5 mb-3">
+        <ProgressBar
+          value={pendingMessageTokens}
+          max={observationThreshold}
+          label="Next observation"
+          colorClass={isObserving ? 'bg-yellow-500' : 'bg-purple-500'}
+          glowClass={isObserving ? 'shadow-[0_0_8px_rgba(234,179,8,0.5)]' : ''}
+        />
+        {hasObservations && (
+          <ProgressBar
+            value={observationTokenCount}
+            max={reflectionThreshold}
+            label="Next reflection"
+            colorClass={isReflecting ? 'bg-blue-500' : 'bg-purple-500/60'}
+            glowClass={isReflecting ? 'shadow-[0_0_8px_rgba(59,130,246,0.5)]' : ''}
+          />
+        )}
       </div>
 
       {/* No observations message - show when no observations exist */}
