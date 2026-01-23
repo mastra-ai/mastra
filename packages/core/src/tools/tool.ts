@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
 import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
+import { validateRequestContext, validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -62,12 +62,14 @@ export class Tool<
   TSchemaOut = unknown,
   TSuspendSchema = unknown,
   TResumeSchema = unknown,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+  TRequestContext extends Record<string, any> = Record<string, any>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, TRequestContext> = ToolExecutionContext<
     TSuspendSchema,
-    TResumeSchema
+    TResumeSchema,
+    TRequestContext
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -87,12 +89,18 @@ export class Tool<
   resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated before tool execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+
+  /**
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId>['execute'];
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -155,13 +163,14 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId>) {
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.suspendSchema = opts.suspendSchema;
     this.resumeSchema = opts.resumeSchema;
+    this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
@@ -282,6 +291,18 @@ export class Tool<
           }
         }
 
+        // Validate request context if schema exists
+        if (this.requestContextSchema) {
+          const contextValidation = validateRequestContext(
+            this.requestContextSchema,
+            organizedContext.requestContext,
+            this.id,
+          );
+          if (contextValidation.error) {
+            return contextValidation.error as any;
+          }
+        }
+
         // Call the original execute with validated input and organized context
         const output = await originalExecute(data as any, organizedContext);
 
@@ -388,9 +409,14 @@ export function createTool<
   TSchemaOut = unknown,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> = Record<string, any>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
-): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId> {
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId> {
   return new Tool(opts);
 }

@@ -7,12 +7,12 @@ export const cookingTool = createTool({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
-  execute: async (inputData, context) => {
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('My cooking tool is running!', inputData.ingredient);
-    if (context?.agent?.toolCallId) {
-      console.log('Cooking tool call ID:', context.agent.toolCallId);
-    }
-    return 'My tool result';
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async (inputData, { requestContext }) => {
+    const userId = requestContext?.get('userId');
+    console.log('My cooking tool is running!', inputData.ingredient, userId);
+    return `My tool result: ${inputData.ingredient} from ${userId}`;
   },
 });

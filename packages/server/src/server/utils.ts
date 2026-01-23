@@ -96,6 +96,9 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
         stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
+        requestContextSchema: step.requestContextSchema
+          ? stringify(zodToJsonSchema(step.requestContextSchema))
+          : undefined,
         component: step.component,
       };
       return acc;
@@ -105,6 +108,9 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
+    requestContextSchema: workflow.requestContextSchema
+      ? stringify(zodToJsonSchema(workflow.requestContextSchema))
+      : undefined,
     options: workflow.options,
     isProcessorWorkflow: workflow.type === 'processor' || looksLikeProcessorStepSchema(workflow.inputSchema),
   };

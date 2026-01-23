@@ -1,9 +1,33 @@
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 
-export type DynamicArgument<T> =
+/**
+ * A value that can be either static or dynamically resolved at runtime.
+ * When used with a requestContextSchema, the TRequestContext generic provides
+ * typed access to the request context values.
+ *
+ * @example
+ * ```typescript
+ * // Static value
+ * const instructions: DynamicArgument<string> = "You are a helpful assistant";
+ *
+ * // Dynamic value with typed context
+ * const instructions: DynamicArgument<string, { userId: string }> = ({ requestContext }) => {
+ *   const { userId } = requestContext.all; // Properly typed!
+ *   return `You are helping user ${userId}`;
+ * };
+ * ```
+ */
+export type DynamicArgument<T, TRequestContext extends Record<string, any> = Record<string, any>> =
   | T
-  | (({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T);
+  | (({
+      requestContext,
+      mastra,
+    }: {
+      requestContext: RequestContext<TRequestContext>;
+      mastra?: Mastra;
+    }) => Promise<T> | T);
+
 
 export type NonEmpty<T extends string> = T extends '' ? never : T;
 

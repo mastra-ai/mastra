@@ -539,6 +539,7 @@ export type StepParams<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -547,6 +548,11 @@ export type StepParams<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TStateSchema;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated before step execution.
+   */
+  requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -700,6 +706,11 @@ export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, 
   inputSchema: SchemaWithValidation<TInput>;
   outputSchema: SchemaWithValidation<TOutput>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated before workflow execution.
+   */
+  requestContextSchema?: SchemaWithValidation<unknown>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

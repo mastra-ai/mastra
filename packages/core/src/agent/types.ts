@@ -29,6 +29,7 @@ import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } fr
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
+import type { SchemaWithValidation } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -49,7 +50,6 @@ export type { LLMStepResult } from '../stream/types';
 export type ToolsInput = Record<string, ToolAction<any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
 
 export type AgentInstructions = SystemMessage;
-export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -111,17 +111,17 @@ export interface AgentCreateOptions {
 
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
 // Without this TS doesn't understand the function/string union type from DynamicArgument
-type DynamicModel = ({
+type DynamicModel<TRequestContext extends Record<string, any> = Record<string, any>> = ({
   requestContext,
   mastra,
 }: {
-  requestContext: RequestContext;
+  requestContext: RequestContext<TRequestContext>;
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
-type ModelWithRetries = {
+type ModelWithRetries<TRequestContext extends Record<string, any> = Record<string, any>> = {
   id?: string;
-  model: MastraModelConfig | DynamicModel;
+  model: MastraModelConfig | DynamicModel<TRequestContext>;
   maxRetries?: number; //defaults to 0
   enabled?: boolean; //defaults to true
 };
@@ -130,6 +130,7 @@ export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
+  TRequestContext extends Record<string, any> = Record<string, any>,
 > {
   /**
    * Identifier for the agent.
@@ -146,12 +147,13 @@ export interface AgentConfig<
   /**
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
+   * When a requestContextSchema is provided, the requestContext parameter in functions will be typed.
    */
-  instructions: DynamicAgentInstructions;
+  instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
    */
-  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
+  model: MastraModelConfig | DynamicModel<TRequestContext> | ModelWithRetries<TRequestContext>[];
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
@@ -160,11 +162,11 @@ export interface AgentConfig<
   /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
-  tools?: DynamicArgument<TTools>;
+  tools?: DynamicArgument<TTools, TRequestContext>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>, TRequestContext>;
   /**
    * Default options used when calling `generate()`.
    */
@@ -176,7 +178,7 @@ export interface AgentConfig<
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
@@ -201,7 +203,7 @@ export interface AgentConfig<
    * });
    * ```
    */
-  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions, TRequestContext>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -209,16 +211,16 @@ export interface AgentConfig<
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, Agent>>;
+  agents?: DynamicArgument<Record<string, Agent>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
-  scorers?: DynamicArgument<MastraScorers>;
+  scorers?: DynamicArgument<MastraScorers, TRequestContext>;
 
   /**
    * Memory module used for storing and retrieving stateful context.
    */
-  memory?: DynamicArgument<MastraMemory>;
+  memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Voice settings for speech input and output.
    */
@@ -228,13 +230,13 @@ export interface AgentConfig<
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Output processors that can modify or validate messages from the agent, before it is sent to the client.
    * These can be individual processors (implementing `processOutputResult`, `processOutputStream`, or `processOutputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.
@@ -246,6 +248,29 @@ export interface AgentConfig<
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated once at start of generate() and stream() methods.
+   * The validated context values will be available via requestContext.all with proper typing.
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   id: 'my-agent',
+   *   name: 'My Agent',
+   *   instructions: ({ requestContext }) => {
+   *     const { userId, apiKey } = requestContext.all; // Properly typed!
+   *     return `You are helping user ${userId}`;
+   *   },
+   *   model: 'gpt-4',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     apiKey: z.string(),
+   *   }),
+   * });
+   * ```
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
 }
 
 export type AgentMemoryOption = {

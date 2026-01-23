@@ -29,6 +29,7 @@ import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
+import { validateRequestContext } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
@@ -159,8 +160,17 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -168,7 +178,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 /**
@@ -203,10 +214,11 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
   TId extends string,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
 
@@ -244,8 +256,17 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -253,7 +274,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 // ============================================
@@ -295,8 +317,17 @@ function createStepFromParams<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -304,7 +335,8 @@ function createStepFromParams<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 > {
   return {
     id: params.id,
@@ -314,6 +346,7 @@ function createStepFromParams<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -1205,6 +1238,11 @@ export class Workflow<
   public inputSchema: SchemaWithValidation<TInput>;
   public outputSchema: SchemaWithValidation<TOutput>;
   public stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated once when workflow starts executing.
+   */
+  public requestContextSchema?: SchemaWithValidation<unknown>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1233,6 +1271,7 @@ export class Workflow<
     inputSchema,
     outputSchema,
     stateSchema,
+    requestContextSchema,
     description,
     executionEngine,
     retryConfig,
@@ -1246,6 +1285,7 @@ export class Workflow<
     this.inputSchema = inputSchema;
     this.outputSchema = outputSchema;
     this.stateSchema = stateSchema;
+    this.requestContextSchema = requestContextSchema;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -1836,6 +1876,7 @@ export class Workflow<
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
+        requestContextSchema: this.requestContextSchema,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -2443,6 +2484,7 @@ export class Run<
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: SchemaWithValidation<TState>;
   protected inputSchema?: SchemaWithValidation<TInput>;
+  protected requestContextSchema?: SchemaWithValidation<unknown>;
 
   protected cleanup?: () => void;
 
@@ -2471,6 +2513,7 @@ export class Run<
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
     workflowEngineType: WorkflowEngineType;
+    requestContextSchema?: SchemaWithValidation<unknown>;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -2488,6 +2531,7 @@ export class Run<
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
     this.inputSchema = params.inputSchema;
+    this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
   }
@@ -2664,6 +2708,24 @@ export class Run<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
+    // Validate request context if schema exists
+    const validatedRequestContext = requestContext ?? new RequestContext();
+    if (this.requestContextSchema) {
+      const contextValidation = validateRequestContext(
+        this.requestContextSchema,
+        validatedRequestContext,
+        this.workflowId,
+      );
+      if (contextValidation.error) {
+        throw new MastraError({
+          category: ErrorCategory.USER,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          id: 'REQUEST_CONTEXT_VALIDATION_FAILED',
+          text: contextValidation.error.message,
+        });
+      }
+    }
+
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -2675,7 +2737,7 @@ export class Run<
       initialState: initialStateToUse,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext: validatedRequestContext,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,

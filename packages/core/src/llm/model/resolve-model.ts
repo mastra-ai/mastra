@@ -68,17 +68,17 @@ export function isOpenAICompatibleObjectConfig(
  * );
  * ```
  */
-export async function resolveModelConfig(
+export async function resolveModelConfig<TRequestContext extends Record<string, any> = Record<string, any>>(
   modelConfig:
     | MastraModelConfig
     | (({
         requestContext,
         mastra,
       }: {
-        requestContext: RequestContext;
+        requestContext: RequestContext<TRequestContext>;
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
-  requestContext: RequestContext = new RequestContext(),
+  requestContext: RequestContext<TRequestContext> = new RequestContext() as RequestContext<TRequestContext>,
   mastra?: Mastra,
 ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
   // If it's a function, resolve it first

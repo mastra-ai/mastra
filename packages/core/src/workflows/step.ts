@@ -84,6 +84,7 @@ export interface Step<
   TResume = unknown,
   TSuspend = unknown,
   TEngineType = any,
+  TRequestContext = unknown,
 > {
   id: TStepId;
   description?: string;
@@ -92,6 +93,11 @@ export interface Step<
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;

@@ -47,13 +47,21 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
     if (!tool) return;
+
+    // Merge global playground request context with schema request context.
+    // Schema values take precedence and explicitly override global values,
+    // including when schema values are empty strings (user intentionally cleared them).
+    const requestContext = {
+      ...(playgroundRequestContext ?? {}),
+      ...(schemaRequestContext ?? {}),
+    };
 
     return executeTool({
       toolId: tool.id,
       input: data,
-      requestContext: playgroundRequestContext,
+      requestContext,
     });
   };
 
@@ -89,6 +97,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
+      requestContextSchema={tool.requestContextSchema}
     />
   );
 };

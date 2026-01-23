@@ -40,6 +40,9 @@ export const LIST_TOOLS_ROUTE = createRoute({
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
             outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+            requestContextSchema: tool.requestContextSchema
+              ? stringify(zodToJsonSchema(tool.requestContextSchema))
+              : undefined,
           };
           return acc;
         },
@@ -81,6 +84,9 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;
@@ -186,6 +192,9 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;

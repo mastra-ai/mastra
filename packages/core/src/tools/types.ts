@@ -233,10 +233,14 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
+export interface ToolExecutionContext<
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> = Record<string, any>,
+> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<TRequestContext>;
   tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
 
@@ -261,7 +265,12 @@ export interface ToolAction<
   TSchemaOut,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> = Record<string, any>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
   TId extends string = string,
 > {
   id: TId;
@@ -270,6 +279,28 @@ export interface ToolAction<
   outputSchema?: SchemaWithValidation<TSchemaOut>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   resumeSchema?: SchemaWithValidation<TResume>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, request context will be validated before tool execution.
+   * The validated context values will be available via requestContext.values in the execute function.
+   *
+   * @example
+   * ```typescript
+   * const myTool = createTool({
+   *   id: 'my-tool',
+   *   description: 'A tool that requires authentication',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     apiKey: z.string(),
+   *   }),
+   *   execute: async (input, { requestContext }) => {
+   *     const { userId, apiKey } = requestContext.values;
+   *     // Use validated context values
+   *   },
+   * });
+   * ```
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.

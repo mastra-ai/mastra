@@ -221,10 +221,19 @@ export function MastraRuntimeProvider({
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
-  const requestContextInstance = new RequestContext();
-  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
-    requestContextInstance.set(key, value);
-  });
+  // Use a ref to store the latest requestContext so onNew always gets current values
+  // (onNew is cached by useExternalStoreRuntime, so it would otherwise use stale values)
+  const requestContextRef = useRef(requestContext);
+  requestContextRef.current = requestContext;
+
+  // Helper function to create RequestContext instance with current values
+  const createRequestContextInstance = () => {
+    const instance = new RequestContext();
+    Object.entries(requestContextRef.current ?? {}).forEach(([key, value]) => {
+      instance.set(key, value);
+    });
+    return instance;
+  };
 
   const modelSettingsArgs = {
     frequencyPenalty,
@@ -274,7 +283,7 @@ export function MastraRuntimeProvider({
             message: input,
             mode: 'network',
             coreUserMessages: attachments,
-            requestContext: requestContextInstance,
+            requestContext: createRequestContextInstance(),
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
@@ -301,7 +310,7 @@ export function MastraRuntimeProvider({
               message: input,
               mode: 'generate',
               coreUserMessages: attachments,
-              requestContext: requestContextInstance,
+              requestContext: createRequestContextInstance(),
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
@@ -316,7 +325,7 @@ export function MastraRuntimeProvider({
               message: input,
               mode: 'stream',
               coreUserMessages: attachments,
-              requestContext: requestContextInstance,
+              requestContext: createRequestContextInstance(),
               threadId,
               modelSettings: modelSettingsArgs,
               tracingOptions: tracingSettings?.tracingOptions,
@@ -363,7 +372,7 @@ export function MastraRuntimeProvider({
             topP,
             seed,
             instructions,
-            requestContext: requestContextInstance,
+            requestContext: createRequestContextInstance(),
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,
           });
@@ -481,7 +490,7 @@ export function MastraRuntimeProvider({
             topP,
             seed,
             instructions,
-            requestContext: requestContextInstance,
+            requestContext: createRequestContextInstance(),
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,
           });
