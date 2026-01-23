@@ -106,7 +106,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     mastra,
     bodyLimitOptions,
     tools,
-    prefix = '',
+    prefix = '/api',
     openapiPath = '',
     taskStore,
     customRouteAuthConfig,

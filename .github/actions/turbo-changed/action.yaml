@@ -28,6 +28,14 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Install turbo
+      shell: bash
+      run: pnpm install -g turbo
+
+    - name: Disable turbo telemetry
+      shell: bash
+      run: turbo telemetry disable
+
     - name: Compare turbo task hashes
       id: compare
       shell: bash
@@ -59,7 +67,8 @@ runs:
           local filter_args=$2
           # Run turbo dry-run and extract all package/task/hash combinations
           # This automatically includes all transitive dependencies
-          pnpm turbo "$task" $filter_args --dry-run=json 2>/dev/null | \
+          # Note: Uses turbo directly (installed globally) - no pnpm install needed
+          turbo "$task" $filter_args --dry-run=json 2>/dev/null | \
             jq -r '.tasks[] | "\(.package)#\(.task)=\(.hash)"'
         }
 
