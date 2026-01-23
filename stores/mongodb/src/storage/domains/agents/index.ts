@@ -3,6 +3,7 @@ import {
   AgentsStorage,
   createStorageErrorId,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   normalizePerPage,
   calculatePagination,
 } from '@mastra/core/storage';
@@ -13,6 +14,12 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
 } from '@mastra/core/storage';
+import type {
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
+} from '@mastra/core/storage/domains/agents';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
@@ -23,7 +30,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_AGENTS] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -48,6 +55,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
       { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, versionNumber: -1 }, options: { unique: true } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, createdAt: -1 } },
     ];
   }
 
@@ -90,8 +100,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const collection = await this.getCollection(TABLE_AGENTS);
-    await collection.deleteMany({});
+    const versionsCollection = await this.getCollection(TABLE_AGENT_VERSIONS);
+    await versionsCollection.deleteMany({});
+    const agentsCollection = await this.getCollection(TABLE_AGENTS);
+    await agentsCollection.deleteMany({});
   }
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
@@ -190,6 +202,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       if (updates.outputProcessors !== undefined) updateDoc.outputProcessors = updates.outputProcessors;
       if (updates.memory !== undefined) updateDoc.memory = updates.memory;
       if (updates.scorers !== undefined) updateDoc.scorers = updates.scorers;
+      if (updates.integrationTools !== undefined) updateDoc.integrationTools = updates.integrationTools;
+      if (updates.ownerId !== undefined) updateDoc.ownerId = updates.ownerId;
+      if (updates.activeVersionId !== undefined) updateDoc.activeVersionId = updates.activeVersionId;
 
       // Merge metadata if provided
       if (updates.metadata !== undefined) {
@@ -228,6 +243,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
+      // Delete all versions for this agent first
+      await this.deleteVersionsByAgentId(id);
+
+      // Then delete the agent
       const collection = await this.getCollection(TABLE_AGENTS);
       // Idempotent delete - no-op if agent doesn't exist
       await collection.deleteOne({ id });
@@ -326,6 +345,247 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   private serializeAgent(agent: StorageAgentType): Record<string, any> {
     return {
       ...agent,
+    };
+  }
+
+  // ==========================================================================
+  // Agent Version Methods
+  // ==========================================================================
+
+  async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const now = new Date();
+
+      const versionDoc = {
+        id: input.id,
+        agentId: input.agentId,
+        versionNumber: input.versionNumber,
+        name: input.name ?? undefined,
+        snapshot: input.snapshot,
+        changedFields: input.changedFields ?? undefined,
+        changeMessage: input.changeMessage ?? undefined,
+        createdAt: now,
+      };
+
+      await collection.insertOne(versionDoc);
+
+      return {
+        ...input,
+        createdAt: now,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CREATE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: input.id, agentId: input.agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersion(id: string): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.findOne<any>({ id });
+
+      if (!result) {
+        return null;
+      }
+
+      return this.transformVersion(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.findOne<any>({ agentId, versionNumber });
+
+      if (!result) {
+        return null;
+      }
+
+      return this.transformVersion(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId, versionNumber },
+        },
+        error,
+      );
+    }
+  }
+
+  async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.find<any>({ agentId }).sort({ versionNumber: -1 }).limit(1).toArray();
+
+      if (!result || result.length === 0) {
+        return null;
+      }
+
+      return this.transformVersion(result[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_LATEST_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+    const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_VERSIONS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 20);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const { field, direction } = this.parseVersionOrderBy(orderBy);
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+
+      // Get total count
+      const total = await collection.countDocuments({ agentId });
+
+      if (total === 0 || perPage === 0) {
+        return {
+          versions: [],
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      let cursor = collection
+        .find({ agentId })
+        .sort({ [field]: sortOrder })
+        .skip(offset);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const results = await cursor.toArray();
+      const versions = results.map((doc: any) => this.transformVersion(doc));
+
+      return {
+        versions,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput !== false && offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersion(id: string): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      await collection.deleteOne({ id });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      await collection.deleteMany({ agentId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async countVersions(agentId: string): Promise<number> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      return await collection.countDocuments({ agentId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'COUNT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // Private Helper Methods
+  // ==========================================================================
+
+  private transformVersion(doc: any): AgentVersion {
+    const { _id, ...version } = doc;
+    return {
+      ...version,
+      createdAt: version.createdAt instanceof Date ? version.createdAt : new Date(version.createdAt),
     };
   }
 }

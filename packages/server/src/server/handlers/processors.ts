@@ -74,12 +74,13 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
 
 export const LIST_PROCESSORS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/processors',
+  path: '/processors',
   responseType: 'json',
   responseSchema: listProcessorsResponseSchema,
   summary: 'List all processors',
   description: 'Returns a list of all available individual processors',
   tags: ['Processors'],
+  requiresAuth: true,
   handler: async ({ mastra }) => {
     try {
       const processors = mastra.listProcessors() || {};
@@ -133,13 +134,14 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
 
 export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/processors/:processorId',
+  path: '/processors/:processorId',
   responseType: 'json',
   pathParamSchema: processorIdPathParams,
   responseSchema: serializedProcessorDetailSchema,
   summary: 'Get processor by ID',
   description: 'Returns details for a specific processor including its phases and configurations',
   tags: ['Processors'],
+  requiresAuth: true,
   handler: async ({ mastra, processorId }) => {
     try {
       // Get the processor from Mastra's registered processors
@@ -187,7 +189,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
 
 export const EXECUTE_PROCESSOR_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/processors/:processorId/execute',
+  path: '/processors/:processorId/execute',
   responseType: 'json',
   pathParamSchema: processorIdPathParams,
   bodySchema: executeProcessorBodySchema,
@@ -195,6 +197,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
   summary: 'Execute processor',
   description: 'Executes a specific processor with the provided input data',
   tags: ['Processors'],
+  requiresAuth: true,
   handler: async ({ mastra, processorId, ...bodyParams }) => {
     try {
       const { phase, messages } = bodyParams;

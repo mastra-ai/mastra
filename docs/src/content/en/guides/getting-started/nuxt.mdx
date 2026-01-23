@@ -23,79 +23,25 @@ If you already have a Nuxt app, skip to the next step.
 
 Run the following command to [create a new Nuxt app](https://nuxt.com/docs/getting-started/installation):
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm create nuxt@latest mastra-nuxt -- --template minimal --packageManager npm --gitInit --modules
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create nuxt@latest mastra-nuxt --template minimal --packageManager pnpm --gitInit --modules
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn create nuxt@latest mastra-nuxt --template minimal --packageManager yarn --gitInit --modules
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create nuxt@latest mastra-nuxt --template minimal --packageManager bun --gitInit --modules
-```
-
-</TabItem>
-</Tabs>
 
 This creates a project called `mastra-nuxt`, but you can replace it with any name you want.
 
 ## Initialize Mastra
 
-`cd` into your Nuxt project and run [`mastra init`](/reference/cli/mastra#mastra-init).
-
-When prompted, choose a provider (e.g. OpenAI) and enter your key:
-
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
+Navigate to your Nuxt project:
 
 ```bash
 cd mastra-nuxt
+```
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash npm2yarn
 npx mastra@latest init
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-cd mastra-nuxt
-pnpm dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-cd mastra-nuxt
-yarn dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-cd mastra-nuxt
-bunx mastra@latest init
-```
-
-</TabItem>
-</Tabs>
 
 This creates a `mastra` folder with an example weather agent and the following files:
 
@@ -109,36 +55,9 @@ You'll call `weather-agent.ts` from your Nuxt server routes in the next steps.
 
 Install AI SDK UI along with the Mastra adapter:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm install @mastra/ai-sdk@latest @ai-sdk/vue ai
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm add @mastra/ai-sdk@latest @ai-sdk/vue ai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add @mastra/ai-sdk@latest @ai-sdk/vue ai
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun add @mastra/ai-sdk@latest @ai-sdk/vue ai
-```
-
-</TabItem>
-</Tabs>
 
 ## Create a chat route
 
