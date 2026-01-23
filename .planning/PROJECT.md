@@ -21,24 +21,38 @@ Catch quality regressions before they reach users — when you modify a prompt o
 
 ### Active
 
+**Data Layer:**
 - [ ] Create and manage datasets with test cases
 - [ ] Dataset versioning (auto-version on item changes)
 - [ ] Test cases with input, optional expected output, context
-- [ ] Run datasets against targets (agents, workflows)
+- [ ] Optional schema validation (JSON Schema for input/expectedOutput)
+- [ ] New storage domain for datasets, runs, results
+
+**Execution Layer:**
+- [ ] Run datasets against targets (agents, workflows, scorers, processors)
 - [ ] Apply scorers to run results (separate from target's built-in scorers)
+- [ ] Item selection for runs (run subset via `itemIds[]` param)
 - [ ] Human evaluation flow (run without scorers, review outputs)
+- [ ] Run status tracking (pending/running/completed/failed)
+
+**Analysis Layer:**
 - [ ] Compare runs to detect score regressions
 - [ ] Cross-version comparison with clear surfacing of changes
-- [ ] Bulk import test cases from CSV
-- [ ] New storage domain for datasets, runs, results
+- [ ] Run analytics (success rate, avg scores, latency distribution)
+
+**Integration:**
+- [ ] Bulk import test cases from CSV with validation
 - [ ] Playground UI: datasets page, dataset detail, run triggering, results view
 - [ ] CI integration for automated evaluation
 
-### Out of Scope
+### Out of Scope (v1)
 
 - Real-time collaboration on datasets — complexity not justified for v1
 - Dataset sharing/marketplace — focus on single-team use first
 - Auto-generated test cases from production traffic — future enhancement
+- Virtual folders (slash notation organization) — defer to v1.1, workaround: naming convention
+- Saved subsets (named item selections) — defer to v1.1, ad-hoc itemIds[] sufficient for v1
+- Statistical significance on score deltas — defer to v1.1
 
 ## Context
 
@@ -48,10 +62,11 @@ Catch quality regressions before they reach users — when you modify a prompt o
 - Playground UI patterns — extend for datasets pages
 - Request context — pass through to dataset runs
 
-**Prior art to research:**
-- Langfuse datasets feature
+**Prior art researched:**
+- Langfuse datasets feature (see `.planning/research/`)
 - Braintrust evaluation system
 - LangSmith datasets
+- Internal requirements docs (Notion — linked below)
 
 **User workflow:**
 1. Create dataset from sidebar in playground
@@ -71,10 +86,20 @@ Catch quality regressions before they reach users — when you modify a prompt o
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| New storage domain for datasets | Follows existing pattern (workflows, memory, scores) | — Pending |
-| Scorers passed to run, not inherited from target | Separates concerns, allows different scoring per experiment | — Pending |
-| Runs persist forever | Simplifies v1, can add cleanup later | — Pending |
-| Allow cross-version comparison with clear warnings | Real use case (added edge cases), but surface caveats | — Pending |
+| New storage domain for datasets | Follows existing pattern (workflows, memory, scores) | ✓ Confirmed |
+| Scorers passed to run, not inherited from target | Separates concerns, allows different scoring per experiment | ✓ Confirmed |
+| Runs persist forever | Simplifies v1, can add cleanup later | ✓ Confirmed |
+| Allow cross-version comparison with clear warnings | Real use case (added edge cases), but surface caveats | ✓ Confirmed |
+| Auto-versioning on item changes | Simpler than explicit versioning, better UX (Braintrust pattern) | ✓ Confirmed |
+| Schema validation optional | Some datasets are exploratory, don't force schema upfront | ✓ Confirmed |
+| Scorer/processor as valid targets | Unique Mastra capability, test components in isolation | ✓ Confirmed |
+| Item selection via `itemIds[]` param | Quick iteration on subsets before full runs, cost control | ✓ Confirmed |
+| Defer virtual folders to v1.1 | Organizational polish, not core workflow | ✓ Confirmed |
+
+## References
+
+- [Backend Requirements (Notion)](https://www.notion.so/kepler-inc/Datasets-Backend-Requirements-2f0ebffbc9f880f08476e03002023695)
+- [UI Requirements (Notion)](https://www.notion.so/kepler-inc/Dataset-UI-Requirements-2f0ebffbc9f8807f99a9e1c7a3104140)
 
 ---
-*Last updated: 2026-01-23 after initialization*
+*Last updated: 2026-01-23 after requirements merge*
