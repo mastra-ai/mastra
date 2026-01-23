@@ -139,6 +139,7 @@ export const ObservationMarkerBadge = ({
                   observations={observations} 
                   maxHeight="500px"
                   className="text-green-800 max-w-2xl"
+                  useInheritedTextColor
                 />
               </div>
             )}

@@ -79,8 +79,10 @@ function Agent() {
   }
 
   const handleRefreshThreadList = () => {
-    searchParams.delete('new');
-    setSearchParams(searchParams);
+    // Create a new URLSearchParams to avoid mutation issues
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('new');
+    setSearchParams(newParams, { replace: true });
     refreshThreads();
   };
 
