@@ -808,7 +808,9 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
             for (const threadId of threadIds) {
               const thread = await memoryStore.getThreadById({ threadId });
               if (thread && thread.resourceId !== effectiveResourceId) {
-                throw new HTTPException(403, { message: 'Access denied: message belongs to a thread owned by a different resource' });
+                throw new HTTPException(403, {
+                  message: 'Access denied: message belongs to a thread owned by a different resource',
+                });
               }
             }
           }

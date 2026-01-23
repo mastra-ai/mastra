@@ -1708,7 +1708,9 @@ describe('Memory Handlers', () => {
             messageIds: ['user-b-msg'],
           }),
         ).rejects.toThrow(
-          new HTTPException(403, { message: 'Access denied: message belongs to a thread owned by a different resource' }),
+          new HTTPException(403, {
+            message: 'Access denied: message belongs to a thread owned by a different resource',
+          }),
         );
       });
 
