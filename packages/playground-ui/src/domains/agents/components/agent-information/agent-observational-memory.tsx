@@ -7,43 +7,69 @@ import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
 
-// Progress bar component with improved styling
+// Format tokens helper
+const formatTokens = (n: number) => {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toString();
+};
+
+// Get bar color based on percentage: green 0-60%, yellow 60-99%, blue 100%
+const getBarColor = (percentage: number, isActive: boolean) => {
+  if (percentage >= 100) {
+    // Subtle pulse using opacity animation instead of full animate-pulse
+    return isActive ? 'bg-blue-500 animate-[pulse_3s_ease-in-out_infinite]' : 'bg-blue-500';
+  }
+  if (percentage >= 60) return 'bg-yellow-500';
+  return 'bg-green-500';
+};
+
+// Progress bar component with percent label inside bar
 const ProgressBar = ({ 
   value, 
   max, 
-  label, 
-  colorClass = 'bg-purple-500',
-  glowClass = ''
+  label,
+  isActive = false
 }: { 
   value: number; 
   max: number; 
   label: string;
-  colorClass?: string;
-  glowClass?: string;
+  isActive?: boolean;
 }) => {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
-  const formatTokens = (n: number) => {
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return n.toString();
-  };
+  const barColor = getBarColor(percentage, isActive);
   
   return (
-    <div className="flex items-center gap-3">
-      {/* Label on left */}
-      <span className="text-xs text-neutral4 whitespace-nowrap min-w-[90px]">{label}</span>
+    <div className="flex-1 min-w-0">
+      {/* Label above bar */}
+      <span className="text-[10px] text-neutral4 uppercase tracking-wider block mb-1">{label}</span>
       
-      {/* Progress bar in middle */}
-      <div className="flex-1 h-2 bg-surface2 rounded-full overflow-hidden">
-        <div 
-          className={`h-full ${colorClass} ${glowClass} transition-all duration-300 ease-out rounded-full`}
-          style={{ width: `${percentage}%` }}
-        />
+      {/* Bar row with tokens on right */}
+      <div className="flex items-center gap-2">
+        {/* Progress bar with percentage inside */}
+        <div className="relative flex-1 h-5 bg-surface4 rounded overflow-hidden">
+          <div 
+            className={`h-full ${barColor} transition-all duration-300 ease-out`}
+            style={{ width: `${percentage}%` }}
+          />
+          {/* Percentage text - dark on unfilled, white on filled */}
+          <span 
+            className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-neutral4 pointer-events-none"
+          >
+            {Math.round(percentage)}%
+          </span>
+          <span 
+            className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white pointer-events-none"
+            style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
+          >
+            {Math.round(percentage)}%
+          </span>
+        </div>
+        
+        {/* Token count on right */}
+        <span className="text-[11px] text-neutral3 tabular-nums whitespace-nowrap font-mono">
+          {formatTokens(value)}<span className="text-neutral4">/{formatTokens(max)}</span>
+        </span>
       </div>
-      
-      {/* Tokens + percentage on right */}
-      <span className="text-xs text-neutral3 whitespace-nowrap tabular-nums">
-        {formatTokens(value)}/{formatTokens(max)} ({Math.round(percentage)}%)
-      </span>
     </div>
   );
 };
@@ -195,8 +221,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
         {/* Status label in header */}
         {isObserving ? (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
-            memorizing
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400 animate-pulse">
+            observing
           </span>
         ) : isReflecting ? (
           <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
@@ -209,24 +235,20 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         ) : null}
       </div>
 
-      {/* Progress Bars for Thresholds */}
-      <div className="space-y-2.5 mb-3">
+      {/* Progress Bars for Thresholds - Side by side */}
+      <div className="flex gap-3 mb-3">
         <ProgressBar
           value={pendingMessageTokens}
           max={observationThreshold}
-          label="Next observation"
-          colorClass={isObserving ? 'bg-yellow-500' : 'bg-purple-500'}
-          glowClass={isObserving ? 'shadow-[0_0_8px_rgba(234,179,8,0.5)]' : ''}
+          label="Messages"
+          isActive={isObserving}
         />
-        {hasObservations && (
-          <ProgressBar
-            value={observationTokenCount}
-            max={reflectionThreshold}
-            label="Next reflection"
-            colorClass={isReflecting ? 'bg-blue-500' : 'bg-purple-500/60'}
-            glowClass={isReflecting ? 'shadow-[0_0_8px_rgba(59,130,246,0.5)]' : ''}
-          />
-        )}
+        <ProgressBar
+          value={observationTokenCount}
+          max={reflectionThreshold}
+          label="Observations"
+          isActive={isReflecting}
+        />
       </div>
 
       {/* No observations message - show when no observations exist */}
