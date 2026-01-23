@@ -434,7 +434,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (workspace.sandbox.executeCode) {
       tools.workspace_execute_code = createTool({
         id: 'workspace_execute_code',
-        description: `Execute code in the workspace sandbox. Supports Node.js, Python, shell, and other runtimes. Output is streamed directly to the user's terminal UI, so don't repeat it. After calling this tool, just respond with a short status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
+        description: `Execute code in the workspace sandbox. Supports Node.js, Python, shell, and other runtimes. Output (stdout/stderr) is streamed live to the user's terminal UI, so don't repeat it. Just respond with a minimal status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
         // Require approval when sandboxApproval is 'all'
         requireApproval: sandboxApproval === 'all',
         inputSchema: z.object({
@@ -499,7 +499,7 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
-      description: `Execute a shell command in the workspace sandbox. Output is streamed directly to the user's terminal UI, so don't repeat it. After calling this tool, just respond with a short status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
+      description: `Execute a shell command in the workspace sandbox. Output (stdout/stderr) is streamed live to the user's terminal UI, so don't repeat it. Just respond with a minimal status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
       // Require approval when sandboxApproval is 'all' or 'commands'
       requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
       inputSchema: z.object({
