@@ -275,7 +275,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-to-json-schema": "^3.24.6",
+    "zod-to-json-schema": "^3.25.0",
     "zod-v3": "npm:zod@3.25.76"
   },
   "engines": {
