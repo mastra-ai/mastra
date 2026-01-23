@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { RequestContext } from '../../request-context';
 import { createStep, createWorkflow } from '../workflow';
@@ -64,7 +64,7 @@ describe('Workflow requestContextSchema', () => {
 
       workflow.commit();
 
-      const requestContext = new RequestContext<{ userId: string }>();
+      const requestContext = new RequestContext<z.infer<typeof requestContextSchema>>();
       requestContext.set('userId', 'user-123');
       // Missing tenantId
 
@@ -97,8 +97,9 @@ describe('Workflow requestContextSchema', () => {
 
       workflow.commit();
 
-      const requestContext = new RequestContext();
-      requestContext.set('userId', 123 as any); // Wrong type
+      const requestContext = new RequestContext<z.infer<typeof requestContextSchema>>();
+      //@ts-expect-error - intentionally testing validation with wrong type
+      requestContext.set('userId', 123); 
       requestContext.set('tenantId', 'tenant-456');
 
       const run = await workflow.createRun();
@@ -130,7 +131,7 @@ describe('Workflow requestContextSchema', () => {
 
       workflow.commit();
 
-      const requestContext = new RequestContext();
+      const requestContext = new RequestContext<z.infer<typeof requestContextSchema>>();
       // Empty context
 
       const run = await workflow.createRun();
@@ -166,11 +167,12 @@ describe('Workflow requestContextSchema', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        requestContextSchema: stepContextSchema,
       }).then(step);
 
       workflow.commit();
 
-      const requestContext = new RequestContext<{ apiKey: string }>();
+      const requestContext = new RequestContext<z.infer<typeof stepContextSchema>>();
       requestContext.set('apiKey', 'key-123');
 
       const run = await workflow.createRun();
@@ -314,9 +316,6 @@ describe('Workflow requestContextSchema', () => {
     it('should validate both workflow and step requestContextSchema', async () => {
       const workflowContextSchema = z.object({
         userId: z.string(),
-      });
-
-      const stepContextSchema = z.object({
         apiKey: z.string(),
       });
 
@@ -325,7 +324,7 @@ describe('Workflow requestContextSchema', () => {
         id: 'test-step',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        requestContextSchema: stepContextSchema,
+        requestContextSchema: workflowContextSchema,
         execute: async ({ inputData }) => {
           stepExecuted = true;
           return { output: `processed: ${inputData.input}` };
@@ -341,7 +340,7 @@ describe('Workflow requestContextSchema', () => {
 
       workflow.commit();
 
-      const requestContext = new RequestContext<{ userId: string; apiKey: string }>();
+      const requestContext = new RequestContext<z.infer<typeof workflowContextSchema>>();
       requestContext.set('userId', 'user-123');
       requestContext.set('apiKey', 'key-456');
 
@@ -358,6 +357,7 @@ describe('Workflow requestContextSchema', () => {
     it('should fail on workflow validation before step validation', async () => {
       const workflowContextSchema = z.object({
         userId: z.string(),
+        apiKey: z.string(),
       });
 
       const stepContextSchema = z.object({
@@ -383,7 +383,7 @@ describe('Workflow requestContextSchema', () => {
 
       workflow.commit();
 
-      const requestContext = new RequestContext();
+      const requestContext = new RequestContext<z.infer<typeof workflowContextSchema>>();
       // Missing both userId and apiKey
 
       const run = await workflow.createRun();
@@ -421,11 +421,12 @@ describe('Workflow requestContextSchema', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        requestContextSchema: stepContextSchema,
       }).then(step);
 
       workflow.commit();
 
-      const requestContext = new RequestContext<{ tenantId: string; permissions: string[] }>();
+      const requestContext = new RequestContext<z.infer<typeof stepContextSchema>>();
       requestContext.set('tenantId', 'tenant-abc');
       requestContext.set('permissions', ['read', 'write']);
 
