@@ -42,7 +42,9 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
   bail(result: TStepOutput): InnerOutput;
-  bail<T>(result: T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['outputSchema']> : T): InnerOutput;
+  bail<T>(
+    result: T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['outputSchema']> : T,
+  ): InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
