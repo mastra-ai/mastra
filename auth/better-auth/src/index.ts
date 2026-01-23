@@ -344,4 +344,22 @@ export class MastraAuthBetterAuth
   getAuth(): Auth {
     return this.auth;
   }
+
+  /**
+   * Get headers to clear the session cookies on logout.
+   * Partial ISessionProvider implementation for logout support.
+   *
+   * Clears Better Auth's default session cookies.
+   */
+  getClearSessionHeaders(): Record<string, string> {
+    // Better Auth uses these cookie names by default
+    // Clear both the session token and its signature cookie
+    const cookies = [
+      'better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      'better-auth.session_token_sig=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    ];
+    return {
+      'Set-Cookie': cookies.join(', '),
+    };
+  }
 }

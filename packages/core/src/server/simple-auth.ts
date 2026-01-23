@@ -156,6 +156,16 @@ export class SimpleAuth<TUser extends EEUser>
     return false;
   }
 
+  /**
+   * Get headers to clear the session cookie on logout.
+   * Partial ISessionProvider implementation for logout support.
+   */
+  getClearSessionHeaders(): Record<string, string> {
+    return {
+      'Set-Cookie': 'mastra-token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    };
+  }
+
   private stripBearerPrefix(token: string): string {
     return token.startsWith('Bearer ') ? token.slice(7) : token;
   }
