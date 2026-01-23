@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { PaginationInfo } from '../../types';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
