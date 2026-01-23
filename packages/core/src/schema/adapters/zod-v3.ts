@@ -11,7 +11,6 @@ import type {
  */
 const TARGET_MAP: Record<string, ZodToJsonSchemaTarget> = {
   'draft-07': 'jsonSchema7',
-  'draft-2020-12': 'jsonSchema2019-09', // zod-to-json-schema doesn't have 2020-12, use closest
   'openapi-3.0': 'openApi3',
 };
 
