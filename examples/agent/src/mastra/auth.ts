@@ -58,7 +58,8 @@ function initSimpleAuth(): AuthResult {
       if (user.email && adminEmails.includes(user.email)) {
         return ['admin'];
       }
-      return ['admin']; // Demo: all users get admin role
+      // Non-admin users get viewer role
+      return ['viewer'];
     },
   });
 
@@ -105,7 +106,8 @@ async function initBetterAuth(): Promise<AuthResult> {
       if (user.email && adminEmails.includes(user.email)) {
         return ['admin'];
       }
-      return ['admin'];
+      // Non-admin users get viewer role
+      return ['viewer'];
     },
   });
 
