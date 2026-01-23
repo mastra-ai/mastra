@@ -243,6 +243,26 @@ export interface AgentConfig<
    */
   maxProcessorRetries?: number;
   /**
+   * Skills that extend the agent's capabilities through contextual instructions.
+   * Skills are folders containing SKILL.md files with instructions that get injected into the agent's context.
+   * Can be provided as file paths (strings) or dynamically resolved.
+   *
+   * @example
+   * ```typescript
+   * // Static skill paths
+   * skills: [".mastra/skills/code-review", ".mastra/skills/documentation"]
+   *
+   * // Dynamic skill resolution
+   * skills: async ({ requestContext }) => {
+   *   const userRole = requestContext.get('userRole');
+   *   return userRole === 'admin'
+   *     ? ['./skills/admin-skill', './skills/code-review']
+   *     : ['./skills/user-skill'];
+   * }
+   * ```
+   */
+  skills?: DynamicArgument<string | string[]>;
+  /**
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
@@ -312,7 +332,7 @@ export type AgentGenerateOptions<
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -322,7 +342,7 @@ export type AgentGenerateOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -332,7 +352,7 @@ export type AgentGenerateOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -391,7 +411,7 @@ export type AgentStreamOptions<
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -401,7 +421,7 @@ export type AgentStreamOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -411,7 +431,7 @@ export type AgentStreamOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
