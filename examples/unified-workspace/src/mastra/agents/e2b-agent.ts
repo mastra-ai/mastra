@@ -34,7 +34,6 @@ export const cloudWorkspace = new Workspace({
   },
   skillsPaths: ['/local/skills', '/bucket-1/skills', '/bucket-2/skills'],
   bm25: true,
-  // autoInit: true,
   safety: {
     requireReadBeforeWrite: false,
     requireSandboxApproval: 'none',
@@ -50,14 +49,7 @@ export const e2bAgent = new Agent({
   id: 'e2b-agent',
   name: 'E2B Agent',
   description: 'An agent that executes code in E2B cloud sandboxes.',
-  instructions: `You are a helpful coding assistant with access to an E2B cloud sandbox.
-
-You can:
-- Execute Python and Node.js code in an isolated cloud environment
-- Run shell commands
-- Read and write files
-
-When asked to run code, use the workspace_execute_code or workspace_execute_command tools.`,
+  instructions: `You are a helpful coding assistant with access to an E2B cloud sandbox.`,
   model: 'anthropic/claude-opus-4-5',
   memory: new Memory({
     storage: new LibSQLStore({
