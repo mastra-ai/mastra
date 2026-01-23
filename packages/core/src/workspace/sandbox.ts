@@ -63,19 +63,6 @@ export interface CodeResult extends ExecutionResult {
   returnValue?: unknown;
 }
 
-export interface StreamingExecutionResult {
-  /** Exit code promise (resolves when execution completes) */
-  exitCode: Promise<number>;
-  /** Async iterator for stdout */
-  stdout: AsyncIterable<string>;
-  /** Async iterator for stderr */
-  stderr: AsyncIterable<string>;
-  /** Kill the execution */
-  kill(): Promise<void>;
-  /** Wait for completion and get full result */
-  wait(): Promise<ExecutionResult>;
-}
-
 // =============================================================================
 // Execution Options
 // =============================================================================
@@ -91,6 +78,10 @@ export interface ExecuteCodeOptions {
   cwd?: string;
   /** Stream output instead of buffering */
   stream?: boolean;
+  /** Callback for stdout chunks (enables streaming) */
+  onStdout?: (data: string) => void;
+  /** Callback for stderr chunks (enables streaming) */
+  onStderr?: (data: string) => void;
 }
 
 export interface ExecuteCommandOptions {
@@ -104,6 +95,10 @@ export interface ExecuteCommandOptions {
   stream?: boolean;
   /** Shell to use (default: /bin/sh) */
   shell?: string | boolean;
+  /** Callback for stdout chunks (enables streaming) */
+  onStdout?: (data: string) => void;
+  /** Callback for stderr chunks (enables streaming) */
+  onStderr?: (data: string) => void;
 }
 
 export interface InstallPackageOptions {
@@ -181,15 +176,11 @@ export interface WorkspaceSandbox {
 
   /**
    * Execute code in the sandbox.
+   * Optional - if not implemented, the workspace_execute_code tool won't be available.
    * @throws {SandboxExecutionError} if execution fails catastrophically
    * @throws {SandboxTimeoutError} if execution times out
    */
-  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
-
-  /**
-   * Execute code with streaming output.
-   */
-  executeCodeStream?(code: string, options?: ExecuteCodeOptions): Promise<StreamingExecutionResult>;
+  executeCode?(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
 
   // ---------------------------------------------------------------------------
   // Command Execution
@@ -197,19 +188,11 @@ export interface WorkspaceSandbox {
 
   /**
    * Execute a shell command.
+   * Optional - if not implemented, the workspace_execute_command tool won't be available.
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
-  executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  /**
-   * Execute a command with streaming output.
-   */
-  executeCommandStream?(
-    command: string,
-    args?: string[],
-    options?: ExecuteCommandOptions,
-  ): Promise<StreamingExecutionResult>;
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   // ---------------------------------------------------------------------------
   // Package Management

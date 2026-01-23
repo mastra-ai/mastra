@@ -29,6 +29,67 @@ import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
 const execFile = promisify(childProcess.execFile);
 
 /**
+ * Execute a command with optional streaming callbacks.
+ * Uses spawn when callbacks are provided for real-time output.
+ */
+function execWithStreaming(
+  command: string,
+  args: string[],
+  options: {
+    cwd?: string;
+    timeout?: number;
+    env?: NodeJS.ProcessEnv;
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+  },
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const proc = childProcess.spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let killed = false;
+
+    // Set up timeout
+    const timeoutId = options.timeout
+      ? setTimeout(() => {
+          killed = true;
+          proc.kill('SIGTERM');
+        }, options.timeout)
+      : undefined;
+
+    proc.stdout.on('data', (data: Buffer) => {
+      const str = data.toString();
+      stdout += str;
+      options.onStdout?.(str);
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      const str = data.toString();
+      stderr += str;
+      options.onStderr?.(str);
+    });
+
+    proc.on('error', err => {
+      if (timeoutId) clearTimeout(timeoutId);
+      reject(err);
+    });
+
+    proc.on('close', code => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (killed) {
+        resolve({ stdout, stderr: stderr + '\nProcess timed out', exitCode: 124 });
+      } else {
+        resolve({ stdout, stderr, exitCode: code ?? 0 });
+      }
+    });
+  });
+}
+
+/**
  * Local sandbox provider configuration.
  */
 export interface LocalSandboxOptions {
@@ -274,14 +335,21 @@ export class LocalSandbox implements WorkspaceSandbox {
     try {
       switch (runtime) {
         case 'node':
-          return await this.executeNodeCode(code, tempFile, timeout, options.env);
+          return await this.executeNodeCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
         case 'python':
-          return await this.executePythonCode(code, tempFile, timeout, options.env);
+          return await this.executePythonCode(
+            code,
+            tempFile,
+            timeout,
+            options.env,
+            options.onStdout,
+            options.onStderr,
+          );
         case 'bash':
         case 'shell':
-          return await this.executeShellCode(code, tempFile, timeout, options.env);
+          return await this.executeShellCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
         case 'ruby':
-          return await this.executeRubyCode(code, tempFile, timeout, options.env);
+          return await this.executeRubyCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
         default:
           throw new UnsupportedRuntimeError(runtime, [...this.supportedRuntimes]);
       }
@@ -319,9 +387,32 @@ export class LocalSandbox implements WorkspaceSandbox {
     tempFile: string,
     timeout: number,
     env?: Record<string, string>,
+    onStdout?: (data: string) => void,
+    onStderr?: (data: string) => void,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
     const file = tempFile + '.js';
     await fs.writeFile(file, code);
+
+    // Use streaming execution when callbacks are provided
+    if (onStdout || onStderr) {
+      try {
+        const result = await execWithStreaming('node', [file], {
+          cwd: this.workingDirectory,
+          timeout,
+          env: this.buildEnv(env),
+          onStdout,
+          onStderr,
+        });
+        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+        };
+      }
+    }
 
     try {
       const { stdout, stderr } = await execFile('node', [file], {
@@ -346,9 +437,32 @@ export class LocalSandbox implements WorkspaceSandbox {
     tempFile: string,
     timeout: number,
     env?: Record<string, string>,
+    onStdout?: (data: string) => void,
+    onStderr?: (data: string) => void,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
     const file = tempFile + '.py';
     await fs.writeFile(file, code);
+
+    // Use streaming execution when callbacks are provided
+    if (onStdout || onStderr) {
+      try {
+        const result = await execWithStreaming('python3', [file], {
+          cwd: this.workingDirectory,
+          timeout,
+          env: this.buildEnv(env),
+          onStdout,
+          onStderr,
+        });
+        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+        };
+      }
+    }
 
     try {
       const { stdout, stderr } = await execFile('python3', [file], {
@@ -373,10 +487,33 @@ export class LocalSandbox implements WorkspaceSandbox {
     tempFile: string,
     timeout: number,
     env?: Record<string, string>,
+    onStdout?: (data: string) => void,
+    onStderr?: (data: string) => void,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
     const file = tempFile + '.sh';
     await fs.writeFile(file, code);
     await fs.chmod(file, '755');
+
+    // Use streaming execution when callbacks are provided
+    if (onStdout || onStderr) {
+      try {
+        const result = await execWithStreaming('bash', [file], {
+          cwd: this.workingDirectory,
+          timeout,
+          env: this.buildEnv(env),
+          onStdout,
+          onStderr,
+        });
+        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+        };
+      }
+    }
 
     try {
       const { stdout, stderr } = await execFile('bash', [file], {
@@ -401,9 +538,32 @@ export class LocalSandbox implements WorkspaceSandbox {
     tempFile: string,
     timeout: number,
     env?: Record<string, string>,
+    onStdout?: (data: string) => void,
+    onStderr?: (data: string) => void,
   ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
     const file = tempFile + '.rb';
     await fs.writeFile(file, code);
+
+    // Use streaming execution when callbacks are provided
+    if (onStdout || onStderr) {
+      try {
+        const result = await execWithStreaming('ruby', [file], {
+          cwd: this.workingDirectory,
+          timeout,
+          env: this.buildEnv(env),
+          onStdout,
+          onStderr,
+        });
+        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+        };
+      }
+    }
 
     try {
       const { stdout, stderr } = await execFile('ruby', [file], {
@@ -436,6 +596,36 @@ export class LocalSandbox implements WorkspaceSandbox {
     const timeout = options.timeout ?? this.timeout;
     const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
 
+    // Use streaming execution when callbacks are provided
+    if (options.onStdout || options.onStderr) {
+      try {
+        const result = await execWithStreaming(command, args, {
+          cwd,
+          timeout,
+          env: this.buildEnv(options.env),
+          onStdout: options.onStdout,
+          onStderr: options.onStderr,
+        });
+
+        return {
+          success: result.exitCode === 0,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          executionTimeMs: Date.now() - startTime,
+        };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: error instanceof Error ? error.message : String(error),
+          exitCode: 1,
+          executionTimeMs: Date.now() - startTime,
+        };
+      }
+    }
+
+    // Use execFile for non-streaming (simpler, better error handling)
     try {
       const { stdout, stderr } = await execFile(command, args, {
         cwd,
