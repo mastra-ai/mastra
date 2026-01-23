@@ -2097,7 +2097,29 @@ ${suggestedResponse}
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
-          omDebug(`[OM processInputStep] Saving ${messagesToSave.length} messages (with markers)`);
+          // Check for messages that would overwrite already-observed messages
+          // If a message has the same ID as one that's already sealed, generate a new ID
+          const { messages: existingMessages } = await this.storage.listMessages({ threadId });
+          const sealedMessageIds = new Set<string>();
+
+          for (const existingMsg of existingMessages) {
+            if (this.findLastCompletedObservationBoundary(existingMsg) !== -1) {
+              sealedMessageIds.add(existingMsg.id);
+            }
+          }
+
+          let regeneratedIds = 0;
+          for (const msg of messagesToSave) {
+            if (sealedMessageIds.has(msg.id)) {
+              // This message would overwrite a sealed message - generate new ID
+              const oldId = msg.id;
+              msg.id = crypto.randomUUID();
+              omDebug(`[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`);
+              regeneratedIds++;
+            }
+          }
+
+          omDebug(`[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`);
           await this.messageHistory.persistMessages({
             messages: messagesToSave,
             threadId,
