@@ -105,7 +105,7 @@ async function getSkillsById(mastra: any, workspaceId?: string): Promise<Workspa
 
 export const LIST_WORKSPACES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspaces',
+  path: '/workspaces',
   responseType: 'json',
   responseSchema: listWorkspacesResponseSchema,
   summary: 'List all workspaces',
@@ -192,7 +192,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 
 export const WORKSPACE_INFO_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace',
+  path: '/workspace',
   responseType: 'json',
   responseSchema: workspaceInfoResponseSchema,
   summary: 'Get workspace info',
@@ -234,7 +234,7 @@ export const WORKSPACE_INFO_ROUTE = createRoute({
 
 export const WORKSPACE_FS_READ_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/fs/read',
+  path: '/workspace/fs/read',
   responseType: 'json',
   queryParamSchema: fsReadQuerySchema,
   responseSchema: fsReadResponseSchema,
@@ -277,7 +277,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
 
 export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/workspace/fs/write',
+  path: '/workspace/fs/write',
   responseType: 'json',
   bodySchema: fsWriteBodySchema,
   responseSchema: fsWriteResponseSchema,
@@ -317,7 +317,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
 
 export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/fs/list',
+  path: '/workspace/fs/list',
   responseType: 'json',
   queryParamSchema: fsListQuerySchema,
   responseSchema: fsListResponseSchema,
@@ -364,7 +364,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
 export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/workspace/fs/delete',
+  path: '/workspace/fs/delete',
   responseType: 'json',
   queryParamSchema: fsDeleteQuerySchema,
   responseSchema: fsDeleteResponseSchema,
@@ -411,7 +411,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
 
 export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/workspace/fs/mkdir',
+  path: '/workspace/fs/mkdir',
   responseType: 'json',
   bodySchema: fsMkdirBodySchema,
   responseSchema: fsMkdirResponseSchema,
@@ -445,7 +445,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 
 export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/fs/stat',
+  path: '/workspace/fs/stat',
   responseType: 'json',
   queryParamSchema: fsStatQuerySchema,
   responseSchema: fsStatResponseSchema,
@@ -492,7 +492,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
 
 export const WORKSPACE_SEARCH_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/search',
+  path: '/workspace/search',
   responseType: 'json',
   queryParamSchema: searchQuerySchema,
   responseSchema: searchResponseSchema,
@@ -561,7 +561,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
 
 export const WORKSPACE_INDEX_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/workspace/index',
+  path: '/workspace/index',
   responseType: 'json',
   bodySchema: indexBodySchema,
   responseSchema: indexResponseSchema,
@@ -598,7 +598,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
 
 export const WORKSPACE_UNINDEX_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/workspace/unindex',
+  path: '/workspace/unindex',
   responseType: 'json',
   queryParamSchema: unindexQuerySchema,
   responseSchema: unindexResponseSchema,
@@ -634,12 +634,12 @@ export const WORKSPACE_UNINDEX_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Skills Routes (under /api/workspace/skills)
+// Skills Routes (under /workspace/skills)
 // =============================================================================
 
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/skills',
+  path: '/workspace/skills',
   responseType: 'json',
   queryParamSchema: listSkillsQuerySchema,
   responseSchema: listSkillsResponseSchema,
@@ -674,7 +674,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/skills/:skillName',
+  path: '/workspace/skills/:skillName',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: getSkillQuerySchema,
@@ -720,7 +720,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/skills/:skillName/references',
+  path: '/workspace/skills/:skillName/references',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
   queryParamSchema: getSkillQuerySchema,
@@ -758,7 +758,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/skills/:skillName/references/:referencePath',
+  path: '/workspace/skills/:skillName/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
   queryParamSchema: getSkillQuerySchema,
@@ -798,7 +798,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 
 export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/workspace/skills/search',
+  path: '/workspace/skills/search',
   responseType: 'json',
   queryParamSchema: searchSkillsQuerySchema,
   responseSchema: searchSkillsResponseSchema,
