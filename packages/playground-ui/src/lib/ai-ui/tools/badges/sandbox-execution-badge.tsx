@@ -1,10 +1,11 @@
-import { BadgeWrapper } from './badge-wrapper';
 import { MastraUIMessage } from '@mastra/react';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { CheckIcon, CopyIcon, TerminalSquare } from 'lucide-react';
+import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { TooltipIconButton } from '../../tooltip-icon-button';
+import { Badge } from '@/ds/components/Badge';
+import { Icon } from '@/ds/icons';
 
 export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
@@ -30,14 +31,37 @@ const useCopyToClipboard = ({ copiedDuration = 1500 }: { copiedDuration?: number
   return { isCopied, copyToClipboard };
 };
 
+// Hook for live elapsed time while running
+const useElapsedTime = (isRunning: boolean, startTime?: number) => {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isRunning) {
+      startRef.current = startTime || Date.now();
+      const interval = setInterval(() => {
+        if (startRef.current) {
+          setElapsed(Date.now() - startRef.current);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    } else {
+      startRef.current = null;
+    }
+  }, [isRunning, startTime]);
+
+  return elapsed;
+};
+
 interface TerminalBlockProps {
-  title: string;
+  command?: string;
   content: string;
-  isStreaming?: boolean;
+  maxHeight?: string;
+  onCopy?: () => void;
+  isCopied?: boolean;
 }
 
-const TerminalBlock = ({ title, content, isStreaming }: TerminalBlockProps) => {
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied }: TerminalBlockProps) => {
   const contentRef = useRef<HTMLPreElement>(null);
 
   // Auto-scroll to bottom when content changes
@@ -47,64 +71,40 @@ const TerminalBlock = ({ title, content, isStreaming }: TerminalBlockProps) => {
     }
   }, [content]);
 
-  const onCopy = () => {
-    if (!content || isCopied) return;
-    copyToClipboard(content);
-  };
-
   return (
-    <div>
-      {/* Header - matches CodeHeader styling */}
-      <div
-        style={{
-          background: 'hsl(0 0% 100% / 0.06)',
-          borderTopRightRadius: '0.5rem',
-          borderTopLeftRadius: '0.5rem',
-          marginTop: '0.5rem',
-          border: '1px solid hsl(0 0% 20.4%)',
-          borderBottom: 'none',
-        }}
-        className="flex items-center justify-between gap-4 px-4 py-2 text-sm font-semibold text-white"
-      >
-        <span className="lowercase flex items-center gap-2">
-          {title}
-          {isStreaming && (
-            <span className="flex items-center gap-1 text-xs font-normal text-accent6">
-              <span className="w-1.5 h-1.5 bg-accent6 rounded-full animate-pulse" />
-              running
-            </span>
+    <div className="rounded-md border border-border1 overflow-hidden">
+      {/* Terminal header with command */}
+      {command && (
+        <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-icon6 text-xs shrink-0">$</span>
+            <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
+          </div>
+          {onCopy && (
+            <TooltipIconButton tooltip="Copy output" onClick={onCopy} className="shrink-0">
+              <span className="grid">
+                <span
+                  style={{ gridArea: '1/1' }}
+                  className={cn('transition-transform', isCopied ? 'scale-100' : 'scale-0')}
+                >
+                  <CheckIcon size={14} />
+                </span>
+                <span
+                  style={{ gridArea: '1/1' }}
+                  className={cn('transition-transform', isCopied ? 'scale-0' : 'scale-100')}
+                >
+                  <CopyIcon size={14} />
+                </span>
+              </span>
+            </TooltipIconButton>
           )}
-        </span>
-        <TooltipIconButton tooltip="Copy" onClick={onCopy}>
-          <span className="grid">
-            <span
-              style={{ gridArea: '1/1' }}
-              className={cn('transition-transform', isCopied ? 'scale-100' : 'scale-0')}
-            >
-              <CheckIcon size={14} />
-            </span>
-            <span
-              style={{ gridArea: '1/1' }}
-              className={cn('transition-transform', isCopied ? 'scale-0' : 'scale-100')}
-            >
-              <CopyIcon size={14} />
-            </span>
-          </span>
-        </TooltipIconButton>
-      </div>
-      {/* Content - matches pre styling */}
+        </div>
+      )}
+      {/* Terminal content */}
       <pre
         ref={contentRef}
-        style={{
-          borderBottomRightRadius: '0.5rem',
-          borderBottomLeftRadius: '0.5rem',
-          background: 'black',
-          fontSize: '0.875rem',
-          marginBottom: '0.5rem',
-          border: '1px solid hsl(0 0% 20.4%)',
-          borderTop: 'none',
-        }}
-        className="overflow-x-auto overflow-y-auto max-h-80 p-4 text-white font-mono whitespace-pre-wrap"
+        style={{ maxHeight }}
+        className="overflow-x-auto overflow-y-auto p-3 text-sm text-neutral-300 font-mono whitespace-pre-wrap bg-black"
       >
         {content || <span className="text-icon6 italic">No output</span>}
       </pre>
@@ -124,6 +124,9 @@ export const SandboxExecutionBadge = ({
   isNetwork,
   toolCalled: toolCalledProp,
 }: SandboxExecutionBadgeProps) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCopied, copyToClipboard } = useCopyToClipboard();
+
   // Parse args to get command info
   let commandDisplay = '';
   try {
@@ -134,7 +137,6 @@ export const SandboxExecutionBadge = ({
       commandDisplay = `${cmd} ${cmdArgs}`.trim();
     } else if (toolName === 'workspace_execute_code') {
       const runtime = parsedArgs.runtime || 'node';
-      // Show truncated code preview
       const codePreview = parsedArgs.code?.slice(0, 50) + (parsedArgs.code?.length > 50 ? '...' : '');
       commandDisplay = `${runtime}: ${codePreview}`;
     }
@@ -162,84 +164,91 @@ export const SandboxExecutionBadge = ({
   const isRunning = hasStreamingOutput && !isStreamingComplete;
   const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
 
-  // Never collapse by default - always show the terminal output
-  const shouldCollapse = false;
-
   // Combine streaming output into a single string
   const streamingContent = sandboxChunks.map(chunk => chunk.data || '').join('');
 
-  // Format display name
+  // Get output content for display
+  const outputContent = hasStreamingOutput
+    ? streamingContent
+    : finalResult
+      ? [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n')
+      : '';
+
+  // Get exit info
+  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode;
+  const exitSuccess = exitChunk?.success ?? finalResult?.success;
+  const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
+
   const displayName = toolName === 'workspace_execute_command' ? 'Execute Command' : 'Execute Code';
 
+  // Get start time from first streaming chunk for live timer
+  const firstChunkTime = sandboxChunks[0]?.timestamp;
+  const elapsedTime = useElapsedTime(isRunning, firstChunkTime);
+
+  const onCopy = () => {
+    if (!outputContent || isCopied) return;
+    copyToClipboard(outputContent);
+  };
+
   return (
-    <BadgeWrapper
-      data-testid="sandbox-execution-badge"
-      icon={<TerminalSquare className="text-accent6" size={16} />}
-      title={
-        <span className="flex items-center gap-2">
-          {displayName}
-          {commandDisplay && (
-            <span className="text-icon6 text-xs font-normal max-w-[300px] truncate">{commandDisplay}</span>
-          )}
-        </span>
-      }
-      initialCollapsed={shouldCollapse}
-    >
-      <div className="space-y-2">
-        {/* Show streaming output - either while running or after completion via exit chunk */}
-        {hasStreamingOutput && (
-          <>
-            {/* Show exit status from exit chunk when available */}
-            {exitChunk && (
-              <div className="flex items-center gap-2 text-sm">
-                <span
-                  className={cn(
-                    'px-2 py-0.5 rounded text-xs font-medium',
-                    exitChunk.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400',
-                  )}
-                >
-                  exit {exitChunk.exitCode}
-                </span>
-                <span className="text-icon6 text-xs">{exitChunk.executionTimeMs}ms</span>
-              </div>
-            )}
-            <TerminalBlock title="output" content={streamingContent} isStreaming={isRunning} />
-          </>
-        )}
+    <div className="mb-4" data-testid="sandbox-execution-badge">
+      {/* Header row */}
+      <div className="flex items-center gap-2 justify-between">
+        <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2 min-w-0" type="button">
+          <Icon>
+            <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
+          </Icon>
+          <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
+        </button>
 
-        {/* Final result from stored messages (no streaming chunks) */}
-        {finalResult && !hasStreamingOutput && (
-          <>
-            {/* Exit status */}
-            <div className="flex items-center gap-2 text-sm">
-              <span
-                className={cn(
-                  'px-2 py-0.5 rounded text-xs font-medium',
-                  finalResult.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400',
-                )}
-              >
-                exit {finalResult.exitCode}
+        {/* Status area */}
+        <div className="flex items-center gap-2">
+          {isRunning ? (
+            <>
+              <span className="flex items-center gap-1.5 text-xs text-accent6">
+                <span className="w-1.5 h-1.5 bg-accent6 rounded-full animate-pulse" />
+                <span className="animate-pulse">running</span>
               </span>
-              <span className="text-icon6 text-xs">{finalResult.executionTimeMs}ms</span>
-            </div>
-
-            {/* stdout - show if we have it */}
-            {finalResult.stdout && <TerminalBlock title="stdout" content={finalResult.stdout} />}
-
-            {/* stderr - always show if present */}
-            {finalResult.stderr && <TerminalBlock title="stderr" content={finalResult.stderr} />}
-          </>
-        )}
-
-        <ToolApprovalButtons
-          toolCalled={toolCalled}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          isGenerateMode={metadata?.mode === 'generate'}
-        />
+              <span className="text-icon6 text-xs tabular-nums">{elapsedTime}ms</span>
+            </>
+          ) : (
+            <>
+              {exitCode !== undefined &&
+                (exitSuccess ? (
+                  <CheckIcon className="text-green-400" size={14} />
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-400">
+                    exit {exitCode}
+                  </span>
+                ))}
+              {executionTime !== undefined && <span className="text-icon6 text-xs">{executionTime}ms</span>}
+            </>
+          )}
+        </div>
       </div>
-    </BadgeWrapper>
+
+      {/* Content area */}
+      {!isCollapsed && (
+        <div className="pt-2">
+          {(outputContent || commandDisplay) && (
+            <TerminalBlock
+              command={commandDisplay}
+              content={outputContent}
+              onCopy={outputContent ? onCopy : undefined}
+              isCopied={isCopied}
+            />
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </div>
+      )}
+    </div>
   );
 };
