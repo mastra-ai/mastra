@@ -40,6 +40,8 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { LoadedSkill } from '../skills';
+import { SkillsManager } from '../skills';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -144,6 +146,8 @@ export class Agent<
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
   readonly #options?: AgentCreateOptions;
+  #skills: DynamicArgument<string | string[]>;
+  #skillsManager?: SkillsManager;
   #legacyHandler?: AgentLegacyHandler;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
@@ -272,12 +276,100 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
+    if (config.skills) {
+      this.#skills = config.skills;
+      this.#skillsManager = new SkillsManager({ validate: true });
+    }
+
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the skills configured for this agent, resolving function-based skills if necessary.
+   * Skills are sets of instructions loaded from directories.
+   *
+   * @example
+   * ```typescript
+   * const skills = await agent.listSkills();
+   * console.log(skills.map(s => s.id)); // ['code-review', 'docs']
+   * ```
+   */
+  public async listSkills({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<LoadedSkill[]> {
+    if (!this.#skills || !this.#skillsManager) {
+      return [];
+    }
+
+    // Resolve skills (could be static or dynamic)
+    const skillPaths =
+      typeof this.#skills === 'function'
+        ? await Promise.resolve(this.#skills({ requestContext, mastra: this.#mastra }))
+        : this.#skills;
+
+    // Normalize to array
+    const pathsArray = Array.isArray(skillPaths) ? skillPaths : [skillPaths];
+
+    // Load skills
+    await this.#skillsManager.load(pathsArray);
+
+    // Return as array
+    return Array.from(this.#skillsManager.getAll().values());
+  }
+
+  /**
+   * Gets combined instructions including skill instructions.
+   * @internal
+   */
+  public async getCombinedInstructions({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<AgentInstructions> {
+    // Get base instructions
+    const result = this.getInstructions({ requestContext });
+    let baseInstructions: AgentInstructions;
+
+    if (result instanceof Promise) {
+      baseInstructions = await result;
+    } else {
+      baseInstructions = result;
+    }
+
+    // Get skills if configured
+    if (!this.#skills || !this.#skillsManager) {
+      return baseInstructions;
+    }
+
+    // Load skills
+    const skills = await this.listSkills({ requestContext });
+
+    if (skills.length === 0) {
+      return baseInstructions;
+    }
+
+    // Format skills instructions
+    const skillsSection = skills
+      .map(
+        skill => `
+## Skill: ${skill.content.frontmatter.name}
+**Description**: ${skill.content.frontmatter.description}
+
+${skill.content.instructions}
+`,
+      )
+      .join('\n\n---\n\n');
+
+    // Combine base instructions with skills
+    const baseText =
+      typeof baseInstructions === 'string'
+        ? baseInstructions
+        : this.#convertInstructionsToString(baseInstructions);
+
+    return `${baseText}\n\n---\n\n# Active Skills\n\n${skillsSection}`;
   }
 
   /**
@@ -734,7 +826,7 @@ export class Agent<
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.listTools({ requestContext }));
-      const instructions = await this.getInstructions({ requestContext });
+      const instructions = await this.getCombinedInstructions({ requestContext });
       voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
@@ -2012,11 +2104,11 @@ export class Agent<
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
+                      memory: {
+                        resource: subAgentResourceId,
+                        thread: subAgentThreadId,
+                      },
+                    }
                     : {}),
                 });
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
@@ -2041,11 +2133,11 @@ export class Agent<
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
+                      memory: {
+                        resource: subAgentResourceId,
+                        thread: subAgentThreadId,
+                      },
+                    }
                     : {}),
                 });
 
@@ -2248,16 +2340,16 @@ export class Agent<
               } else if (methodType === 'stream') {
                 const streamResult = resumeData
                   ? run.resumeStream({
-                      resumeData,
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                    })
+                    resumeData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                  })
                   : run.stream({
-                      inputData: workflowInputData,
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(initialState && { initialState }),
-                    });
+                    inputData: workflowInputData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                    ...(initialState && { initialState }),
+                  });
 
                 if (context?.writer) {
                   await streamResult.fullStream.pipeTo(context.writer);
@@ -2554,8 +2646,8 @@ export class Agent<
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
@@ -2775,11 +2867,11 @@ export class Agent<
     const threadFromArgs = threadIdFromContext
       ? { id: threadIdFromContext }
       : resolveThreadIdFromArgs({
-          memory: {
-            ...options.memory,
-            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
-          },
-        });
+        memory: {
+          ...options.memory,
+          thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+        },
+      });
 
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
@@ -2838,7 +2930,7 @@ export class Agent<
         resourceId,
       }) ||
       randomUUID();
-    const instructions = options.instructions || (await this.getInstructions({ requestContext }));
+    const instructions = options.instructions || (await this.getCombinedInstructions({ requestContext }));
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -3831,10 +3923,10 @@ export class Agent<
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-          ? z.infer<OUTPUT>
-          : EXPERIMENTAL_OUTPUT extends ZodSchema
-            ? z.infer<EXPERIMENTAL_OUTPUT>
-            : unknown
+        ? z.infer<OUTPUT>
+        : EXPERIMENTAL_OUTPUT extends ZodSchema
+        ? z.infer<EXPERIMENTAL_OUTPUT>
+        : unknown
       >['experimental_partialOutputStream'];
     }
   >;
