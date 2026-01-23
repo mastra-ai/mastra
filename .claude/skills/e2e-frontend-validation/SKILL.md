@@ -27,7 +27,7 @@ pnpm build:cli
 2. **Start the dev server**
 
 ```sh
-cd examples/agent && node ../../packages/cli/dist/index.js dev
+cd packages/playground && pnpm test:e2e
 ```
 
 3. **Verify server is running**
