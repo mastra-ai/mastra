@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
+import { z as zv4 } from 'zod/v4';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -28,7 +28,7 @@ function patchRecordSchemas(schema: any): any {
     // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
     // Fix: move it to valueType and set keyType to string (the default)
     def.valueType = def.keyType;
-    def.keyType = (z as any).string();
+    def.keyType = zv4.string();
   }
 
   // Recursively patch nested schemas
@@ -164,18 +164,29 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+/**
+ * Detect if a schema is a Zod v4 schema by checking its internal structure.
+ * Zod v4 schemas have a `_zod` property with a nested `def` object.
+ * Zod v3 schemas have a `_def` property with a `typeName` string.
+ */
+function isZodV4Schema(schema: unknown): boolean {
+  if (!schema || typeof schema !== 'object') return false;
+  // Zod v4 schemas have _zod.def.type structure
+  const maybeV4 = schema as { _zod?: { def?: { type?: string } } };
+  return typeof maybeV4._zod?.def?.type === 'string';
+}
+
 export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
 ): JSONSchema7 {
-  const fn = 'toJSONSchema';
-
-  if (fn in z) {
+  // Detect Zod version by schema structure, not by import
+  if (isZodV4Schema(zodSchema)) {
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    const jsonSchema = (z as any)[fn](zodSchema, {
+    const jsonSchema = zv4.toJSONSchema(zodSchema as ZodSchemaV4, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
@@ -186,7 +197,7 @@ export function zodToJsonSchema(
           ctx.jsonSchema.format = 'date-time';
         }
       },
-    }) satisfies JSONSchema7;
+    }) as JSONSchema7;
 
     // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
     return fixAnyOfNullable(jsonSchema);

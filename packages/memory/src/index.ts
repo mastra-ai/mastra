@@ -13,6 +13,7 @@ import type {
   MessageDeleteInput,
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -23,7 +24,6 @@ import type {
   ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
-import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';

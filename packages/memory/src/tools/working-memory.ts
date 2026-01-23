@@ -1,4 +1,4 @@
-import type { MemoryConfig, MemoryConfigInternal } from '@mastra/core/memory';
+import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
