@@ -117,46 +117,66 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
 
   return {
     name: PLUGIN_NAME,
-    async resolveId(request, importer, options) {
-      if (!importer || request.startsWith('\0') || importer.charCodeAt(0) === 0) {
-        return null;
-      }
-
-      const moduleName = resolveAlias(request, importer);
-      // No tsconfig alias found, so we need to resolve it normally
-      if (!moduleName) {
-        let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
-
-        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
-        if (!resolved) {
+    resolveId: {
+      order: 'pre',
+      async handler(request, importer, options) {
+        if (!importer || request.startsWith('\0') || importer.charCodeAt(0) === 0) {
           return null;
         }
 
-        // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
-        // if so, we need to resolve the request from the importer instead of the root and mark it as external
-        if (localResolve) {
-          const importerInfo = this.getModuleInfo(importer);
-          importerMeta = importerInfo?.meta || {};
+        const moduleName = resolveAlias(request, importer);
+        // No tsconfig alias found, so we need to resolve it normally
+        if (!moduleName) {
+          let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
 
-          if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
-            return {
-              ...resolved,
-              external: !request.startsWith('hono/') && request !== 'hono',
-            };
+          const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
+          if (!resolved) {
+            return null;
           }
+
+          // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
+          // if so, we need to resolve the request from the importer instead of the root and mark it as external
+          if (localResolve) {
+            const importerInfo = this.getModuleInfo(importer);
+            importerMeta = importerInfo?.meta || {};
+
+            if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
+              return {
+                ...resolved,
+                external: !request.startsWith('hono/') && request !== 'hono',
+              };
+            }
+          }
+
+          return {
+            ...resolved,
+            meta: {
+              ...(resolved.meta || {}),
+              ...importerMeta,
+            },
+          };
         }
 
-        return {
-          ...resolved,
-          meta: {
-            ...(resolved.meta || {}),
-            ...importerMeta,
-          },
-        };
-      }
+        // When a module does not have an extension, we need to resolve it to a file
+        if (!path.extname(moduleName)) {
+          const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
 
-      // When a module does not have an extension, we need to resolve it to a file
-      if (!path.extname(moduleName)) {
+          if (!resolved) {
+            return null;
+          }
+
+          return {
+            ...resolved,
+            meta: {
+              ...resolved.meta,
+              [PLUGIN_NAME]: {
+                resolved: true,
+              },
+            },
+          };
+        }
+
+        // Always pass through bundler's resolution to ensure proper path normalization
         const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
 
         if (!resolved) {
@@ -172,24 +192,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
             },
           },
         };
-      }
-
-      // Always pass through bundler's resolution to ensure proper path normalization
-      const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
-
-      if (!resolved) {
-        return null;
-      }
-
-      return {
-        ...resolved,
-        meta: {
-          ...resolved.meta,
-          [PLUGIN_NAME]: {
-            resolved: true,
-          },
-        },
-      };
+      },
     },
   } satisfies Plugin;
 }

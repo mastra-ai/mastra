@@ -200,6 +200,16 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(hasMappedPkg).toBeFalsy();
     });
 
+    it('should resolve workspace package tsconfig paths', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      // Verify that the path alias ~/utils is resolved and not present in the bundled output
+      const hasWorkspaceMappedPath = content.includes('~/utils');
+
+      expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
     afterAll(async () => {
       if (proc) {
         try {

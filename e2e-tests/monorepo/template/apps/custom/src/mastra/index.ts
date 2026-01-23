@@ -14,6 +14,7 @@ export const mastra = new Mastra({
   },
   bundler: {
     externals: ['bcrypt'],
+    transpilePackages: ['@inner/inner-tools'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });
