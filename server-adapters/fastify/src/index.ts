@@ -1,5 +1,6 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -385,6 +386,20 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
       };
+
+      // Check route permission requirement (EE feature)
+      // Only enforce permissions when auth is configured
+      const authConfig = this.mastra.getServer()?.auth;
+      if (route.requiresPermission && authConfig) {
+        const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+
+        if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
+          return reply.status(403).send({
+            error: 'Forbidden',
+            message: `Missing required permission: ${route.requiresPermission}`,
+          });
+        }
+      }
 
       try {
         const result = await route.handler(handlerParams);

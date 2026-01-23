@@ -1,3 +1,4 @@
+import type { IRBACProvider, EEUser } from '@mastra/core/ee';
 import {
   canAccessPublicly,
   checkRules,
@@ -68,6 +69,24 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
 
     // Store user in context
     request.requestContext.set('user', user);
+
+    // Resolve and store user permissions using RBAC provider (EE feature)
+    try {
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+      if (rbacProvider) {
+        // Use the RBAC provider to resolve permissions
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        request.requestContext.set('userPermissions', permissions);
+
+        // Also store roles for UI display
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        request.requestContext.set('userRoles', roles);
+      }
+    } catch {
+      // RBAC not available or failed, continue without permissions
+    }
 
     return;
   } catch (err) {
