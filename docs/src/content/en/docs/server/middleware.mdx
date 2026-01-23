@@ -112,6 +112,100 @@ export const mastra = new Mastra({
 }
 ```
 
+### Authorization (User Isolation)
+
+Authentication verifies who the user is. Authorization controls what they can access. Without authorization middleware, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
+
+Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async (token) => {
+        // Your auth logic returns the user
+        return verifyToken(token); // { id: 'user-123', ... }
+      },
+    },
+    middleware: [
+      {
+        path: '/api/memory/*',
+        handler: async (c, next) => {
+          const requestContext = c.get('requestContext');
+          const user = requestContext.get('user');
+
+          if (!user) {
+            return c.json({ error: 'Unauthorized' }, 401);
+          }
+
+          // Force all memory operations to use this user's ID
+          // This takes precedence over any client-provided resourceId
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+          return next();
+        },
+      },
+    ],
+  },
+});
+```
+
+With this middleware:
+- **Thread listing** returns only threads where `resourceId` matches the user's ID
+- **Thread creation** forces the new thread's `resourceId` to be the user's ID
+- **Message operations** are scoped to threads owned by the user
+
+Even if a client passes `?resourceId=other-user-id`, the middleware-set value takes precedence.
+
+#### Thread ownership validation
+
+For additional security, validate thread ownership before allowing access:
+
+```typescript
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+
+{
+  path: '/api/memory/*',
+  handler: async (c, next) => {
+    const requestContext = c.get('requestContext');
+    const user = requestContext.get('user');
+
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+    // Validate thread ownership if accessing a specific thread
+    const path = c.req.path;
+    const threadMatch = path.match(/\/memory\/(?:network\/)?threads\/([^\/]+)/);
+
+    if (threadMatch) {
+      const threadId = threadMatch[1];
+      const storage = c.get('mastra').getStorage();
+
+      if (storage) {
+        const memoryStore = await storage.getStore('memory');
+        const thread = await memoryStore?.getThreadById({ threadId });
+
+        if (thread && thread.resourceId !== user.id) {
+          return c.json({ error: 'Access denied' }, 403);
+        }
+
+        if (thread) {
+          requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+        }
+      }
+    }
+
+    return next();
+  },
+}
+```
+
 ### CORS support
 
 ```typescript
@@ -177,3 +271,4 @@ be inspected by middleware to tailor behavior:
 # Related
 
 - [Request Context](/docs/server/request-context)
+- [Reserved Keys](/docs/server/request-context#reserved-keys)
