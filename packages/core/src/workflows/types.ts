@@ -547,6 +547,11 @@ export type StepParams<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TStateSchema;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -571,6 +576,11 @@ export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOu
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
@@ -700,6 +710,12 @@ export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, 
   inputSchema: SchemaWithValidation<TInput>;
   outputSchema: SchemaWithValidation<TOutput>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema when the workflow starts.
+   * If validation fails, a validation error is thrown.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

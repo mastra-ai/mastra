@@ -271,6 +271,12 @@ export interface ToolAction<
   suspendSchema?: SchemaWithValidation<TSuspend>;
   resumeSchema?: SchemaWithValidation<TResume>;
   /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   * If validation fails, a validation error is returned instead of executing the tool.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
+  /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
    */

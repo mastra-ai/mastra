@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
 
@@ -230,4 +231,44 @@ export function validateToolOutput<T = any>(
   };
 
   return { data: output, error };
+}
+
+/**
+ * Validates request context values against a Zod schema.
+ *
+ * @param schema The Zod schema to validate against
+ * @param requestContext The RequestContext instance to validate
+ * @param identifier Optional identifier for better error messages (e.g., tool ID, agent ID)
+ * @returns The validated data or a validation error
+ */
+export function validateRequestContext<T = any>(
+  schema: SchemaWithValidation<T> | undefined,
+  requestContext: RequestContext | undefined,
+  identifier?: string,
+): { data: T | Record<string, any>; error?: ValidationError<T> } {
+  // Get all values from the requestContext
+  const contextValues = requestContext?.all ?? {};
+
+  // If no schema, return context values as-is
+  if (!schema || !('safeParse' in schema)) {
+    return { data: contextValues };
+  }
+
+  // Validate the context values
+  const validation = schema.safeParse(contextValues);
+
+  if (validation.success) {
+    return { data: validation.data };
+  }
+
+  // Validation failed, return error
+  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+
+  const error: ValidationError<T> = {
+    error: true,
+    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided context: ${truncateForLogging(contextValues)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+  };
+
+  return { data: contextValues, error };
 }

@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions } from '../workflows';
 import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
+import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -87,6 +87,12 @@ export class Tool<
   resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
+   * Schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
+
+  /**
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata
@@ -162,6 +168,7 @@ export class Tool<
     this.outputSchema = opts.outputSchema;
     this.suspendSchema = opts.suspendSchema;
     this.resumeSchema = opts.resumeSchema;
+    this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
@@ -177,6 +184,16 @@ export class Tool<
         const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
           return error as any;
+        }
+
+        // Validate request context if schema exists
+        const { error: requestContextError } = validateRequestContext(
+          this.requestContextSchema,
+          context?.requestContext,
+          this.id,
+        );
+        if (requestContextError) {
+          return requestContextError as any;
         }
 
         let suspendData = null;

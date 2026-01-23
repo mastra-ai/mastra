@@ -314,6 +314,7 @@ function createStepFromParams<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -1205,6 +1206,7 @@ export class Workflow<
   public inputSchema: SchemaWithValidation<TInput>;
   public outputSchema: SchemaWithValidation<TOutput>;
   public stateSchema?: SchemaWithValidation<TState>;
+  public requestContextSchema?: SchemaWithValidation<any>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1233,6 +1235,7 @@ export class Workflow<
     inputSchema,
     outputSchema,
     stateSchema,
+    requestContextSchema,
     description,
     executionEngine,
     retryConfig,
@@ -1246,6 +1249,7 @@ export class Workflow<
     this.inputSchema = inputSchema;
     this.outputSchema = outputSchema;
     this.stateSchema = stateSchema;
+    this.requestContextSchema = requestContextSchema;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -1823,6 +1827,7 @@ export class Workflow<
         workflowId: this.id,
         stateSchema: this.stateSchema,
         inputSchema: this.inputSchema,
+        requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
@@ -2443,6 +2448,7 @@ export class Run<
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: SchemaWithValidation<TState>;
   protected inputSchema?: SchemaWithValidation<TInput>;
+  protected requestContextSchema?: SchemaWithValidation<any>;
 
   protected cleanup?: () => void;
 
@@ -2457,6 +2463,7 @@ export class Run<
     resourceId?: string;
     stateSchema?: SchemaWithValidation<TState>;
     inputSchema?: SchemaWithValidation<TInput>;
+    requestContextSchema?: SchemaWithValidation<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -2488,6 +2495,7 @@ export class Run<
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
     this.inputSchema = params.inputSchema;
+    this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
   }
@@ -2563,6 +2571,21 @@ export class Run<
     }
 
     return initialStateToUse;
+  }
+
+  protected async _validateRequestContext(requestContext?: RequestContext) {
+    if (this.validateInputs && this.requestContextSchema && isZodType(this.requestContextSchema)) {
+      const contextValues = requestContext?.all ?? {};
+      const validatedRequestContext = await this.requestContextSchema.safeParseAsync(contextValues);
+
+      if (!validatedRequestContext.success) {
+        const errors = getZodErrors(validatedRequestContext.error);
+        throw new Error(
+          `Request context validation failed for workflow '${this.workflowId}': \n` +
+            errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        );
+      }
+    }
   }
 
   protected async _validateResumeData<TResume>(resumeData: TResume, suspendedStep?: StepWithComponent) {
@@ -2663,6 +2686,7 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+    await this._validateRequestContext(requestContext);
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,

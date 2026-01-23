@@ -143,6 +143,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
+  #requestContextSchema?: ZodSchema;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -272,12 +273,42 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
+    if (config.requestContextSchema) {
+      this.#requestContextSchema = config.requestContextSchema;
+    }
+
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Validates the request context against the agent's requestContextSchema.
+   * Throws an error if validation fails.
+   */
+  async #validateRequestContext(requestContext?: RequestContext) {
+    if (this.#requestContextSchema && isZodType(this.#requestContextSchema)) {
+      const contextValues = requestContext?.all ?? {};
+      const validatedRequestContext = await this.#requestContextSchema.safeParseAsync(contextValues);
+
+      if (!validatedRequestContext.success) {
+        const errors = validatedRequestContext.error.issues;
+        const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+        throw new MastraError({
+          id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Request context validation failed for agent '${this.id}':\n${errorMessages}`,
+          details: {
+            agentId: this.id,
+            agentName: this.name,
+          },
+        });
+      }
+    }
   }
 
   /**
@@ -3319,6 +3350,9 @@ export class Agent<
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<FullOutput<any>> {
+    // Validate request context if schema is provided
+    await this.#validateRequestContext(options?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -3409,6 +3443,9 @@ export class Agent<
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Validate request context if schema is provided
+    await this.#validateRequestContext(streamOptions?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });

@@ -246,6 +246,12 @@ export interface AgentConfig<
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
+   * If validation fails, an error is thrown.
+   */
+  requestContextSchema?: ZodSchema;
 }
 
 export type AgentMemoryOption = {

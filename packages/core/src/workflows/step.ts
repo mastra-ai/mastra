@@ -92,6 +92,11 @@ export interface Step<
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<any>;
   execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
