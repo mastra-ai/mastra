@@ -42,7 +42,13 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import { sanitizeBody, validateBody } from './utils';
+import {
+  sanitizeBody,
+  validateBody,
+  getEffectiveResourceId,
+  getEffectiveThreadId,
+  validateThreadOwnership,
+} from './utils';
 
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
@@ -604,7 +610,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ agentId, mastra, abortSignal, ...params }) => {
+  handler: async ({ agentId, mastra, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -612,12 +618,39 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, ...rest } = params;
+      const { messages, memory: memoryOption, ...rest } = params;
 
       validateBody({ messages });
 
+      // Authorization: apply context overrides to memory option if present
+      let authorizedMemoryOption = memoryOption;
+      if (memoryOption) {
+        const clientThreadId =
+          typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+
+        const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
+
+        // Validate thread ownership if accessing an existing thread
+        if (effectiveThreadId && effectiveResourceId) {
+          const memoryInstance = await agent.getMemory({ requestContext });
+          if (memoryInstance) {
+            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+            await validateThreadOwnership(thread, effectiveResourceId);
+          }
+        }
+
+        // Build authorized memory option with effective values
+        authorizedMemoryOption = {
+          ...memoryOption,
+          resource: effectiveResourceId ?? memoryOption.resource,
+          thread: effectiveThreadId ?? memoryOption.thread,
+        };
+      }
+
       const result = await agent.generate<unknown>(messages, {
         ...rest,
+        memory: authorizedMemoryOption,
         abortSignal,
       });
 
@@ -640,7 +673,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   description: 'Legacy endpoint for generating agent responses. Use /agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -650,19 +683,32 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const clientResourceId = resourceId ?? resourceid;
+
+      // Authorization: context values take precedence over client-provided values
+      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
 
-      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      // Validate thread ownership if accessing an existing thread
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
       }
 
       const result = await agent.generateLegacy(messages, {
         ...rest,
         abortSignal,
-        resourceId: finalResourceId ?? '',
-        threadId: threadId ?? '',
+        resourceId: effectiveResourceId ?? '',
+        threadId: effectiveThreadId ?? '',
       });
 
       return result;
@@ -683,7 +729,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   description: 'Legacy endpoint for streaming agent responses. Use /agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -693,19 +739,32 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const clientResourceId = resourceId ?? resourceid;
+
+      // Authorization: context values take precedence over client-provided values
+      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
 
-      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      // Validate thread ownership if accessing an existing thread
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
       }
 
       const streamResult = await agent.streamLegacy(messages, {
         ...rest,
         abortSignal,
-        resourceId: finalResourceId ?? '',
-        threadId: threadId ?? '',
+        resourceId: effectiveResourceId ?? '',
+        threadId: effectiveThreadId ?? '',
       });
 
       const streamResponse = rest.output
@@ -791,7 +850,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -799,11 +858,38 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, ...rest } = params;
+      const { messages, memory: memoryOption, ...rest } = params;
       validateBody({ messages });
+
+      // Authorization: apply context overrides to memory option if present
+      let authorizedMemoryOption = memoryOption;
+      if (memoryOption) {
+        const clientThreadId =
+          typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+
+        const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
+
+        // Validate thread ownership if accessing an existing thread
+        if (effectiveThreadId && effectiveResourceId) {
+          const memoryInstance = await agent.getMemory({ requestContext });
+          if (memoryInstance) {
+            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+            await validateThreadOwnership(thread, effectiveResourceId);
+          }
+        }
+
+        // Build authorized memory option with effective values
+        authorizedMemoryOption = {
+          ...memoryOption,
+          resource: effectiveResourceId ?? memoryOption.resource,
+          thread: effectiveThreadId ?? memoryOption.thread,
+        };
+      }
 
       const streamResult = await agent.stream<unknown>(messages, {
         ...rest,
+        memory: authorizedMemoryOption,
         abortSignal,
       });
 

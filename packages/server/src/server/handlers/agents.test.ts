@@ -1,6 +1,12 @@
+import { Agent } from '@mastra/core/agent';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GET_PROVIDERS_ROUTE } from './agents';
+import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { HTTPException } from '../http-exception';
+import { GET_PROVIDERS_ROUTE, GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from './agents';
 
 describe('getProvidersHandler', () => {
   // Store original env
@@ -112,6 +118,206 @@ describe('getProvidersHandler', () => {
       expect(provider.envVar).toBe(registryEntry.apiKeyEnvVar);
       // Models should match (converting readonly to regular array)
       expect(provider.models).toEqual([...registryEntry.models]);
+    });
+  });
+});
+
+// ============================================================================
+// Authorization Tests
+// ============================================================================
+
+describe('Agent Routes Authorization', () => {
+  let storage: InMemoryStore;
+  let mockMemory: MockMemory;
+  let mockAgent: Agent;
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    storage = new InMemoryStore();
+    mockMemory = new MockMemory({ storage });
+
+    mockAgent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test-instructions',
+      model: {} as any,
+      memory: mockMemory,
+    });
+
+    mastra = new Mastra({
+      agents: { 'test-agent': mockAgent },
+      logger: false,
+    });
+  });
+
+  /**
+   * Creates a test context with reserved keys set (simulating middleware behavior)
+   */
+  function createContextWithReservedKeys({
+    resourceId,
+    threadId,
+  }: {
+    resourceId?: string;
+    threadId?: string;
+  }) {
+    const requestContext = new RequestContext();
+    if (resourceId) {
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    }
+    if (threadId) {
+      requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    }
+    return requestContext;
+  }
+
+  describe('GENERATE_AGENT_ROUTE', () => {
+    it('should return 403 when memory option specifies thread owned by different resource', async () => {
+      // Create a thread owned by user-b
+      await mockMemory.createThread({
+        threadId: 'thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      // User-a (via middleware) tries to access thread owned by user-b
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'thread-owned-by-b',
+            resource: 'user-a', // Client tries to use their resource ID
+          },
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should override client-provided resource with context value', async () => {
+      // Create a thread owned by user-a
+      await mockMemory.createThread({
+        threadId: 'thread-owned-by-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      // Mock agent.generate to capture the memory option
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { text: 'mocked response' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'thread-owned-by-a',
+          resource: 'user-b', // Client tries to use different resource ID
+        },
+      } as any);
+
+      // The resource should be overridden to user-a (from context)
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should allow access when thread belongs to the same resource', async () => {
+      // Create a thread owned by user-a
+      await mockMemory.createThread({
+        threadId: 'thread-owned-by-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      // Mock agent.generate
+      vi.spyOn(mockAgent, 'generate').mockResolvedValue({ text: 'mocked response' } as any);
+
+      // Should not throw
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'thread-owned-by-a',
+            resource: 'user-a',
+          },
+        } as any),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('STREAM_GENERATE_ROUTE', () => {
+    it('should return 403 when memory option specifies thread owned by different resource', async () => {
+      // Create a thread owned by user-b
+      await mockMemory.createThread({
+        threadId: 'stream-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      // User-a (via middleware) tries to access thread owned by user-b
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        STREAM_GENERATE_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'stream-thread-owned-by-b',
+            resource: 'user-a',
+          },
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should override client-provided resource with context value', async () => {
+      // Create a thread owned by user-a
+      await mockMemory.createThread({
+        threadId: 'stream-thread-owned-by-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      // Mock agent.stream to capture the memory option
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'stream-thread-owned-by-a',
+          resource: 'user-b', // Client tries to use different resource ID
+        },
+      } as any);
+
+      // The resource should be overridden to user-a (from context)
+      expect(capturedMemoryOption.resource).toBe('user-a');
     });
   });
 });
