@@ -10,12 +10,9 @@ export const cloudWorkspace = new Workspace({
   name: 'Cloud Workspace',
   sandbox: new E2BSandbox({
     id: 'yay-testing-1234',
-    // timeout: 30_000, // 30 seconds
   }),
-  // ?? sandbox logs?
   mounts: {
     '/local': new LocalFilesystem({ basePath: '/Users/caleb/mastra/examples/unified-workspace/agent-files' }),
-
     '/bucket-1': new S3Filesystem({
       displayName: 'Cloudflare R2',
       bucket: 'agent-test-bucket',
@@ -35,7 +32,6 @@ export const cloudWorkspace = new Workspace({
       endpoint: process.env.S3_ENDPOINT,
     }),
   },
-  // TODO: better error messages (not just exit code) for execute_code and execute_command tools
   skillsPaths: ['/local/skills', '/bucket-1/skills', '/bucket-2/skills'],
   bm25: true,
   // autoInit: true,
