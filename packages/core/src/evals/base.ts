@@ -9,6 +9,8 @@ import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import { InternalSpans } from '../observability';
+import type { PublicSchema } from '../schema';
+import { toStandardSchema } from '../schema';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
@@ -56,6 +58,17 @@ interface ScorerRun<TInput = any, TOutput = any> {
   tracingContext?: TracingContext;
 }
 
+/**
+ * Helper type for schema output type inference.
+ * This is a minimal interface that captures the output type from various schema types
+ * without importing the full schema types (which would cause OOM during type checking).
+ */
+type InferSchemaOutput<TSchema> = TSchema extends { '~standard': { types: { output: infer O } } }
+  ? O
+  : TSchema extends z.ZodType<infer O>
+    ? O
+    : unknown;
+
 // Prompt object definition with conditional typing
 interface PromptObject<
   TOutput,
@@ -63,9 +76,17 @@ interface PromptObject<
   TStepName extends string = string,
   TInput = any,
   TRunOutput = any,
+  TSchema = unknown,
 > {
   description: string;
-  outputSchema: z.ZodSchema<TOutput>;
+  /**
+   * Schema defining the expected output structure.
+   * Accepts any schema type supported by Mastra (Zod v3, Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
+   * Will be converted to StandardSchemaWithJSON at runtime via toStandardSchema().
+   *
+   * The TOutput generic is inferred from this schema's output type.
+   */
+  outputSchema: TSchema;
   judge?: {
     model: MastraModelConfig;
     instructions: string;
@@ -166,11 +187,15 @@ interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, T
 // Step definition types that support both function and prompt object steps
 type PreprocessStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
-  | PromptObject<TStepOutput, TAccumulated, 'preprocess', TInput, TRunOutput>;
+  | (PromptObject<TStepOutput, TAccumulated, 'preprocess', TInput, TRunOutput, unknown> & {
+      outputSchema: { '~standard': { types: { output: TStepOutput } } } | z.ZodType<TStepOutput>;
+    });
 
 type AnalyzeStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
-  | PromptObject<TStepOutput, TAccumulated, 'analyze', TInput, TRunOutput>;
+  | (PromptObject<TStepOutput, TAccumulated, 'analyze', TInput, TRunOutput, unknown> & {
+      outputSchema: { '~standard': { types: { output: TStepOutput } } } | z.ZodType<TStepOutput>;
+    });
 
 // Conditional type for generateScore step definition
 type GenerateScoreStepDef<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
@@ -586,13 +611,13 @@ class MastraScorer<
       } else {
         const schema = z.object({
           score: z.number(),
-        })
+        });
         result = await judge.generateLegacy(prompt, {
           output: z.toJSONSchema(schema) as JSONSchema7,
           tracingContext,
         });
       }
-      return { result: (result.object as { score: number}).score, prompt };
+      return { result: (result.object as { score: number }).score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
@@ -605,17 +630,21 @@ class MastraScorer<
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
+      // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
+      // Cast to PublicSchema since outputSchema can be any schema type
+      const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
+        // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
-            schema: promptStep.outputSchema,
+            schema: standardSchema as any,
           },
           tracingContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: promptStep.outputSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           tracingContext,
         });
       }

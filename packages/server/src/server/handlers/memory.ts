@@ -314,7 +314,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   description: 'Returns a paginated list of messages in a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({
+  handler: (async ({
     mastra,
     agentId,
     threadId,
@@ -325,7 +325,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     include,
     filter,
     requestContext,
-  }) => {
+  }: any) => {
     try {
       validateBody({ threadId });
 
@@ -384,7 +384,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }
-  },
+  }) as any,
 });
 
 export const GET_WORKING_MEMORY_ROUTE = createRoute({

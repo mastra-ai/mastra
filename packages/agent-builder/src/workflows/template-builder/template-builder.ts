@@ -249,7 +249,7 @@ Return the actual exported names of the units, as well as the file names.`,
             maxSteps: 100,
           })
         : await agent.generateLegacy(prompt, {
-            experimental_output: output,
+            experimental_output: output as any,
             maxSteps: 100,
           });
 
@@ -889,7 +889,7 @@ const programmaticFileCopyStep = createStep({
           } else {
             // Both exist - merge them intelligently
             const targetContent = await readFile(targetEnv, 'utf-8');
-            const mergedContent = mergeEnvFiles(targetContent, variables, slug);
+            const mergedContent = mergeEnvFiles(targetContent, variables as Record<string, string>, slug);
 
             if (mergedContent !== targetContent) {
               const addedLines = mergedContent.split('\n').length - targetContent.split('\n').length;
@@ -1458,7 +1458,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
               },
             })
           : await validationAgent.streamLegacy(iterationPrompt, {
-              experimental_output: output,
+              experimental_output: output as any,
             });
 
         let iterationErrors = 0;

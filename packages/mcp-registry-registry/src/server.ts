@@ -65,7 +65,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         content: [
           {
             type: 'text',
-            text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+            text: `Invalid arguments: ${error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
           },
         ],
         isError: true,

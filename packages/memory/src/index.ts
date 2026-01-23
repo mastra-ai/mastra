@@ -23,13 +23,11 @@ import type {
   ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
-import { ZodObject } from 'zod';
-import type { ZodTypeAny } from 'zod';
 import {
   updateWorkingMemoryTool,
   __experimental_updateWorkingMemoryToolVNext,
@@ -45,8 +43,6 @@ const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
-
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -813,10 +809,13 @@ ${workingMemory}`;
         const schema = config.workingMemory.schema;
         let convertedSchema: JSONSchema7;
 
-        if (isZodObject(schema as ZodTypeAny)) {
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
+        // Convert any PublicSchema to StandardSchemaWithJSON, then extract JSON Schema
+        if (isStandardSchemaWithJSON(schema)) {
+          convertedSchema = schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         } else {
-          convertedSchema = schema as JSONSchema7;
+          // Convert to standard schema first, then get JSON Schema
+          const standardSchema = toStandardSchema(schema);
+          convertedSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };

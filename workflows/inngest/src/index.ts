@@ -6,11 +6,8 @@ import type { MastraScorers } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput,
-  ProcessorRunner,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  ProcessorStepInputSchema } from '@mastra/core/processors';
+import type { Processor, ProcessorStepOutput, ProcessorStepInputSchema } from '@mastra/core/processors';
+import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { ChunkType } from '@mastra/core/stream';

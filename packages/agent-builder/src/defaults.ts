@@ -517,7 +517,7 @@ export const mastra = new Mastra({
           timeout: z.number().default(30000).describe('Timeout in milliseconds'),
           captureOutput: z.boolean().default(true).describe('Capture command output'),
           shell: z.string().optional().describe('Shell to use (defaults to system shell)'),
-          env: z.record(z.string()).optional().describe('Environment variables'),
+          env: z.record(z.string(), z.string()).optional().describe('Environment variables'),
         }),
         outputSchema: z.object({
           success: z.boolean(),
@@ -533,6 +533,7 @@ export const mastra = new Mastra({
           return await AgentBuilderDefaults.executeCommand({
             ...inputData,
             workingDirectory: inputData.workingDirectory || projectPath,
+            env: inputData.env as Record<string, string> | undefined,
           });
         },
       }),
@@ -557,7 +558,7 @@ export const mastra = new Mastra({
             .optional()
             .describe('Tasks to create or update'),
           taskId: z.string().optional().describe('Specific task ID for single task operations'),
-        }) as z.Schema<TaskManagerInputType>,
+        }),
         outputSchema: z.object({
           success: z.boolean(),
           tasks: z.array(
@@ -574,8 +575,8 @@ export const mastra = new Mastra({
           ),
           message: z.string(),
         }),
-        execute: async (inputData: TaskManagerInputType) => {
-          return await AgentBuilderDefaults.manageTaskList(inputData);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.manageTaskList(inputData as TaskManagerInputType);
         },
       }),
 
@@ -1024,7 +1025,7 @@ export const mastra = new Mastra({
           method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method'),
           url: z.string().describe('Full URL or path (if baseUrl provided)'),
           baseUrl: z.string().optional().describe('Base URL for the server (e.g., http://localhost:4200)'),
-          headers: z.record(z.string()).optional().describe('HTTP headers'),
+          headers: z.record(z.string(), z.string()).optional().describe('HTTP headers'),
           body: z.any().optional().describe('Request body (will be JSON stringified if object)'),
           timeout: z.number().optional().default(30000).describe('Request timeout in milliseconds'),
         }),
@@ -1032,7 +1033,7 @@ export const mastra = new Mastra({
           success: z.boolean(),
           status: z.number().optional(),
           statusText: z.string().optional(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
           data: z.any().optional(),
           errorMessage: z.string().optional(),
           url: z.string(),
@@ -1045,7 +1046,7 @@ export const mastra = new Mastra({
               method,
               url,
               baseUrl,
-              headers,
+              headers: headers as Record<string, string> | undefined,
               body,
               timeout,
             });

@@ -1,7 +1,7 @@
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
-import { roundToTwoDecimals, getA ssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
