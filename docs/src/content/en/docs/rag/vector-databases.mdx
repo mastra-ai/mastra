@@ -284,7 +284,13 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
-const store = new ElasticSearchVector({ id: 'elasticsearch-vector', url: process.env.ELASTICSEARCH_URL });
+const store = new ElasticSearchVector({
+  id: 'elasticsearch-vector',
+  url: process.env.ELASTICSEARCH_URL,
+  auth: {
+    apiKey : process.env.ELASTICSEARCH_API_KEY
+  }
+});
 
 await store.createIndex({
   indexName: "my-collection",
@@ -297,6 +303,10 @@ await store.upsert({
   metadata: chunks.map((chunk) => ({ text: chunk.text })),
 });
 ```
+<h3>Using Elasticsearch</h3>
+
+For detailed setup instructions and best practices, see the [official Elasticsearch documentation](https://www.elastic.co/docs/solutions/search/get-started).
+
 
   </TabItem>
   <TabItem value="couchbase" label="Couchbase">

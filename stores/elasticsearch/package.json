@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elasticsearch",
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0",
   "description": "ElasticSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@elastic/elasticsearch": "^8.17.0"
+    "@elastic/elasticsearch": "^8.19.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
