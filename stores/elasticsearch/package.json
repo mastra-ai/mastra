@@ -31,7 +31,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@elastic/elasticsearch": "^8.17.0"
+    "@elastic/elasticsearch": "^8.19.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

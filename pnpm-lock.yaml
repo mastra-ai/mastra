@@ -4306,7 +4306,7 @@ importers:
   stores/elasticsearch:
     dependencies:
       '@elastic/elasticsearch':
-        specifier: ^8.17.0
+        specifier: ^8.19.1
         version: 8.19.1
     devDependencies:
       '@internal/lint':
