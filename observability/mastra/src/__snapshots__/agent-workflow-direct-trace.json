@@ -1,0 +1,346 @@
+{
+  "__structure__": [
+    "agent_run: \"agent run: 'workflow-agent'\"",
+    "└── model_generation: \"llm: 'mock-model-id'\"",
+    "    ├── model_step: \"step: 0\"",
+    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   ├── tool_call: \"tool: 'workflow-simpleWorkflow'\"",
+    "    │   │   └── workflow_run: \"workflow run: 'simple-workflow'\"",
+    "    │   │       └── workflow_step: \"workflow step: 'simple-step'\"",
+    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
+    "    └── model_step: \"step: 1\"",
+    "        └── model_chunk: \"chunk: 'text'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "agent run: 'workflow-agent'",
+        "type": "agent_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "agent",
+        "entityId": "workflow-agent",
+        "attributes": {
+          "instructions": "You can execute workflows that exist in your config"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": "Execute the simpleWorkflow with test input",
+        "output": {
+          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "files": []
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "llm: 'mock-model-id'",
+            "type": "model_generation",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "workflow-agent",
+            "attributes": {
+              "model": "mock-model-id",
+              "provider": "mock-provider",
+              "streaming": true,
+              "parameters": {
+                "temperature": 0
+              },
+              "finishReason": "stop",
+              "responseId": "<responseId-1>",
+              "responseModel": "mock-model-id",
+              "completionStartTime": "<date>",
+              "usage": {
+                "inputTokens": 30,
+                "outputTokens": 35
+              }
+            },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
+            "input": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You can execute workflows that exist in your config"
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Execute the simpleWorkflow with test input"
+                    }
+                  ]
+                }
+              ]
+            },
+            "output": {
+              "files": [],
+              "reasoning": [],
+              "sources": [],
+              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "warnings": []
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "step: 0",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "workflow-agent",
+                "attributes": {
+                  "stepIndex": 0,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 10
+                  },
+                  "isContinued": true,
+                  "finishReason": "tool-calls"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": "",
+                  "toolCalls": [
+                    {
+                      "toolCallId": "call-workflow-1",
+                      "toolName": "workflow-simpleWorkflow",
+                      "args": {
+                        "inputData": {
+                          "input": "test input"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-call'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "workflow-agent",
+                    "attributes": {
+                      "chunkType": "tool-call",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "toolName": "workflow-simpleWorkflow",
+                      "toolCallId": "call-workflow-1",
+                      "toolInput": {
+                        "inputData": {
+                          "input": "test input"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "tool: 'workflow-simpleWorkflow'",
+                    "type": "tool_call",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "tool",
+                    "entityId": "workflow-agent",
+                    "attributes": {
+                      "toolDescription": "Workflow: simpleWorkflow",
+                      "toolType": "tool",
+                      "success": true
+                    },
+                    "input": {
+                      "inputData": {
+                        "input": "test input"
+                      }
+                    },
+                    "output": {
+                      "result": {
+                        "output": "test input processed"
+                      },
+                      "runId": "<runId-1>"
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "workflow run: 'simple-workflow'",
+                        "type": "workflow_run",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-5>",
+                        "entityType": "workflow_run",
+                        "entityId": "simple-workflow",
+                        "attributes": {
+                          "status": "success"
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>"
+                        },
+                        "input": {
+                          "input": "test input"
+                        },
+                        "output": {
+                          "output": "test input processed"
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-7>",
+                            "traceId": "<trace-1>",
+                            "name": "workflow step: 'simple-step'",
+                            "type": "workflow_step",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-6>",
+                            "entityType": "workflow_step",
+                            "entityId": "simple-step",
+                            "attributes": {
+                              "status": "success"
+                            },
+                            "input": {
+                              "input": "test input"
+                            },
+                            "output": {
+                              "output": "test input processed"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "span": {
+                    "id": "<span-8>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-result'",
+                    "type": "model_chunk",
+                    "completed": false,
+                    "isEvent": true,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "workflow-agent",
+                    "attributes": {
+                      "chunkType": "tool-result",
+                      "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "toolCallId": "call-workflow-1",
+                      "toolName": "workflow-simpleWorkflow"
+                    },
+                    "output": {
+                      "result": {
+                        "output": "test input processed"
+                      },
+                      "runId": "<runId-1>"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "span": {
+                "id": "<span-9>",
+                "traceId": "<trace-1>",
+                "name": "step: 1",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "workflow-agent",
+                "attributes": {
+                  "stepIndex": 1,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25
+                  },
+                  "isContinued": false,
+                  "finishReason": "stop"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "toolCalls": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-10>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-9>",
+                    "entityType": "agent",
+                    "entityId": "workflow-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -290,7 +290,7 @@ describe('Agent Hub Integration Tests', () => {
         (operationName === 'POST' &&
           s.references?.some((r: any) => {
             const refSpan = traceSpans.find((rs: any) => rs.spanID === r.spanID);
-            return refSpan?.tags?.some((t: any) => t.key === 'mastra.span.type' && t.value === 'model_generation');
+            return refSpan?.tags?.some((t: any) => t.key === 'mastra.span.type' && t.value === 'model_step');
           }))
       );
     });
@@ -313,13 +313,14 @@ describe('Agent Hub Integration Tests', () => {
           const parentMastraType = parentTags.find((t: any) => t.key === 'mastra.span.type')?.value;
           const parentOpName = parentSpan.operationName;
 
-          // Parent should either be MODEL_GENERATION or another OpenAI span (like tls.connect -> tcp.connect)
+          // Parent should either be MODEL_STEP or another OpenAI span (like tls.connect -> tcp.connect)
           // But should NOT be demo-controller
           expect(parentOpName).not.toBe('demo-controller');
 
-          // If parent has mastra.span.type, it should be model_generation
+          // If parent has mastra.span.type, it should be model_step
+          // (HTTP calls during LLM execution are nested under model_step)
           if (parentMastraType) {
-            expect(parentMastraType).toBe('model_generation');
+            expect(parentMastraType).toBe('model_step');
           }
         }
       }
