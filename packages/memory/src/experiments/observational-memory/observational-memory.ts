@@ -2076,6 +2076,10 @@ ${suggestedResponse}
         omDebug(`[OM processInputStep] Threshold reached, triggering observation`);
         omDebug(`[OM processInputStep] writer available: ${!!writer}`);
 
+        // Track IDs of messages we've already saved with observation markers (sealed)
+        // These IDs cannot be reused - if we see them again, we must regenerate
+        const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+
         const lockKey = this.getLockKey(threadId, resourceId);
         await this.withLock(lockKey, async () => {
           const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
@@ -2097,21 +2101,12 @@ ${suggestedResponse}
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
-          // Check for messages that would overwrite already-observed messages
-          // If a message has the same ID as one that's already sealed, generate a new ID
-          const { messages: existingMessages } = await this.storage.listMessages({ threadId });
-          const sealedMessageIds = new Set<string>();
-
-          for (const existingMsg of existingMessages) {
-            if (this.findLastCompletedObservationBoundary(existingMsg) !== -1) {
-              sealedMessageIds.add(existingMsg.id);
-            }
-          }
-
+          // Regenerate IDs for messages that were already saved with observation markers
+          // This prevents overwriting sealed messages in the DB
           let regeneratedIds = 0;
           for (const msg of messagesToSave) {
-            if (sealedMessageIds.has(msg.id)) {
-              // This message would overwrite a sealed message - generate new ID
+            if (sealedIds.has(msg.id)) {
+              // This message ID was already saved as sealed - generate new ID
               const oldId = msg.id;
               msg.id = crypto.randomUUID();
               omDebug(`[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`);
@@ -2125,6 +2120,15 @@ ${suggestedResponse}
             threadId,
             resourceId,
           });
+
+          // After successful save, track IDs of messages that now have observation markers (sealed)
+          // These IDs cannot be reused in future cycles
+          for (const msg of messagesToSave) {
+            if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+              sealedIds.add(msg.id);
+            }
+          }
+          state.sealedIds = sealedIds;
         }
 
         // Re-fetch record to get updated observations

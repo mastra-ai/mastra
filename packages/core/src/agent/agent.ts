@@ -36,7 +36,7 @@ import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow, Processor } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
-import { ProcessorRunner } from '../processors/runner';
+import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -331,10 +331,12 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Use overrides if provided, otherwise resolve from agent config + memory
     const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
@@ -346,6 +348,7 @@ export class Agent<
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      processorStates,
     });
   }
 
@@ -1597,11 +1600,13 @@ export class Agent<
     tracingContext,
     messageList,
     inputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -1617,6 +1622,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        processorStates,
       });
       try {
         messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);

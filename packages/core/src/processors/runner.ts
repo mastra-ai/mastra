@@ -98,38 +98,41 @@ export class ProcessorRunner {
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
   /**
-   * Per-processor state that persists across all method calls within this request.
-   * This is used to share state between processInput, processInputStep, processOutputResult, etc.
-   * for the same processor within a single generate() call.
+   * Shared processor state that persists across loop iterations.
+   * Used by all processor methods (input and output) to share state.
+   * Keyed by processor ID.
    */
-  private readonly processorStates: Map<string, Record<string, unknown>> = new Map();
+  private readonly processorStates: Map<string, ProcessorState>;
 
   constructor({
     inputProcessors,
     outputProcessors,
     logger,
     agentName,
+    processorStates,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.processorStates = processorStates ?? new Map();
   }
 
   /**
-   * Get or create per-processor state for the given processor ID.
-   * This state persists across all method calls (processInput, processInputStep, processOutputResult)
-   * for the same processor within this request.
+   * Get or create ProcessorState for the given processor ID.
+   * This state persists across loop iterations and is shared between
+   * all processor methods (input and output).
    */
-  private getProcessorState(processorId: string): Record<string, unknown> {
+  private getProcessorState(processorId: string): ProcessorState {
     let state = this.processorStates.get(processorId);
     if (!state) {
-      state = {};
+      state = new ProcessorState();
       this.processorStates.set(processorId, state);
     }
     return state;
@@ -149,7 +152,13 @@ export class ProcessorRunner {
     // Create a run and start the workflow
     const run = await workflow.createRun();
     const result = await run.start({
-      inputData: input,
+      // Cast to allow processorStates - it's passed through to workflow processor steps
+      // but not part of the official ProcessorStepOutput schema
+      inputData: {
+        ...input,
+        // Pass the processorStates map so workflow processor steps can access their state
+        processorStates: this.processorStates,
+      } as ProcessorStepOutput,
       tracingContext,
       requestContext,
       outputWriter: writer ? (chunk => writer.custom(chunk)) : undefined,
@@ -270,7 +279,7 @@ export class ProcessorRunner {
       const result = await processMethod({
         messages: processableMessages,
         messageList,
-        state: processorState,
+        state: processorState.customState,
         abort,
         tracingContext: { currentSpan: processorSpan },
         requestContext,
@@ -610,7 +619,7 @@ export class ProcessorRunner {
       const result = await processMethod({
         messages: processableMessages,
         systemMessages: currentSystemMessages,
-        state: processorState,
+        state: processorState.customState,
         abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
@@ -851,7 +860,7 @@ export class ProcessorRunner {
         const processMethodArgs = {
           messageList,
           ...inputData,
-          state: processorState,
+          state: processorState.customState,
           abort,
           tracingContext: { currentSpan: processorSpan },
           retryCount: args.retryCount ?? 0,
@@ -1050,7 +1059,7 @@ export class ProcessorRunner {
           text,
           systemMessages: currentSystemMessages,
           steps,
-          state: processorState,
+          state: processorState.customState,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,

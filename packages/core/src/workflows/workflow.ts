@@ -18,7 +18,7 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { EntityType, SpanType, getOrCreateSpan } from '../observability';
-import { ProcessorRunner } from '../processors';
+import { ProcessorRunner, ProcessorState } from '../processors';
 import type { Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
@@ -610,7 +610,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput;
+      const input = inputData as ProcessorStepOutput & { processorStates?: Map<string, ProcessorState> };
       const {
         phase,
         messages,
@@ -633,6 +633,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        // Shared processor states map for accessing persisted state
+        processorStates,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -695,12 +697,28 @@ function createStepFromProcessor<TProcessorId extends string>(
       // and tracingContext for proper span nesting when processors call internal agents
       // state is per-processor state that persists across all method calls within this request
       // writer enables real-time streaming of data-* parts to the UI
+      
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
+      
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
-        state: state ?? {},
+        state: processorState,
         writer: processorWriter,
       };
 

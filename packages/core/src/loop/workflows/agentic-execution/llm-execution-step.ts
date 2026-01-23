@@ -591,6 +591,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates,
           });
 
           try {
@@ -616,7 +617,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               modelSettings,
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
-              state: {},
               writer: inputStepWriter,
             });
             Object.assign(currentStep, processInputStepResult);
@@ -989,6 +989,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          processorStates,
         });
 
         try {

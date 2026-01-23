@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorState } from '../../../processors';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -56,6 +56,8 @@ export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
+  /** Shared processor states map that persists across loop iterations for both input and output processors */
+  processorStates: z.instanceof(Map<string, ProcessorState>),
   /** Tripwire data when input processor triggered abort */
   tripwire: z
     .object({

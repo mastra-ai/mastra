@@ -144,7 +144,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
+export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort' | 'state'>;
 
 /**
  * Result from processInputStep method

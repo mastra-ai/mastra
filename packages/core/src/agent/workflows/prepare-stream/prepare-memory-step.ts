@@ -5,6 +5,7 @@ import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
+import { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -71,6 +72,10 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
 
+      // Create processorStates map - persists across loop iterations within this agent turn
+      // Shared by all processor methods (input and output) for state sharing
+      const processorStates = new Map<string, ProcessorState>();
+
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
 
@@ -86,11 +91,13 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           tracingContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
+          processorStates,
         });
         return {
           threadExists: false,
           thread: undefined,
           messageList,
+          processorStates,
           tripwire,
         };
       }
@@ -168,11 +175,13 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         tracingContext,
         messageList,
         inputProcessorOverrides: options.inputProcessors,
+        processorStates,
       });
 
       return {
         thread: threadObject,
         messageList: messageList,
+        processorStates,
         tripwire,
         threadExists: !!existingThread,
       };

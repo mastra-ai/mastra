@@ -25,6 +25,10 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  /**
+   * Shared processor state map that persists across agent turns.
+   */
+  processorStates?: Map<string, Record<string, unknown>>;
 }
 
 export function createMapResultsStep<OUTPUT = undefined>({
@@ -249,6 +253,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
+      processorStates: memoryData.processorStates,
     };
 
     return loopOptions;
