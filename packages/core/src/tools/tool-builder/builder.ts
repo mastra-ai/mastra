@@ -345,7 +345,9 @@ export class CoreToolBuilder extends MastraBase {
                 resumeSchema:
                   suspendOptions?.resumeSchema ??
                   (resumeSchema
-                    ? JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(resumeSchema)))
+                    ? JSON.stringify(
+                        toStandardSchema(resumeSchema)['~standard'].jsonSchema.input({ target: 'draft-07' }),
+                      )
                     : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
