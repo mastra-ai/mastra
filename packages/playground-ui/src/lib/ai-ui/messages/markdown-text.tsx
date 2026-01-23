@@ -11,9 +11,9 @@ import remarkGfm from 'remark-gfm';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { cn } from '@/lib/utils';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { makePrismAsyncLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 
-const SyntaxHighlighter = makePrismAsyncLightSyntaxHighlighter({
+const SyntaxHighlighter = makePrismLightSyntaxHighlighter({
   style: coldarkDark,
   customStyle: {
     margin: 0,
