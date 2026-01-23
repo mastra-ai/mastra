@@ -15,6 +15,9 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'role') return 'user';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
 
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
   if (field.includes('tool')) return 'test-tool';
