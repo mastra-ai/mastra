@@ -120,6 +120,15 @@ function isMastraCloudAuth(auth: unknown): boolean {
 }
 
 /**
+ * Check if auth provider is SimpleAuth (exempt from license requirement).
+ * SimpleAuth is for development/testing and should work without a license.
+ */
+function isSimpleAuth(auth: unknown): boolean {
+  if (!auth || typeof auth !== 'object') return false;
+  return 'isSimpleAuth' in auth && (auth as { isSimpleAuth: boolean }).isSimpleAuth === true;
+}
+
+/**
  * Options for building capabilities.
  */
 export interface BuildCapabilitiesOptions {
@@ -162,9 +171,11 @@ export async function buildCapabilities(
   }
 
   // Determine if EE features are available
+  // SimpleAuth and MastraCloudAuth are exempt from license requirement
   const hasLicense = isEELicenseValid();
   const isCloud = isMastraCloudAuth(auth);
-  const isLicensedOrCloud = hasLicense || isCloud;
+  const isSimple = isSimpleAuth(auth);
+  const isLicensedOrCloud = hasLicense || isCloud || isSimple;
 
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;
