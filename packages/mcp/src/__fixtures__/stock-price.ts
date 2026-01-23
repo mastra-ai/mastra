@@ -1,7 +1,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { z, toJSONSchema } from 'zod';
+import { z } from 'zod';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const getStockPrice = async (symbol: string) => {
   // Return mock data for testing
@@ -73,7 +74,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: stockTool.name,
       description: stockTool.description,
-      inputSchema: toJSONSchema(stockInputSchema),
+      inputSchema: zodToJsonSchema(stockInputSchema),
     },
   ],
 }));
