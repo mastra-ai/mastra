@@ -135,8 +135,8 @@ export default function WorkspaceSkillDetailPage() {
         </HeaderAction>
       </Header>
 
-      <div className="grid overflow-y-auto h-full">
-        <div className="max-w-[100rem] px-[3rem] mx-auto py-8 h-full w-full">
+      <div className="grid overflow-y-auto overflow-x-hidden h-full">
+        <div className="max-w-[100rem] px-[3rem] mx-auto py-8 h-full w-full overflow-x-hidden">
           <SkillDetail skill={skill} onReferenceClick={setViewingReference} />
         </div>
       </div>
