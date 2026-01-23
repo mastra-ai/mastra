@@ -772,11 +772,14 @@ export class Workspace {
 
   /**
    * Execute code in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   * @throws {SandboxNotAvailableError} if no sandbox is configured or doesn't support executeCode
    */
   async executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult> {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
+    }
+    if (!this._sandbox.executeCode) {
+      throw new SandboxNotAvailableError('Sandbox does not support executeCode');
     }
     await this.ensureInitialized();
     this.lastAccessedAt = new Date();
@@ -1378,6 +1381,76 @@ export class Workspace {
         'Filesystem and sandbox are in different environments. To use workspace files in code: 1) Read file contents using workspace_read_file, 2) Pass contents as variables to your code, or 3) Use workspace_sync_to_sandbox to sync files before execution.',
     };
   }
+
+  /**
+   * Generate a context description of this workspace for agent instructions.
+   * Describes mounts, sandbox capabilities, and how to access files.
+   *
+   * @returns Formatted string describing the workspace configuration
+   */
+  getAgentContext(): string {
+    const lines: string[] = [];
+    lines.push('## Workspace Configuration');
+    lines.push('');
+
+    // Describe mounts
+    if (this._mounts.size > 0) {
+      lines.push('### Mounts');
+      for (const [mountPath, fs] of this._mounts) {
+        const provider = fs.provider;
+        const displayName = (fs as any).displayName || provider;
+        const isMountable = provider !== 'local'; // Cloud filesystems can be mounted in remote sandboxes
+
+        if (isMountable) {
+          lines.push(`- \`${mountPath}\` - ${displayName} (accessible in sandbox at ${mountPath})`);
+        } else {
+          lines.push(`- \`${mountPath}\` - ${displayName} (local - use workspace_read_file/workspace_write_file)`);
+        }
+      }
+      lines.push('');
+    } else if (this._fs) {
+      // Single filesystem
+      const provider = this._fs.provider;
+      const basePath = (this._fs as any).basePath;
+      lines.push('### Filesystem');
+      lines.push(`- Provider: ${provider}`);
+      if (basePath) {
+        lines.push(`- Base path: ${basePath}`);
+      }
+      lines.push('');
+    }
+
+    // Describe sandbox
+    if (this._sandbox) {
+      lines.push('### Sandbox');
+      lines.push(`- Provider: ${this._sandbox.provider}`);
+      lines.push('- Use `workspace_execute_command` to run shell commands');
+
+      // Note about cloud mounts being accessible
+      const cloudMounts = Array.from(this._mounts.entries()).filter(([_, fs]) => fs.provider !== 'local');
+      if (cloudMounts.length > 0) {
+        const mountPaths = cloudMounts.map(([path]) => path).join(', ');
+        lines.push(`- Cloud storage mounts are directly accessible at: ${mountPaths}`);
+      }
+
+      // Note about local mounts requiring workspace tools
+      const localMounts = Array.from(this._mounts.entries()).filter(([_, fs]) => fs.provider === 'local');
+      if (localMounts.length > 0) {
+        const mountPaths = localMounts.map(([path]) => path).join(', ');
+        lines.push(`- Local mounts (${mountPaths}) are NOT in the sandbox - use workspace_read_file to read them`);
+      }
+      lines.push('');
+    }
+
+    // Describe skills paths
+    if (this._config.skillsPaths && this._config.skillsPaths.length > 0) {
+      lines.push('### Skills');
+      lines.push(`- Skills are loaded from: ${this._config.skillsPaths.join(', ')}`);
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
 }
 
 // =============================================================================
@@ -1481,8 +1554,8 @@ export class FilesystemNotAvailableError extends WorkspaceError {
 }
 
 export class SandboxNotAvailableError extends WorkspaceError {
-  constructor() {
-    super('Workspace does not have a sandbox configured', 'NO_SANDBOX');
+  constructor(message?: string) {
+    super(message ?? 'Workspace does not have a sandbox configured', 'NO_SANDBOX');
     this.name = 'SandboxNotAvailableError';
   }
 }

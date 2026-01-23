@@ -1,19 +1,22 @@
 import { LocalFilesystem, Workspace } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { E2BSandbox } from '@mastra/e2b';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { S3Filesystem } from '@mastra/s3';
 
 export const cloudWorkspace = new Workspace({
   id: 'cloud-workspace',
   name: 'Cloud Workspace',
   sandbox: new E2BSandbox({
-    id: 'yay-testing-123',
-    timeout: 30_000, // 30 seconds
+    id: 'yay-testing-1234',
+    // timeout: 30_000, // 30 seconds
   }),
   // ?? sandbox logs?
   mounts: {
     '/local': new LocalFilesystem({ basePath: '/Users/caleb/mastra/examples/unified-workspace/agent-files' }),
-    '/default-skills': new S3Filesystem({
+
+    '/bucket-1': new S3Filesystem({
       displayName: 'Cloudflare R2',
       bucket: 'agent-test-bucket',
       description: 'agent-test-bucket',
@@ -22,7 +25,7 @@ export const cloudWorkspace = new Workspace({
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
       endpoint: process.env.S3_ENDPOINT,
     }),
-    '/data': new S3Filesystem({
+    '/bucket-2': new S3Filesystem({
       displayName: 'Cloudflare R2',
       bucket: 'agent-test-bucket-2',
       description: 'agent-test-bucket-2',
@@ -33,7 +36,7 @@ export const cloudWorkspace = new Workspace({
     }),
   },
   // TODO: better error messages (not just exit code) for execute_code and execute_command tools
-  skillsPaths: ['/local/skills', '/default-skills/skills', '/data/skills'],
+  skillsPaths: ['/local/skills', '/bucket-1/skills', '/bucket-2/skills'],
   bm25: true,
   // autoInit: true,
   safety: {
@@ -61,5 +64,11 @@ You can:
 When asked to run code, use the workspace_execute_code tool.
 Always show the output to the user.`,
   model: 'openai/gpt-5.1',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'e2b-agent-memory-storage',
+      url: 'file:./e2b-agent.db',
+    }),
+  }),
   workspace: cloudWorkspace,
 });

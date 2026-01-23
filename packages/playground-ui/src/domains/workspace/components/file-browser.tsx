@@ -464,7 +464,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       </div>
 
       {/* Content */}
-      <div className="max-h-[500px] overflow-auto" style={{ backgroundColor: 'black' }}>
+      <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-icon3" />

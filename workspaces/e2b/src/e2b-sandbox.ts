@@ -14,12 +14,8 @@ import type {
   SandboxStatus,
   SandboxRuntime,
   SandboxInfo,
-  ExecuteCodeOptions,
   ExecuteCommandOptions,
-  CodeResult,
   CommandResult,
-  InstallPackageOptions,
-  InstallPackageResult,
   WorkspaceFilesystem,
   FilesystemMountConfig,
 } from '@mastra/core/workspace';
@@ -638,15 +634,19 @@ export class E2BSandbox implements WorkspaceSandbox {
     return this._sandbox;
   }
 
-  private isSandboxTimeoutError(error: unknown): boolean {
+  /**
+   * Check if error indicates the sandbox itself is dead/gone.
+   * Does NOT include code execution timeouts (those are the user's code taking too long).
+   * Does NOT include "port is not open" - that needs sandbox kill, not reconnect.
+   */
+  private isSandboxDeadError(error: unknown): boolean {
     if (!error) return false;
     const errorStr = String(error);
     return (
       errorStr.includes('sandbox was not found') ||
-      errorStr.includes('sandbox timeout') ||
       errorStr.includes('Sandbox is probably not running') ||
-      errorStr.includes('TimeoutError') ||
-      (error instanceof Error && error.name === 'TimeoutError')
+      errorStr.includes('Sandbox not found') ||
+      errorStr.includes('sandbox has been killed')
     );
   }
 
@@ -656,81 +656,20 @@ export class E2BSandbox implements WorkspaceSandbox {
   }
 
   // ---------------------------------------------------------------------------
-  // Code Execution
-  // ---------------------------------------------------------------------------
-
-  async executeCode(code: string, options: ExecuteCodeOptions = {}): Promise<CodeResult> {
-    const sandbox = await this.ensureSandbox();
-
-    const startTime = Date.now();
-    const runtime = options.runtime ?? this.defaultRuntime;
-    const language = this.mapRuntimeToLanguage(runtime);
-
-    try {
-      const execution = await sandbox.runCode(code, { language });
-
-      const executionTimeMs = Date.now() - startTime;
-      const hasError = !!execution.error;
-
-      const errorStr = execution.error ? String(execution.error.value ?? execution.error.name ?? '') : '';
-
-      return {
-        success: !hasError,
-        exitCode: hasError ? 1 : 0,
-        stdout: execution.logs.stdout.join('\n'),
-        stderr: execution.logs.stderr.join('\n') + errorStr,
-        executionTimeMs,
-        runtime,
-        returnValue: execution.text ?? undefined,
-      };
-    } catch (error) {
-      // Handle sandbox timeout - retry once with fresh sandbox
-      if (this.isSandboxTimeoutError(error)) {
-        this.handleSandboxTimeout();
-        return this.executeCode(code, options);
-      }
-
-      const executionTimeMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return {
-        success: false,
-        exitCode: 1,
-        stdout: '',
-        stderr: errorMessage,
-        executionTimeMs,
-        runtime,
-      };
-    }
-  }
-
-  private mapRuntimeToLanguage(runtime: SandboxRuntime): 'python' | 'js' | 'ts' | 'r' | 'java' {
-    switch (runtime) {
-      case 'python':
-        return 'python';
-      case 'node':
-        return 'js';
-      case 'deno':
-      case 'bun':
-        return 'ts';
-      default:
-        return 'js';
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 
   async executeCommand(
     command: string,
     args: string[] = [],
-    options: ExecuteCommandOptions = {},
+    options: ExecuteCommandOptions & { _isRetry?: boolean } = {},
   ): Promise<CommandResult> {
     const sandbox = await this.ensureSandbox();
 
     const startTime = Date.now();
     const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+    console.log(`[E2B] Executing: ${fullCommand}`);
 
     try {
       const result = await sandbox.commands.run(fullCommand, {
@@ -740,6 +679,10 @@ export class E2BSandbox implements WorkspaceSandbox {
       });
 
       const executionTimeMs = Date.now() - startTime;
+
+      console.log(`[E2B] Exit code: ${result.exitCode} (${executionTimeMs}ms)`);
+      if (result.stdout) console.log(`[E2B] stdout:\n${result.stdout}`);
+      if (result.stderr) console.log(`[E2B] stderr:\n${result.stderr}`);
 
       return {
         success: result.exitCode === 0,
@@ -751,64 +694,34 @@ export class E2BSandbox implements WorkspaceSandbox {
         args,
       };
     } catch (error) {
-      // Handle sandbox timeout - retry once
-      if (this.isSandboxTimeoutError(error)) {
+      // Handle sandbox-is-dead errors - retry once (not infinitely)
+      if (this.isSandboxDeadError(error) && !options._isRetry) {
         this.handleSandboxTimeout();
-        return this.executeCommand(command, args, options);
+        return this.executeCommand(command, args, { ...options, _isRetry: true });
       }
 
       const executionTimeMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // E2B errors often contain the actual command result in error.result
+      const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
+      const stdout = errorObj.result?.stdout || '';
+      const stderr = errorObj.result?.stderr || (error instanceof Error ? error.message : String(error));
+      const exitCode = errorObj.result?.exitCode ?? 1;
+
+      console.log(`[E2B] Exit code: ${exitCode} (${executionTimeMs}ms) [error]`);
+      if (stdout) console.log(`[E2B] stdout:\n${stdout}`);
+      if (stderr) console.log(`[E2B] stderr:\n${stderr}`);
 
       return {
         success: false,
-        exitCode: 1,
-        stdout: '',
-        stderr: errorMessage,
+        exitCode,
+        stdout,
+        stderr,
         executionTimeMs,
         command,
         args,
       };
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Package Management
-  // ---------------------------------------------------------------------------
-
-  async installPackage(packageName: string, options: InstallPackageOptions = {}): Promise<InstallPackageResult> {
-    const startTime = Date.now();
-    const pm = options.packageManager ?? 'auto';
-
-    let command: string;
-    if (pm === 'pip' || pm === 'auto') {
-      command = `pip install ${packageName}${options.version ? `==${options.version}` : ''}`;
-    } else if (pm === 'npm' || pm === 'yarn' || pm === 'pnpm') {
-      const pmCmd = pm === 'npm' ? 'npm install' : pm === 'yarn' ? 'yarn add' : 'pnpm add';
-      const devFlag = options.dev ? ' -D' : '';
-      const versionSuffix = options.version ? `@${options.version}` : '';
-      command = `${pmCmd}${devFlag} ${packageName}${versionSuffix}`;
-    } else {
-      command = `pip install ${packageName}`;
-    }
-
-    const result = await this.executeCommand(command, [], { timeout: options.timeout ?? 60000 });
-
-    return {
-      success: result.success,
-      packageName,
-      version: options.version,
-      error: result.success ? undefined : result.stderr,
-      executionTimeMs: Date.now() - startTime,
-    };
-  }
-
-  async installPackages(packages: string[], options: InstallPackageOptions = {}): Promise<InstallPackageResult[]> {
-    const results: InstallPackageResult[] = [];
-    for (const pkg of packages) {
-      results.push(await this.installPackage(pkg, options));
-    }
-    return results;
   }
 
   // ---------------------------------------------------------------------------

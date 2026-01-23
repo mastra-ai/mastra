@@ -222,10 +222,11 @@ export interface WorkspaceSandbox {
 
   /**
    * Execute code in the sandbox.
+   * Optional - if not implemented, the workspace_execute_code tool won't be available.
    * @throws {SandboxExecutionError} if execution fails catastrophically
    * @throws {SandboxTimeoutError} if execution times out
    */
-  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
+  executeCode?(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
 
   /**
    * Execute code with streaming output.

@@ -8,11 +8,11 @@ import {
   // editorAgent,
   // automationAgent,
   // scriptRunnerAgent,
-  testAgent,
-  // e2bAgent,
+  // testAgent,
+  e2bAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
-import { cloudWorkspace } from './agents/e2b-agent';
+// import { cloudWorkspace } from './agents/e2b-agent';
 
 // Re-export workspaces for demo scripts
 export {
@@ -56,11 +56,11 @@ export const mastra = new Mastra({
     // editorAgent,
     // automationAgent,
     // scriptRunnerAgent,
-    testAgent,
-    // e2bAgent,
+    // testAgent,
+    e2bAgent,
   },
-  workspace: cloudWorkspace,
-  // workspace: globalWorkspace,
+  // workspace: cloudWorkspace,
+  workspace: globalWorkspace,
   storage,
 });
 

@@ -156,25 +156,30 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       const agents = mastra.listAgents?.() ?? {};
       for (const [agentId, agent] of Object.entries(agents)) {
         if (agent.hasOwnWorkspace?.()) {
-          const agentWorkspace = await agent.getWorkspace?.();
-          if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
-            seenIds.add(agentWorkspace.id);
-            workspaces.push({
-              id: agentWorkspace.id,
-              name: agentWorkspace.name,
-              status: agentWorkspace.status,
-              source: 'agent',
-              agentId,
-              agentName: agent.name,
-              capabilities: {
-                hasFilesystem: !!agentWorkspace.fs,
-                hasSandbox: !!agentWorkspace.sandbox,
-                canBM25: agentWorkspace.canBM25,
-                canVector: agentWorkspace.canVector,
-                canHybrid: agentWorkspace.canHybrid,
-                hasSkills: !!agentWorkspace.skills,
-              },
-            });
+          try {
+            const agentWorkspace = await agent.getWorkspace?.();
+            if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
+              seenIds.add(agentWorkspace.id);
+              workspaces.push({
+                id: agentWorkspace.id,
+                name: agentWorkspace.name,
+                status: agentWorkspace.status,
+                source: 'agent',
+                agentId,
+                agentName: agent.name,
+                capabilities: {
+                  hasFilesystem: !!agentWorkspace.fs,
+                  hasSandbox: !!agentWorkspace.sandbox,
+                  canBM25: agentWorkspace.canBM25,
+                  canVector: agentWorkspace.canVector,
+                  canHybrid: agentWorkspace.canHybrid,
+                  hasSkills: !!agentWorkspace.skills,
+                },
+              });
+            }
+          } catch {
+            // Skip agents with dynamic workspaces that fail without thread context
+            continue;
           }
         }
       }
@@ -200,11 +205,46 @@ export const WORKSPACE_INFO_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra }) => {
     try {
-      const workspace = getWorkspace(mastra);
+      // Check if any workspace exists (global or agent)
+      const globalWorkspace = getWorkspace(mastra);
 
-      if (!workspace) {
+      // Also check agent workspaces
+      let hasAgentWorkspace = false;
+      const agents = mastra.listAgents?.() ?? {};
+      for (const agent of Object.values(agents)) {
+        if ((agent as any).hasOwnWorkspace?.()) {
+          hasAgentWorkspace = true;
+          break;
+        }
+      }
+
+      // If no workspaces at all
+      if (!globalWorkspace && !hasAgentWorkspace) {
         return {
           isWorkspaceConfigured: false,
+        };
+      }
+
+      // Use global workspace for the info if available, otherwise get first agent workspace
+      let workspace = globalWorkspace;
+      if (!workspace) {
+        for (const agent of Object.values(agents)) {
+          if ((agent as any).hasOwnWorkspace?.()) {
+            try {
+              workspace = await (agent as any).getWorkspace?.();
+              if (workspace) break;
+            } catch {
+              continue;
+            }
+          }
+        }
+      }
+
+      // If we have workspaces configured but couldn't get one (dynamic workspace issue)
+      if (!workspace) {
+        return {
+          isWorkspaceConfigured: true,
+          // No specific workspace info since they're all dynamic
         };
       }
 

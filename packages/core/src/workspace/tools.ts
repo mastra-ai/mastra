@@ -430,47 +430,50 @@ export function createWorkspaceTools(workspace: Workspace) {
       }
     }
 
-    tools.workspace_execute_code = createTool({
-      id: 'workspace_execute_code',
-      description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
-      // Require approval when sandboxApproval is 'all'
-      requireApproval: sandboxApproval === 'all',
-      inputSchema: z.object({
-        code: z.string().describe('The code to execute'),
-        runtime: z
-          .enum(['node', 'python', 'bash', 'shell', 'ruby'])
-          .nullish()
-          .default('node')
-          .describe('The runtime to use for execution'),
-        timeout: z
-          .number()
-          .nullish()
-          .default(30000)
-          .describe(
-            'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
-          ),
-      }),
-      outputSchema: z.object({
-        success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
-        stdout: z.string().describe('Standard output from the execution'),
-        stderr: z.string().describe('Standard error output'),
-        exitCode: z.number().describe('Exit code (0 = success)'),
-        executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
-      }),
-      execute: async ({ code, runtime, timeout }) => {
-        const result = await workspace.executeCode(code, {
-          runtime: runtime ?? undefined,
-          timeout: timeout ?? 30000,
-        });
-        return {
-          success: result.success,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          executionTimeMs: result.executionTimeMs,
-        };
-      },
-    });
+    // Only add execute_code tool if sandbox implements it
+    if (workspace.sandbox.executeCode) {
+      tools.workspace_execute_code = createTool({
+        id: 'workspace_execute_code',
+        description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
+        // Require approval when sandboxApproval is 'all'
+        requireApproval: sandboxApproval === 'all',
+        inputSchema: z.object({
+          code: z.string().describe('The code to execute'),
+          runtime: z
+            .enum(['node', 'python', 'bash', 'shell', 'ruby'])
+            .nullish()
+            .default('node')
+            .describe('The runtime to use for execution'),
+          timeout: z
+            .number()
+            .nullish()
+            .default(30000)
+            .describe(
+              'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
+            ),
+        }),
+        outputSchema: z.object({
+          success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
+          stdout: z.string().describe('Standard output from the execution'),
+          stderr: z.string().describe('Standard error output'),
+          exitCode: z.number().describe('Exit code (0 = success)'),
+          executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
+        }),
+        execute: async ({ code, runtime, timeout }) => {
+          const result = await workspace.executeCode(code, {
+            runtime: runtime ?? undefined,
+            timeout: timeout ?? 30000,
+          });
+          return {
+            success: result.success,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            executionTimeMs: result.executionTimeMs,
+          };
+        },
+      });
+    }
 
     tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
@@ -511,46 +514,41 @@ export function createWorkspaceTools(workspace: Workspace) {
       },
     });
 
-    tools.workspace_install_package = createTool({
-      id: 'workspace_install_package',
-      description: 'Install a package in the workspace sandbox environment',
-      // Require approval when sandboxApproval is 'all' or 'commands'
-      requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
-      inputSchema: z.object({
-        packageName: z.string().describe('The name of the package to install'),
-        packageManager: z
-          .enum(['npm', 'pip', 'yarn', 'pnpm'])
-          .optional()
-          .default('npm')
-          .describe('The package manager to use'),
-        version: z.string().optional().describe('Specific version to install'),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        packageName: z.string(),
-        version: z.string().optional(),
-        errorMessage: z.string().optional(),
-        executionTimeMs: z.number(),
-      }),
-      execute: async ({ packageName, packageManager, version }) => {
-        if (!workspace.sandbox!.installPackage) {
+    // Only add install_package tool if sandbox implements it
+    if (workspace.sandbox.installPackage) {
+      tools.workspace_install_package = createTool({
+        id: 'workspace_install_package',
+        description: 'Install a package in the workspace sandbox environment',
+        // Require approval when sandboxApproval is 'all' or 'commands'
+        requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
+        inputSchema: z.object({
+          packageName: z.string().describe('The name of the package to install'),
+          packageManager: z
+            .enum(['npm', 'pip', 'yarn', 'pnpm'])
+            .optional()
+            .default('npm')
+            .describe('The package manager to use'),
+          version: z.string().optional().describe('Specific version to install'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          packageName: z.string(),
+          version: z.string().optional(),
+          errorMessage: z.string().optional(),
+          executionTimeMs: z.number(),
+        }),
+        execute: async ({ packageName, packageManager, version }) => {
+          const result = await workspace.sandbox!.installPackage!(packageName, { packageManager, version });
           return {
-            success: false,
-            packageName,
-            errorMessage: 'Package installation not supported by this sandbox',
-            executionTimeMs: 0,
+            success: result.success,
+            packageName: result.packageName,
+            version: result.version,
+            errorMessage: result.error,
+            executionTimeMs: result.executionTimeMs,
           };
-        }
-        const result = await workspace.sandbox!.installPackage(packageName, { packageManager, version });
-        return {
-          success: result.success,
-          packageName: result.packageName,
-          version: result.version,
-          errorMessage: result.error,
-          executionTimeMs: result.executionTimeMs,
-        };
-      },
-    });
+        },
+      });
+    }
   }
 
   return tools;
