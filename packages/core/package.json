@@ -250,7 +250,7 @@
     "@ai-sdk/provider-utils-v4": "npm:@ai-sdk/provider-utils@2.2.8",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.33",
     "@ai-sdk/perplexity-v5": "npm:@ai-sdk/perplexity@2.0.5",
-    "@babel/core": "^7.28.5",
+    "@babel/core": "^7.28.6",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",

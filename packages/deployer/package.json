@@ -94,7 +94,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^7.28.5",
+    "@babel/core": "^7.28.6",
     "@babel/preset-typescript": "^7.27.1",
     "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
