@@ -73,15 +73,28 @@ function initSimpleAuth(): AuthResult {
 async function initBetterAuth(): Promise<AuthResult> {
   const { MastraAuthBetterAuth } = await import('@mastra/auth-better-auth');
   const { betterAuth } = await import('better-auth');
-  const Database = (await import('better-sqlite3')).default;
+  const { getMigrations } = await import('better-auth/db');
+  // Use Node.js built-in SQLite (available since Node 22.5.0)
+  // No native module compilation required
+  const { DatabaseSync } = await import('node:sqlite');
   const { join } = await import('node:path');
 
   const dbPath = join(import.meta.dirname, '../../database.sqlite');
 
-  const auth = betterAuth({
-    database: new Database(dbPath),
+  const authConfig = {
+    database: new DatabaseSync(dbPath),
     emailAndPassword: { enabled: true },
-  });
+  };
+
+  const auth = betterAuth(authConfig);
+
+  // Auto-migrate database schema if needed
+  const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(authConfig);
+  if (toBeCreated.length > 0 || toBeAdded.length > 0) {
+    console.log('[Auth] Running Better Auth migrations...');
+    await runMigrations();
+    console.log('[Auth] Migrations completed');
+  }
 
   const mastraAuth = new MastraAuthBetterAuth({ auth });
 
