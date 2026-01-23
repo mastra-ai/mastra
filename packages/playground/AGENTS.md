@@ -37,6 +37,10 @@ Standards and conventions for building the local studio in `packages/playground`
 - Pages should be thin wrappers around `playground-ui` components
 - When in doubt, add functionality to `playground-ui` instead
 
-## E2E Testing (MUST DO)
+## MUST DO EVERY SINGLE TIME
 
-On every change to this package, you MUST use the `e2e-frontend-validation` skill
+On every change to this package, you MUST ALWAYS follow these instructions:
+
+- use `e2e-frontend-validation` skill
+- use `react-best-practices` skill
+- use `tailwind-best-practices` skill
