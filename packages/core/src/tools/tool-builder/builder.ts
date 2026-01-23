@@ -183,7 +183,8 @@ export class CoreToolBuilder extends MastraBase {
           processedParameters = parameters;
         } else if (isStandardSchemaWithJSON(parameters)) {
           // StandardSchemaWithJSON - extract the JSON schema and wrap it
-          const jsonSchema = parameters['~standard'].jsonSchema.output({ target: 'draft-07' });
+          // Use .input() since parameters represent tool input
+          const jsonSchema = parameters['~standard'].jsonSchema.input({ target: 'draft-07' });
           processedParameters = { jsonSchema };
         } else {
           // Assume Zod schema - convert to AI SDK Schema
@@ -343,7 +344,9 @@ export class CoreToolBuilder extends MastraBase {
                 ...(suspendOptions ?? {}),
                 resumeSchema:
                   suspendOptions?.resumeSchema ??
-                  (resumeSchema ? JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(resumeSchema))) : undefined),
+                  (resumeSchema
+                    ? JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(resumeSchema)))
+                    : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
             },
