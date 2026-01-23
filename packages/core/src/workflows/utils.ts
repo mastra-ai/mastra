@@ -15,8 +15,8 @@ import type {
 
 export function getZodErrors(error: any): { path?: (string | number)[]; message: string }[] {
   // zod v4 returns issues instead of errors
-  const errors = error.issues as { path?: (string | number)[]; message: string }[];
-  return errors;
+  const issues = error?.issues;
+  return Array.isArray(issues) ? issues : [];
 }
 
 export async function validateStepInput({
