@@ -1646,6 +1646,72 @@ describe('Memory Handlers', () => {
 
         expect(result).toBeDefined();
       });
+
+      it('should return 403 when saving messages to thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        // Create thread owned by user-b
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        // User-a tries to save message to user-b's thread (with matching resourceId to bypass first check)
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            threadId: 'user-b-thread', // Trying to write to user-b's thread
+            resourceId: 'user-a', // Matches middleware-set resourceId
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Malicious message to wrong thread' }],
+              content: 'Malicious message to wrong thread',
+            },
+          },
+        ];
+
+        await expect(
+          SAVE_MESSAGES_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            messages,
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+
+      it('should allow saving messages to new thread that does not exist yet', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        // No thread created - simulates first message to a new thread
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            threadId: 'new-thread-id',
+            resourceId: 'user-a',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'First message' }],
+              content: 'First message',
+            },
+          },
+        ];
+
+        // Should not throw - thread doesn't exist yet, will be created
+        const result = await SAVE_MESSAGES_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          messages,
+        });
+
+        expect(result).toBeDefined();
+      });
     });
 
     describe('MASTRA_THREAD_ID_KEY - threadId override', () => {

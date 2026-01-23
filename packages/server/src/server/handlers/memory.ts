@@ -526,6 +526,15 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
             message: 'Access denied: cannot save messages for a different resource',
           });
         }
+
+        // Validate that all threads belong to this resource (prevents cross-resource data pollution)
+        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        for (const threadId of threadIds) {
+          const thread = await memory.getThreadById({ threadId });
+          // Thread may not exist yet (will be created on first message save), which is allowed
+          // But if it exists, it must belong to the same resource
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
       }
 
       const processedMessages = messages.map(message => ({
@@ -888,9 +897,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
             searchType: hasSemanticRecall ? 'semantic' : 'text',
           };
         }
-        if (thread.resourceId !== effectiveResourceId) {
-          throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
-        }
+        await validateThreadOwnership(thread, effectiveResourceId);
       }
 
       // Use effectiveThreadId or find one from the resource

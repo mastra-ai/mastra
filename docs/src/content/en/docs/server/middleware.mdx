@@ -116,7 +116,7 @@ export const mastra = new Mastra({
 
 Authentication verifies who the user is. Authorization controls what they can access. Without authorization middleware, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
 
-Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values. The server automatically enforces these keys across all memory endpoints:
+Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values. The server automatically enforces these keys across memory and agent endpoints:
 
 ```typescript
 import { Mastra } from "@mastra/core";
@@ -132,7 +132,7 @@ export const mastra = new Mastra({
     },
     middleware: [
       {
-        path: '/api/memory/*',
+        path: '/api/*',
         handler: async (c, next) => {
           const requestContext = c.get('requestContext');
           const user = requestContext.get('user');
@@ -141,7 +141,7 @@ export const mastra = new Mastra({
             return c.json({ error: 'Unauthorized' }, 401);
           }
 
-          // Force all memory operations to use this user's ID
+          // Force all API operations to use this user's ID
           // This takes precedence over any client-provided resourceId
           requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
 
