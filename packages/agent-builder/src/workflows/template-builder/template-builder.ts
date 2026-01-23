@@ -889,7 +889,7 @@ const programmaticFileCopyStep = createStep({
           } else {
             // Both exist - merge them intelligently
             const targetContent = await readFile(targetEnv, 'utf-8');
-            const mergedContent = mergeEnvFiles(targetContent, variables as Record<string, string>, slug);
+            const mergedContent = mergeEnvFiles(targetContent, variables, slug);
 
             if (mergedContent !== targetContent) {
               const addedLines = mergedContent.split('\n').length - targetContent.split('\n').length;
