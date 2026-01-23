@@ -130,7 +130,7 @@
     "@mastra/mcp": "workspace:^",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.19.3",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

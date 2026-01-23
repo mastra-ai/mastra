@@ -38,7 +38,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@observability/test-utils": "workspace:*",
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.30",
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

@@ -54,7 +54,7 @@
     "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/lru-cache": "^7.10.10",
-    "@types/node": "22.19.3",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
