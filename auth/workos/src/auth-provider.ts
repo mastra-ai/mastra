@@ -346,13 +346,43 @@ export class MastraAuthWorkos
 
   /**
    * Get the URL to redirect users to for logout.
+   * Extracts session ID from the request's JWT to build a valid WorkOS logout URL.
+   *
+   * @param redirectUri - URL to redirect to after logout
+   * @param request - Request containing session cookie (needed to extract sid)
+   * @returns Logout URL or null if no active session
    */
-  getLogoutUrl(redirectUri: string): string {
-    const params = new URLSearchParams({
-      client_id: this.clientId,
-      redirect_uri: redirectUri,
-    });
-    return `https://api.workos.com/user_management/logout?${params.toString()}`;
+  async getLogoutUrl(redirectUri: string, request?: Request): Promise<string | null> {
+    // WorkOS logout requires session_id from the JWT's sid claim
+    if (!request) {
+      return null;
+    }
+
+    try {
+      const { auth } = await this.authService.withAuth(request);
+
+      // No active session
+      if (!auth.user) {
+        return null;
+      }
+
+      // Decode JWT to extract sid claim (don't verify, just decode)
+      const [, payloadBase64] = auth.accessToken.split('.');
+      if (!payloadBase64) {
+        return null;
+      }
+
+      const payload = JSON.parse(atob(payloadBase64));
+      const sessionId = payload.sid;
+
+      if (!sessionId) {
+        return null;
+      }
+
+      return this.workos.userManagement.getLogoutUrl({ sessionId, returnTo: redirectUri });
+    } catch {
+      return null;
+    }
   }
 
   /**

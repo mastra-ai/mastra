@@ -96,9 +96,10 @@ export interface ISSOProvider<TUser = unknown> {
    * Optional: Get logout URL if provider supports it.
    *
    * @param redirectUri - URL to redirect to after logout
-   * @returns Logout URL or undefined
+   * @param request - Optional request to extract session info (e.g., for WorkOS sid)
+   * @returns Logout URL, null if no active session, or undefined if not implemented
    */
-  getLogoutUrl?(redirectUri: string): string;
+  getLogoutUrl?(redirectUri: string, request?: Request): string | null | Promise<string | null>;
 
   /**
    * Get configuration for rendering login button in UI.
