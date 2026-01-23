@@ -27,7 +27,7 @@ pnpm build:cli
 2. **Start the dev server**
 
 ```sh
-cd packages/playground && pnpm test:e2e
+cd packages/playground/e2e/kitchen-sink && pnpm dev
 ```
 
 3. **Verify server is running**
@@ -117,13 +117,13 @@ cd packages/playground && pnpm test:e2e
 
 ## Quick Reference
 
-| Step         | Command/Action                                     |
-| ------------ | -------------------------------------------------- |
-| Build        | `pnpm build:cli`                                   |
-| Start        | `cd packages/playground && pnpm test:e2e`          |
-| App URL      | http://localhost:4111                              |
-| Routes       | `@packages/playground/src/App.tsx`                 |
-| Run tests    | `cd packages/playground && pnpm test:e2e`          |
-| Test dir     | `packages/playground/e2e/tests/`                   |
-| Fixtures     | `packages/playground/e2e/kitchen-sink/fixtures/`   |
-| Kitchen-sink | `packages/playground/e2e/kitchen-sink/src/mastra/` |
+| Step         | Command/Action                                        |
+| ------------ | ----------------------------------------------------- |
+| Build        | `pnpm build:cli`                                      |
+| Start        | `cd packages/playground/e2e/kitchen-sink && pnpm dev` |
+| App URL      | http://localhost:4111                                 |
+| Routes       | `@packages/playground/src/App.tsx`                    |
+| Run tests    | `cd packages/playground && pnpm test:e2e`             |
+| Test dir     | `packages/playground/e2e/tests/`                      |
+| Fixtures     | `packages/playground/e2e/kitchen-sink/fixtures/`      |
+| Kitchen-sink | `packages/playground/e2e/kitchen-sink/src/mastra/`    |
