@@ -46,12 +46,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import {
-  validateBody,
-  getEffectiveResourceId,
-  getEffectiveThreadId,
-  validateThreadOwnership,
-} from './utils';
+import { validateBody, getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;

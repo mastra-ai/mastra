@@ -153,13 +153,7 @@ describe('Agent Routes Authorization', () => {
   /**
    * Creates a test context with reserved keys set (simulating middleware behavior)
    */
-  function createContextWithReservedKeys({
-    resourceId,
-    threadId,
-  }: {
-    resourceId?: string;
-    threadId?: string;
-  }) {
+  function createContextWithReservedKeys({ resourceId, threadId }: { resourceId?: string; threadId?: string }) {
     const requestContext = new RequestContext();
     if (resourceId) {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);

@@ -625,8 +625,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
-        const clientThreadId =
-          typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
         const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
@@ -864,8 +863,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
-        const clientThreadId =
-          typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
         const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
