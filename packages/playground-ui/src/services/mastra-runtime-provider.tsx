@@ -291,9 +291,9 @@ export function MastraRuntimeProvider({
   const { prompt: instructions } = useAgentPromptExperiment();
   const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
-    memory ? initializeMessageState(initialLegacyMessages || []) : [],
-  );
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() => {
+    return memory ? initializeMessageState(initialLegacyMessages || []) : [];
+  });
 
   const {
     messages,
@@ -321,13 +321,11 @@ export function MastraRuntimeProvider({
 
   // Helper to signal observation started (from streaming)
   const handleObservationStart = () => {
-    console.log('[OM-DEBUG] handleObservationStart called, setting isObservingFromStream=true');
     setIsObservingFromStream(true);
   };
 
   // Helper to refresh OM sidebar when observation completes
   const refreshObservationalMemory = () => {
-    console.log('[OM-DEBUG] refreshObservationalMemory called, setting isObservingFromStream=false');
     setIsObservingFromStream(false);
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
@@ -479,13 +477,11 @@ export function MastraRuntimeProvider({
 
                 // Signal observation started (for sidebar status)
                 if (chunk.type === 'data-om-observation-start') {
-                  console.log('[OM-DEBUG] stream chunk: data-om-observation-start received');
                   handleObservationStart();
                 }
 
                 // Refresh OM sidebar when observation completes
                 if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
-                  console.log('[OM-DEBUG] stream chunk: data-om-observation-end/failed received');
                   refreshObservationalMemory();
                 }
               },
