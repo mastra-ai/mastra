@@ -32,7 +32,7 @@ import { handleError } from './error';
 
 export const LIST_DATASETS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets',
+  path: '/datasets',
   responseType: 'json',
   queryParamSchema: listDatasetsQuerySchema,
   responseSchema: listDatasetsResponseSchema,
@@ -61,7 +61,7 @@ export const LIST_DATASETS_ROUTE = createRoute({
 
 export const CREATE_DATASET_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/datasets',
+  path: '/datasets',
   responseType: 'json',
   bodySchema: createDatasetBodySchema,
   responseSchema: datasetResponseSchema,
@@ -85,7 +85,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
 
 export const GET_DATASET_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets/:datasetId',
+  path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   responseSchema: datasetResponseSchema,
@@ -113,7 +113,7 @@ export const GET_DATASET_ROUTE = createRoute({
 
 export const UPDATE_DATASET_ROUTE = createRoute({
   method: 'PUT',
-  path: '/api/datasets/:datasetId',
+  path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   bodySchema: updateDatasetBodySchema,
@@ -138,7 +138,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
 
 export const DELETE_DATASET_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/datasets/:datasetId',
+  path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   responseSchema: deleteDatasetResponseSchema,
@@ -166,7 +166,7 @@ export const DELETE_DATASET_ROUTE = createRoute({
 
 export const LIST_DATASET_ITEMS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets/:datasetId/items',
+  path: '/datasets/:datasetId/items',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   queryParamSchema: listDatasetItemsQuerySchema,
@@ -204,7 +204,7 @@ export const LIST_DATASET_ITEMS_ROUTE = createRoute({
 
 export const CREATE_DATASET_ITEMS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/datasets/:datasetId/items',
+  path: '/datasets/:datasetId/items',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   bodySchema: createDatasetItemsBodySchema,
@@ -235,7 +235,7 @@ export const CREATE_DATASET_ITEMS_ROUTE = createRoute({
 
 export const UPDATE_DATASET_ITEM_ROUTE = createRoute({
   method: 'PUT',
-  path: '/api/datasets/:datasetId/items/:itemId',
+  path: '/datasets/:datasetId/items/:itemId',
   responseType: 'json',
   pathParamSchema: datasetItemIdPathParams,
   bodySchema: updateDatasetItemBodySchema,
@@ -269,7 +269,7 @@ export const UPDATE_DATASET_ITEM_ROUTE = createRoute({
 
 export const ARCHIVE_DATASET_ITEM_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/datasets/:datasetId/items/:itemId',
+  path: '/datasets/:datasetId/items/:itemId',
   responseType: 'json',
   pathParamSchema: datasetItemIdPathParams,
   responseSchema: deleteDatasetResponseSchema,
@@ -306,7 +306,7 @@ export const ARCHIVE_DATASET_ITEM_ROUTE = createRoute({
 
 export const LIST_DATASET_RUNS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets/:datasetId/runs',
+  path: '/datasets/:datasetId/runs',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   queryParamSchema: listDatasetRunsQuerySchema,
@@ -343,7 +343,7 @@ export const LIST_DATASET_RUNS_ROUTE = createRoute({
 
 export const CREATE_DATASET_RUN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/datasets/:datasetId/runs',
+  path: '/datasets/:datasetId/runs',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   bodySchema: createDatasetRunBodySchema,
@@ -386,7 +386,7 @@ export const CREATE_DATASET_RUN_ROUTE = createRoute({
 
 export const GET_DATASET_RUN_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets/:datasetId/runs/:runId',
+  path: '/datasets/:datasetId/runs/:runId',
   responseType: 'json',
   pathParamSchema: datasetRunIdPathParams,
   responseSchema: datasetRunResponseSchema,
@@ -419,7 +419,7 @@ export const GET_DATASET_RUN_ROUTE = createRoute({
 
 export const LIST_DATASET_RUN_RESULTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/datasets/:datasetId/runs/:runId/results',
+  path: '/datasets/:datasetId/runs/:runId/results',
   responseType: 'json',
   pathParamSchema: datasetRunIdPathParams,
   queryParamSchema: listDatasetRunResultsQuerySchema,

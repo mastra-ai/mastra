@@ -2,6 +2,7 @@ import type { Dataset, DatasetItem, DatasetRun, DatasetRunResult } from '../../d
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type { StorageAgentType, StorageMessageType, StorageResourceType, StorageWorkflowRun } from '../types';
+import type { AgentVersion } from './agents';
 import type { TraceEntry } from './observability';
 
 /**
@@ -23,6 +24,7 @@ export class InMemoryDB {
   readonly datasetItems = new Map<string, DatasetItem>();
   readonly datasetRuns = new Map<string, DatasetRun>();
   readonly datasetRunResults = new Map<string, DatasetRunResult>();
+  readonly agentVersions = new Map<string, AgentVersion>();
 
   /**
    * Clears all data from all collections.
@@ -40,5 +42,6 @@ export class InMemoryDB {
     this.datasetItems.clear();
     this.datasetRuns.clear();
     this.datasetRunResults.clear();
+    this.agentVersions.clear();
   }
 }

@@ -1,6 +1,11 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -18,7 +23,7 @@ describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
 
-    setupAdapter: async (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       const app = new Hono();
 
       // Create Hono adapter
@@ -28,6 +33,7 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
+        prefix: options?.prefix,
       });
 
       await adapter.init();

@@ -18,7 +18,7 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 
 Before you can use the `MastraJwtAuth` class you have to install the `@mastra/auth` package.
 
-```bash
+```bash npm2yarn
 npm install @mastra/auth@latest
 ```
 
@@ -71,7 +71,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 <Tabs>
   <TabItem value="react" label="React">
 
-    ```tsx title="src/components/test-agent.tsx" copy
+    ```tsx title="src/components/test-agent.tsx"
     import { mastraClient } from "../../lib/mastra-client";
 
     export const TestAgent = () => {
@@ -90,7 +90,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
   </TabItem>
   <TabItem value="curl" label="cURL">
 
-    ```bash copy
+    ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer <your-jwt>" \

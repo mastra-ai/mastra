@@ -16,15 +16,15 @@ importers:
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
-        specifier: ^17.0.0
-        version: 17.0.1
+        specifier: ^17.2.3
+        version: 17.2.3
 
 packages:
 
-  dotenv@17.0.1:
-    resolution: {integrity: sha512-GLjkduuAL7IMJg/ZnOPm9AnWKJ82mSE2tzXLaJ/6hD6DhwGfZaXG77oB8qbReyiczNxnbxQKyh0OE5mXq0bAHA==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
 snapshots:
 
-  dotenv@17.0.1: {}
+  dotenv@17.2.3: {}

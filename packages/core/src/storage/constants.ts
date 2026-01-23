@@ -15,6 +15,7 @@ export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_RUNS = 'mastra_dataset_runs';
 export const TABLE_DATASET_RUN_RESULTS = 'mastra_dataset_run_results';
+export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -28,7 +29,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_RUNS
-  | typeof TABLE_DATASET_RUN_RESULTS;
+  | typeof TABLE_DATASET_RUN_RESULTS
+  | typeof TABLE_AGENT_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -110,13 +112,27 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
   workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
   agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  integrationTools: { type: 'jsonb', nullable: true }, // Specific integration tool IDs (provider_toolkit_tool format)
   inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
   outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
   memory: { type: 'jsonb', nullable: true }, // Memory configuration
   scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
+  activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  agentId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: true }, // Vanity name
+  snapshot: { type: 'jsonb', nullable: false }, // Full agent config
+  changedFields: { type: 'jsonb', nullable: true }, // Array of field names
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
@@ -185,4 +201,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_ITEMS]: DATASET_ITEM_SCHEMA,
   [TABLE_DATASET_RUNS]: DATASET_RUN_SCHEMA,
   [TABLE_DATASET_RUN_RESULTS]: DATASET_RUN_RESULT_SCHEMA,
+  [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
 };
