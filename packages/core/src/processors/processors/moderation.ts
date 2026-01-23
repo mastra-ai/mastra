@@ -2,6 +2,7 @@ import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { GenerateObjectResult } from '@internal/ai-sdk-v4';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
+import { toStandardSchema, type PublicSchema } from '../../schema';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -295,10 +296,14 @@ export class ModerationProcessor implements Processor<'moderation'> {
           tracingContext,
         });
 
-        result = response.object!;
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
+        const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.moderationAgent.generateLegacy(prompt, {
-          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
