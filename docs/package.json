@@ -24,6 +24,7 @@
     "@docusaurus/plugin-content-docs": "^3.9.2",
     "@docusaurus/plugin-vercel-analytics": "^3.9.1",
     "@docusaurus/preset-classic": "^3.9.1",
+    "@docusaurus/remark-plugin-npm2yarn": "^3.9.2",
     "@docusaurus/theme-common": "^3.9.1",
     "@headlessui/react": "^2.2.9",
     "@hookform/resolvers": "^5.2.2",

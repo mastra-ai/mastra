@@ -228,7 +228,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req,
           res,
         });
@@ -254,8 +254,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           context: response,
         });
       } catch {
@@ -289,6 +289,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       `${prefix}${route.path}`,
       ...middlewares,
       async (c: Context) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+        });
+
+        if (authError) {
+          return c.json({ error: authError.error }, authError.status as any);
+        }
+
         const params = await this.getParams(route, c.req);
 
         if (params.queryParams) {
@@ -338,6 +351,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
+          routePrefix: this.prefix,
         };
 
         try {

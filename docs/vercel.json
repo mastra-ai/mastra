@@ -564,6 +564,11 @@
       "source": "/reference/memory/query",
       "destination": "/reference/memory/recall",
       "permanent": true
+    },
+    {
+      "source": "/docs/scorers/overview",
+      "destination": "/docs/evals/overview",
+      "permanent": true
     }
   ]
 }

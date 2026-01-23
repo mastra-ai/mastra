@@ -68,7 +68,7 @@ This configuration includes `DefaultExporter`, `CloudExporter`, and `SensitiveDa
 
 If you need to configure specific exporters (like OTLP), install the exporter package and configure it:
 
-```bash
+```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
@@ -165,7 +165,7 @@ The observability functionality has moved to a dedicated `@mastra/observability`
 
 To migrate, install the package and update your import statements:
 
-```bash
+```bash npm2yarn
 npm install @mastra/observability@latest
 ```
 
@@ -323,12 +323,12 @@ If you were using OTEL-based telemetry with specific providers in 0.x, here's ho
 ### Installation
 
 **Dedicated exporters** (Arize, Braintrust, Langfuse, LangSmith):
-```bash
+```bash npm2yarn
 npm install @mastra/[exporter-name]-exporter
 ```
 
 **OpenTelemetry exporter** (Dash0, Laminar, New Relic, SigNoz, Traceloop):
-```bash
+```bash npm2yarn
 npm install @mastra/otel-exporter@latest
 ```
 

@@ -46,6 +46,10 @@ Standards and conventions for building components in `packages/playground-ui`.
 - Minimize side effects and state management
 - Use TanStack Query for all server state
 
-## E2E Testing (MUST DO)
+## MUST DO EVERY SINGLE TIME
 
-On every change to this package, you MUST use the `e2e-frontend-validation` skill
+On every change to this package, you MUST ALWAYS follow these instructions:
+
+- use `e2e-frontend-validation` skill
+- use `react-best-practices` skill
+- use `tailwind-best-practices` skill

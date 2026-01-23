@@ -52,7 +52,7 @@ describe('watcher', () => {
         expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
-          externalDependencies: expect.any(Set),
+          externalDependencies: expect.any(Map),
           workspaceMap: expect.any(Map),
         }),
         'node',
@@ -77,7 +77,7 @@ describe('watcher', () => {
         expect.stringMatching('test-entry.js'),
         expect.objectContaining({
           dependencies: expect.any(Map),
-          externalDependencies: expect.any(Set),
+          externalDependencies: expect.any(Map),
           workspaceMap: expect.any(Map),
         }),
         'node',
@@ -101,7 +101,7 @@ describe('watcher', () => {
           expect.stringMatching('test-entry.js'),
           expect.objectContaining({
             dependencies: expect.any(Map),
-            externalDependencies: expect.any(Set),
+            externalDependencies: expect.any(Map),
             workspaceMap: expect.any(Map),
           }),
           'node',
@@ -124,7 +124,7 @@ describe('watcher', () => {
           expect.stringMatching('test-entry.js'),
           expect.objectContaining({
             dependencies: expect.any(Map),
-            externalDependencies: expect.any(Set),
+            externalDependencies: expect.any(Map),
             workspaceMap: expect.any(Map),
           }),
           'neutral',

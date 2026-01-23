@@ -36,7 +36,6 @@
         "claude-opus-4-5",
         "claude-sonnet-4-5",
         "deepseek-chat",
-        "deepseek-coder",
         "deepseek-reasoner",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
@@ -1355,7 +1354,6 @@
         "gemini-3-flash",
         "gemini-3-pro",
         "glm-4.6",
-        "glm-4.7-free",
         "gpt-5",
         "gpt-5-codex",
         "gpt-5-nano",
@@ -1368,7 +1366,6 @@
         "grok-code",
         "kimi-k2",
         "kimi-k2-thinking",
-        "minimax-m2.1-free",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -2474,7 +2471,6 @@
       "claude-opus-4-5",
       "claude-sonnet-4-5",
       "deepseek-chat",
-      "deepseek-coder",
       "deepseek-reasoner",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
@@ -3549,7 +3545,6 @@
       "gemini-3-flash",
       "gemini-3-pro",
       "glm-4.6",
-      "glm-4.7-free",
       "gpt-5",
       "gpt-5-codex",
       "gpt-5-nano",
@@ -3562,7 +3557,6 @@
       "grok-code",
       "kimi-k2",
       "kimi-k2-thinking",
-      "minimax-m2.1-free",
       "qwen3-coder"
     ],
     "fastrouter": [
