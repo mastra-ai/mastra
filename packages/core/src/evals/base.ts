@@ -612,8 +612,9 @@ class MastraScorer<
         const schema = z.object({
           score: z.number(),
         });
+        const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
-          output: z.toJSONSchema(schema) as JSONSchema7,
+          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           tracingContext,
         });
       }
