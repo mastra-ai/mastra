@@ -41,7 +41,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "@types/node": "20.19.27",
+    "@types/node": "20.19.30",
     "concurrently": "9.2.1",
     "dotenv": "17.2.3",
     "prettier": "3.6.2",

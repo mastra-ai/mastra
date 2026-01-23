@@ -19,7 +19,7 @@
   ],
   "devDependencies": {
     "@hono/otel": "^1.0.1",
-    "@types/node": "^20.19.27",
+    "@types/node": "^20.19.30",
     "dotenv": "^17.2.3",
     "specifier-resolution-node": "^1.1.4",
     "ts-node": "^10.9.2",

@@ -23,7 +23,7 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "22.19.3",
+    "@types/node": "22.19.7",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
     "tsx": "^4.21.0"
