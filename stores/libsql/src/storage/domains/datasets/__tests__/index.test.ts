@@ -191,8 +191,6 @@ describe('DatasetItems', () => {
         input: { prompt: 'Hello' },
         expectedOutput: { response: 'World' },
         metadata: { category: 'greeting' },
-        sourceTraceId: 'trace-123',
-        sourceSpanId: 'span-456',
       });
 
       expect(item.id).toBeDefined();
@@ -200,8 +198,6 @@ describe('DatasetItems', () => {
       expect(item.input).toEqual({ prompt: 'Hello' });
       expect(item.expectedOutput).toEqual({ response: 'World' });
       expect(item.metadata).toEqual({ category: 'greeting' });
-      expect(item.sourceTraceId).toBe('trace-123');
-      expect(item.sourceSpanId).toBe('span-456');
       expect(item.archivedAt).toBeNull();
       expect(item.createdAt).toBeInstanceOf(Date);
       expect(item.updatedAt).toBeInstanceOf(Date);

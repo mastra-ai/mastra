@@ -206,8 +206,6 @@ export class DatasetsLibSQL extends DatasetsStorage {
         input: payload.input,
         expectedOutput: payload.expectedOutput ?? null,
         metadata: payload.metadata ?? null,
-        sourceTraceId: payload.sourceTraceId ?? null,
-        sourceSpanId: payload.sourceSpanId ?? null,
         archivedAt: null,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
@@ -238,8 +236,6 @@ export class DatasetsLibSQL extends DatasetsStorage {
         input: payload.input,
         expectedOutput: payload.expectedOutput ?? null,
         metadata: payload.metadata ?? null,
-        sourceTraceId: payload.sourceTraceId ?? null,
-        sourceSpanId: payload.sourceSpanId ?? null,
         archivedAt: null,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
@@ -263,7 +259,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async getDatasetItemById(id: string): Promise<DatasetItem | null> {
     const result = await this.#client.execute({
-      sql: `SELECT id, datasetId, json(input) as input, json(expectedOutput) as expectedOutput, json(metadata) as metadata, sourceTraceId, sourceSpanId, archivedAt, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE id = ?`,
+      sql: `SELECT id, datasetId, json(input) as input, json(expectedOutput) as expectedOutput, json(metadata) as metadata, archivedAt, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE id = ?`,
       args: [id],
     });
 
@@ -362,7 +358,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     const end = perPageInput === false ? total : start + perPage;
 
     const result = await this.#client.execute({
-      sql: `SELECT id, datasetId, json(input) as input, json(expectedOutput) as expectedOutput, json(metadata) as metadata, sourceTraceId, sourceSpanId, archivedAt, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+      sql: `SELECT id, datasetId, json(input) as input, json(expectedOutput) as expectedOutput, json(metadata) as metadata, archivedAt, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
       args: [...queryParams, limitValue, start],
     });
 
@@ -659,8 +655,6 @@ export class DatasetsLibSQL extends DatasetsStorage {
       input: this.parseJson(row.input),
       expectedOutput: this.parseJson(row.expectedOutput),
       metadata: this.parseJson(row.metadata) as Record<string, unknown> | undefined,
-      sourceTraceId: row.sourceTraceId as string | undefined,
-      sourceSpanId: row.sourceSpanId as string | undefined,
       archivedAt: row.archivedAt ? this.parseDate(row.archivedAt) : null,
       createdAt: this.parseDate(row.createdAt),
       updatedAt: this.parseDate(row.updatedAt),

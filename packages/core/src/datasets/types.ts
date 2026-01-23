@@ -41,8 +41,6 @@ export const datasetItemSchema = z.object({
   input: z.unknown().describe('Input data for evaluation'),
   expectedOutput: z.unknown().optional().describe('Expected output for comparison'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Custom metadata'),
-  sourceTraceId: z.string().optional().describe('Trace ID if captured from production'),
-  sourceSpanId: z.string().optional().describe('Span ID if captured from production'),
   archivedAt: z.date().nullable().optional().describe('Soft delete timestamp for versioning'),
   ...dbTimestamps,
 });

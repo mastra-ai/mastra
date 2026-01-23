@@ -35,8 +35,6 @@ const createMockDatasetItem = (overrides: Partial<DatasetItem> = {}): DatasetIte
   input: { prompt: 'Test input' },
   expectedOutput: { response: 'Expected output' },
   metadata: { source: 'test' },
-  sourceTraceId: undefined,
-  sourceSpanId: undefined,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
   archivedAt: null,
