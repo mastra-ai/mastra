@@ -1189,7 +1189,7 @@ export function cloneWorkflow<
 
 export class Workflow<
   TEngineType = DefaultEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
@@ -1334,7 +1334,8 @@ export class Workflow<
       TSchemaOut,
       any,
       any,
-      TEngineType
+      TEngineType,
+      any
     >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
@@ -1435,8 +1436,8 @@ export class Workflow<
           [k: string]:
             | {
                 step:
-                  | Step<string, any, any, any, any, any, TEngineType>
-                  | Step<string, any, any, any, any, any, TEngineType>[];
+                  | Step<string, any, any, any, any, any, TEngineType, any>
+                  | Step<string, any, any, any, any, any, TEngineType, any>[];
                 path: string;
               }
             | { value: any; schema: SchemaWithValidation<any> }
@@ -1580,7 +1581,7 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
       [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
         string,
@@ -1631,7 +1632,7 @@ export class Workflow<
     TBranchSteps extends Array<
       [
         ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>,
-        Step<string, any, TPrevSchema, any, any, any, TEngineType>,
+        Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
   >(steps: TBranchSteps) {
@@ -2364,7 +2365,7 @@ export class Workflow<
 
 export class Run<
   TEngineType = DefaultEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
@@ -2616,7 +2617,7 @@ export class Run<
 
   protected async _validateTimetravelInputData<TInput>(
     inputData: TInput,
-    step: Step<string, any, TInput, any, any, any, TEngineType>,
+    step: Step<string, any, TInput, any, any, any, TEngineType, any>,
   ) {
     let inputDataToUse = inputData;
 
@@ -3110,10 +3111,10 @@ export class Run<
   }: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, any, TResume, any, TEngineType>
+      | Step<string, any, any, any, TResume, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResume, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResume, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3272,10 +3273,10 @@ export class Run<
   async resume<TResume>(params: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, any, TResume, any, TEngineType>
+      | Step<string, any, any, any, TResume, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResume, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResume, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3313,10 +3314,10 @@ export class Run<
   protected async _resume<TResume>(params: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, TResume, any, any, TEngineType>
+      | Step<string, any, any, TResume, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResume, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, TResume, any, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3626,8 +3627,8 @@ export class Run<
     resumeData?: any;
     initialState?: TState;
     step:
-      | Step<string, any, TInput, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInput, any, any, any, TEngineType>]
+      | Step<string, any, TInput, any, any, any, TEngineType, any>
+      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, TInput, any, any, any, TEngineType, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -3744,8 +3745,8 @@ export class Run<
     resumeData?: any;
     initialState?: TState;
     step:
-      | Step<string, any, TInput, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInput, any, any, any, TEngineType>]
+      | Step<string, any, TInput, any, any, any, TEngineType, any>
+      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, TInput, any, any, any, TEngineType, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -3780,8 +3781,8 @@ export class Run<
     initialState?: TState;
     resumeData?: any;
     step:
-      | Step<string, any, any, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | Step<string, any, any, any, any, any, TEngineType, any>
+      | [...Step<string, any, any, any, any, any, TEngineType, any>[], Step<string, any, any, any, any, any, TEngineType, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;

@@ -1318,10 +1318,10 @@ export class EventedRun<
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
     step:
-      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+      | Step<string, any, any, TResumeSchema, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, TResumeSchema, any, any, TEngineType, any>,
         ]
       | string
       | string[];
