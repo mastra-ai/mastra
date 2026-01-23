@@ -676,13 +676,19 @@ export class E2BSandbox implements WorkspaceSandbox {
         cwd: options.cwd,
         envs: options.env,
         timeoutMs: options.timeout,
+        onStdout: (data: string) => {
+          console.log(`[E2B] stdout: ${data}`);
+          options.onStdout?.(data);
+        },
+        onStderr: (data: string) => {
+          console.log(`[E2B] stderr: ${data}`);
+          options.onStderr?.(data);
+        },
       });
 
       const executionTimeMs = Date.now() - startTime;
 
       console.log(`[E2B] Exit code: ${result.exitCode} (${executionTimeMs}ms)`);
-      if (result.stdout) console.log(`[E2B] stdout:\n${result.stdout}`);
-      if (result.stderr) console.log(`[E2B] stderr:\n${result.stderr}`);
 
       return {
         success: result.exitCode === 0,

@@ -91,6 +91,10 @@ export interface ExecuteCodeOptions {
   cwd?: string;
   /** Stream output instead of buffering */
   stream?: boolean;
+  /** Callback for stdout chunks (enables streaming) */
+  onStdout?: (data: string) => void;
+  /** Callback for stderr chunks (enables streaming) */
+  onStderr?: (data: string) => void;
 }
 
 export interface ExecuteCommandOptions {
@@ -104,6 +108,10 @@ export interface ExecuteCommandOptions {
   stream?: boolean;
   /** Shell to use (default: /bin/sh) */
   shell?: string | boolean;
+  /** Callback for stdout chunks (enables streaming) */
+  onStdout?: (data: string) => void;
+  /** Callback for stderr chunks (enables streaming) */
+  onStderr?: (data: string) => void;
 }
 
 export interface InstallPackageOptions {

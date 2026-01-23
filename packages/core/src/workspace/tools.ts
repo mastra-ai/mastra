@@ -434,7 +434,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (workspace.sandbox.executeCode) {
       tools.workspace_execute_code = createTool({
         id: 'workspace_execute_code',
-        description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
+        description: `Execute code in the workspace sandbox. Supports Node.js, Python, shell, and other runtimes. Output is streamed directly to the user's terminal UI, so don't repeat it. After calling this tool, just respond with a short status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
         // Require approval when sandboxApproval is 'all'
         requireApproval: sandboxApproval === 'all',
         inputSchema: z.object({
@@ -459,10 +459,32 @@ export function createWorkspaceTools(workspace: Workspace) {
           exitCode: z.number().describe('Exit code (0 = success)'),
           executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
         }),
-        execute: async ({ code, runtime, timeout }) => {
+        execute: async ({ code, runtime, timeout }, context) => {
           const result = await workspace.executeCode(code, {
             runtime: runtime ?? undefined,
             timeout: timeout ?? 30000,
+            // Stream stdout/stderr as tool-output chunks for proper UI integration
+            onStdout: async (data: string) => {
+              await context?.writer?.write({
+                type: 'sandbox-stdout',
+                data,
+                timestamp: Date.now(),
+              });
+            },
+            onStderr: async (data: string) => {
+              await context?.writer?.write({
+                type: 'sandbox-stderr',
+                data,
+                timestamp: Date.now(),
+              });
+            },
+          });
+          // Emit exit chunk so UI knows streaming is complete
+          await context?.writer?.write({
+            type: 'sandbox-exit',
+            exitCode: result.exitCode,
+            success: result.success,
+            executionTimeMs: result.executionTimeMs,
           });
           return {
             success: result.success,
@@ -477,7 +499,7 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
-      description: `Execute a shell command in the workspace sandbox.${pathInfo}`,
+      description: `Execute a shell command in the workspace sandbox. Output is streamed directly to the user's terminal UI, so don't repeat it. After calling this tool, just respond with a short status like "Done (exit 0)" or offer to help if it failed.${pathInfo}`,
       // Require approval when sandboxApproval is 'all' or 'commands'
       requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
       inputSchema: z.object({
@@ -499,10 +521,32 @@ export function createWorkspaceTools(workspace: Workspace) {
         exitCode: z.number().describe('Exit code (0 = success)'),
         executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
       }),
-      execute: async ({ command, args, timeout, cwd }) => {
+      execute: async ({ command, args, timeout, cwd }, context) => {
         const result = await workspace.executeCommand(command, args ?? [], {
           timeout: timeout ?? 30000,
           cwd: cwd ?? undefined,
+          // Stream stdout/stderr as tool-output chunks for proper UI integration
+          onStdout: async (data: string) => {
+            await context?.writer?.write({
+              type: 'sandbox-stdout',
+              data,
+              timestamp: Date.now(),
+            });
+          },
+          onStderr: async (data: string) => {
+            await context?.writer?.write({
+              type: 'sandbox-stderr',
+              data,
+              timestamp: Date.now(),
+            });
+          },
+        });
+        // Emit exit chunk so UI knows streaming is complete
+        await context?.writer?.write({
+          type: 'sandbox-exit',
+          exitCode: result.exitCode,
+          success: result.success,
+          executionTimeMs: result.executionTimeMs,
         });
         return {
           success: result.success,
