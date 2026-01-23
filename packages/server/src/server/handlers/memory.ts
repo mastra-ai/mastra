@@ -766,9 +766,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, messageIds, requestContext }) => {
     try {
-      // Note: This endpoint deletes messages by ID without ownership validation.
-      // For full security, applications should validate message ownership before calling this endpoint,
-      // or use thread-level operations which support MASTRA_RESOURCE_ID_KEY validation.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (messageIds === undefined || messageIds === null) {
         throw new HTTPException(400, { message: 'messageIds is required' });
@@ -789,7 +787,34 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
         normalizedIds = [messageIds];
       }
 
+      // Extract string IDs for validation and deletion
+      const stringIds = normalizedIds.map(id => (typeof id === 'string' ? id : id.id));
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+
+      // If effectiveResourceId is set, validate ownership of all messages before deletion
+      if (effectiveResourceId && stringIds.length > 0) {
+        const storage = memory?.storage || getStorageFromContext({ mastra });
+        if (storage) {
+          const memoryStore = await storage.getStore('memory');
+          if (memoryStore) {
+            // Get messages to find their threads
+            const { messages } = await memoryStore.listMessagesById({ messageIds: stringIds });
+
+            // Collect unique thread IDs
+            const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+
+            // Validate ownership of all threads
+            for (const threadId of threadIds) {
+              const thread = await memoryStore.getThreadById({ threadId });
+              if (thread && thread.resourceId !== effectiveResourceId) {
+                throw new HTTPException(403, { message: 'Access denied: message belongs to a thread owned by a different resource' });
+              }
+            }
+          }
+        }
+      }
+
       if (memory) {
         await memory.deleteMessages(normalizedIds);
       } else if (!agentId) {
@@ -798,8 +823,6 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
         if (storage) {
           const memoryStore = await storage.getStore('memory');
           if (memoryStore) {
-            // Extract string IDs from the normalized array
-            const stringIds = normalizedIds.map(id => (typeof id === 'string' ? id : id.id));
             await memoryStore.deleteMessages(stringIds);
           } else {
             throw new HTTPException(400, { message: 'Memory is not initialized' });

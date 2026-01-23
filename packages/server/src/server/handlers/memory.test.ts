@@ -1672,6 +1672,117 @@ describe('Memory Handlers', () => {
         expect(spy).toHaveBeenCalledWith({ threadId: 'correct-thread' });
       });
     });
+
+    describe('DELETE_MESSAGES_ROUTE - ownership validation', () => {
+      it('should return 403 when deleting messages from thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          storage,
+        });
+
+        // Create thread and message owned by user-b
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'user-b-msg',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'user-b-thread',
+              resourceId: 'user-b',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Secret message' }],
+                content: 'Secret message',
+              },
+            } as MastraDBMessage,
+          ],
+        });
+
+        // User-a (via middleware) tries to delete user-b's message
+        await expect(
+          DELETE_MESSAGES_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            messageIds: ['user-b-msg'],
+          }),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: message belongs to a thread owned by a different resource' }),
+        );
+      });
+
+      it('should allow deletion when user owns the thread containing the messages', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          storage,
+        });
+
+        // Create thread and message owned by user-a
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'user-a-msg',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'user-a-thread',
+              resourceId: 'user-a',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'My message' }],
+                content: 'My message',
+              },
+            } as MastraDBMessage,
+          ],
+        });
+
+        // User-a deletes their own message - should succeed
+        const result = await DELETE_MESSAGES_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          messageIds: ['user-a-msg'],
+        });
+
+        expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
+      });
+
+      it('should allow deletion when no MASTRA_RESOURCE_ID_KEY is set (no restriction)', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          storage,
+        });
+
+        await mockMemory.createThread({ threadId: 'any-thread', resourceId: 'any-user' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'any-msg',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'any-thread',
+              resourceId: 'any-user',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Message' }],
+                content: 'Message',
+              },
+            } as MastraDBMessage,
+          ],
+        });
+
+        // Without reserved key, deletion is allowed
+        const result = await DELETE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          messageIds: ['any-msg'],
+        });
+
+        expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
+      });
+    });
   });
 
   // Tests for fetching threads/messages without agentId
