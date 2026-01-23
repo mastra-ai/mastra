@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MockMemory } from '@mastra/core/memory';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -13,9 +14,37 @@ import {
   CREATE_THREAD_ROUTE,
   LIST_MESSAGES_ROUTE,
   DELETE_MESSAGES_ROUTE,
+  DELETE_THREAD_ROUTE,
+  UPDATE_THREAD_ROUTE,
   getTextContent,
 } from './memory';
 import { createTestServerContext } from './test-utils';
+
+/**
+ * Creates a test context with reserved keys set (simulating middleware behavior)
+ */
+function createTestContextWithReservedKeys({
+  mastra,
+  resourceId,
+  threadId,
+}: {
+  mastra: Mastra;
+  resourceId?: string;
+  threadId?: string;
+}) {
+  const requestContext = new RequestContext();
+  if (resourceId) {
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  }
+  if (threadId) {
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+  }
+  return {
+    mastra,
+    requestContext,
+    abortSignal: new AbortController().signal,
+  };
+}
 
 function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType {
   const now = new Date();
@@ -1326,6 +1355,322 @@ describe('Memory Handlers', () => {
       });
 
       expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['msg-1', 'msg-2', 'msg-3']);
+    });
+  });
+
+  /**
+   * Authorization tests for reserved context keys
+   *
+   * Tests that MASTRA_RESOURCE_ID_KEY and MASTRA_THREAD_ID_KEY from requestContext
+   * take precedence over client-provided values, enabling secure user isolation.
+   */
+  describe('Authorization - Reserved Context Keys', () => {
+    describe('LIST_THREADS_ROUTE - resourceId isolation', () => {
+      it('should use MASTRA_RESOURCE_ID_KEY over client-provided resourceId', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        // Create threads for two different users
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        const spy = vi.spyOn(mockMemory, 'listThreads');
+
+        // Client tries to access user-b's threads, but middleware set user-a
+        const result = await LIST_THREADS_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          resourceId: 'user-b', // Client tries to access different user
+          page: 0,
+          perPage: 10,
+        });
+
+        // Should only return user-a's threads (middleware value takes precedence)
+        expect(result.threads).toHaveLength(1);
+        expect(result.threads[0].resourceId).toBe('user-a');
+        expect(spy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filter: { resourceId: 'user-a' }, // Not 'user-b'
+          }),
+        );
+      });
+
+      it('should list all threads when no MASTRA_RESOURCE_ID_KEY is set', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ resourceId: 'user-a' });
+        await mockMemory.createThread({ resourceId: 'user-b' });
+
+        // Without reserved key, client-provided value is used
+        const result = await LIST_THREADS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: undefined, // No filter
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result.threads).toHaveLength(2);
+      });
+    });
+
+    describe('GET_THREAD_BY_ID_ROUTE - ownership validation', () => {
+      it('should return 403 when accessing thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        // Create thread owned by user-b
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        // User-a (via middleware) tries to access user-b's thread
+        await expect(
+          GET_THREAD_BY_ID_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'user-b-thread',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+
+      it('should allow access when resourceId matches thread owner', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'user-a-thread',
+        });
+
+        expect(result.id).toBe('user-a-thread');
+        expect(result.resourceId).toBe('user-a');
+      });
+
+      it('should allow access when no MASTRA_RESOURCE_ID_KEY is set (no restriction)', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'any-thread', resourceId: 'any-user' });
+
+        // Without reserved key, access is allowed
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          threadId: 'any-thread',
+        });
+
+        expect(result.id).toBe('any-thread');
+      });
+    });
+
+    describe('LIST_MESSAGES_ROUTE - ownership validation', () => {
+      it('should return 403 when accessing messages from thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        await expect(
+          LIST_MESSAGES_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'user-b-thread',
+            page: 0,
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+    });
+
+    describe('CREATE_THREAD_ROUTE - forced resourceId', () => {
+      it('should use MASTRA_RESOURCE_ID_KEY for new thread regardless of client value', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        const spy = vi.spyOn(mockMemory, 'createThread');
+
+        // Client tries to create thread for user-b, but middleware set user-a
+        const result = await CREATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          resourceId: 'user-b', // Client tries to create for different user
+          title: 'Test Thread',
+        });
+
+        // Thread should be created with user-a (middleware value)
+        expect(result.resourceId).toBe('user-a');
+        expect(spy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            resourceId: 'user-a',
+          }),
+        );
+      });
+    });
+
+    describe('DELETE_THREAD_ROUTE - ownership validation', () => {
+      it('should return 403 when deleting thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        await expect(
+          DELETE_THREAD_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'user-b-thread',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+
+      it('should allow deletion when resourceId matches thread owner', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+
+        const result = await DELETE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'user-a-thread',
+        });
+
+        expect(result).toEqual({ result: 'Thread deleted' });
+      });
+    });
+
+    describe('UPDATE_THREAD_ROUTE - ownership validation', () => {
+      it('should return 403 when updating thread owned by different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-b-thread', resourceId: 'user-b' });
+
+        await expect(
+          UPDATE_THREAD_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'user-b-thread',
+            title: 'Hacked Title',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+    });
+
+    describe('SAVE_MESSAGES_ROUTE - resourceId validation', () => {
+      it('should return 403 when saving messages for different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            threadId: 'user-a-thread',
+            resourceId: 'user-b', // Message claims to be from user-b
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Malicious message' }],
+              content: 'Malicious message',
+            },
+          },
+        ];
+
+        // Middleware set user-a, but message claims user-b
+        await expect(
+          SAVE_MESSAGES_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            messages,
+          }),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: cannot save messages for a different resource' }),
+        );
+      });
+
+      it('should allow saving messages when resourceId matches', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            threadId: 'user-a-thread',
+            resourceId: 'user-a',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Valid message' }],
+              content: 'Valid message',
+            },
+          },
+        ];
+
+        const result = await SAVE_MESSAGES_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          messages,
+        });
+
+        expect(result).toBeDefined();
+      });
+    });
+
+    describe('MASTRA_THREAD_ID_KEY - threadId override', () => {
+      it('should use MASTRA_THREAD_ID_KEY over client-provided threadId', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'correct-thread', resourceId: 'user-a' });
+        await mockMemory.createThread({ threadId: 'wrong-thread', resourceId: 'user-a' });
+
+        const spy = vi.spyOn(mockMemory, 'getThreadById');
+
+        // Middleware sets correct-thread, client tries to access wrong-thread
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a', threadId: 'correct-thread' }),
+          agentId: 'test-agent',
+          threadId: 'wrong-thread', // Client tries different thread
+        });
+
+        // Should return correct-thread (middleware value)
+        expect(result.id).toBe('correct-thread');
+        expect(spy).toHaveBeenCalledWith({ threadId: 'correct-thread' });
+      });
     });
   });
 
