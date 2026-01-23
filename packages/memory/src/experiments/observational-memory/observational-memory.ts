@@ -1950,7 +1950,9 @@ ${suggestedResponse}
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, messages, requestContext, stepNumber, state, writer } = args;
 
-    omDebug(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer in args: ${!!args.writer}, writer destructured: ${!!writer}`);
+    omDebug(
+      `[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer in args: ${!!args.writer}, writer destructured: ${!!writer}`,
+    );
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
@@ -2011,7 +2013,9 @@ ${suggestedResponse}
             }
           }
           if (skippedFullyObserved > 0) {
-            omDebug(`[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`);
+            omDebug(
+              `[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`,
+            );
           }
         } else {
           // Thread scope: add all messages (skip fully observed)
@@ -2088,7 +2092,13 @@ ${suggestedResponse}
 
           if (freshUnobservedMessages.length > 0) {
             if (this.scope === 'resource' && resourceId) {
-              await this.doResourceScopedObservation(freshRecord, threadId, resourceId, freshUnobservedMessages, writer);
+              await this.doResourceScopedObservation(
+                freshRecord,
+                threadId,
+                resourceId,
+                freshUnobservedMessages,
+                writer,
+              );
             } else {
               await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
             }
@@ -2096,10 +2106,9 @@ ${suggestedResponse}
         });
 
         // Save messages with markers
-        // Use .get instead of .clear - we don't want to remove messages from messageList
-        // since the agent may continue using them in subsequent steps
-        const newInput = messageList.get.input.db();
-        const newOutput = messageList.get.response.db();
+        // Use .clear to remove observed messages from context - they're now in observations
+        const newInput = messageList.clear.input.db();
+        const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
@@ -2111,12 +2120,16 @@ ${suggestedResponse}
               // This message ID was already saved as sealed - generate new ID
               const oldId = msg.id;
               msg.id = crypto.randomUUID();
-              omDebug(`[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`);
+              omDebug(
+                `[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`,
+              );
               regeneratedIds++;
             }
           }
 
-          omDebug(`[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`);
+          omDebug(
+            `[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`,
+          );
           await this.messageHistory.persistMessages({
             messages: messagesToSave,
             threadId,
@@ -2564,7 +2577,7 @@ ${formattedMessages}
       }
 
       // Then add to message (skipPush since writer.custom already added the part)
-      await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
+      // await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
     }
 
     try {
@@ -2679,7 +2692,7 @@ ${formattedMessages}
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
-        await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
+        // await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
       }
 
       // Emit debug event for observation complete
@@ -2720,7 +2733,7 @@ ${formattedMessages}
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
-        await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
+        // await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
       }
       throw error;
     } finally {
@@ -3010,7 +3023,7 @@ ${formattedMessages}
           }
 
           // Then add to message (skipPush since writer.custom already added the part)
-          await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
+          // await this.insertObservationMarker(lastMessage, startMarker, { skipPush: !!writer });
         }
       }
 
@@ -3326,7 +3339,7 @@ ${formattedMessages}
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
-          await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
+          // await this.insertObservationMarker(lastMessage, endMarker, { skipPush: !!writer });
         }
       }
 
@@ -3367,7 +3380,7 @@ ${formattedMessages}
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
-          await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
+          // await this.insertObservationMarker(lastMessage, failedMarker, { skipPush: !!writer });
         }
       }
       throw error;
