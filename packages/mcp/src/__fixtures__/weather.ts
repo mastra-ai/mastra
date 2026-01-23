@@ -154,7 +154,7 @@ const mcpServerResources: MCPServerResources = {
 
 const mcpServerPrompts: MCPServerPrompts = {
   listPrompts: async () => weatherPrompts,
-  getPromptMessages: async ({ name }: { name: string }): Promise<PromptMessage[]> => {
+  getPromptMessages: async ({ name }) => {
     const prompt = weatherPrompts.find(p => p.name === name);
     if (!prompt) {
       throw new Error(`Mock prompt not found for ${name}`);

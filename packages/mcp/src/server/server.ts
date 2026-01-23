@@ -45,6 +45,7 @@ import type {
   ElicitResult,
   ElicitRequest,
   LoggingLevel,
+  PromptMessage,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -759,7 +760,7 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
         GetPromptRequestSchema,
-        async (request: { params: { name: string; arguments?: Record<string, string> } }, extra) => {
+        async (request, extra) => {
           const startTime = Date.now();
           const { name, arguments: args } = request.params;
           if (!this.definedPrompts) {
@@ -779,7 +780,7 @@ export class MCPServer extends MCPServerBase {
             }
           }
           try {
-            let messages: any[] = [];
+            let messages: PromptMessage[] = [];
             if (capturedPromptOptions.getPromptMessages) {
               messages = await capturedPromptOptions.getPromptMessages({ name, args, extra });
             }
