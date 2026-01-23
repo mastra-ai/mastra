@@ -1103,6 +1103,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3-pro',
     'glm-4.6',
+    'glm-4.7',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
