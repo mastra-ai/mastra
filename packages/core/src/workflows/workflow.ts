@@ -159,8 +159,9 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema, TRequestContextSchema>,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -168,7 +169,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 /**
@@ -203,12 +205,13 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> | unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
   TId extends string,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
+): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
@@ -244,8 +247,9 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema, TRequestContextSchema>,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -253,7 +257,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 // ============================================
@@ -1144,8 +1149,9 @@ export function createWorkflow<
   TInput = unknown,
   TOutput = unknown,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(params);
+  TRequestContext extends Record<string, any> | unknown = unknown,
+>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
 }
 
 export function cloneWorkflow<
@@ -1197,6 +1203,7 @@ export class Workflow<
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 >
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType>
@@ -1206,7 +1213,7 @@ export class Workflow<
   public inputSchema: SchemaWithValidation<TInput>;
   public outputSchema: SchemaWithValidation<TOutput>;
   public stateSchema?: SchemaWithValidation<TState>;
-  public requestContextSchema?: SchemaWithValidation<any>;
+  public requestContextSchema?: SchemaWithValidation<TRequestContext>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1242,7 +1249,7 @@ export class Workflow<
     steps,
     options = {},
     type,
-  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;

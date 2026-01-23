@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type { AgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
@@ -82,6 +83,72 @@ describe('Agent Type Tests', () => {
 
       // After fix: SchemaType is `OutputSchema` (accepts Zod schemas, JSONSchema7, etc.)
       expectTypeOf<SchemaType>().toExtend<NonNullable<OutputSchema<any>>>();
+    });
+  });
+
+  describe('requestContextSchema type inference', () => {
+    it('should type requestContext in instructions function based on requestContextSchema', () => {
+      const config: AgentConfig<
+        'test-agent',
+        Record<string, never>,
+        undefined,
+        { userId: string; tenantId: string }
+      > = {
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: {} as any,
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
+        }),
+        instructions: ({ requestContext }) => {
+          // Verify requestContext is typed
+          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ userId: string; tenantId: string }>>();
+
+          // Verify get() returns the correct type
+          const userId = requestContext.get('userId');
+          expectTypeOf(userId).toEqualTypeOf<string>();
+
+          // Verify .all returns the typed object
+          const all = requestContext.all;
+          expectTypeOf(all).toEqualTypeOf<{ userId: string; tenantId: string }>();
+
+          return 'You are a helpful assistant';
+        },
+      };
+
+      expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
+    });
+
+    it('should type requestContext in tools function based on requestContextSchema', () => {
+      const config: AgentConfig<
+        'test-agent',
+        Record<string, never>,
+        undefined,
+        { featureFlags: { enableSearch: boolean } }
+      > = {
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: {} as any,
+        requestContextSchema: z.object({
+          featureFlags: z.object({
+            enableSearch: z.boolean(),
+          }),
+        }),
+        instructions: 'You are a helpful assistant',
+        tools: ({ requestContext }) => {
+          // Verify requestContext is typed
+          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ featureFlags: { enableSearch: boolean } }>>();
+
+          // Verify get() returns the correct type
+          const flags = requestContext.get('featureFlags');
+          expectTypeOf(flags).toEqualTypeOf<{ enableSearch: boolean }>();
+
+          return {};
+        },
+      };
+
+      expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
     });
   });
 });

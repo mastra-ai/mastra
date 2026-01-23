@@ -124,7 +124,7 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
           if (tool && typeof tool === 'object' && 'id' in tool) {
             // Use tool's intrinsic ID to avoid collisions across MCP servers
             const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
-            mastra.addTool(tool as ToolAction<any, any, any, any, ToolExecutionContext<any, any>>, toolKey);
+            mastra.addTool(tool as ToolAction<any, any, any, any, unknown, ToolExecutionContext<any, any, unknown>, string>, toolKey);
           }
         } catch (error) {
           // Tool might already be registered, that's okay

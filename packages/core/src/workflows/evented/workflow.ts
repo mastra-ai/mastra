@@ -200,12 +200,13 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> | unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
   TId extends string,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
+): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step

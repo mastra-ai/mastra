@@ -62,12 +62,14 @@ export class Tool<
   TSchemaOut = unknown,
   TSuspendSchema = unknown,
   TResumeSchema = unknown,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, TRequestContext> = ToolExecutionContext<
     TSuspendSchema,
-    TResumeSchema
+    TResumeSchema,
+    TRequestContext
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -90,7 +92,7 @@ export class Tool<
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: SchemaWithValidation<any>;
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
 
   /**
    * Tool execution function
@@ -98,7 +100,7 @@ export class Tool<
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId>['execute'];
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -161,7 +163,7 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TRequestContext, TContext, TId>) {
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
@@ -405,9 +407,10 @@ export function createTool<
   TSchemaOut = unknown,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<TSuspend, TResume, TRequestContext>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
-): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId> {
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId> {
   return new Tool(opts);
 }

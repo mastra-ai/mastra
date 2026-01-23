@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
+import { z } from 'zod';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
@@ -81,6 +82,65 @@ export const dynamicAgent = new Agent({
     };
 
     if (requestContext.get('foo')) {
+      tools['web_search_preview'] = openai.tools.webSearchPreview();
+    }
+
+    return tools;
+  },
+});
+
+/**
+ * Example demonstrating requestContextSchema for type-safe, validated request context.
+ *
+ * The requestContextSchema allows you to:
+ * 1. Define required runtime context values upfront using Zod schemas
+ * 2. Get automatic validation with clear error messages when validation fails
+ * 3. Have the Playground UI show a schema-driven form instead of raw JSON editor
+ *
+ * This is useful when you want to ensure certain context values are always present
+ * before the agent executes, like API keys, user IDs, feature flags, etc.
+ */
+export const schemaValidatedAgent = new Agent({
+  id: 'schema-validated-agent',
+  name: 'Schema Validated Agent',
+  description: 'An agent that demonstrates requestContextSchema for type-safe request context validation',
+
+  // Define the required request context values using a Zod schema
+  requestContextSchema: z.object({
+    userId: z.string().describe('The ID of the current user'),
+    apiKey: z.string().describe('API key for external service access'),
+    featureFlags: z
+      .object({
+        enableSearch: z.boolean().default(false).describe('Enable web search capabilities'),
+        debugMode: z.boolean().default(false).describe('Enable debug logging'),
+      })
+      .optional()
+      .describe('Optional feature flags'),
+  }),
+
+  instructions: ({ requestContext }) => {
+    // Access validated context values with type safety
+    const { userId, featureFlags } = requestContext.all;
+
+    const baseInstructions = `You are a helpful assistant. The current user ID is: ${userId}.`;
+
+    if (featureFlags?.debugMode) {
+      return `${baseInstructions} Debug mode is enabled - provide verbose responses.`;
+    }
+
+    return baseInstructions;
+  },
+
+  model: 'openai/gpt-4o-mini',
+
+  tools: ({ requestContext }) => {
+    const tools: Record<string, any> = {
+      weatherInfo,
+    };
+
+    // Conditionally add tools based on validated feature flags
+    const { featureFlags } = requestContext.all;
+    if (featureFlags?.enableSearch) {
       tools['web_search_preview'] = openai.tools.webSearchPreview();
     }
 

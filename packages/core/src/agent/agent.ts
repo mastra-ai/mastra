@@ -121,10 +121,11 @@ export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
-  #instructions: DynamicAgentInstructions;
+  #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -136,14 +137,14 @@ export class Agent<
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
-  #tools: DynamicArgument<TTools>;
+  #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: CompositeVoice;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
-  #requestContextSchema?: ZodSchema;
+  #requestContextSchema?: ZodSchema<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -169,7 +170,7 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TOutput>) {
+  constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -787,7 +788,7 @@ export class Agent<
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
-      const result = this.#instructions({ requestContext, mastra: this.#mastra });
+      const result = this.#instructions({ requestContext: requestContext as RequestContext<TRequestContext>, mastra: this.#mastra });
       return resolveMaybePromise(result, instructions => {
         if (!instructions) {
           const mastraError = new MastraError({
@@ -1064,7 +1065,7 @@ export class Agent<
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ requestContext, mastra: this.#mastra });
+    const result = this.#tools({ requestContext: requestContext as RequestContext<TRequestContext>, mastra: this.#mastra });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {

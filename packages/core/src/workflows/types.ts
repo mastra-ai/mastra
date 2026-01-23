@@ -539,6 +539,7 @@ export type StepParams<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -551,7 +552,7 @@ export type StepParams<
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before step execution.
    */
-  requestContextSchema?: SchemaWithValidation<any>;
+  requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -560,7 +561,8 @@ export type StepParams<
     z.infer<TOutputSchema>,
     TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
     TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-    DefaultEngineType
+    DefaultEngineType,
+    TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
   >;
 };
 
@@ -568,7 +570,15 @@ export type StepParams<
  * Legacy StepParams type for backward compatibility.
  * Use the schema-based StepParams for new code.
  */
-export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
+export type StepParamsLegacy<
+  TStepId extends string,
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   id: TStepId;
   description?: string;
   inputSchema: SchemaWithValidation<TStepInput>;
@@ -580,10 +590,10 @@ export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOu
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before step execution.
    */
-  requestContextSchema?: SchemaWithValidation<any>;
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType, TRequestContext>;
 };
 
 export type ToolStep<
@@ -703,7 +713,14 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
       };
     };
 
-export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, TSteps extends Step[]> = {
+export type WorkflowConfig<
+  TWorkflowId extends string,
+  TState,
+  TInput,
+  TOutput,
+  TSteps extends Step[],
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
@@ -715,7 +732,7 @@ export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, 
    * When provided, the request context will be validated against this schema when the workflow starts.
    * If validation fails, a validation error is thrown.
    */
-  requestContextSchema?: SchemaWithValidation<any>;
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
