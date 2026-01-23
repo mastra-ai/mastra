@@ -112,6 +112,68 @@ export const mastra = new Mastra({
 }
 ```
 
+### Authorization (User Isolation)
+
+Authentication verifies who the user is. Authorization controls what they can access. Without authorization middleware, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
+
+Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values. The server automatically enforces these keys across all memory endpoints:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async (token) => {
+        // Your auth logic returns the user
+        return verifyToken(token); // { id: 'user-123', ... }
+      },
+    },
+    middleware: [
+      {
+        path: '/api/memory/*',
+        handler: async (c, next) => {
+          const requestContext = c.get('requestContext');
+          const user = requestContext.get('user');
+
+          if (!user) {
+            return c.json({ error: 'Unauthorized' }, 401);
+          }
+
+          // Force all memory operations to use this user's ID
+          // This takes precedence over any client-provided resourceId
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+          return next();
+        },
+      },
+    ],
+  },
+});
+```
+
+With this middleware, the server automatically:
+- **Filters thread listing** to only return threads owned by the user
+- **Validates thread access** and returns 403 if accessing another user's thread
+- **Forces thread creation** to use the authenticated user's ID
+- **Validates message operations** including deletion, ensuring messages belong to owned threads
+
+Even if a client passes `?resourceId=other-user-id`, the middleware-set value takes precedence. Attempts to access threads or messages owned by other users will return a 403 error.
+
+#### Using `MASTRA_THREAD_ID_KEY`
+
+You can also set `MASTRA_THREAD_ID_KEY` to override the client-provided thread ID:
+
+```typescript
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+
+// Force operations to use a specific thread
+requestContext.set(MASTRA_THREAD_ID_KEY, validatedThreadId);
+```
+
+This is useful when you want to restrict operations to a specific thread that you've validated through other means.
+
 ### CORS support
 
 ```typescript
@@ -177,3 +239,4 @@ be inspected by middleware to tailor behavior:
 # Related
 
 - [Request Context](/docs/server/request-context)
+- [Reserved Keys](/docs/server/request-context#reserved-keys)

@@ -248,6 +248,30 @@ Visit [createTool()](/reference/tools/create-tool) for a full list of configurat
 
 :::
 
+## Reserved keys
+
+Mastra reserves special context keys for security purposes. When set by middleware, these keys take precedence over client-provided values. The server automatically validates ownership and returns 403 errors when users attempt to access resources they don't own.
+
+```typescript
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from "@mastra/core/request-context";
+
+// In middleware: force memory operations to use authenticated user's ID
+requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+// In middleware: set validated thread ID
+requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+```
+
+| Key | Purpose |
+|-----|---------|
+| `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
+| `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
+
+These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
+
 ## TypeScript support
 
 When you provide a type parameter to `RequestContext`, all methods are fully typed:
@@ -295,3 +319,4 @@ for (const [key, value] of ctx.entries()) {
 - [Agent Request Context](/docs/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Server Middleware](/docs/server/middleware)
+- [Authorization Middleware](/docs/server/middleware#authorization-user-isolation)
