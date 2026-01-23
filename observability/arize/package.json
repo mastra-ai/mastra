@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@arizeai/openinference-genai": "0.1.5",
-    "@arizeai/openinference-semantic-conventions": "^2.1.2",
+    "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/core": "^2.1.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
