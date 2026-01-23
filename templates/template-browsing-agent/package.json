@@ -22,7 +22,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
-    "@browserbasehq/stagehand": "^2.5.2",
+    "@browserbasehq/stagehand": "^2.5.6",
     "zod": "^3.25.67"
   },
   "devDependencies": {
