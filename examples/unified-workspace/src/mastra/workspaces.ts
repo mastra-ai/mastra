@@ -320,3 +320,29 @@ export const testAgentWorkspace = new Workspace({
   autoIndexPaths: ['/'],
   autoInit: true,
 });
+
+/**
+ * Skills-only workspace - no filesystem or sandbox, just skills.
+ *
+ * This demonstrates the minimal workspace configuration:
+ * - Only skillsPaths is provided
+ * - Skills are loaded read-only via LocalSkillSource (using Node.js fs/promises)
+ * - No filesystem tools (workspace_read_file, workspace_write_file, etc.)
+ * - No sandbox tools (execute_code, execute_command)
+ * - Only skills are available to the agent
+ *
+ * Use cases:
+ * - Agents that only need behavioral guidelines (skills) without file access
+ * - Lightweight agents focused on following instructions
+ * - Security-conscious deployments where file/code access is not needed
+ */
+export const skillsOnlyWorkspace = new Workspace({
+  id: 'skills-only-workspace',
+  name: 'Skills Only Workspace',
+  // No filesystem - skills loaded read-only from disk via LocalSkillSource
+  // No sandbox - no code execution capability
+  // Only skills from the configured paths
+  skillsPaths: [join(PROJECT_ROOT, 'skills'), join(PROJECT_ROOT, 'docs-skills')],
+  // Note: BM25/vector search not available without filesystem
+  // Skills are still searchable via workspace.skills.search() using simple text matching
+});

@@ -75,7 +75,6 @@ async function main() {
         console.log(`  Description: ${skill.description?.slice(0, 60) || 'N/A'}...`);
         console.log(`  Instructions: ${skill.instructions.length} characters`);
         console.log(`  Allowed tools: ${skill.allowedTools?.join(', ') || 'None'}`);
-        console.log(`  Disallowed tools: ${skill.disallowedTools?.join(', ') || 'None'}`);
       }
     }
   }
@@ -232,7 +231,7 @@ async function main() {
       // Update
       console.log('Updating the skill...');
       const updatedSkill = await globalWorkspace.skills.update(testSkillName, {
-        description: 'An updated test skill description',
+        metadata: { description: 'An updated test skill description' },
         instructions: 'Updated instructions for the test skill.',
       });
       console.log(`  Updated description: ${updatedSkill.description}`);

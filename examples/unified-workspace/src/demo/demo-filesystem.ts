@@ -119,7 +119,7 @@ async function main() {
   // Create directory
   console.log(`Creating directory: ${testDir}`);
   try {
-    await globalWorkspace.filesystem.mkdir(testDir);
+    await globalWorkspace.filesystem?.mkdir(testDir);
     console.log('  ✓ Directory created');
   } catch (error) {
     console.log(`  Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -159,7 +159,7 @@ async function main() {
   // Delete file
   console.log(`Deleting file: ${testFile}`);
   try {
-    await globalWorkspace.filesystem.deleteFile(testFile);
+    await globalWorkspace.filesystem?.deleteFile(testFile);
     const stillExists = await globalWorkspace.exists(testFile);
     console.log(`  ✓ File deleted (exists: ${stillExists})`);
   } catch (error) {
@@ -170,7 +170,7 @@ async function main() {
   // Delete directory (requires recursive option)
   console.log(`Deleting directory: ${testDir}`);
   try {
-    await globalWorkspace.filesystem.rmdir(testDir, { recursive: true });
+    await globalWorkspace.filesystem?.rmdir(testDir, { recursive: true });
     const stillExists = await globalWorkspace.exists(testDir);
     console.log(`  ✓ Directory deleted (exists: ${stillExists})`);
   } catch (error) {
