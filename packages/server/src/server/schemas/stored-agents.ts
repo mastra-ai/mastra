@@ -25,7 +25,7 @@ const storageOrderBySchema = z.object({
 });
 
 /**
- * GET /api/storage/agents - List stored agents
+ * GET /stored/agents - List stored agents
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
@@ -75,14 +75,14 @@ const storedAgentBaseSchema = z.object({
 });
 
 /**
- * POST /api/storage/agents - Create stored agent body
+ * POST /stored/agents - Create stored agent body
  */
 export const createStoredAgentBodySchema = storedAgentBaseSchema.extend({
   id: z.string().describe('Unique identifier for the agent'),
 });
 
 /**
- * PATCH /api/storage/agents/:storedAgentId - Update stored agent body
+ * PATCH /stored/agents/:storedAgentId - Update stored agent body
  */
 export const updateStoredAgentBodySchema = storedAgentBaseSchema.partial();
 
@@ -101,29 +101,29 @@ export const storedAgentSchema = storedAgentBaseSchema.extend({
 });
 
 /**
- * Response for GET /api/storage/agents
+ * Response for GET /stored/agents
  */
 export const listStoredAgentsResponseSchema = paginationInfoSchema.extend({
   agents: z.array(storedAgentSchema),
 });
 
 /**
- * Response for GET /api/storage/agents/:storedAgentId
+ * Response for GET /stored/agents/:storedAgentId
  */
 export const getStoredAgentResponseSchema = storedAgentSchema;
 
 /**
- * Response for POST /api/storage/agents
+ * Response for POST /stored/agents
  */
 export const createStoredAgentResponseSchema = storedAgentSchema;
 
 /**
- * Response for PATCH /api/storage/agents/:storedAgentId
+ * Response for PATCH /stored/agents/:storedAgentId
  */
 export const updateStoredAgentResponseSchema = storedAgentSchema;
 
 /**
- * Response for DELETE /api/storage/agents/:storedAgentId
+ * Response for DELETE /stored/agents/:storedAgentId
  */
 export const deleteStoredAgentResponseSchema = z.object({
   success: z.boolean(),

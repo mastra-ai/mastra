@@ -189,7 +189,7 @@ export async function deleteIndex({
 
 export const UPSERT_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/upsert',
+  path: '/vector/:vectorName/upsert',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: upsertVectorsBodySchema,
@@ -217,7 +217,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
 
 export const CREATE_INDEX_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/create-index',
+  path: '/vector/:vectorName/create-index',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: createIndexBodySchema,
@@ -251,7 +251,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
 
 export const QUERY_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/query',
+  path: '/vector/:vectorName/query',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: queryVectorsBodySchema,
@@ -281,7 +281,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
 
 export const LIST_INDEXES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes',
+  path: '/vector/:vectorName/indexes',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   responseSchema: listIndexesResponseSchema,
@@ -302,7 +302,7 @@ export const LIST_INDEXES_ROUTE = createRoute({
 
 export const DESCRIBE_INDEX_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: describeIndexResponseSchema,
@@ -332,7 +332,7 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
 
 export const DELETE_INDEX_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: deleteIndexResponseSchema,

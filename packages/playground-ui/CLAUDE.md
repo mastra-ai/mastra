@@ -1,1 +1,1 @@
-AGENTS.md
+Always read and follow the instructions in AGENTS.md in this directory before working on this package.  

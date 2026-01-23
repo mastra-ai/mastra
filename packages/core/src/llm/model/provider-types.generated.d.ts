@@ -29,7 +29,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-5',
     'claude-sonnet-4-5',
     'deepseek-chat',
-    'deepseek-coder',
     'deepseek-reasoner',
     'gemini-2.5-flash',
     'gemini-2.5-pro',
@@ -1104,7 +1103,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3-pro',
     'glm-4.6',
-    'glm-4.7-free',
+    'glm-4.7',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -1117,7 +1116,6 @@ export type ProviderModelsMap = {
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
-    'minimax-m2.1-free',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
