@@ -54,9 +54,9 @@ console.log(`Processed ${result.summary.totalItems} items`);
     },
     {
       name: "scorers",
-      type: "MastraScorer[] | WorkflowScorerConfig",
+      type: "(MastraScorer | ScorerWithConfig)[] | WorkflowScorerConfig",
       description:
-        "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
+        "Array of scorers (or scorer configs) for agents, or configuration object for workflows specifying scorers for the workflow and individual steps. Use ScorerWithConfig to specify modelSettings or run scorers multiple times with different temperatures.",
       isOptional: false,
     },
     {
@@ -130,6 +130,61 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
     },
   ]}
 />
+
+## Scorer Configuration (ScorerWithConfig)
+
+For LLM-based scorers, you can configure model settings and run scorers multiple times with different temperatures using `ScorerWithConfig`:
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorer",
+      type: "MastraScorer",
+      description: "The scorer instance to run.",
+      isOptional: false,
+    },
+    {
+      name: "modelSettings",
+      type: "Omit<CallSettings, 'abortSignal'>",
+      description: "Model settings applied to all LLM judge calls (e.g., temperature, maxTokens, topP).",
+      isOptional: true,
+    },
+    {
+      name: "temperatures",
+      type: "number[]",
+      description: "Run the scorer multiple times with different temperature values. Useful for getting varied opinions from the LLM judge. Each temperature run creates a separate score entry.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Temperature Array Example
+
+Run an LLM-based scorer multiple times with different temperatures to get varied judge opinions:
+
+```typescript
+import { runEvals } from "@mastra/core/evals";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+
+const relevancyScorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o" });
+
+const result = await runEvals({
+  target: myAgent,
+  data: [{ input: "What is machine learning?" }],
+  scorers: [
+    {
+      scorer: relevancyScorer,
+      temperatures: [0.3, 0.5, 0.7],
+      modelSettings: { maxTokens: 500 },
+    },
+  ],
+});
+
+// Results are keyed with temperature suffix
+console.log(result.scores["answer-relevancy@0.3"]); // Score at temp 0.3
+console.log(result.scores["answer-relevancy@0.5"]); // Score at temp 0.5
+console.log(result.scores["answer-relevancy@0.7"]); // Score at temp 0.7
+```
 
 ## Returns
 

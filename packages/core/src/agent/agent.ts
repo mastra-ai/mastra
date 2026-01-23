@@ -13,6 +13,7 @@ import type {
   ScorerRunOutputForAgent,
   MastraScorers,
   MastraScorer,
+  MastraScorerEntry,
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
@@ -2555,12 +2556,12 @@ export class Agent<
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
   }) {
-    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    let scorers: MastraScorers = {};
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
@@ -2608,9 +2609,11 @@ export class Agent<
    * @internal
    */
   private resolveOverrideScorerReferences(
-    overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
-  ) {
-    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    overrideScorers:
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>,
+  ): MastraScorers {
+    const result: MastraScorers = {};
     for (const [id, scorerObject] of Object.entries(overrideScorers)) {
       // If the scorer is a string (scorer name), we need to get the scorer from the mastra instance
       if (typeof scorerObject.scorer === 'string') {
@@ -2625,12 +2628,18 @@ export class Agent<
           }
 
           const scorer = this.#mastra.getScorerById(scorerObject.scorer);
-          result[id] = { scorer, sampling: scorerObject.sampling };
+          // Preserve sampling, modelSettings, and temperatures from the override config
+          result[id] = {
+            scorer,
+            sampling: scorerObject.sampling,
+            modelSettings: scorerObject.modelSettings,
+            temperatures: scorerObject.temperatures,
+          };
         } catch (error) {
           this.logger.warn(`[Agent:${this.name}] - Failed to get scorer ${scorerObject.scorer}: ${error}`);
         }
       } else {
-        result[id] = scorerObject;
+        result[id] = scorerObject as MastraScorerEntry;
       }
     }
 

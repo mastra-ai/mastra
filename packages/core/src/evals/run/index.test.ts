@@ -709,4 +709,237 @@ describe('runEvals', () => {
       );
     });
   });
+
+  describe('Temperature array functionality', () => {
+    it('should run scorer multiple times with different temperatures when temperatures array is provided', async () => {
+      const scorer = createMockScorer('temp-scorer', 0.8);
+      const scorerSpy = vi.spyOn(scorer, 'run');
+
+      // Mock different scores for different temperature runs
+      scorerSpy
+        .mockResolvedValueOnce({ score: 0.6, reason: 'low temp' })
+        .mockResolvedValueOnce({ score: 0.7, reason: 'mid temp' })
+        .mockResolvedValueOnce({ score: 0.9, reason: 'high temp' });
+
+      const result = await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          {
+            scorer,
+            temperatures: [0.3, 0.5, 0.7],
+          },
+        ],
+        target: mockAgent,
+      });
+
+      // Verify scorer was called 3 times
+      expect(scorerSpy).toHaveBeenCalledTimes(3);
+
+      // Verify each call received the correct modelSettings with temperature
+      expect(scorerSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          modelSettings: { temperature: 0.3 },
+        }),
+      );
+      expect(scorerSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          modelSettings: { temperature: 0.5 },
+        }),
+      );
+      expect(scorerSpy).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({
+          modelSettings: { temperature: 0.7 },
+        }),
+      );
+
+      // Verify results are keyed with temperature suffix
+      expect(result.scores['temp-scorer@0.3']).toBeCloseTo(0.6, 5);
+      expect(result.scores['temp-scorer@0.5']).toBeCloseTo(0.7, 5);
+      expect(result.scores['temp-scorer@0.7']).toBeCloseTo(0.9, 5);
+    });
+
+    it('should use ScorerWithConfig format correctly', async () => {
+      const scorer = createMockScorer('config-scorer', 0.75);
+      const scorerSpy = vi.spyOn(scorer, 'run');
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          {
+            scorer,
+            modelSettings: { maxTokens: 100, topP: 0.9 },
+          },
+        ],
+        target: mockAgent,
+      });
+
+      expect(scorerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelSettings: { maxTokens: 100, topP: 0.9 },
+        }),
+      );
+    });
+
+    it('should merge modelSettings with temperature when both are provided', async () => {
+      const scorer = createMockScorer('merge-scorer', 0.8);
+      const scorerSpy = vi.spyOn(scorer, 'run');
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          {
+            scorer,
+            modelSettings: { maxTokens: 100 },
+            temperatures: [0.5],
+          },
+        ],
+        target: mockAgent,
+      });
+
+      expect(scorerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelSettings: { maxTokens: 100, temperature: 0.5 },
+        }),
+      );
+    });
+
+    it('should handle bare scorers alongside ScorerWithConfig', async () => {
+      const bareScorer = createMockScorer('bare-scorer', 0.7);
+      const configScorer = createMockScorer('config-scorer', 0.8);
+      const bareSpy = vi.spyOn(bareScorer, 'run');
+      const configSpy = vi.spyOn(configScorer, 'run');
+
+      const result = await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          bareScorer,
+          {
+            scorer: configScorer,
+            temperatures: [0.3, 0.9],
+          },
+        ],
+        target: mockAgent,
+      });
+
+      // Bare scorer called once without modelSettings
+      expect(bareSpy).toHaveBeenCalledTimes(1);
+      expect(bareSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelSettings: undefined,
+        }),
+      );
+
+      // Config scorer called twice with temperatures
+      expect(configSpy).toHaveBeenCalledTimes(2);
+
+      // Verify result keys
+      expect(result.scores['bare-scorer']).toBe(0.7);
+      expect(result.scores['config-scorer@0.3']).toBe(0.8);
+      expect(result.scores['config-scorer@0.9']).toBe(0.8);
+    });
+
+    it('should include temperature in scorer results', async () => {
+      const scorer = createMockScorer('temp-result-scorer', 0.8);
+
+      const onItemComplete = vi.fn();
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          {
+            scorer,
+            temperatures: [0.5],
+          },
+        ],
+        target: mockAgent,
+        onItemComplete,
+      });
+
+      expect(onItemComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerResults: expect.objectContaining({
+            'temp-result-scorer@0.5': expect.objectContaining({
+              temperature: 0.5,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should handle empty temperatures array like no temperatures', async () => {
+      const scorer = createMockScorer('empty-temp-scorer', 0.8);
+      const scorerSpy = vi.spyOn(scorer, 'run');
+
+      const result = await runEvals({
+        data: [{ input: 'test input', groundTruth: 'truth' }],
+        scorers: [
+          {
+            scorer,
+            temperatures: [],
+          },
+        ],
+        target: mockAgent,
+      });
+
+      // Should be called once (no temperature iteration)
+      expect(scorerSpy).toHaveBeenCalledTimes(1);
+
+      // Result should be keyed without temperature suffix
+      expect(result.scores['empty-temp-scorer']).toBe(0.8);
+    });
+
+    it('should calculate average scores correctly across multiple temperatures', async () => {
+      const scorer = createMockScorer('avg-scorer', 0.8);
+      const scorerSpy = vi.spyOn(scorer, 'run');
+
+      // Different scores for two data items at two temperatures
+      // Item 1: temp 0.3 -> 0.6, temp 0.7 -> 0.8
+      // Item 2: temp 0.3 -> 0.4, temp 0.7 -> 1.0
+      scorerSpy
+        .mockResolvedValueOnce({ score: 0.6, reason: 'item1-low' })
+        .mockResolvedValueOnce({ score: 0.8, reason: 'item1-high' })
+        .mockResolvedValueOnce({ score: 0.4, reason: 'item2-low' })
+        .mockResolvedValueOnce({ score: 1.0, reason: 'item2-high' });
+
+      const result = await runEvals({
+        data: [
+          { input: 'test input 1', groundTruth: 'truth1' },
+          { input: 'test input 2', groundTruth: 'truth2' },
+        ],
+        scorers: [
+          {
+            scorer,
+            temperatures: [0.3, 0.7],
+          },
+        ],
+        target: mockAgent,
+      });
+
+      // Average for temp 0.3: (0.6 + 0.4) / 2 = 0.5
+      // Average for temp 0.7: (0.8 + 1.0) / 2 = 0.9
+      expect(result.scores['avg-scorer@0.3']).toBeCloseTo(0.5, 5);
+      expect(result.scores['avg-scorer@0.7']).toBeCloseTo(0.9, 5);
+    });
+
+    it('should include temperature in error details when scorer fails', async () => {
+      const scorer = createMockScorer('error-scorer', 0.8);
+      vi.spyOn(scorer, 'run').mockRejectedValue(new Error('Scorer failed'));
+
+      await expect(
+        runEvals({
+          data: [{ input: 'test input', groundTruth: 'truth' }],
+          scorers: [
+            {
+              scorer,
+              temperatures: [0.5],
+            },
+          ],
+          target: mockAgent,
+        }),
+      ).rejects.toThrow('at temperature 0.5');
+    });
+  });
 });
