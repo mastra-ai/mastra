@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
+import { toStandardSchema, type PublicSchema } from '../../schema';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
@@ -285,10 +286,14 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
           tracingContext,
         });
 
-        result = response.object!;
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
+        const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.detectionAgent.generateLegacy(text, {
-          output: schema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
           tracingContext,
         });
 
