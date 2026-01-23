@@ -332,7 +332,11 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.fs) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        return {
+          path: decodeURIComponent(path),
+          entries: [],
+          error: 'No workspace filesystem configured',
+        };
       }
 
       const decodedPath = decodeURIComponent(path);
