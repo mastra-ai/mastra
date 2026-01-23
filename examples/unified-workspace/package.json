@@ -7,11 +7,13 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
-    "@mastra/core": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/memory": "beta",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "^1.0.0",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "ai": "^6.0.1",
-    "mastra": "beta",
+    "mastra": "latest",
     "typescript": "^5.8.3",
     "zod": "^3"
   },
@@ -20,8 +22,9 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
-      "mastra": "link:../../packages/cli",
-      "@mastra/client-js": "link:../../client-sdks/client-js"
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
