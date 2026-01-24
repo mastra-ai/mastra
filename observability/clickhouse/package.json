@@ -1,0 +1,78 @@
+{
+  "name": "@mastra/observability-clickhouse",
+  "version": "0.0.1",
+  "description": "ClickHouse storage and ingestion worker for MastraAdmin observability data",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mastra-observability-clickhouse": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./cli": {
+      "import": {
+        "types": "./dist/cli/index.d.ts",
+        "default": "./dist/cli/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:watch": "pnpm build:lib --watch",
+    "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude src/integration.test.ts",
+    "test:watch": "vitest watch --exclude src/integration.test.ts",
+    "test:integration": "RUN_INTEGRATION_TESTS=1 vitest run src/integration.test.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@clickhouse/client": "^1.12.1",
+    "commander": "^14.0.2"
+  },
+  "peerDependencies": {
+    "@mastra/admin": "workspace:*"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/admin": "workspace:*",
+    "@mastra/observability-writer": "workspace:*",
+    "@mastra/observability-file-local": "workspace:*",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "tsup": "^8.3.5",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "observability/clickhouse"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}
