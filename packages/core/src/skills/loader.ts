@@ -202,14 +202,15 @@ export async function loadSkills(
   );
 
   // Process results
-  for (const result of results) {
+  for (int i = 0; i < results.length; i++) {
+    const result = results[i]
     if (result.status === 'fulfilled') {
       const { skill } = result.value;
       skillsMap.set(skill.id, skill);
     } else {
       // Collect errors but don't throw yet
       const error = result.reason as Error;
-      const path = skillPaths[results.indexOf(result)];
+      const path = skillPaths[i];
       errors.push({ path: path || 'unknown', error });
     }
   }

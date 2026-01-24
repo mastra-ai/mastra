@@ -110,9 +110,9 @@ export function validateLoadOptions(options: LoadSkillOptions): void {
 }
 
 /**
- * Validates a skill directory structure
+ * Validates a skill path string format
  * @param skillPath Path to the skill directory
- * @returns True if the directory appears to be a valid skill directory
+ * @returns True if the path is a valid non-empty string
  */
 export function isValidSkillDirectory(skillPath: string): boolean {
   // Must be a string path

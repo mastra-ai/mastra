@@ -115,7 +115,8 @@ export class SkillsManager {
 
     // Reload from the same path
     const reloadedSkill = await loadSkill(existingSkill.path, this.defaultOptions);
-    this.skills.set(skillId, reloadedSkill);
+    this.skills.delete(skillId);
+    this.skills.set(reloadedSkill.id, reloadedSkill);
   }
 
   /**

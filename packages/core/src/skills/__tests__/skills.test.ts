@@ -67,8 +67,9 @@ Use this skill for testing purposes.
       const skillDir = join(testDir, 'missing-skill');
       mkdirSync(skillDir);
 
-      await expect(loadSkill(skillDir)).rejects.toThrow(SkillError);
-      await expect(loadSkill(skillDir)).rejects.toThrow(/SKILL\.md not found/);
+      const promise = loadSkill(skillDir);
+      await expect(promise).rejects.toThrow(SkillError);
+      await expect(promise).rejects.toThrow(/SKILL\.md not found/);
     });
 
     it('should throw error for missing directory', async () => {
