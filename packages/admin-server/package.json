@@ -1,0 +1,115 @@
+{
+  "name": "@mastra/admin-server",
+  "version": "0.1.0",
+  "description": "HTTP API server for MastraAdmin",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./routes": {
+      "import": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.js"
+      },
+      "require": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.cjs"
+      }
+    },
+    "./middleware": {
+      "import": {
+        "types": "./dist/middleware/index.d.ts",
+        "default": "./dist/middleware/index.js"
+      },
+      "require": {
+        "types": "./dist/middleware/index.d.ts",
+        "default": "./dist/middleware/index.cjs"
+      }
+    },
+    "./websocket": {
+      "import": {
+        "types": "./dist/websocket/index.d.ts",
+        "default": "./dist/websocket/index.js"
+      },
+      "require": {
+        "types": "./dist/websocket/index.d.ts",
+        "default": "./dist/websocket/index.cjs"
+      }
+    },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.js"
+      },
+      "require": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build": "pnpm build:lib",
+    "build:watch": "pnpm build:lib --watch",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "mastra",
+    "admin",
+    "server",
+    "api"
+  ],
+  "author": "Mastra",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@mastra/admin": ">=0.1.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.11.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/admin": "workspace:*",
+    "@types/node": "22.13.17",
+    "@types/ws": "^8.5.13",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/admin-server"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai"
+}

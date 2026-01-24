@@ -1,0 +1,2457 @@
+openapi: 3.1.0
+info:
+  title: Mastra Admin Server API
+  description: |
+    HTTP API for MastraAdmin. This server provides REST endpoints for managing
+    teams, projects, deployments, builds, and observability data.
+
+    ## Authentication
+
+    All endpoints (except `/health`, `/ready`, `/auth/login`, `/auth/refresh`, and
+    `/invites/:inviteId/accept`) require authentication via Bearer token.
+
+    ```
+    Authorization: Bearer <token>
+    ```
+
+    Tokens are obtained through the `/auth/login` endpoint using your configured
+    auth provider (e.g., Supabase, Auth0).
+
+    ## WebSocket
+
+    Real-time updates for build logs and server logs are available via WebSocket
+    at `ws://<host>:<port>/ws`. Connect with a token query parameter:
+
+    ```
+    ws://localhost:3000/ws?token=<your-token>
+    ```
+
+    Subscribe to channels:
+    - `build:<buildId>` - Build log and status updates
+    - `server:<serverId>` - Server log and health updates
+
+    ## Error Responses
+
+    All errors follow a consistent format:
+
+    ```json
+    {
+      "error": "Human-readable error message",
+      "code": "ERROR_CODE",
+      "details": { ... },
+      "requestId": "uuid"
+    }
+    ```
+
+  version: 0.1.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: Mastra
+    url: https://mastra.ai
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+tags:
+  - name: System
+    description: Health and readiness endpoints
+  - name: Auth
+    description: Authentication endpoints
+  - name: Teams
+    description: Team management
+  - name: Projects
+    description: Project management
+  - name: Sources
+    description: Project source management
+  - name: Deployments
+    description: Deployment management
+  - name: Builds
+    description: Build management
+  - name: Servers
+    description: Running server management
+  - name: Observability
+    description: Traces, logs, and metrics
+  - name: Admin
+    description: Platform administration (admin only)
+
+paths:
+  # System Endpoints (outside /api base path)
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Check if the server is running
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness check
+      description: Check if the server is ready to accept requests
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+        '503':
+          description: Server is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: false
+
+  # Auth Endpoints
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Authenticate with the configured auth provider
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: End the current session
+      operationId: logout
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      description: Get information about the authenticated user
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh token
+      description: Get a new access token using a refresh token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Team Endpoints
+  /teams:
+    get:
+      tags: [Teams]
+      summary: List teams
+      description: List all teams the authenticated user is a member of
+      operationId: listTeams
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamListResponse'
+    post:
+      tags: [Teams]
+      summary: Create team
+      description: Create a new team. The authenticated user becomes the owner.
+      operationId: createTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '200':
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /teams/{teamId}:
+    get:
+      tags: [Teams]
+      summary: Get team
+      description: Get details of a specific team
+      operationId: getTeam
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Teams]
+      summary: Update team
+      description: Update team name or settings
+      operationId: updateTeam
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Team updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Teams]
+      summary: Delete team
+      description: Delete a team and all its projects and deployments
+      operationId: deleteTeam
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      responses:
+        '200':
+          description: Team deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /teams/{teamId}/members:
+    get:
+      tags: [Teams]
+      summary: List team members
+      description: List all members of a team
+      operationId: listTeamMembers
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: List of team members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberListResponse'
+    post:
+      tags: [Teams]
+      summary: Invite member
+      description: Send an invitation to join the team
+      operationId: inviteMember
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '200':
+          description: Invitation sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamInviteResponse'
+
+  /teams/{teamId}/members/{userId}:
+    patch:
+      tags: [Teams]
+      summary: Update member role
+      description: Update a team member's role
+      operationId: updateMemberRole
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/UserIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+      responses:
+        '200':
+          description: Member role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMemberResponse'
+    delete:
+      tags: [Teams]
+      summary: Remove member
+      description: Remove a member from the team
+      operationId: removeMember
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /teams/{teamId}/invites:
+    get:
+      tags: [Teams]
+      summary: List invites
+      description: List pending team invitations
+      operationId: listTeamInvites
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: List of pending invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamInviteListResponse'
+
+  /teams/{teamId}/invites/{inviteId}:
+    delete:
+      tags: [Teams]
+      summary: Cancel invite
+      description: Cancel a pending team invitation
+      operationId: cancelInvite
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/InviteIdParam'
+      responses:
+        '200':
+          description: Invite cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /invites/{inviteId}/accept:
+    post:
+      tags: [Teams]
+      summary: Accept invite
+      description: Accept a team invitation and join the team
+      operationId: acceptInvite
+      parameters:
+        - $ref: '#/components/parameters/InviteIdParam'
+      responses:
+        '200':
+          description: Invite accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Project Endpoints
+  /teams/{teamId}/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      description: List all projects in a team
+      operationId: listProjects
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+    post:
+      tags: [Projects]
+      summary: Create project
+      description: Create a new project in a team
+      operationId: createProject
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '200':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+
+  /projects/{projectId}:
+    get:
+      tags: [Projects]
+      summary: Get project
+      description: Get details of a specific project
+      operationId: getProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Projects]
+      summary: Update project
+      description: Update project name, branch, or source config
+      operationId: updateProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      description: Delete a project and all its deployments
+      operationId: deleteProject
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /projects/{projectId}/env-vars:
+    get:
+      tags: [Projects]
+      summary: List environment variables
+      description: List all environment variables for a project
+      operationId: listEnvVars
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: List of environment variables
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvVarListResponse'
+    post:
+      tags: [Projects]
+      summary: Set environment variable
+      description: Create or update an environment variable
+      operationId: setEnvVar
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEnvVarRequest'
+      responses:
+        '200':
+          description: Environment variable set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvVarResponse'
+
+  /projects/{projectId}/env-vars/{key}:
+    delete:
+      tags: [Projects]
+      summary: Delete environment variable
+      description: Delete an environment variable
+      operationId: deleteEnvVar
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment variable deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /projects/{projectId}/api-tokens:
+    get:
+      tags: [Projects]
+      summary: List API tokens
+      description: List all API tokens for a project
+      operationId: listApiTokens
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: List of API tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenListResponse'
+    post:
+      tags: [Projects]
+      summary: Create API token
+      description: Create a new API token for the project
+      operationId: createApiToken
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiTokenRequest'
+      responses:
+        '200':
+          description: API token created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateApiTokenResponse'
+
+  /projects/{projectId}/api-tokens/{tokenId}:
+    delete:
+      tags: [Projects]
+      summary: Revoke API token
+      description: Revoke an API token
+      operationId: revokeApiToken
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/TokenIdParam'
+      responses:
+        '200':
+          description: API token revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Source Endpoints
+  /teams/{teamId}/sources:
+    get:
+      tags: [Sources]
+      summary: List sources
+      description: List available project sources for a team
+      operationId: listSources
+      parameters:
+        - $ref: '#/components/parameters/TeamIdParam'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [local, github]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceListResponse'
+
+  /sources/{sourceId}:
+    get:
+      tags: [Sources]
+      summary: Get source
+      description: Get details of a specific project source
+      operationId: getSource
+      parameters:
+        - $ref: '#/components/parameters/SourceIdParam'
+      responses:
+        '200':
+          description: Source details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceResponse'
+
+  /sources/{sourceId}/validate:
+    post:
+      tags: [Sources]
+      summary: Validate source
+      description: Validate that the source is accessible and can be used
+      operationId: validateSource
+      parameters:
+        - $ref: '#/components/parameters/SourceIdParam'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateSourceResponse'
+
+  # Deployment Endpoints
+  /projects/{projectId}/deployments:
+    get:
+      tags: [Deployments]
+      summary: List deployments
+      description: List all deployments for a project
+      operationId: listDeployments
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of deployments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentListResponse'
+    post:
+      tags: [Deployments]
+      summary: Create deployment
+      description: Create a new deployment for a project
+      operationId: createDeployment
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeploymentRequest'
+      responses:
+        '200':
+          description: Deployment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentResponse'
+
+  /deployments/{deploymentId}:
+    get:
+      tags: [Deployments]
+      summary: Get deployment
+      description: Get details of a specific deployment
+      operationId: getDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      responses:
+        '200':
+          description: Deployment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentResponse'
+    patch:
+      tags: [Deployments]
+      summary: Update deployment
+      description: Update deployment configuration
+      operationId: updateDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeploymentRequest'
+      responses:
+        '200':
+          description: Deployment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentResponse'
+    delete:
+      tags: [Deployments]
+      summary: Delete deployment
+      description: Delete a deployment and stop any running servers
+      operationId: deleteDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      responses:
+        '200':
+          description: Deployment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /deployments/{deploymentId}/deploy:
+    post:
+      tags: [Deployments]
+      summary: Trigger deploy
+      description: Trigger a new build and deployment
+      operationId: triggerDeploy
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerDeployRequest'
+      responses:
+        '200':
+          description: Build triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildResponse'
+
+  /deployments/{deploymentId}/stop:
+    post:
+      tags: [Deployments]
+      summary: Stop deployment
+      description: Stop a running deployment
+      operationId: stopDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      responses:
+        '200':
+          description: Deployment stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /deployments/{deploymentId}/restart:
+    post:
+      tags: [Deployments]
+      summary: Restart deployment
+      description: Stop and redeploy using the current build
+      operationId: restartDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      responses:
+        '200':
+          description: Restart triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildResponse'
+
+  /deployments/{deploymentId}/rollback:
+    post:
+      tags: [Deployments]
+      summary: Rollback deployment
+      description: Rollback to a previous build
+      operationId: rollbackDeployment
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '200':
+          description: Rollback triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildResponse'
+
+  # Build Endpoints
+  /deployments/{deploymentId}/builds:
+    get:
+      tags: [Builds]
+      summary: List builds
+      description: List all builds for a deployment
+      operationId: listBuilds
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of builds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildListResponse'
+
+  /builds/{buildId}:
+    get:
+      tags: [Builds]
+      summary: Get build
+      description: Get details of a specific build
+      operationId: getBuild
+      parameters:
+        - $ref: '#/components/parameters/BuildIdParam'
+      responses:
+        '200':
+          description: Build details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildResponse'
+
+  /builds/{buildId}/logs:
+    get:
+      tags: [Builds]
+      summary: Get build logs
+      description: Get build logs. Set stream=true for SSE streaming.
+      operationId: getBuildLogs
+      parameters:
+        - $ref: '#/components/parameters/BuildIdParam'
+        - name: stream
+          in: query
+          description: Enable SSE streaming
+          schema:
+            type: boolean
+        - name: since
+          in: query
+          description: Byte offset to start from
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Build logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildLogsResponse'
+
+  /builds/{buildId}/cancel:
+    post:
+      tags: [Builds]
+      summary: Cancel build
+      description: Cancel a queued or running build
+      operationId: cancelBuild
+      parameters:
+        - $ref: '#/components/parameters/BuildIdParam'
+      responses:
+        '200':
+          description: Build cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Server Endpoints
+  /deployments/{deploymentId}/server:
+    get:
+      tags: [Servers]
+      summary: Get server
+      description: Get information about the running server for a deployment
+      operationId: getServer
+      parameters:
+        - $ref: '#/components/parameters/DeploymentIdParam'
+      responses:
+        '200':
+          description: Server info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /servers/{serverId}/logs:
+    get:
+      tags: [Servers]
+      summary: Get server logs
+      description: Get server logs. Set stream=true for SSE streaming.
+      operationId: getServerLogs
+      parameters:
+        - $ref: '#/components/parameters/ServerIdParam'
+        - name: tail
+          in: query
+          description: Number of lines to return from the end
+          schema:
+            type: integer
+        - name: since
+          in: query
+          description: Return logs since this timestamp (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Server logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerLogsResponse'
+
+  /servers/{serverId}/health:
+    get:
+      tags: [Servers]
+      summary: Get server health
+      description: Get health status of a running server
+      operationId: getServerHealth
+      parameters:
+        - $ref: '#/components/parameters/ServerIdParam'
+      responses:
+        '200':
+          description: Server health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerHealthResponse'
+
+  /servers/{serverId}/metrics:
+    get:
+      tags: [Servers]
+      summary: Get server metrics
+      description: Get resource metrics for a running server
+      operationId: getServerMetrics
+      parameters:
+        - $ref: '#/components/parameters/ServerIdParam'
+      responses:
+        '200':
+          description: Server metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerMetricsResponse'
+
+  # Observability Endpoints
+  /projects/{projectId}/traces:
+    get:
+      tags: [Observability]
+      summary: Query traces
+      description: Query traces for a project with optional filters
+      operationId: queryTraces
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: name
+          in: query
+          description: Filter by trace name
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by trace status
+          schema:
+            type: string
+            enum: [ok, error]
+        - name: minDurationMs
+          in: query
+          description: Minimum duration filter
+          schema:
+            type: integer
+        - name: maxDurationMs
+          in: query
+          description: Maximum duration filter
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of traces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceListResponse'
+
+  /traces/{traceId}:
+    get:
+      tags: [Observability]
+      summary: Get trace
+      description: Get trace details with all spans
+      operationId: getTrace
+      parameters:
+        - $ref: '#/components/parameters/TraceIdParam'
+      responses:
+        '200':
+          description: Trace with spans
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceWithSpansResponse'
+
+  /projects/{projectId}/logs:
+    get:
+      tags: [Observability]
+      summary: Query logs
+      description: Query logs for a project with optional filters
+      operationId: queryLogs
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: level
+          in: query
+          description: Filter by log level
+          schema:
+            type: string
+            enum: [debug, info, warn, error]
+        - name: search
+          in: query
+          description: Full-text search
+          schema:
+            type: string
+        - name: traceId
+          in: query
+          description: Filter by trace ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogListResponse'
+
+  /projects/{projectId}/metrics:
+    get:
+      tags: [Observability]
+      summary: Query metrics
+      description: Query aggregated metrics for a project
+      operationId: queryMetrics
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: name
+          in: query
+          description: Metric name
+          schema:
+            type: string
+        - name: aggregation
+          in: query
+          description: Aggregation function
+          schema:
+            type: string
+            enum: [sum, avg, min, max, count]
+        - name: groupBy
+          in: query
+          description: Group by attribute
+          schema:
+            type: string
+        - name: interval
+          in: query
+          description: Time bucket interval
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Aggregated metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+  /projects/{projectId}/scores:
+    get:
+      tags: [Observability]
+      summary: Query scores
+      description: Query evaluation scores for a project
+      operationId: queryScores
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: name
+          in: query
+          description: Score name
+          schema:
+            type: string
+        - name: traceId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: minValue
+          in: query
+          schema:
+            type: number
+        - name: maxValue
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: List of scores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreListResponse'
+
+  # Admin Endpoints
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      description: List all users in the system (platform admin only)
+      operationId: listAllUsers
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: search
+          in: query
+          description: Search by email or name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/teams:
+    get:
+      tags: [Admin]
+      summary: List all teams
+      description: List all teams in the system (platform admin only)
+      operationId: listAllTeams
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: search
+          in: query
+          description: Search by name or slug
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/license:
+    get:
+      tags: [Admin]
+      summary: Get license info
+      description: Get current license information
+      operationId: getLicense
+      responses:
+        '200':
+          description: License info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseInfoResponse'
+    post:
+      tags: [Admin]
+      summary: Update license
+      description: Update the license key (platform admin only)
+      operationId: updateLicense
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLicenseRequest'
+      responses:
+        '200':
+          description: License updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseInfoResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/stats:
+    get:
+      tags: [Admin]
+      summary: Get system stats
+      description: Get system-wide statistics (platform admin only)
+      operationId: getSystemStats
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatsResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PerPageParam:
+      name: perPage
+      in: query
+      description: Items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    LimitParam:
+      name: limit
+      in: query
+      description: Maximum items to return
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    TeamIdParam:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ProjectIdParam:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    DeploymentIdParam:
+      name: deploymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    BuildIdParam:
+      name: buildId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ServerIdParam:
+      name: serverId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    TraceIdParam:
+      name: traceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    SourceIdParam:
+      name: sourceId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    InviteIdParam:
+      name: inviteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    TokenIdParam:
+      name: tokenId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Permission denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+        requestId:
+          type: string
+          format: uuid
+
+    PaginatedResponse:
+      type: object
+      required: [data, total, page, perPage, hasMore]
+      properties:
+        data:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        perPage:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # Auth schemas
+    LoginRequest:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          description: Auth provider name
+        credentials:
+          type: object
+          description: Provider-specific credentials
+
+    LoginResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    RefreshTokenResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    UserResponse:
+      type: object
+      required: [id, email, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserResponse'
+
+    # Team schemas
+    TeamResponse:
+      type: object
+      required: [id, name, slug, settings, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        settings:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TeamResponse'
+
+    CreateTeamRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+          minLength: 1
+          maxLength: 50
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        settings:
+          type: object
+
+    TeamMemberResponse:
+      type: object
+      required: [id, teamId, userId, role, createdAt, updatedAt, user]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [owner, admin, member, viewer]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            name:
+              type: string
+              nullable: true
+            avatarUrl:
+              type: string
+              format: uri
+              nullable: true
+
+    TeamMemberListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TeamMemberResponse'
+
+    InviteMemberRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member, viewer]
+
+    UpdateMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member, viewer]
+
+    TeamInviteResponse:
+      type: object
+      required: [id, teamId, email, role, invitedBy, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        invitedBy:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    TeamInviteListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TeamInviteResponse'
+
+    # Project schemas
+    ProjectResponse:
+      type: object
+      required: [id, teamId, name, slug, sourceType, sourceConfig, envVars, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        sourceType:
+          type: string
+          enum: [local, github]
+        sourceConfig:
+          type: object
+        defaultBranch:
+          type: string
+          nullable: true
+        envVars:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvVarResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProjectListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectResponse'
+
+    CreateProjectRequest:
+      type: object
+      required: [name, slug, sourceType, sourceConfig]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+          minLength: 1
+          maxLength: 50
+        sourceType:
+          type: string
+          enum: [local, github]
+        sourceConfig:
+          type: object
+        defaultBranch:
+          type: string
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        defaultBranch:
+          type: string
+        sourceConfig:
+          type: object
+
+    EnvVarResponse:
+      type: object
+      required: [key, isSecret, createdAt, updatedAt]
+      properties:
+        key:
+          type: string
+        isSecret:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EnvVarListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvVarResponse'
+
+    SetEnvVarRequest:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 256
+        value:
+          type: string
+        isSecret:
+          type: boolean
+          default: false
+
+    ApiTokenResponse:
+      type: object
+      required: [id, projectId, name, tokenPrefix, scopes, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tokenPrefix:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiTokenListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ApiTokenResponse'
+
+    CreateApiTokenRequest:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scopes:
+          type: array
+          items:
+            type: string
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+
+    CreateApiTokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiTokenResponse'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The full token value (only returned on creation)
+
+    # Source schemas
+    SourceResponse:
+      type: object
+      required: [id, type, name]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [local, github]
+        name:
+          type: string
+        path:
+          type: string
+        owner:
+          type: string
+        repo:
+          type: string
+        defaultBranch:
+          type: string
+
+    SourceListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceResponse'
+
+    ValidateSourceResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+        error:
+          type: string
+
+    # Deployment schemas
+    DeploymentResponse:
+      type: object
+      required: [id, projectId, type, branch, slug, status, envVarOverrides, autoShutdown, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [production, staging, preview]
+        branch:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [pending, building, running, stopped, failed]
+        currentBuildId:
+          type: string
+          format: uuid
+          nullable: true
+        publicUrl:
+          type: string
+          format: uri
+          nullable: true
+        internalHost:
+          type: string
+          nullable: true
+        envVarOverrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvVarResponse'
+        autoShutdown:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DeploymentListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DeploymentResponse'
+
+    CreateDeploymentRequest:
+      type: object
+      required: [type, branch]
+      properties:
+        type:
+          type: string
+          enum: [production, staging, preview]
+        branch:
+          type: string
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        envVarOverrides:
+          type: object
+          additionalProperties:
+            type: string
+        autoShutdown:
+          type: boolean
+          default: false
+
+    UpdateDeploymentRequest:
+      type: object
+      properties:
+        autoShutdown:
+          type: boolean
+
+    TriggerDeployRequest:
+      type: object
+      properties:
+        commitSha:
+          type: string
+        commitMessage:
+          type: string
+
+    RollbackRequest:
+      type: object
+      required: [buildId]
+      properties:
+        buildId:
+          type: string
+          format: uuid
+
+    # Build schemas
+    BuildResponse:
+      type: object
+      required: [id, deploymentId, trigger, triggeredBy, commitSha, status, queuedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deploymentId:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          enum: [manual, webhook, schedule]
+        triggeredBy:
+          type: string
+          format: uuid
+        commitSha:
+          type: string
+        commitMessage:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [queued, building, deploying, succeeded, failed, cancelled]
+        queuedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+
+    BuildListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/BuildResponse'
+
+    BuildLogsResponse:
+      type: object
+      required: [buildId, logs, complete]
+      properties:
+        buildId:
+          type: string
+          format: uuid
+        logs:
+          type: string
+        complete:
+          type: boolean
+
+    # Server schemas
+    ServerResponse:
+      type: object
+      required: [id, deploymentId, buildId, host, port, healthStatus, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deploymentId:
+          type: string
+          format: uuid
+        buildId:
+          type: string
+          format: uuid
+        processId:
+          type: integer
+          nullable: true
+        containerId:
+          type: string
+          nullable: true
+        host:
+          type: string
+        port:
+          type: integer
+        healthStatus:
+          type: string
+          enum: [starting, healthy, unhealthy, stopping]
+        lastHealthCheck:
+          type: string
+          format: date-time
+          nullable: true
+        memoryUsageMb:
+          type: number
+          nullable: true
+        cpuPercent:
+          type: number
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ServerLogsResponse:
+      type: object
+      required: [serverId, logs, hasMore]
+      properties:
+        serverId:
+          type: string
+          format: uuid
+        logs:
+          type: string
+        hasMore:
+          type: boolean
+
+    ServerHealthResponse:
+      type: object
+      required: [serverId, status, lastCheck]
+      properties:
+        serverId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [starting, healthy, unhealthy, stopping]
+        lastCheck:
+          type: string
+          format: date-time
+        details:
+          type: object
+          properties:
+            memoryUsageMb:
+              type: number
+              nullable: true
+            cpuPercent:
+              type: number
+              nullable: true
+            uptime:
+              type: integer
+              nullable: true
+              description: Uptime in seconds
+
+    ServerMetricsResponse:
+      type: object
+      required: [serverId, timestamp]
+      properties:
+        serverId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        memoryUsageMb:
+          type: number
+          nullable: true
+        cpuPercent:
+          type: number
+          nullable: true
+
+    # Observability schemas
+    TraceResponse:
+      type: object
+      required: [id, projectId, name, status, startTime, endTime, durationMs]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ok, error]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+        attributes:
+          type: object
+
+    TraceListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TraceResponse'
+
+    SpanResponse:
+      type: object
+      required: [id, traceId, name, startTime, endTime, durationMs]
+      properties:
+        id:
+          type: string
+          format: uuid
+        traceId:
+          type: string
+          format: uuid
+        parentSpanId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+        attributes:
+          type: object
+        events:
+          type: array
+          items:
+            type: object
+
+    TraceWithSpansResponse:
+      allOf:
+        - $ref: '#/components/schemas/TraceResponse'
+        - type: object
+          required: [spans]
+          properties:
+            spans:
+              type: array
+              items:
+                $ref: '#/components/schemas/SpanResponse'
+
+    LogEntryResponse:
+      type: object
+      required: [id, projectId, level, message, timestamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        traceId:
+          type: string
+          format: uuid
+          nullable: true
+        spanId:
+          type: string
+          format: uuid
+          nullable: true
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        attributes:
+          type: object
+
+    LogListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LogEntryResponse'
+
+    MetricDataPoint:
+      type: object
+      required: [timestamp, value]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          type: number
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    MetricsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricDataPoint'
+
+    ScoreResponse:
+      type: object
+      required: [id, projectId, name, value, timestamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        traceId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        value:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+        comment:
+          type: string
+          nullable: true
+
+    ScoreListResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScoreResponse'
+
+    # Admin schemas
+    LicenseInfoResponse:
+      type: object
+      required: [valid, tier]
+      properties:
+        valid:
+          type: boolean
+        tier:
+          type: string
+          enum: [free, pro, enterprise]
+        maxTeams:
+          type: integer
+          nullable: true
+        maxProjects:
+          type: integer
+          nullable: true
+        maxUsersPerTeam:
+          type: integer
+          nullable: true
+        features:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    UpdateLicenseRequest:
+      type: object
+      required: [licenseKey]
+      properties:
+        licenseKey:
+          type: string
+
+    SystemStatsResponse:
+      type: object
+      required:
+        - userCount
+        - teamCount
+        - projectCount
+        - deploymentCount
+        - runningDeploymentCount
+        - buildCount
+        - successfulBuildCount
+        - failedBuildCount
+      properties:
+        userCount:
+          type: integer
+        teamCount:
+          type: integer
+        projectCount:
+          type: integer
+        deploymentCount:
+          type: integer
+        runningDeploymentCount:
+          type: integer
+        buildCount:
+          type: integer
+        successfulBuildCount:
+          type: integer
+        failedBuildCount:
+          type: integer
+
+security:
+  - bearerAuth: []
