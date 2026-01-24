@@ -12,7 +12,7 @@ Systematic evaluation infrastructure for Mastra agents and workflows. Build from
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning
+- [x] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning ✓
 - [ ] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring
 - [ ] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows
 - [ ] **Phase 4: Scorer & Processor Targets** - Extend targets to scorers and processors
@@ -36,10 +36,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Types, schemas, and DatasetsStorage base class
-- [ ] 01-02-PLAN.md — DatasetsInMemory implementation and core registration
-- [ ] 01-03-PLAN.md — DatasetsLibSQL implementation
-- [ ] 01-04-PLAN.md — Test suite validating both backends
+- [x] 01-01-PLAN.md — Types, schemas, and DatasetsStorage base class
+- [x] 01-02-PLAN.md — DatasetsInMemory implementation and core registration
+- [x] 01-03-PLAN.md — DatasetsLibSQL implementation
+- [x] 01-04-PLAN.md — Test suite validating both backends
 
 ### Phase 2: Execution Core
 **Goal**: Run datasets against targets with automatic scoring and result persistence
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Storage Foundation | 0/3 | Planned | - |
+| 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
 | 2. Execution Core | 0/TBD | Not started | - |
 | 3. Agent & Workflow Targets | 0/TBD | Not started | - |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
