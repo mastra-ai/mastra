@@ -1,0 +1,69 @@
+{
+  "name": "@mastra/admin-pg",
+  "version": "0.1.0",
+  "description": "PostgreSQL storage adapter for MastraAdmin",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build": "pnpm build:lib",
+    "build:watch": "pnpm build:lib --watch",
+    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U mastra && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test": "vitest run",
+    "posttest": "docker compose down -v",
+    "pretest:watch": "docker compose up -d",
+    "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "async-mutex": "^0.5.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/admin": "workspace:*",
+    "@types/node": "22.13.17",
+    "@types/pg": "^8.16.0",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/admin": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/admin-pg"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
