@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { processFile, listPendingFiles, type FileProcessingResult } from './file-processor.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+
 import type { FileStorageProvider, FileInfo, ObservabilityEvent } from '../types.js';
+
+import { processFile, listPendingFiles } from './file-processor.js';
 
 // Mock file storage
 function createMockFileStorage(): FileStorageProvider & {

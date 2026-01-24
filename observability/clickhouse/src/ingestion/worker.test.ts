@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { IngestionWorker } from './worker.js';
+import type { ClickHouseClient } from '@clickhouse/client';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import type { FileStorageProvider, FileInfo, ObservabilityEvent } from '../types.js';
+
+import { IngestionWorker } from './worker.js';
 
 // Mock file storage
 function createMockFileStorage(): FileStorageProvider & {
@@ -72,7 +76,7 @@ function createMockClickHouseClient() {
     async insert(options: { table: string; values: Record<string, unknown>[]; format: string }) {
       insertedRows.push(...options.values);
     },
-    async query(options: { query: string }) {
+    async query(_options: { query: string }) {
       // Return empty result for schema checks
       return {
         async json() {
@@ -107,7 +111,7 @@ describe('IngestionWorker', () => {
     it('should create worker with valid config using client', () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -117,7 +121,7 @@ describe('IngestionWorker', () => {
     it('should apply default config values', () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
       });
 
       const status = worker.getStatus();
@@ -130,7 +134,7 @@ describe('IngestionWorker', () => {
     it('should return initial status', () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -151,7 +155,7 @@ describe('IngestionWorker', () => {
     it('should return empty result when no files', async () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -186,7 +190,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -217,7 +221,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         deleteAfterProcess: false,
         debug: false,
       });
@@ -251,7 +255,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         deleteAfterProcess: true,
         debug: false,
       });
@@ -306,7 +310,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -339,7 +343,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -355,7 +359,7 @@ describe('IngestionWorker', () => {
     it('should accumulate statistics across multiple processOnce calls', async () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -410,7 +414,7 @@ describe('IngestionWorker', () => {
     it('should start and stop the worker', async () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         pollIntervalMs: 100,
         debug: false,
       });
@@ -428,7 +432,7 @@ describe('IngestionWorker', () => {
     it('should not start if already running', async () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         pollIntervalMs: 100,
         debug: false,
       });
@@ -448,7 +452,7 @@ describe('IngestionWorker', () => {
     it('should not fail if stopped when not running', async () => {
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         debug: false,
       });
 
@@ -488,7 +492,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: failingClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: failingClient as unknown as ClickHouseClient },
         retryAttempts: 1,
         retryDelayMs: 10,
         debug: false,
@@ -535,7 +539,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: retriableClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: retriableClient as unknown as ClickHouseClient },
         retryAttempts: 3,
         retryDelayMs: 10,
         debug: false,
@@ -574,7 +578,7 @@ describe('IngestionWorker', () => {
 
       worker = new IngestionWorker({
         fileStorage,
-        clickhouse: { client: clickhouseClient as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: clickhouseClient as unknown as ClickHouseClient },
         batchSize: 2,
         debug: false,
       });

@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { bulkInsert } from './bulk-inserter.js';
+import type { ClickHouseClient } from '@clickhouse/client';
+
+import { describe, it, expect, beforeEach } from 'vitest';
+
 import { TABLE_NAMES } from '../schema/tables.js';
-import type { ObservabilityEvent } from '../types.js';
+import type { ObservabilityEvent, ObservabilityEventType } from '../types.js';
+
+import { bulkInsert } from './bulk-inserter.js';
 
 // Mock ClickHouse client
 function createMockClickHouseClient() {
@@ -43,9 +47,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'trace', data: event },
-      ]);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'trace', data: event }]);
 
       expect(client.insertCalls).toHaveLength(1);
       expect(client.insertCalls[0]?.table).toBe(TABLE_NAMES.TRACES);
@@ -80,9 +82,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'span', data: event },
-      ]);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'span', data: event }]);
 
       expect(client.insertCalls).toHaveLength(1);
       expect(client.insertCalls[0]?.table).toBe(TABLE_NAMES.SPANS);
@@ -111,9 +111,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'log', data: event },
-      ]);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'log', data: event }]);
 
       expect(client.insertCalls).toHaveLength(1);
       expect(client.insertCalls[0]?.table).toBe(TABLE_NAMES.LOGS);
@@ -141,9 +139,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'metric', data: event },
-      ]);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'metric', data: event }]);
 
       expect(client.insertCalls).toHaveLength(1);
       expect(client.insertCalls[0]?.table).toBe(TABLE_NAMES.METRICS);
@@ -174,9 +170,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'score', data: event },
-      ]);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'score', data: event }]);
 
       expect(client.insertCalls).toHaveLength(1);
       expect(client.insertCalls[0]?.table).toBe(TABLE_NAMES.SCORES);
@@ -193,7 +187,7 @@ describe('bulkInsert', () => {
 
   describe('grouping by type', () => {
     it('should group events by type and insert into correct tables', async () => {
-      const events: Array<{ type: import('../types.js').ObservabilityEventType; data: ObservabilityEvent }> = [
+      const events: Array<{ type: ObservabilityEventType; data: ObservabilityEvent }> = [
         {
           type: 'trace',
           data: {
@@ -261,7 +255,7 @@ describe('bulkInsert', () => {
         },
       ];
 
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, events);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, events);
 
       expect(client.insertCalls).toHaveLength(3);
 
@@ -281,7 +275,7 @@ describe('bulkInsert', () => {
     });
 
     it('should handle empty events array', async () => {
-      const result = await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, []);
+      const result = await bulkInsert(client as unknown as ClickHouseClient, []);
 
       expect(client.insertCalls).toHaveLength(0);
       expect(result.insertedByType).toEqual({});
@@ -309,9 +303,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'trace', data: event },
-      ]);
+      await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'trace', data: event }]);
 
       const insertedRow = client.insertCalls[0]?.values[0];
       expect(insertedRow?.metadata).toBe('{"nested":{"value":123,"array":[1,2,3]}}');
@@ -336,9 +328,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'span', data: event },
-      ]);
+      await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'span', data: event }]);
 
       const insertedRow = client.insertCalls[0]?.values[0];
       expect(insertedRow?.parent_span_id).toBeNull();
@@ -361,9 +351,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'trace', data: event },
-      ]);
+      await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'trace', data: event }]);
 
       const insertedRow = client.insertCalls[0]?.values[0];
       expect(insertedRow?.deployment_id).toBe('');
@@ -387,9 +375,7 @@ describe('bulkInsert', () => {
         },
       };
 
-      await bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [
-        { type: 'trace', data: event },
-      ]);
+      await bulkInsert(client as unknown as ClickHouseClient, [{ type: 'trace', data: event }]);
 
       const insertedRow = client.insertCalls[0]?.values[0];
       expect(insertedRow?.recorded_at).toBeDefined();
@@ -402,13 +388,13 @@ describe('bulkInsert', () => {
   describe('error handling', () => {
     it('should throw error for unknown event type', async () => {
       const event = {
-        type: 'unknown_type' as import('../types.js').ObservabilityEventType,
+        type: 'unknown_type' as ObservabilityEventType,
         data: { type: 'unknown_type', data: {} } as ObservabilityEvent,
       };
 
-      await expect(
-        bulkInsert(client as unknown as import('@clickhouse/client').ClickHouseClient, [event]),
-      ).rejects.toThrow('Unknown event type: unknown_type');
+      await expect(bulkInsert(client as unknown as ClickHouseClient, [event])).rejects.toThrow(
+        'Unknown event type: unknown_type',
+      );
     });
   });
 });

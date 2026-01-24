@@ -1,7 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import type { ClickHouseClient } from '@clickhouse/client';
+
+import { describe, it, expect } from 'vitest';
+
+import { ALL_MATERIALIZED_VIEWS_SQL } from './materialized-views.js';
 import { runMigrations, checkSchemaStatus, dropAllTables } from './migrations.js';
 import { ALL_TABLES_SQL } from './tables.js';
-import { ALL_MATERIALIZED_VIEWS_SQL } from './materialized-views.js';
 
 // Mock ClickHouse client
 function createMockClickHouseClient(existingTables: string[] = []) {
@@ -48,7 +51,7 @@ describe('runMigrations', () => {
   it('should create all tables and views', async () => {
     const client = createMockClickHouseClient();
 
-    await runMigrations(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await runMigrations(client as unknown as ClickHouseClient);
 
     // Should have run commands for all tables and views
     const expectedCount = ALL_TABLES_SQL.length + ALL_MATERIALIZED_VIEWS_SQL.length;
@@ -73,10 +76,10 @@ describe('runMigrations', () => {
     const client = createMockClickHouseClient();
 
     // Run migrations twice
-    await runMigrations(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await runMigrations(client as unknown as ClickHouseClient);
     const firstRunCount = client.commands.length;
 
-    await runMigrations(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await runMigrations(client as unknown as ClickHouseClient);
     const secondRunCount = client.commands.length;
 
     // Both runs should execute the same number of commands
@@ -89,7 +92,7 @@ describe('runMigrations', () => {
   it('should create tables in correct order (tables before views)', async () => {
     const client = createMockClickHouseClient();
 
-    await runMigrations(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await runMigrations(client as unknown as ClickHouseClient);
 
     // Find indices of table and view creation commands
     const tracesTableIdx = client.commands.findIndex(c => c.includes('CREATE TABLE') && c.includes('mastra_admin_traces'));
@@ -104,7 +107,7 @@ describe('checkSchemaStatus', () => {
   it('should return not initialized when no tables exist', async () => {
     const client = createMockClickHouseClient([]);
 
-    const status = await checkSchemaStatus(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    const status = await checkSchemaStatus(client as unknown as ClickHouseClient);
 
     expect(status.isInitialized).toBe(false);
     expect(status.missingTables).toContain('mastra_admin_traces');
@@ -129,7 +132,7 @@ describe('checkSchemaStatus', () => {
       'mastra_admin_scores_hourly_stats',
     ]);
 
-    const status = await checkSchemaStatus(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    const status = await checkSchemaStatus(client as unknown as ClickHouseClient);
 
     expect(status.isInitialized).toBe(true);
     expect(status.missingTables).toHaveLength(0);
@@ -143,7 +146,7 @@ describe('checkSchemaStatus', () => {
       // missing logs, metrics, scores
     ]);
 
-    const status = await checkSchemaStatus(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    const status = await checkSchemaStatus(client as unknown as ClickHouseClient);
 
     expect(status.isInitialized).toBe(false);
     expect(status.missingTables).toContain('mastra_admin_logs');
@@ -162,7 +165,7 @@ describe('checkSchemaStatus', () => {
       // missing other views
     ]);
 
-    const status = await checkSchemaStatus(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    const status = await checkSchemaStatus(client as unknown as ClickHouseClient);
 
     expect(status.isInitialized).toBe(false);
     expect(status.missingTables).toHaveLength(0);
@@ -186,7 +189,7 @@ describe('dropAllTables', () => {
       'mastra_admin_scores_hourly_stats',
     ]);
 
-    await dropAllTables(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await dropAllTables(client as unknown as ClickHouseClient);
 
     // All tables should be dropped
     expect(client.tables.size).toBe(0);
@@ -199,7 +202,7 @@ describe('dropAllTables', () => {
       'mastra_admin_traces_hourly_stats',
     ]);
 
-    await dropAllTables(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await dropAllTables(client as unknown as ClickHouseClient);
 
     // Find indices of drop commands
     const dropViewIdx = client.commands.findIndex(c => c.includes('mastra_admin_traces_hourly_stats'));
@@ -213,7 +216,7 @@ describe('dropAllTables', () => {
     const client = createMockClickHouseClient([]);
 
     // Should not throw
-    await dropAllTables(client as unknown as import('@clickhouse/client').ClickHouseClient);
+    await dropAllTables(client as unknown as ClickHouseClient);
 
     expect(client.commands.length).toBe(10); // Still executes DROP IF EXISTS
   });

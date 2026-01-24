@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ClickHouseQueryProvider } from './index.js';
+import type { ClickHouseClient } from '@clickhouse/client';
+
+import { describe, it, expect, vi } from 'vitest';
+
 import { TABLE_NAMES } from '../schema/tables.js';
+
+import { ClickHouseQueryProvider } from './index.js';
 
 // Mock ClickHouse client that returns configurable results
 function createMockClickHouseClient(mockData: {
@@ -74,7 +78,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should create provider with client config', () => {
       const client = createMockClickHouseClient();
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       expect(provider).toBeInstanceOf(ClickHouseQueryProvider);
@@ -85,7 +89,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should run migrations if schema is not initialized', async () => {
       const client = createMockClickHouseClient({ tables: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.init();
@@ -109,7 +113,7 @@ describe('ClickHouseQueryProvider', () => {
         ],
       });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.init();
@@ -122,7 +126,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should return empty result when no traces', async () => {
       const client = createMockClickHouseClient({ traces: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listTraces();
@@ -148,7 +152,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ traces: mockTraces });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listTraces();
@@ -168,7 +172,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should apply filters correctly', async () => {
       const client = createMockClickHouseClient({ traces: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.listTraces({
@@ -206,7 +210,7 @@ describe('ClickHouseQueryProvider', () => {
       }));
       const client = createMockClickHouseClient({ traces: mockTraces });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listTraces({
@@ -224,7 +228,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should return null when trace not found', async () => {
       const client = createMockClickHouseClient({ traces: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.getTrace('nonexistent');
@@ -248,7 +252,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ traces: mockTraces });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.getTrace('t1');
@@ -279,7 +283,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ spans: mockSpans });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listSpans();
@@ -296,7 +300,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should apply span-specific filters', async () => {
       const client = createMockClickHouseClient({ spans: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.listSpans({
@@ -350,7 +354,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ spans: mockSpans });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.getSpansForTrace('t1');
@@ -378,7 +382,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ logs: mockLogs });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listLogs();
@@ -395,7 +399,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should apply log-specific filters', async () => {
       const client = createMockClickHouseClient({ logs: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.listLogs({
@@ -430,7 +434,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ metrics: mockMetrics });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listMetrics();
@@ -447,7 +451,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should apply metric-specific filters', async () => {
       const client = createMockClickHouseClient({ metrics: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.listMetrics({
@@ -479,7 +483,7 @@ describe('ClickHouseQueryProvider', () => {
       ];
       const client = createMockClickHouseClient({ scores: mockScores });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.listScores();
@@ -497,7 +501,7 @@ describe('ClickHouseQueryProvider', () => {
     it('should apply score-specific filters', async () => {
       const client = createMockClickHouseClient({ scores: [] });
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       await provider.listScores({
@@ -527,7 +531,7 @@ describe('ClickHouseQueryProvider', () => {
       });
 
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.getTraceCountTimeSeries({
@@ -557,7 +561,7 @@ describe('ClickHouseQueryProvider', () => {
       });
 
       const provider = new ClickHouseQueryProvider({
-        clickhouse: { client: client as unknown as import('@clickhouse/client').ClickHouseClient },
+        clickhouse: { client: client as unknown as ClickHouseClient },
       });
 
       const result = await provider.getErrorRateTimeSeries({
