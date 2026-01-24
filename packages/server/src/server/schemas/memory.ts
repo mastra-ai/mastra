@@ -287,8 +287,11 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
 /**
  * GET /memory/network/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
  * GET /memory/network/threads/:threadId/messages
@@ -319,13 +322,19 @@ export const updateThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * DELETE /memory/network/threads/:threadId
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteThreadNetworkQuerySchema = agentIdQuerySchema;
+export const deleteThreadNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
  * POST /memory/network/messages/delete
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
+export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 // ============================================================================
 // Response Schemas
