@@ -88,15 +88,16 @@ async function main() {
     buildDir: resolve(process.cwd(), '.mastra/builds'),
   });
 
-  // Initialize router with reverse-proxy strategy
-  // This allows accessing deployments via http://localhost:3100/{subdomain}/...
-  // instead of remembering individual ports
+  // Initialize router with reverse-proxy strategy and custom domain
+  // This allows accessing deployments via http://{subdomain}.mastra.local:3100/
+  // Note: Requires sudo to modify /etc/hosts, or manually add entries
   console.log('[4] Initializing local edge router...');
   const router = new LocalEdgeRouter({
     strategy: 'reverse-proxy',
-    baseDomain: 'localhost',
-    proxyPort: 3100, // Single entry point for all deployments
+    baseDomain: 'mastra.local',
+    proxyPort: 3100,
     portRange: { start: 4100, end: 4199 }, // Backend ports (hidden from user)
+    enableHostsFile: true, // Auto-manage /etc/hosts entries (requires sudo)
     logRoutes: true,
   });
 
@@ -187,10 +188,13 @@ async function main() {
   console.log();
   console.log(`API URL:   http://localhost:${PORT}/api`);
   console.log(`Health:    http://localhost:${PORT}/api/health`);
-  console.log(`Proxy:     http://localhost:3100/{subdomain}/...`);
+  console.log(`Proxy:     http://{subdomain}.mastra.local:3100/`);
   console.log();
   console.log('Deployed Mastra instances are accessible via:');
-  console.log('  http://localhost:3100/{deployment-subdomain}/');
+  console.log('  http://{subdomain}.mastra.local:3100/');
+  console.log();
+  console.log('Note: /etc/hosts entries are auto-managed (requires sudo).');
+  console.log('If not running as sudo, manually add: 127.0.0.1 {subdomain}.mastra.local');
   console.log();
   console.log('Dev Authentication:');
   console.log(`  User ID: ${DEMO_USER_ID}`);
