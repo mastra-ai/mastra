@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: 'admin-pg-test-db'
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: mastra
+      POSTGRES_PASSWORD: mastra
+      POSTGRES_DB: mastra_admin_test
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mastra -d mastra_admin_test']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - admin_pgdata:/var/lib/postgresql/data
+
+volumes:
+  admin_pgdata:
