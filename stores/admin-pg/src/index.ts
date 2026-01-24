@@ -17,3 +17,6 @@ export { PoolAdapter } from './client';
 
 // Migration schemas (for external tooling)
 export { TABLES, TABLE_SCHEMAS, DEFAULT_INDEXES, type TableName, type IndexDefinition } from './migrations/001_initial';
+
+// Database utilities
+export { AdminPgDB } from './db';
