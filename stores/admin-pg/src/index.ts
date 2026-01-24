@@ -14,3 +14,6 @@ export { isPoolConfig, isConnectionStringConfig, isHostConfig, validateConfig, p
 // Client types
 export type { DbClient, TxClient, QueryValues } from './client';
 export { PoolAdapter } from './client';
+
+// Migration schemas (for external tooling)
+export { TABLES, TABLE_SCHEMAS, DEFAULT_INDEXES, type TableName, type IndexDefinition } from './migrations/001_initial';
