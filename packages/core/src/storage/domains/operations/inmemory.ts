@@ -18,6 +18,8 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_ai_spans: new Map(),
       mastra_agents: new Map(),
       mastra_agent_versions: new Map(),
+      mastra_datasets: new Map(),
+      mastra_dataset_items: new Map(),
     };
   }
 

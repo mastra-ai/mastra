@@ -11,6 +11,8 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -21,7 +23,9 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_ITEMS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -121,6 +125,27 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  version: { type: 'timestamp', nullable: false }, // Timestamp-based versioning
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'timestamp', nullable: false }, // Timestamp when item was added/modified
+  input: { type: 'jsonb', nullable: false },
+  expectedOutput: { type: 'jsonb', nullable: true },
+  context: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -184,4 +209,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_DATASETS]: DATASETS_SCHEMA,
+  [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
 };
