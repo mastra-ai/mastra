@@ -74,6 +74,15 @@ export class MockAdminStorage implements AdminStorage {
   }
 
   async createUser(user: Omit<User, 'createdAt' | 'updatedAt'>): Promise<User> {
+    // Validate email
+    if (!user.email || !user.email.trim()) {
+      throw new Error('Email is required and cannot be empty');
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(user.email)) {
+      throw new Error('Invalid email format');
+    }
+
     // Check for duplicate email
     if (this.usersByEmail.has(user.email.toLowerCase())) {
       throw new Error(`User with email ${user.email} already exists`);

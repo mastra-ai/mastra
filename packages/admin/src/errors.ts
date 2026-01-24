@@ -57,10 +57,7 @@ export class MastraAdminError extends Error {
   public readonly details?: Record<string, unknown>;
   public readonly originalError?: unknown;
 
-  constructor(
-    definition: ErrorDefinition,
-    originalError?: unknown,
-  ) {
+  constructor(definition: ErrorDefinition, originalError?: unknown) {
     const message = definition.text ?? 'Unknown error';
     super(message);
     this.id = definition.id;
@@ -367,5 +364,19 @@ export class MastraAdminError extends Error {
       },
       originalError,
     );
+  }
+
+  // ============================================================================
+  // Static Factory Methods - Validation
+  // ============================================================================
+
+  static validationError(field: string, message: string, details?: Record<string, unknown>): MastraAdminError {
+    return new MastraAdminError({
+      id: 'VALIDATION_ERROR',
+      text: `${field}: ${message}`,
+      domain: AdminErrorDomain.ADMIN,
+      category: AdminErrorCategory.USER,
+      details: { field, ...details },
+    });
   }
 }

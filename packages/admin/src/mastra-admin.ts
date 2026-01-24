@@ -199,9 +199,10 @@ export class MastraAdmin<
     this.#config = config;
 
     // Initialize logger
-    this.#logger = config.logger === false
-      ? { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
-      : config.logger ?? new ConsoleAdminLogger('MastraAdmin');
+    this.#logger =
+      config.logger === false
+        ? { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+        : (config.logger ?? new ConsoleAdminLogger('MastraAdmin'));
 
     // Initialize components
     this.#license = new LicenseValidator(config.licenseKey);
@@ -357,10 +358,28 @@ export class MastraAdmin<
   async createTeam(userId: string, input: CreateTeamInput): Promise<Team> {
     this.#assertInitialized();
 
+    // Validate input
+    if (!input.name || !input.name.trim()) {
+      throw MastraAdminError.validationError('name', 'Team name is required and cannot be empty');
+    }
+    if (!input.slug || !input.slug.trim()) {
+      throw MastraAdminError.validationError('slug', 'Team slug is required and cannot be empty');
+    }
+    if (!/^[a-z0-9-]+$/.test(input.slug)) {
+      throw MastraAdminError.validationError(
+        'slug',
+        'Team slug must contain only lowercase letters, numbers, and hyphens',
+      );
+    }
+
     // Check license limits
     const existingTeams = await this.#storage.listTeamsForUser(userId);
     if (!this.#license.canCreateTeam(existingTeams.total)) {
-      throw MastraAdminError.licenseLimitExceeded('Teams', existingTeams.total, this.#license.getLicenseInfo().maxTeams ?? 0);
+      throw MastraAdminError.licenseLimitExceeded(
+        'Teams',
+        existingTeams.total,
+        this.#license.getLicenseInfo().maxTeams ?? 0,
+      );
     }
 
     // Check if slug already exists
@@ -392,6 +411,7 @@ export class MastraAdmin<
    */
   async getTeam(userId: string, teamId: string): Promise<Team | null> {
     this.#assertInitialized();
+    this.#validateUUID(teamId, 'teamId');
     await this.#rbac.assertPermission({ userId, teamId }, `${RBACResource.TEAM}:${RBACAction.READ}`);
     return this.#storage.getTeam(teamId);
   }
@@ -401,19 +421,38 @@ export class MastraAdmin<
    */
   async listTeams(userId: string, pagination?: PaginationParams): Promise<PaginatedResult<Team>> {
     this.#assertInitialized();
+
+    // Validate pagination
+    if (pagination) {
+      if (pagination.page !== undefined && pagination.page < 1) {
+        throw MastraAdminError.validationError('page', 'Page number must be a positive integer');
+      }
+      if (pagination.perPage !== undefined && pagination.perPage < 1) {
+        throw MastraAdminError.validationError('perPage', 'Items per page must be a positive integer');
+      }
+    }
+
     return this.#storage.listTeamsForUser(userId, pagination);
   }
 
   /**
    * Invite a user to a team.
    */
-  async inviteMember(
-    userId: string,
-    teamId: string,
-    email: string,
-    role: TeamRole,
-  ): Promise<TeamInvite> {
+  async inviteMember(userId: string, teamId: string, email: string, role: TeamRole): Promise<TeamInvite> {
     this.#assertInitialized();
+
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      throw MastraAdminError.validationError('email', 'A valid email address is required');
+    }
+
+    // Validate role
+    const validRoles = Object.values(TeamRole);
+    if (!role || !validRoles.includes(role)) {
+      throw MastraAdminError.validationError('role', `Role must be one of: ${validRoles.join(', ')}`);
+    }
+
     await this.#rbac.assertPermission({ userId, teamId }, `${RBACResource.INVITE}:${RBACAction.CREATE}`);
 
     // Check if already invited
@@ -448,7 +487,11 @@ export class MastraAdmin<
   /**
    * Get team members.
    */
-  async getTeamMembers(userId: string, teamId: string, pagination?: PaginationParams): Promise<PaginatedResult<TeamMember & { user: User }>> {
+  async getTeamMembers(
+    userId: string,
+    teamId: string,
+    pagination?: PaginationParams,
+  ): Promise<PaginatedResult<TeamMember & { user: User }>> {
     this.#assertInitialized();
     await this.#rbac.assertPermission({ userId, teamId }, `${RBACResource.MEMBER}:${RBACAction.READ}`);
     return this.#storage.listTeamMembers(teamId, pagination);
@@ -475,10 +518,37 @@ export class MastraAdmin<
     this.#assertInitialized();
     await this.#rbac.assertPermission({ userId, teamId }, `${RBACResource.PROJECT}:${RBACAction.CREATE}`);
 
+    // Validate input
+    if (!input.name || !input.name.trim()) {
+      throw MastraAdminError.validationError('name', 'Project name is required and cannot be empty');
+    }
+    if (!input.slug || !input.slug.trim()) {
+      throw MastraAdminError.validationError('slug', 'Project slug is required and cannot be empty');
+    }
+    if (!/^[a-z0-9-]+$/.test(input.slug)) {
+      throw MastraAdminError.validationError(
+        'slug',
+        'Project slug must contain only lowercase letters, numbers, and hyphens',
+      );
+    }
+    if (!input.sourceConfig) {
+      throw MastraAdminError.validationError('sourceConfig', 'Source configuration is required');
+    }
+    if (input.sourceType === 'local') {
+      const path = input.sourceConfig.path as string | undefined;
+      if (!path || !path.trim()) {
+        throw MastraAdminError.validationError('sourceConfig.path', 'Source path is required for local source type');
+      }
+    }
+
     // Check license limits
     const existingProjects = await this.#storage.listProjectsForTeam(teamId);
     if (!this.#license.canCreateProject(teamId, existingProjects.total)) {
-      throw MastraAdminError.licenseLimitExceeded('Projects', existingProjects.total, this.#license.getLicenseInfo().maxProjects ?? 0);
+      throw MastraAdminError.licenseLimitExceeded(
+        'Projects',
+        existingProjects.total,
+        this.#license.getLicenseInfo().maxProjects ?? 0,
+      );
     }
 
     // Check if slug exists in team
@@ -505,10 +575,13 @@ export class MastraAdmin<
   /**
    * Get a project by ID.
    */
-  async getProject(userId: string, projectId: string): Promise<Project | null> {
+  async getProject(userId: string, projectId: string): Promise<Project> {
     this.#assertInitialized();
+    this.#validateUUID(projectId, 'projectId');
     const project = await this.#storage.getProject(projectId);
-    if (!project) return null;
+    if (!project) {
+      throw MastraAdminError.projectNotFound(projectId);
+    }
 
     await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.PROJECT}:${RBACAction.READ}`);
     return project;
@@ -517,11 +590,7 @@ export class MastraAdmin<
   /**
    * List projects in a team.
    */
-  async listProjects(
-    userId: string,
-    teamId: string,
-    pagination?: PaginationParams,
-  ): Promise<PaginatedResult<Project>> {
+  async listProjects(userId: string, teamId: string, pagination?: PaginationParams): Promise<PaginatedResult<Project>> {
     this.#assertInitialized();
     await this.#rbac.assertPermission({ userId, teamId }, `${RBACResource.PROJECT}:${RBACAction.READ}`);
     return this.#storage.listProjectsForTeam(teamId, pagination);
@@ -538,15 +607,31 @@ export class MastraAdmin<
     isSecret: boolean,
   ): Promise<EncryptedEnvVar> {
     this.#assertInitialized();
+
+    // Validate key
+    if (!key || !key.trim()) {
+      throw MastraAdminError.validationError('key', 'Environment variable key is required and cannot be empty');
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      if (/^[0-9]/.test(key)) {
+        throw MastraAdminError.validationError('key', 'Environment variable key cannot start with a number');
+      }
+      throw MastraAdminError.validationError(
+        'key',
+        'Environment variable key can only contain letters, numbers, and underscores',
+      );
+    }
+
     const project = await this.#storage.getProject(projectId);
     if (!project) {
       throw MastraAdminError.projectNotFound(projectId);
     }
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.ENV_VAR}:${RBACAction.UPDATE}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.ENV_VAR}:${RBACAction.UPDATE}`,
+    );
 
-    const encryptedValue = isSecret
-      ? await this.#encryption.encrypt(value)
-      : value;
+    const encryptedValue = isSecret ? await this.#encryption.encrypt(value) : value;
 
     const envVar = await this.#storage.setProjectEnvVar(projectId, {
       key,
@@ -580,7 +665,10 @@ export class MastraAdmin<
     if (!project) {
       throw MastraAdminError.projectNotFound(projectId);
     }
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.PROJECT}:${RBACAction.DELETE}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.PROJECT}:${RBACAction.DELETE}`,
+    );
 
     // Stop all deployments first
     const deployments = await this.#storage.listDeploymentsForProject(projectId);
@@ -601,17 +689,26 @@ export class MastraAdmin<
   /**
    * Create a new deployment for a project.
    */
-  async createDeployment(
-    userId: string,
-    projectId: string,
-    input: CreateDeploymentInput,
-  ): Promise<Deployment> {
+  async createDeployment(userId: string, projectId: string, input: CreateDeploymentInput): Promise<Deployment> {
     this.#assertInitialized();
+
+    // Validate input
+    const validTypes = ['production', 'staging', 'preview'];
+    if (!input.type || !validTypes.includes(input.type)) {
+      throw MastraAdminError.validationError('type', `Deployment type must be one of: ${validTypes.join(', ')}`);
+    }
+    if (!input.branch || !input.branch.trim()) {
+      throw MastraAdminError.validationError('branch', 'Branch is required and cannot be empty');
+    }
+
     const project = await this.#storage.getProject(projectId);
     if (!project) {
       throw MastraAdminError.projectNotFound(projectId);
     }
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.CREATE}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.CREATE}`,
+    );
 
     const slug = input.slug ?? `${input.branch}--${project.slug}`;
 
@@ -637,15 +734,23 @@ export class MastraAdmin<
   /**
    * Get a deployment by ID.
    */
-  async getDeployment(userId: string, deploymentId: string): Promise<Deployment | null> {
+  async getDeployment(userId: string, deploymentId: string): Promise<Deployment> {
     this.#assertInitialized();
+    this.#validateUUID(deploymentId, 'deploymentId');
     const deployment = await this.#storage.getDeployment(deploymentId);
-    if (!deployment) return null;
+    if (!deployment) {
+      throw MastraAdminError.deploymentNotFound(deploymentId);
+    }
 
     const project = await this.#storage.getProject(deployment.projectId);
-    if (!project) return null;
+    if (!project) {
+      throw MastraAdminError.projectNotFound(deployment.projectId);
+    }
 
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`,
+    );
     return deployment;
   }
 
@@ -662,7 +767,10 @@ export class MastraAdmin<
     if (!project) {
       throw MastraAdminError.projectNotFound(projectId);
     }
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`,
+    );
     return this.#storage.listDeploymentsForProject(projectId, pagination);
   }
 
@@ -682,7 +790,10 @@ export class MastraAdmin<
       throw MastraAdminError.projectNotFound(deployment.projectId);
     }
 
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.DEPLOY}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.DEPLOY}`,
+    );
 
     // Create a build and queue it
     const build = await this.#storage.createBuild({
@@ -720,7 +831,10 @@ export class MastraAdmin<
       throw MastraAdminError.projectNotFound(deployment.projectId);
     }
 
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.UPDATE}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.UPDATE}`,
+    );
 
     await this.#orchestrator.stopDeployment(deploymentId);
     await this.#storage.updateDeploymentStatus(deploymentId, 'stopped');
@@ -743,7 +857,10 @@ export class MastraAdmin<
       throw MastraAdminError.projectNotFound(deployment.projectId);
     }
 
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.DEPLOY}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.DEPLOY}`,
+    );
 
     // Get the build to rollback to
     const targetBuild = await this.#storage.getBuild(buildId);
@@ -778,16 +895,23 @@ export class MastraAdmin<
   /**
    * Get a build by ID.
    */
-  async getBuild(userId: string, buildId: string): Promise<Build | null> {
+  async getBuild(userId: string, buildId: string): Promise<Build> {
     this.#assertInitialized();
+    this.#validateUUID(buildId, 'buildId');
     const build = await this.#storage.getBuild(buildId);
-    if (!build) return null;
+    if (!build) {
+      throw MastraAdminError.buildNotFound(buildId);
+    }
 
     const deployment = await this.#storage.getDeployment(build.deploymentId);
-    if (!deployment) return null;
+    if (!deployment) {
+      throw MastraAdminError.deploymentNotFound(build.deploymentId);
+    }
 
     const project = await this.#storage.getProject(deployment.projectId);
-    if (!project) return null;
+    if (!project) {
+      throw MastraAdminError.projectNotFound(deployment.projectId);
+    }
 
     await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.BUILD}:${RBACAction.READ}`);
     return build;
@@ -863,7 +987,10 @@ export class MastraAdmin<
       throw MastraAdminError.projectNotFound(deployment.projectId);
     }
 
-    await this.#rbac.assertPermission({ userId, teamId: project.teamId }, `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`);
+    await this.#rbac.assertPermission(
+      { userId, teamId: project.teamId },
+      `${RBACResource.DEPLOYMENT}:${RBACAction.READ}`,
+    );
     return this.#storage.getRunningServerForDeployment(deploymentId);
   }
 
@@ -874,6 +1001,13 @@ export class MastraAdmin<
   #assertInitialized(): void {
     if (!this.#initialized) {
       throw MastraAdminError.configurationError('MastraAdmin not initialized. Call init() first.');
+    }
+  }
+
+  #validateUUID(value: string, fieldName: string): void {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(value)) {
+      throw MastraAdminError.validationError(fieldName, 'Invalid UUID format');
     }
   }
 
