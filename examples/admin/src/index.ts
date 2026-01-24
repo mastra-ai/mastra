@@ -83,7 +83,9 @@ async function main() {
     source,
     runner,
     router,
-    fileStorage,
+    observability: {
+      fileStorage,
+    },
   });
 
   // 7. Initialize
@@ -166,9 +168,7 @@ async function main() {
     console.log('[12] Creating a project in MastraAdmin...');
     let project;
     try {
-      const sourceConfig = discoveredProjects[0]
-        ? { path: discoveredProjects[0].path }
-        : { path: '/mock/project' };
+      const sourceConfig = discoveredProjects[0] ? { path: discoveredProjects[0].path } : { path: '/mock/project' };
 
       project = await admin.createProject(DEMO_USER_ID, team.id, {
         name: discoveredProjects[0]?.name ?? 'Demo Project',
@@ -277,7 +277,6 @@ async function main() {
     console.log('  1. Run "pnpm demo:full" for a comprehensive demo with HTTP API');
     console.log('  2. Try deploying a project with admin.deploy()');
     console.log();
-
   } finally {
     // Cleanup
     console.log('Shutting down...');
@@ -286,7 +285,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error('Demo failed:', error);
   process.exit(1);
 });

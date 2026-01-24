@@ -1,42 +1,13 @@
-# Mastra Admin Demo
+# Mastra Admin Example
 
-This example demonstrates the complete Mastra Admin MVP infrastructure for managing teams, projects, and deployments.
+This example demonstrates the full MastraAdmin platform with:
 
-## What is Mastra Admin?
+- PostgreSQL storage for teams, projects, and deployments
+- Local project discovery and deployment
+- **Admin UI dashboard** for managing everything visually
+- Development authentication (no Supabase required)
 
-Mastra Admin is an enterprise-grade, self-hosted platform that enables organizations to run and operate multiple Mastra servers across their teams. It provides:
-
-- **Team Management**: Create teams, invite members, manage roles
-- **Project Management**: Register Mastra projects, configure environment variables
-- **Deployment Management**: Create production, staging, and preview deployments
-- **Local Project Discovery**: Automatically discover Mastra projects in configured directories
-- **Local Process Runner**: Build and run Mastra servers locally
-- **Local Edge Router**: Expose deployed servers via port mapping or reverse proxy
-- **File-based Observability**: Store logs and metrics locally
-- **RBAC**: Role-based access control for team resources
-- **License Validation**: Enterprise feature gating
-
-## MVP Infrastructure
-
-The following packages are integrated in this demo:
-
-| Package | Description |
-|---------|-------------|
-| `@mastra/admin` | Core MastraAdmin class, types, interfaces |
-| `@mastra/admin-server` | HTTP API server (Hono-based) |
-| `@mastra/admin-pg` | PostgreSQL storage implementation |
-| `@mastra/source-local` | Local filesystem project discovery |
-| `@mastra/runner-local` | Local process runner (build & run servers) |
-| `@mastra/router-local` | Local edge router (expose servers) |
-| `@mastra/observability-file-local` | Local file storage for observability |
-
-## Prerequisites
-
-- Node.js 18+
-- Docker (for PostgreSQL)
-- pnpm
-
-## Quick Start
+## Quick Start (Full UI Experience)
 
 ### 1. Start PostgreSQL
 
@@ -44,213 +15,268 @@ The following packages are integrated in this demo:
 pnpm db:up
 ```
 
-This starts a PostgreSQL container on port 5432.
+### 2. Configure Environment
 
-### 2. Install Dependencies
+```bash
+cp .env.example .env
+# Edit .env and set PROJECTS_DIR to your projects directory
+```
+
+### 3. Build the Monorepo
 
 From the monorepo root:
+
 ```bash
 pnpm install
 pnpm build
 ```
 
-### 3. Configure Environment
+### 4. Run the Full Stack
 
 ```bash
-cp .env.example .env
-# Edit .env to set your PROJECTS_DIR
+cd examples/admin
+pnpm dev:full
 ```
 
-### 4. Run the Demo
+This starts:
 
-```bash
-# Basic demo
-pnpm dev
+- **API Server** on http://localhost:3001
+- **Admin UI** on http://localhost:5173
 
-# Team management demo
-pnpm demo:teams
+Open http://localhost:5173 in your browser to access the Admin UI.
 
-# Project management demo
-pnpm demo:projects
+## Available Scripts
 
-# Full demo with HTTP API
-pnpm demo:full
-```
-
-## Demo Scripts
-
-### `pnpm dev` (src/index.ts)
-
-Basic demo showing:
-- MastraAdmin initialization with full infrastructure
-- Team creation
-- Project creation with local source
-- Environment variable management
-- Deployment creation
-
-### `pnpm demo:teams` (src/demo-teams.ts)
-
-Team management focused demo:
-- Creating multiple teams
-- Listing team members
-- Inviting team members
-
-### `pnpm demo:projects` (src/demo-projects.ts)
-
-Project management focused demo:
-- Discovering local Mastra projects
-- Creating projects from discovered sources
-- Setting environment variables
-- Creating multiple deployment types
-
-### `pnpm demo:deploy` (src/demo-deploy.ts)
-
-Full deployment lifecycle demo:
-- Discovers a local Mastra project
-- Creates team, project, and deployment
-- Triggers a deployment build
-- Streams build logs in real-time
-- Shows deployment results with server URL
-
-### `pnpm demo:full` (src/demo-full.ts)
-
-Comprehensive demo with HTTP API:
-- All of the above features
-- AdminServer HTTP API
-- License feature checks
-- Infrastructure summary
-- Example curl commands
+| Script               | Description                                         |
+| -------------------- | --------------------------------------------------- |
+| `pnpm dev:full`      | **Recommended**: Start both API server and Admin UI |
+| `pnpm dev:server`    | Start only the API server                           |
+| `pnpm dev:ui`        | Start only the Admin UI                             |
+| `pnpm dev`           | Run the basic CLI demo (no UI)                      |
+| `pnpm demo:full`     | Run comprehensive CLI demo with all features        |
+| `pnpm demo:teams`    | Demo team management                                |
+| `pnpm demo:projects` | Demo project management                             |
+| `pnpm demo:deploy`   | Demo deployment workflow                            |
+| `pnpm db:up`         | Start PostgreSQL container                          |
+| `pnpm db:down`       | Stop PostgreSQL container                           |
+| `pnpm db:reset`      | Reset database (delete all data)                    |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          MastraAdmin                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│   ┌─────────────────┐     ┌─────────────────┐     ┌───────────────┐ │
-│   │  AdminServer    │     │   MastraAdmin   │     │   Storage     │ │
-│   │  (HTTP API)     │────▶│   (Core Logic)  │────▶│  (PostgreSQL) │ │
-│   └─────────────────┘     └─────────────────┘     └───────────────┘ │
-│                                  │                                   │
-│                    ┌─────────────┼─────────────┐                     │
-│                    │             │             │                     │
-│                    ▼             ▼             ▼                     │
-│            ┌───────────┐ ┌───────────┐ ┌───────────┐                │
-│            │  Source   │ │  Runner   │ │  Router   │                │
-│            │  (Local)  │ │  (Local)  │ │  (Local)  │                │
-│            └───────────┘ └───────────┘ └───────────┘                │
-│                                  │                                   │
-│                                  ▼                                   │
-│                          ┌───────────────┐                          │
-│                          │ File Storage  │                          │
-│                          │ (Observability)│                          │
-│                          └───────────────┘                          │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         Admin UI                                │
+│                    (http://localhost:5173)                      │
+│    React + TanStack Query + Tailwind + shadcn/ui               │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       Admin Server                              │
+│                    (http://localhost:3001)                      │
+│                  Hono HTTP API + WebSockets                     │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       MastraAdmin                               │
+│                   Core Orchestrator                             │
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Storage   │  │   Source    │  │   Runner    │             │
+│  │  (Postgres) │  │   (Local)   │  │   (Local)   │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Router    │  │ FileStorage │  │    Auth     │             │
+│  │   (Local)   │  │   (Local)   │  │    (Dev)    │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        PostgreSQL                               │
+│                    (localhost:5433)                             │
+│     Teams, Projects, Deployments, Builds, Env Vars, etc.       │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+## Development Authentication
+
+For local development, the example uses a mock authentication system:
+
+- **User ID**: `00000000-0000-0000-0000-000000000001`
+- **Email**: `demo@example.com`
+- **Token**: `dev-token` (any token is accepted)
+
+The Admin UI automatically uses this mock authentication when `VITE_DEV_MODE=true`.
+
+For production, configure Supabase authentication:
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_DEV_MODE=false
+```
+
+## Features
+
+### Team Management
+
+- Create and manage teams
+- Invite team members
+- Role-based access control (Owner, Admin, Developer, Viewer)
+
+### Project Management
+
+- Discover local Mastra projects
+- Create projects from discovered sources
+- Manage environment variables (with encryption)
+- Configure project settings
+
+### Deployment Management
+
+- Create deployments (production, staging, preview)
+- Trigger builds
+- View build logs in real-time
+- Monitor running servers
+
+### Observability
+
+- View traces and spans
+- Search logs
+- Monitor metrics
+- Track evaluations
+
+## Packages Used
+
+| Package                            | Description             |
+| ---------------------------------- | ----------------------- |
+| `@mastra/admin`                    | Core orchestrator       |
+| `@mastra/admin-server`             | HTTP API server         |
+| `@mastra/admin-pg`                 | PostgreSQL storage      |
+| `@mastra/admin-ui`                 | React dashboard         |
+| `@mastra/source-local`             | Local project discovery |
+| `@mastra/runner-local`             | Local process runner    |
+| `@mastra/router-local`             | Local HTTP router       |
+| `@mastra/observability-file-local` | Local file storage      |
+
+## Configuration
+
+| Environment Variable      | Description                                 | Default                                                      |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `DATABASE_URL`            | PostgreSQL connection string                | `postgresql://postgres:postgres@localhost:5433/mastra_admin` |
+| `PROJECTS_DIR`            | Directory to scan for Mastra projects       | `../` (parent directory)                                     |
+| `PORT`                    | HTTP server port                            | `3001`                                                       |
+| `ADMIN_ENCRYPTION_SECRET` | Secret for encrypting environment variables | Auto-generated (dev only)                                    |
 
 ## Component Configuration
 
 ### Runner (LocalProcessRunner)
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `portRange` | `{ start: 4111, end: 4200 }` | Port range for server allocation |
-| `maxConcurrentBuilds` | `3` | Maximum concurrent builds |
-| `defaultBuildTimeoutMs` | `600000` | Build timeout (10 minutes) |
-| `logRetentionLines` | `10000` | Log lines per server |
-| `buildDir` | `.mastra/builds` | Build artifacts directory |
+| Option                  | Default                      | Description                      |
+| ----------------------- | ---------------------------- | -------------------------------- |
+| `portRange`             | `{ start: 4111, end: 4200 }` | Port range for server allocation |
+| `maxConcurrentBuilds`   | `3`                          | Maximum concurrent builds        |
+| `defaultBuildTimeoutMs` | `600000`                     | Build timeout (10 minutes)       |
+| `logRetentionLines`     | `10000`                      | Log lines per server             |
+| `buildDir`              | `.mastra/builds`             | Build artifacts directory        |
 
 ### Router (LocalEdgeRouter)
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `strategy` | `port-mapping` | Routing strategy (`port-mapping` or `reverse-proxy`) |
-| `baseDomain` | `localhost` | Base domain for routes |
-| `portRange` | `{ start: 3100, end: 3199 }` | Port range for routing |
-| `enableTls` | `false` | Enable HTTPS with self-signed certs |
-| `enableHostsFile` | `false` | Manage /etc/hosts for custom domains |
+| Option            | Default                      | Description                                          |
+| ----------------- | ---------------------------- | ---------------------------------------------------- |
+| `strategy`        | `port-mapping`               | Routing strategy (`port-mapping` or `reverse-proxy`) |
+| `baseDomain`      | `localhost`                  | Base domain for routes                               |
+| `portRange`       | `{ start: 3100, end: 3199 }` | Port range for routing                               |
+| `enableTls`       | `false`                      | Enable HTTPS with self-signed certs                  |
+| `enableHostsFile` | `false`                      | Manage /etc/hosts for custom domains                 |
 
 ### File Storage (LocalFileStorage)
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `baseDir` | Required | Base directory for file storage |
-| `atomicWrites` | `true` | Use atomic writes for safety |
+| Option         | Default  | Description                     |
+| -------------- | -------- | ------------------------------- |
+| `baseDir`      | Required | Base directory for file storage |
+| `atomicWrites` | `true`   | Use atomic writes for safety    |
 
 ## API Endpoints
 
-When running `pnpm demo:full`, the AdminServer exposes these endpoints:
+When running the server, these endpoints are available:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/teams` | List teams |
-| POST | `/api/teams` | Create team |
-| GET | `/api/teams/:id` | Get team |
-| GET | `/api/projects` | List projects |
-| POST | `/api/projects` | Create project |
-| GET | `/api/projects/:id` | Get project |
-| GET | `/api/deployments` | List deployments |
-| POST | `/api/deployments` | Create deployment |
-| POST | `/api/deployments/:id/deploy` | Trigger deployment |
+| Method | Endpoint                        | Description        |
+| ------ | ------------------------------- | ------------------ |
+| GET    | `/api/health`                   | Health check       |
+| GET    | `/api/teams`                    | List teams         |
+| POST   | `/api/teams`                    | Create team        |
+| GET    | `/api/teams/:id`                | Get team           |
+| GET    | `/api/teams/:id/projects`       | List team projects |
+| POST   | `/api/teams/:id/projects`       | Create project     |
+| GET    | `/api/projects/:id`             | Get project        |
+| GET    | `/api/projects/:id/deployments` | List deployments   |
+| POST   | `/api/projects/:id/deployments` | Create deployment  |
+| POST   | `/api/deployments/:id/deploy`   | Trigger deployment |
+| GET    | `/api/deployments/:id/builds`   | List builds        |
+| GET    | `/api/builds/:id/logs`          | Get build logs     |
 
-## Configuration
+## CLI Demo Scripts
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/mastra_admin` |
-| `PROJECTS_DIR` | Directory to scan for Mastra projects | `../` (parent directory) |
-| `PORT` | HTTP server port | `3001` |
-| `ADMIN_ENCRYPTION_SECRET` | Secret for encrypting environment variables | Auto-generated (dev only) |
+For CLI-based exploration without the UI:
 
-## Deploying a Project
+### `pnpm dev` (src/index.ts)
 
-With the complete MVP infrastructure, you can now deploy projects:
+Basic demo showing MastraAdmin initialization, team creation, project creation, and deployment setup.
 
-```typescript
-// Trigger a deployment
-const build = await admin.deploy(userId, deploymentId);
+### `pnpm demo:full` (src/demo-full.ts)
 
-// The runner will:
-// 1. Clone/copy project source
-// 2. Install dependencies
-// 3. Build the project
-// 4. Start the Mastra server
+Comprehensive demo with AdminServer HTTP API, example curl commands, and infrastructure summary.
 
-// The router will:
-// 1. Allocate a port
-// 2. Create a route mapping
-// 3. Expose the server
-```
+### `pnpm demo:deploy` (src/demo-deploy.ts)
 
-## Future Enhancements
+Full deployment lifecycle demo including build and server startup.
 
-The following features are planned:
+## Troubleshooting
 
-- **@mastra/observability-writer**: Batch events to JSONL files
-- **@mastra/observability-clickhouse**: ClickHouse ingestion + queries
-- **@mastra/source-github**: GitHub integration for private repositories
-- **@mastra/runner-k8s**: Kubernetes runner for production
-- **@mastra/router-cloudflare**: Cloudflare routing
+### Database connection failed
 
-## Database Commands
+Make sure PostgreSQL is running:
 
 ```bash
-# Start database
 pnpm db:up
-
-# Stop database
-pnpm db:down
-
-# Reset database (delete all data)
-pnpm db:reset
+docker ps  # Should show mastra-admin-demo-db
 ```
+
+### Port already in use
+
+The default ports are:
+
+- 5433: PostgreSQL
+- 3001: API Server
+- 5173: Admin UI (Vite dev server)
+
+Change the port in `.env` if needed.
+
+### Projects not discovered
+
+Update `PROJECTS_DIR` in `.env` to point to a directory containing Mastra projects.
+Projects must have a valid `mastra.config.ts` or `mastra.config.js` file.
+
+### Build failures
+
+Make sure you've built the monorepo first:
+
+```bash
+cd ../..  # Go to monorepo root
+pnpm build
+```
+
+### UI shows "Not authenticated"
+
+Ensure the server is running (`pnpm dev:server`) and the UI is using dev mode.
+The `pnpm dev:full` command handles this automatically.
 
 ## Cleanup
 
 ```bash
 # Stop database and remove volume
-docker compose down -v
+pnpm db:down -v
 ```

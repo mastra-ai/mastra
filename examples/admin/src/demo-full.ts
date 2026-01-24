@@ -15,14 +15,7 @@
 
 import 'dotenv/config';
 
-import {
-  MastraAdmin,
-  TeamRole,
-  LicenseFeature,
-  type Team,
-  type Project,
-  type Deployment,
-} from '@mastra/admin';
+import { MastraAdmin, TeamRole, LicenseFeature, type Team, type Project, type Deployment } from '@mastra/admin';
 import { PostgresAdminStorage } from '@mastra/admin-pg';
 import { AdminServer } from '@mastra/admin-server';
 import { LocalProjectSource } from '@mastra/source-local';
@@ -96,7 +89,9 @@ class AdminDemo {
       source,
       runner: this.runner,
       router: this.router,
-      fileStorage,
+      observability: {
+        fileStorage,
+      },
     });
 
     await this.admin.init();
@@ -171,12 +166,7 @@ class AdminDemo {
 
     // Invite a member (will send to console)
     try {
-      const invite = await this.admin.inviteMember(
-        DEMO_USER_ID,
-        team.id,
-        'colleague@example.com',
-        TeamRole.DEVELOPER,
-      );
+      const invite = await this.admin.inviteMember(DEMO_USER_ID, team.id, 'colleague@example.com', TeamRole.DEVELOPER);
       console.log('  Invited:', invite.email, '(check console for email)');
     } catch (e) {
       console.log('  Invite already exists or failed');

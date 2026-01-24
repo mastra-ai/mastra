@@ -80,8 +80,7 @@ class DeployDemo {
 
     // Initialize storage
     this.storage = new PostgresAdminStorage({
-      connectionString:
-        process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5432/mastra_admin',
+      connectionString: process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5432/mastra_admin',
       schemaName: 'mastra_admin',
     });
 
@@ -123,7 +122,9 @@ class DeployDemo {
       source,
       runner: this.runner,
       router: this.router,
-      fileStorage,
+      observability: {
+        fileStorage,
+      },
     });
 
     await this.admin.init();
