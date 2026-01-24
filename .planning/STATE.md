@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 1 of 8 (Storage Foundation)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-01-23 — Completed 01-01-PLAN.md (Types and Base Class)
+Last activity: 2026-01-24 — Completed 01-02-PLAN.md (InMemory Implementation)
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 8 min
-- Total execution time: 0.13 hours
+- Total plans completed: 2
+- Average duration: 5 min
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-storage-foundation | 1 | 8 min | 8 min |
+| 01-storage-foundation | 2 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (8 min)
-- Trend: Just started
+- Last 5 plans: 01-01 (8 min), 01-02 (2 min)
+- Trend: Accelerating
 
 *Updated after each plan completion*
 
@@ -47,6 +47,8 @@ Recent decisions affecting current work:
 - Scorers passed to run: Separates concerns, allows different scoring per experiment
 - Input stored as unknown: Target adapter normalizes at execution time
 - Defer virtual folders: Organizational polish, not core workflow (v1.1)
+- Timestamp-based versioning: dataset.version and item.version are Date objects
+- Snapshot semantics: version queries filter items by item.version <= requested version
 
 ### Pending Todos
 
@@ -58,6 +60,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-23 21:18
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-01-24 05:19
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
