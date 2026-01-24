@@ -134,8 +134,13 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
     if (config.subdomain !== undefined) updates.subdomain = config.subdomain;
     if (config.tls !== undefined) updates.tls = config.tls;
 
-    // Rebuild public URL if target changed
-    if (config.targetHost !== undefined || config.targetPort !== undefined || config.subdomain !== undefined) {
+    // Rebuild public URL if any URL-affecting field changed
+    if (
+      config.targetHost !== undefined ||
+      config.targetPort !== undefined ||
+      config.subdomain !== undefined ||
+      config.tls !== undefined
+    ) {
       updates.publicUrl = this.buildPublicUrl({
         ...route,
         ...updates,
