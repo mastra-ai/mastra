@@ -39,6 +39,8 @@ export class BuildOrchestrator {
    * Queue a build for processing.
    */
   async queueBuild(buildId: string, priority = 0): Promise<void> {
+    console.log(`[BuildOrchestrator] Queueing build ${buildId} with priority ${priority}`);
+
     this.#queue.push({
       buildId,
       queuedAt: new Date(),
@@ -52,6 +54,34 @@ export class BuildOrchestrator {
       }
       return a.queuedAt.getTime() - b.queuedAt.getTime();
     });
+
+    console.log(`[BuildOrchestrator] Queue now has ${this.#queue.length} build(s)`);
+  }
+
+  /**
+   * Get the storage instance.
+   * Used by build worker to access database queue directly.
+   */
+  getStorage(): AdminStorage {
+    return this.#storage;
+  }
+
+  /**
+   * Process a build by ID (public wrapper for #processBuild).
+   * Used by build worker when processing from database queue.
+   */
+  async processBuildById(buildId: string): Promise<void> {
+    if (this.#shutdown || this.#processing) {
+      return;
+    }
+
+    this.#processing = true;
+
+    try {
+      await this.#processBuild(buildId);
+    } finally {
+      this.#processing = false;
+    }
   }
 
   /**
@@ -60,15 +90,22 @@ export class BuildOrchestrator {
    * Returns true if a build was processed, false if queue is empty.
    */
   async processNextBuild(): Promise<boolean> {
+    console.log(
+      `[BuildOrchestrator] processNextBuild called. shutdown=${this.#shutdown}, processing=${this.#processing}, queueLength=${this.#queue.length}`,
+    );
+
     if (this.#shutdown || this.#processing) {
+      console.log(`[BuildOrchestrator] Skipping: shutdown=${this.#shutdown}, processing=${this.#processing}`);
       return false;
     }
 
     const job = this.#queue.shift();
     if (!job) {
+      console.log(`[BuildOrchestrator] Queue is empty, nothing to process`);
       return false;
     }
 
+    console.log(`[BuildOrchestrator] Processing build ${job.buildId} from queue`);
     this.#processing = true;
 
     try {
@@ -84,20 +121,29 @@ export class BuildOrchestrator {
    * Process a specific build.
    */
   async #processBuild(buildId: string): Promise<void> {
+    console.log(`[BuildOrchestrator] Starting to process build ${buildId}`);
+
     const build = await this.#storage.getBuild(buildId);
     if (!build) {
+      console.log(`[BuildOrchestrator] Build ${buildId} not found in storage`);
       return;
     }
 
     const deployment = await this.#storage.getDeployment(build.deploymentId);
     if (!deployment) {
+      console.log(`[BuildOrchestrator] Deployment ${build.deploymentId} not found`);
       return;
     }
 
     const project = await this.#storage.getProject(deployment.projectId);
     if (!project) {
+      console.log(`[BuildOrchestrator] Project ${deployment.projectId} not found`);
       return;
     }
+
+    console.log(
+      `[BuildOrchestrator] Build ${buildId}: Found build, deployment, project. Updating status to building...`,
+    );
 
     // Update build status
     await this.#storage.updateBuildStatus(buildId, 'building');
@@ -129,15 +175,10 @@ export class BuildOrchestrator {
         throw new Error('No runner configured');
       }
 
-      const updatedBuild = await this.#runner.build(
-        project,
-        build,
-        { envVars },
-        (log) => {
-          // Append logs as they come in
-          void this.#storage.appendBuildLogs(buildId, log);
-        },
-      );
+      const updatedBuild = await this.#runner.build(project, build, { envVars }, log => {
+        // Append logs as they come in
+        void this.#storage.appendBuildLogs(buildId, log);
+      });
 
       if (updatedBuild.status === 'failed') {
         throw new Error(updatedBuild.errorMessage ?? 'Build failed');
@@ -146,12 +187,7 @@ export class BuildOrchestrator {
       // 4. Deploy the artifact
       await this.#storage.updateBuildStatus(buildId, 'deploying');
 
-      const server = await this.#runner.deploy(
-        project,
-        deployment,
-        updatedBuild,
-        { envVars },
-      );
+      const server = await this.#runner.deploy(project, deployment, updatedBuild, { envVars });
 
       // 5. Configure routing
       if (this.#router && deployment.slug) {
@@ -179,7 +215,13 @@ export class BuildOrchestrator {
         internalHost: `${server.host}:${server.port}`,
       });
 
+      console.log(`[BuildOrchestrator] Build ${buildId} succeeded!`);
     } catch (error) {
+      console.log(
+        `[BuildOrchestrator] Build ${buildId} failed:`,
+        error instanceof Error ? error.message : String(error),
+      );
+
       await this.#storage.updateBuild(buildId, {
         status: 'failed',
         completedAt: new Date(),

@@ -111,6 +111,10 @@ export class BuildsPG {
     return this.db.count(TABLES.builds, { status: 'queued' });
   }
 
+  async listQueuedBuilds(): Promise<Build[]> {
+    return this.db.findBy<Build>(TABLES.builds, { status: 'queued' }, { orderBy: 'queued_at ASC' });
+  }
+
   async cancelQueuedBuilds(deploymentId: string): Promise<number> {
     const sql = `
       UPDATE "${this.db.schemaName}"."${TABLES.builds}"

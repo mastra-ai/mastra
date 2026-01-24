@@ -1,10 +1,6 @@
 import type { AdminServerContext, AdminServerRoute } from '../types';
 import { teamIdParamSchema, sourceIdParamSchema } from '../schemas/common';
-import {
-  projectSourceResponseSchema,
-  validateSourceResponseSchema,
-  listSourcesQuerySchema,
-} from '../schemas/sources';
+import { projectSourceResponseSchema, validateSourceResponseSchema, listSourcesQuerySchema } from '../schemas/sources';
 
 /**
  * GET /teams/:teamId/sources - List available project sources.
@@ -34,22 +30,35 @@ export const LIST_SOURCES_ROUTE: AdminServerRoute = {
     }
 
     // Get sources from the source provider
-    // Note: The source provider may provide different sources based on the team's configuration
-    // For now, we return an empty list if no source provider is configured
-    // The actual implementation depends on the source provider
+    const sourceProvider = admin.getSource();
+    if (!sourceProvider) {
+      return {
+        data: [],
+        total: 0,
+        page: page ?? 1,
+        perPage: limit ?? 20,
+        hasMore: false,
+      };
+    }
 
-    // This would typically call something like:
-    // const sourceProvider = admin.getSourceProvider();
-    // if (sourceProvider) {
-    //   return sourceProvider.listSources({ type, page, perPage: limit });
-    // }
+    // List projects from the source provider
+    const allSources = await sourceProvider.listProjects(teamId);
+
+    // Filter by type if specified
+    const filteredSources = type ? allSources.filter(s => s.type === type) : allSources;
+
+    // Apply pagination
+    const pageNum = page ?? 1;
+    const perPage = limit ?? 20;
+    const start = (pageNum - 1) * perPage;
+    const paginatedSources = filteredSources.slice(start, start + perPage);
 
     return {
-      data: [],
-      total: 0,
-      page: page ?? 1,
-      perPage: limit ?? 20,
-      hasMore: false,
+      data: paginatedSources,
+      total: filteredSources.length,
+      page: pageNum,
+      perPage,
+      hasMore: start + paginatedSources.length < filteredSources.length,
     };
   },
 };
@@ -67,11 +76,16 @@ export const GET_SOURCE_ROUTE: AdminServerRoute = {
   description: 'Get details of a specific project source',
   tags: ['Sources'],
   handler: async params => {
-    const { admin, userId } = params;
+    const { admin } = params;
     const { sourceId } = params as AdminServerContext & { sourceId: string };
-    // This would typically call the source provider to get source details
-    // For now, throw a not found error
-    throw new Error('Source not found');
+
+    const sourceProvider = admin.getSource();
+    if (!sourceProvider) {
+      throw new Error('Source provider not configured');
+    }
+
+    const source = await sourceProvider.getProject(sourceId);
+    return source;
   },
 };
 
@@ -88,22 +102,34 @@ export const VALIDATE_SOURCE_ROUTE: AdminServerRoute = {
   description: 'Validate that the source is accessible and can be used',
   tags: ['Sources'],
   handler: async params => {
-    const { admin, userId } = params;
+    const { admin } = params;
     const { sourceId } = params as AdminServerContext & { sourceId: string };
-    // This would typically call the source provider to validate access
-    // For now, return invalid with an error
-    return {
-      valid: false,
-      error: 'Source provider not configured',
-    };
+
+    const sourceProvider = admin.getSource();
+    if (!sourceProvider) {
+      return {
+        valid: false,
+        error: 'Source provider not configured',
+      };
+    }
+
+    try {
+      const source = await sourceProvider.getProject(sourceId);
+      const valid = await sourceProvider.validateAccess(source);
+      return {
+        valid,
+        error: valid ? undefined : 'Source is not accessible',
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   },
 };
 
 /**
  * All source routes.
  */
-export const SOURCE_ROUTES: AdminServerRoute[] = [
-  LIST_SOURCES_ROUTE,
-  GET_SOURCE_ROUTE,
-  VALIDATE_SOURCE_ROUTE,
-];
+export const SOURCE_ROUTES: AdminServerRoute[] = [LIST_SOURCES_ROUTE, GET_SOURCE_ROUTE, VALIDATE_SOURCE_ROUTE];
