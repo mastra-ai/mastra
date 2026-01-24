@@ -13,6 +13,7 @@ packages:
   - auth/*
   - observability/*
   - sources/*
+  - routers/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
