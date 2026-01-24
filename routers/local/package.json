@@ -36,16 +36,23 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/admin": "workspace:*",
+    "@types/http-proxy": "^1.17.16",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
+    "http-proxy": "^1.18.1",
+    "selfsigned": "^2.4.1",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/admin": ">=1.0.0-0 <2.0.0-0"
+  },
+  "optionalDependencies": {
+    "http-proxy": "^1.18.1",
+    "selfsigned": "^2.4.1"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -3,8 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { EdgeRouterProvider, RouteConfig, RouteHealthStatus, RouteInfo, RouteStatus } from '@mastra/admin';
 
 import { HealthChecker } from './health-checker';
+import { HostsManager } from './hosts';
 import { PortManager } from './port-manager';
+import { ProxyServer } from './proxy';
 import { RouteRegistry } from './registry';
+import { TLSManager } from './tls';
 import type { LocalEdgeRouterConfig, LocalRoute } from './types';
 
 const DEFAULT_CONFIG: Required<Omit<LocalEdgeRouterConfig, 'tls'>> = {
@@ -49,6 +52,20 @@ const DEFAULT_CONFIG: Required<Omit<LocalEdgeRouterConfig, 'tls'>> = {
  * // Check health
  * const health = await router.checkRouteHealth(route.routeId);
  * ```
+ *
+ * @example
+ * ```typescript
+ * // With reverse proxy and TLS
+ * const router = new LocalEdgeRouter({
+ *   strategy: 'reverse-proxy',
+ *   baseDomain: 'mastra.local',
+ *   proxyPort: 443,
+ *   enableTls: true,
+ *   enableHostsFile: true, // Requires elevated permissions
+ * });
+ *
+ * await router.startProxy(); // Start the proxy server
+ * ```
  */
 export class LocalEdgeRouter implements EdgeRouterProvider {
   readonly type = 'local' as const;
@@ -58,6 +75,12 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
   private readonly portManager: PortManager;
   private readonly healthChecker: HealthChecker;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Optional Phase 3 components
+  private proxyServer: ProxyServer | null = null;
+  private hostsManager: HostsManager | null = null;
+  private tlsManager: TLSManager | null = null;
+  private tlsCert: { cert: string; key: string } | null = null;
 
   constructor(config: LocalEdgeRouterConfig = {}) {
     this.config = {
@@ -74,6 +97,21 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
       timeoutMs: this.config.healthCheck.timeoutMs!,
       failureThreshold: this.config.healthCheck.failureThreshold!,
     });
+
+    // Initialize optional components based on config
+    if (this.config.enableHostsFile) {
+      this.hostsManager = new HostsManager({
+        logChanges: this.config.logRoutes,
+      });
+    }
+
+    if (this.config.enableTls) {
+      this.tlsManager = new TLSManager({
+        certDir: this.config.tls?.certDir,
+        validityDays: this.config.tls?.validityDays,
+        logChanges: this.config.logRoutes,
+      });
+    }
   }
 
   /**
@@ -105,6 +143,17 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
 
     this.registry.add(route);
 
+    // Add route to proxy server if running
+    if (this.proxyServer?.isRunning()) {
+      this.proxyServer.addRoute(route);
+    }
+
+    // Add hosts file entry if enabled and using custom domain
+    if (this.hostsManager && this.config.baseDomain !== 'localhost') {
+      const hostname = `${config.subdomain}.${this.config.baseDomain}`;
+      await this.hostsManager.addEntry(hostname, `Mastra route for ${config.deploymentId}`);
+    }
+
     // Perform initial health check
     const health = await this.healthChecker.check(route);
     route.status = health.healthy ? ('active' as RouteStatus) : ('pending' as RouteStatus);
@@ -127,6 +176,7 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
       throw new Error(`Route not found: ${routeId}`);
     }
 
+    const oldSubdomain = route.subdomain;
     const updates: Partial<LocalRoute> = {};
 
     if (config.targetHost !== undefined) updates.targetHost = config.targetHost;
@@ -152,6 +202,19 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
       throw new Error(`Failed to update route: ${routeId}`);
     }
 
+    // Update proxy server route if running
+    if (this.proxyServer?.isRunning()) {
+      this.proxyServer.updateRoute(updated);
+    }
+
+    // Update hosts file entry if subdomain changed
+    if (this.hostsManager && config.subdomain && config.subdomain !== oldSubdomain) {
+      const oldHostname = `${oldSubdomain}.${this.config.baseDomain}`;
+      const newHostname = `${config.subdomain}.${this.config.baseDomain}`;
+      await this.hostsManager.removeEntry(oldHostname);
+      await this.hostsManager.addEntry(newHostname, `Mastra route for ${route.deploymentId}`);
+    }
+
     if (this.config.logRoutes) {
       console.info(`[LocalEdgeRouter] Route updated: ${updated.subdomain} → ${updated.publicUrl}`);
     }
@@ -167,6 +230,17 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
     if (!route) {
       // Idempotent - already removed
       return;
+    }
+
+    // Remove from proxy server if running
+    if (this.proxyServer?.isRunning()) {
+      this.proxyServer.removeRoute(routeId);
+    }
+
+    // Remove hosts file entry if enabled
+    if (this.hostsManager && this.config.baseDomain !== 'localhost') {
+      const hostname = `${route.subdomain}.${this.config.baseDomain}`;
+      await this.hostsManager.removeEntry(hostname);
     }
 
     this.registry.remove(routeId);
@@ -249,6 +323,66 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
   }
 
   /**
+   * Start the reverse proxy server.
+   * Only applicable when strategy is 'reverse-proxy'.
+   */
+  async startProxy(): Promise<void> {
+    if (this.config.strategy !== 'reverse-proxy') {
+      throw new Error('Proxy can only be started when strategy is "reverse-proxy"');
+    }
+
+    if (this.proxyServer?.isRunning()) {
+      throw new Error('Proxy server is already running');
+    }
+
+    // Generate TLS certificate if enabled
+    if (this.config.enableTls && this.tlsManager) {
+      const result = await this.tlsManager.getCertificate(this.config.baseDomain);
+      if (!result.success || !result.certificate) {
+        throw new Error(`Failed to generate TLS certificate: ${result.error}`);
+      }
+      this.tlsCert = {
+        cert: result.certificate.cert,
+        key: result.certificate.key,
+      };
+    }
+
+    // Create and start proxy server
+    this.proxyServer = new ProxyServer({
+      port: this.config.proxyPort,
+      baseDomain: this.config.baseDomain,
+      tls: this.config.enableTls,
+      cert: this.tlsCert?.cert,
+      key: this.tlsCert?.key,
+      logRequests: this.config.logRoutes,
+    });
+
+    // Add existing routes to proxy
+    for (const route of this.registry.all()) {
+      this.proxyServer.addRoute(route);
+    }
+
+    await this.proxyServer.start();
+  }
+
+  /**
+   * Stop the reverse proxy server.
+   */
+  async stopProxy(): Promise<void> {
+    if (this.proxyServer) {
+      await this.proxyServer.stop();
+      this.proxyServer = null;
+    }
+  }
+
+  /**
+   * Check if the proxy server is running.
+   */
+  isProxyRunning(): boolean {
+    return this.proxyServer?.isRunning() ?? false;
+  }
+
+  /**
    * Get all registered routes.
    */
   getAllRoutes(): RouteInfo[] {
@@ -259,6 +393,11 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
    * Clear all routes.
    */
   clearRoutes(): void {
+    // Clear proxy routes
+    if (this.proxyServer?.isRunning()) {
+      this.proxyServer.clearRoutes();
+    }
+
     this.registry.clear();
     if (this.config.logRoutes) {
       console.info('[LocalEdgeRouter] All routes cleared');
@@ -266,10 +405,62 @@ export class LocalEdgeRouter implements EdgeRouterProvider {
   }
 
   /**
+   * Clean up all hosts file entries managed by this router.
+   */
+  async cleanupHostsFile(): Promise<void> {
+    if (this.hostsManager) {
+      await this.hostsManager.removeAllEntries();
+    }
+  }
+
+  /**
+   * Get trust instructions for the TLS certificate.
+   */
+  getTlsTrustInstructions(): string | null {
+    if (!this.tlsManager) {
+      return null;
+    }
+    return this.tlsManager.getTrustInstructions(this.config.baseDomain);
+  }
+
+  /**
+   * Get the proxy server instance.
+   * Returns null if proxy is not initialized.
+   */
+  getProxyServer(): ProxyServer | null {
+    return this.proxyServer;
+  }
+
+  /**
+   * Get the hosts manager instance.
+   * Returns null if hosts file management is not enabled.
+   */
+  getHostsManager(): HostsManager | null {
+    return this.hostsManager;
+  }
+
+  /**
+   * Get the TLS manager instance.
+   * Returns null if TLS is not enabled.
+   */
+  getTlsManager(): TLSManager | null {
+    return this.tlsManager;
+  }
+
+  /**
    * Clean up resources.
    */
   async close(): Promise<void> {
     this.stopHealthChecking();
+
+    // Stop proxy if running
+    await this.stopProxy();
+
+    // Clean up hosts file entries
+    if (this.hostsManager) {
+      await this.hostsManager.removeAllEntries();
+    }
+
     this.clearRoutes();
   }
 
