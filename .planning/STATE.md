@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 2 of 8 (Execution Core)
-Plan: 2 of TBD in current phase
+Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-01-24 — Completed 02-02-PLAN.md (RunsInMemory implementation)
+Last activity: 2026-01-24 — Completed 02-03-PLAN.md (Run Orchestration)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 23%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 4 min
-- Total execution time: 0.4 hours
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-storage-foundation | 4 | 20 min | 5 min |
-| 02-execution-core | 2 | 6 min | 3 min |
+| 02-execution-core | 3 | 11 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (2 min), 01-03 (3 min), 01-04 (7 min), 02-01 (4 min), 02-02 (2 min)
+- Last 5 plans: 01-03 (3 min), 01-04 (7 min), 02-01 (4 min), 02-02 (2 min), 02-03 (5 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - Timestamp-based versioning: dataset.version and item.version are Date objects
 - Snapshot semantics: version queries filter items by item.version <= requested version
 - 0-indexed pagination: Matches existing storage adapter patterns
+- Inline scoring: scorers run immediately after each item execution (not batched)
+- Error isolation: failing scorer doesn't affect other scorers or item results
 
 ### Pending Todos
 
@@ -62,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-24 14:28
-Stopped at: Completed 02-02-PLAN.md — RunsInMemory implementation
+Last session: 2026-01-24 22:31
+Stopped at: Completed 02-03-PLAN.md — Run Orchestration
 Resume file: None
