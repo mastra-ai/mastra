@@ -225,7 +225,7 @@ export class AdminPgDB {
   /**
    * Insert a record
    */
-  async insert<T extends Record<string, unknown>>(table: TableName, data: T): Promise<T & { id: string }> {
+  async insert<T>(table: TableName, data: Record<string, unknown>): Promise<T & { id: string }> {
     const keys = Object.keys(data);
     const values = Object.values(data);
     const placeholders = keys.map((_, i) => `$${i + 1}`);
@@ -244,7 +244,7 @@ export class AdminPgDB {
   /**
    * Batch insert records
    */
-  async batchInsert<T extends Record<string, unknown>>(table: TableName, records: T[]): Promise<(T & { id: string })[]> {
+  async batchInsert<T>(table: TableName, records: Record<string, unknown>[]): Promise<(T & { id: string })[]> {
     if (records.length === 0) return [];
 
     return this.client.tx(async tx => {
@@ -271,7 +271,7 @@ export class AdminPgDB {
   /**
    * Update a record
    */
-  async update<T extends Record<string, unknown>>(table: TableName, id: string, data: Partial<T>): Promise<(T & { id: string }) | null> {
+  async update<T>(table: TableName, id: string, data: Record<string, unknown>): Promise<(T & { id: string }) | null> {
     const keys = Object.keys(data);
     if (keys.length === 0) return null;
 

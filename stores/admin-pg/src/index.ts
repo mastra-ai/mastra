@@ -20,3 +20,17 @@ export { TABLES, TABLE_SCHEMAS, DEFAULT_INDEXES, type TableName, type IndexDefin
 
 // Database utilities
 export { AdminPgDB } from './db';
+
+// Domain classes
+export { UsersPG } from './domains/users';
+export { TeamsPG } from './domains/teams';
+export { ProjectsPG } from './domains/projects';
+export { DeploymentsPG } from './domains/deployments';
+export { BuildsPG } from './domains/builds';
+export { RunningServersPG } from './domains/servers';
+export { RoutesPG } from './domains/routes';
+export { RbacPG } from './domains/rbac';
+
+// Domain utilities
+export type { PgDomainConfig } from './domains/utils';
+export { resolvePgConfig } from './domains/utils';
