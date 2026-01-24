@@ -33,12 +33,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Dataset version increments automatically when items are added/modified
   4. Items are queryable by dataset and version
   5. Storage works with libsql and in-memory backends (pg deferred)
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [ ] 01-01-PLAN.md — Types, schemas, and DatasetsStorage base class
 - [ ] 01-02-PLAN.md — DatasetsInMemory implementation and core registration
 - [ ] 01-03-PLAN.md — DatasetsLibSQL implementation
+- [ ] 01-04-PLAN.md — Test suite validating both backends
 
 ### Phase 2: Execution Core
 **Goal**: Run datasets against targets with automatic scoring and result persistence
