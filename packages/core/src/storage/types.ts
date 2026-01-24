@@ -548,3 +548,89 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 
   return result as Record<keyof Shape & string, StorageColumn>;
 }
+
+// Dataset Types
+
+/** Dataset entity */
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  /** Timestamp-based versioning (Langfuse pattern) */
+  version: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Dataset item entity */
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  /** Timestamp when item was added/modified */
+  version: Date;
+  /** Any JSON - string for simple prompts, object for structured */
+  input: unknown;
+  /** Any JSON */
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input for creating a dataset */
+export interface CreateDatasetInput {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Input for updating a dataset */
+export interface UpdateDatasetInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Input for adding an item to a dataset */
+export interface AddDatasetItemInput {
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+/** Input for updating a dataset item */
+export interface UpdateDatasetItemInput {
+  id: string;
+  datasetId: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+/** Input for listing datasets */
+export interface ListDatasetsInput {
+  pagination: StoragePagination;
+}
+
+/** Output for listing datasets */
+export interface ListDatasetsOutput {
+  datasets: Dataset[];
+  pagination: PaginationInfo;
+}
+
+/** Input for listing dataset items */
+export interface ListDatasetItemsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+  /** Optional: filter items at or before this version timestamp */
+  version?: Date;
+}
+
+/** Output for listing dataset items */
+export interface ListDatasetItemsOutput {
+  items: DatasetItem[];
+  pagination: PaginationInfo;
+}
