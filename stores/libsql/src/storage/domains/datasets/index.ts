@@ -83,13 +83,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      // Note: prepareStatement handles JSON.stringify for jsonb columns automatically
       await this.#db.insert({
         tableName: TABLE_DATASETS,
         record: {
           id,
           name: input.name,
           description: input.description ?? null,
-          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          metadata: input.metadata, // jsonb serialization handled by prepareStatement
           version: nowIso, // Timestamp-based versioning
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -292,6 +293,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       });
 
       // Insert item with version timestamp
+      // Note: prepareStatement handles JSON.stringify for jsonb columns automatically
       const id = crypto.randomUUID();
       await this.#db.insert({
         tableName: TABLE_DATASET_ITEMS,
@@ -299,9 +301,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
           id,
           datasetId: args.datasetId,
           version: nowIso, // Item stores the version timestamp when added
-          input: JSON.stringify(args.input),
-          expectedOutput: args.expectedOutput !== undefined ? JSON.stringify(args.expectedOutput) : null,
-          context: args.context ? JSON.stringify(args.context) : null,
+          input: args.input,
+          expectedOutput: args.expectedOutput,
+          context: args.context,
           createdAt: nowIso,
           updatedAt: nowIso,
         },
