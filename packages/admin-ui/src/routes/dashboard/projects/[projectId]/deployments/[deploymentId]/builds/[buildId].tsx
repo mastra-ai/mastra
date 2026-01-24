@@ -1,11 +1,12 @@
 import { useParams } from 'react-router';
-import { useBuild } from '@/hooks/builds/use-build';
+import { useBuild, useBuildLogsQuery } from '@/hooks/builds/use-build';
 import { useBuildLogs } from '@/hooks/builds/use-build-logs';
 
 export function BuildLogs() {
   const { buildId } = useParams<{ buildId: string }>();
   const { data: build, isLoading: buildLoading } = useBuild(buildId!);
-  const { logs, status } = useBuildLogs(buildId);
+  const { data: initialLogsData } = useBuildLogsQuery(buildId!);
+  const { logs, status } = useBuildLogs(buildId, initialLogsData?.logs);
 
   if (buildLoading) {
     return (

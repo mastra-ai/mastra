@@ -48,7 +48,7 @@ export class BuildsPG {
   async appendBuildLogs(id: string, logs: string): Promise<void> {
     const sql = `
       UPDATE "${this.db.schemaName}"."${TABLES.builds}"
-      SET logs = COALESCE(logs, '') || $1
+      SET logs = COALESCE(logs, '') || $1 || E'\\n'
       WHERE id = $2
     `;
     await this.db.db.none(sql, [logs, id]);
