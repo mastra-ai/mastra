@@ -22,6 +22,7 @@ import { resolve } from 'path';
 
 // Configuration
 const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
+const PROXY_PORT = parseInt(process.env['PROXY_PORT'] ?? '80', 10);
 const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
 const DEMO_USER_EMAIL = 'demo@example.com';
 const DEMO_USER_NAME = 'Demo User';
@@ -89,13 +90,13 @@ async function main() {
   });
 
   // Initialize router with reverse-proxy strategy and custom domain
-  // This allows accessing deployments via http://{subdomain}.mastra.local:3100/
-  // Note: Requires sudo to modify /etc/hosts, or manually add entries
+  // This allows accessing deployments via http://{subdomain}.mastra.local/
+  // Run with sudo for port 80, or use PROXY_PORT=3100 for non-privileged port
   console.log('[4] Initializing local edge router...');
   const router = new LocalEdgeRouter({
     strategy: 'reverse-proxy',
     baseDomain: 'mastra.local',
-    proxyPort: 3100,
+    proxyPort: PROXY_PORT,
     portRange: { start: 4100, end: 4199 }, // Backend ports (hidden from user)
     enableHostsFile: true, // Auto-manage /etc/hosts entries (requires sudo)
     logRoutes: true,
@@ -133,7 +134,7 @@ async function main() {
   // Start the reverse proxy
   console.log('    Starting reverse proxy...');
   await router.startProxy();
-  console.log('    Reverse proxy started on port 3100');
+  console.log(`    Reverse proxy started on port ${PROXY_PORT}`);
 
   // Recover any queued builds from the database
   console.log('    Recovering queued builds...');
@@ -186,15 +187,20 @@ async function main() {
   console.log('Server Ready!');
   console.log('='.repeat(60));
   console.log();
+  const proxyPortSuffix = PROXY_PORT === 80 ? '' : `:${PROXY_PORT}`;
   console.log(`API URL:   http://localhost:${PORT}/api`);
   console.log(`Health:    http://localhost:${PORT}/api/health`);
-  console.log(`Proxy:     http://{subdomain}.mastra.local:3100/`);
+  console.log(`Proxy:     http://{subdomain}.mastra.local${proxyPortSuffix}/`);
   console.log();
   console.log('Deployed Mastra instances are accessible via:');
-  console.log('  http://{subdomain}.mastra.local:3100/');
+  console.log(`  http://{subdomain}.mastra.local${proxyPortSuffix}/`);
   console.log();
-  console.log('Note: /etc/hosts entries are auto-managed (requires sudo).');
-  console.log('If not running as sudo, manually add: 127.0.0.1 {subdomain}.mastra.local');
+  console.log('Note: /etc/hosts entries are auto-managed.');
+  if (PROXY_PORT === 80) {
+    console.log('Running on port 80 requires sudo.');
+  } else {
+    console.log(`For clean URLs, run: sudo PROXY_PORT=80 pnpm dev:server`);
+  }
   console.log();
   console.log('Dev Authentication:');
   console.log(`  User ID: ${DEMO_USER_ID}`);
