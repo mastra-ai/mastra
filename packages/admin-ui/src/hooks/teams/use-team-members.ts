@@ -1,50 +1,76 @@
-import { useQuery } from '@tanstack/react-query';
-import { ADMIN_API_URL } from '@/lib/constants';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAdminClient } from '../use-admin-client';
 import { useAuth } from '../use-auth';
-
-interface User {
-  id: string;
-  email: string;
-  name?: string;
-}
-
-interface TeamMember {
-  userId: string;
-  teamId: string;
-  role: 'owner' | 'admin' | 'member';
-  user?: User;
-}
-
-interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  perPage: number;
-  hasMore: boolean;
-}
+import type { TeamRole } from '@/types/api';
 
 export function useTeamMembers(teamId: string, params?: { page?: number; perPage?: number }) {
+  const client = useAdminClient();
   const { session } = useAuth();
 
   return useQuery({
     queryKey: ['team-members', teamId, params],
-    queryFn: async (): Promise<PaginatedResponse<TeamMember>> => {
-      const url = new URL(`${ADMIN_API_URL}/teams/${teamId}/members`);
-      if (params?.page) url.searchParams.set('page', String(params.page));
-      if (params?.perPage) url.searchParams.set('perPage', String(params.perPage));
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch team members');
-      }
-
-      return response.json();
-    },
+    queryFn: () => client.teams.listMembers(teamId, params),
     enabled: !!session?.access_token && !!teamId,
+  });
+}
+
+export function useInviteMember(teamId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { email: string; role: TeamRole }) => client.teams.inviteMember(teamId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-members', teamId] });
+      queryClient.invalidateQueries({ queryKey: ['team-invites', teamId] });
+    },
+  });
+}
+
+export function useUpdateMemberRole(teamId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: TeamRole }) =>
+      client.teams.updateMemberRole(teamId, userId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-members', teamId] });
+    },
+  });
+}
+
+export function useRemoveMember(teamId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) => client.teams.removeMember(teamId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-members', teamId] });
+    },
+  });
+}
+
+export function useTeamInvites(teamId: string) {
+  const client = useAdminClient();
+  const { session } = useAuth();
+
+  return useQuery({
+    queryKey: ['team-invites', teamId],
+    queryFn: () => client.teams.listInvites(teamId),
+    enabled: !!session?.access_token && !!teamId,
+  });
+}
+
+export function useCancelInvite(teamId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (inviteId: string) => client.teams.cancelInvite(teamId, inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-invites', teamId] });
+    },
   });
 }

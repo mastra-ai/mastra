@@ -28,7 +28,7 @@ export function DeploymentDetail() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral9">{deployment.name}</h1>
+          <h1 className="text-2xl font-semibold text-neutral9">{deployment.slug}</h1>
           <p className="text-sm text-neutral6">{deployment.slug}</p>
         </div>
         <div className="flex gap-2">
@@ -84,14 +84,14 @@ export function DeploymentDetail() {
                 className="block p-4 bg-surface2 rounded-lg border border-border hover:border-accent1 transition-colors"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-neutral9">Build #{build.number}</span>
+                  <span className="text-sm text-neutral9">Build {build.id.slice(0, 8)}</span>
                   <span
                     className={`px-2 py-1 text-xs font-medium rounded ${
-                      build.status === 'success'
+                      build.status === 'succeeded'
                         ? 'bg-green-500/10 text-green-500'
                         : build.status === 'failed'
                           ? 'bg-red-500/10 text-red-500'
-                          : build.status === 'running'
+                          : build.status === 'building'
                             ? 'bg-blue-500/10 text-blue-500'
                             : 'bg-neutral3/10 text-neutral3'
                     }`}

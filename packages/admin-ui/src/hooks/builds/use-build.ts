@@ -1,35 +1,37 @@
-import { useQuery } from '@tanstack/react-query';
-import { ADMIN_API_URL } from '@/lib/constants';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAdminClient } from '../use-admin-client';
 import { useAuth } from '../use-auth';
 
-interface Build {
-  id: string;
-  number: number;
-  deploymentId: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
-  startedAt?: string;
-  finishedAt?: string;
-  createdAt: string;
-}
-
 export function useBuild(buildId: string) {
+  const client = useAdminClient();
   const { session } = useAuth();
 
   return useQuery({
     queryKey: ['build', buildId],
-    queryFn: async (): Promise<Build> => {
-      const response = await fetch(`${ADMIN_API_URL}/builds/${buildId}`, {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch build');
-      }
-
-      return response.json();
-    },
+    queryFn: () => client.builds.get(buildId),
     enabled: !!session?.access_token && !!buildId,
+  });
+}
+
+export function useBuildLogsQuery(buildId: string) {
+  const client = useAdminClient();
+  const { session } = useAuth();
+
+  return useQuery({
+    queryKey: ['build-logs', buildId],
+    queryFn: () => client.builds.getLogs(buildId),
+    enabled: !!session?.access_token && !!buildId,
+  });
+}
+
+export function useCancelBuild(buildId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.builds.cancel(buildId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['build', buildId] });
+    },
   });
 }

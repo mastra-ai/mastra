@@ -1,36 +1,65 @@
-import { useQuery } from '@tanstack/react-query';
-import { ADMIN_API_URL } from '@/lib/constants';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAdminClient } from '../use-admin-client';
 import { useAuth } from '../use-auth';
 
-interface Deployment {
-  id: string;
-  name: string;
-  slug: string;
-  projectId: string;
-  status: 'pending' | 'running' | 'stopped' | 'failed';
-  publicUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export function useDeployment(deploymentId: string) {
+  const client = useAdminClient();
   const { session } = useAuth();
 
   return useQuery({
     queryKey: ['deployment', deploymentId],
-    queryFn: async (): Promise<Deployment> => {
-      const response = await fetch(`${ADMIN_API_URL}/deployments/${deploymentId}`, {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch deployment');
-      }
-
-      return response.json();
-    },
+    queryFn: () => client.deployments.get(deploymentId),
     enabled: !!session?.access_token && !!deploymentId,
+  });
+}
+
+export function useTriggerDeploy(deploymentId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.deployments.deploy(deploymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
+      queryClient.invalidateQueries({ queryKey: ['builds', deploymentId] });
+    },
+  });
+}
+
+export function useStopDeployment(deploymentId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.deployments.stop(deploymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
+    },
+  });
+}
+
+export function useRestartDeployment(deploymentId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.deployments.restart(deploymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
+      queryClient.invalidateQueries({ queryKey: ['builds', deploymentId] });
+    },
+  });
+}
+
+export function useRollbackDeployment(deploymentId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (buildId?: string) => client.deployments.rollback(deploymentId, buildId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
+      queryClient.invalidateQueries({ queryKey: ['builds', deploymentId] });
+    },
   });
 }

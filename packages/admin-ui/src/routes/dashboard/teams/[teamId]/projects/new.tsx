@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useCreateProject } from '@/hooks/projects/use-create-project';
+import { SourceType } from '@/types/api';
 
 export function NewProjectPage() {
   const { teamId } = useParams<{ teamId: string }>();
   const [name, setName] = useState('');
+  const [sourcePath, setSourcePath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const createProject = useCreateProject();
@@ -15,7 +17,16 @@ export function NewProjectPage() {
     setError(null);
 
     try {
-      const project = await createProject.mutateAsync({ teamId, name });
+      const project = await createProject.mutateAsync({
+        teamId,
+        data: {
+          name,
+          sourceType: SourceType.LOCAL,
+          sourceConfig: {
+            path: sourcePath,
+          },
+        },
+      });
       navigate(`/projects/${project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project');
@@ -41,6 +52,22 @@ export function NewProjectPage() {
             required
             className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
           />
+        </div>
+
+        <div>
+          <label htmlFor="sourcePath" className="block text-sm text-neutral6 mb-1">
+            Project Path
+          </label>
+          <input
+            id="sourcePath"
+            type="text"
+            value={sourcePath}
+            onChange={e => setSourcePath(e.target.value)}
+            placeholder="/path/to/project"
+            required
+            className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
+          />
+          <p className="mt-1 text-xs text-neutral6">Absolute path to the Mastra project directory</p>
         </div>
 
         <div className="flex gap-3">

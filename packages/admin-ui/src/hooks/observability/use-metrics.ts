@@ -1,32 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { ADMIN_API_URL } from '@/lib/constants';
+import { useAdminClient } from '../use-admin-client';
 import { useAuth } from '../use-auth';
+import type { MetricQueryParams } from '@/types/api';
 
-interface Metrics {
-  totalRequests: number;
-  successRate: number;
-  avgLatency: number;
-  p99Latency: number;
-}
-
-export function useMetrics(projectId: string) {
+export function useMetrics(projectId: string, params?: MetricQueryParams) {
+  const client = useAdminClient();
   const { session } = useAuth();
 
   return useQuery({
-    queryKey: ['metrics', projectId],
-    queryFn: async (): Promise<Metrics> => {
-      const response = await fetch(`${ADMIN_API_URL}/projects/${projectId}/metrics`, {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch metrics');
-      }
-
-      return response.json();
-    },
+    queryKey: ['metrics', projectId, params],
+    queryFn: () => client.observability.metrics.get(projectId, params),
     enabled: !!session?.access_token && !!projectId,
   });
 }

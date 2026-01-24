@@ -1,49 +1,49 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ADMIN_API_URL } from '@/lib/constants';
-import { useAuth } from '../use-auth';
+import { useAdminClient } from '../use-admin-client';
+import type { CreateDeploymentInput } from '@/types/api';
 
-interface Deployment {
-  id: string;
-  name: string;
-  slug: string;
+interface CreateDeploymentArgs {
   projectId: string;
-  status: 'pending' | 'running' | 'stopped' | 'failed';
-  publicUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CreateDeploymentInput {
-  projectId: string;
-  name: string;
-  slug?: string;
+  data: CreateDeploymentInput;
 }
 
 export function useCreateDeployment() {
-  const { session } = useAuth();
+  const client = useAdminClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: CreateDeploymentInput): Promise<Deployment> => {
-      const { projectId, ...body } = data;
-      const response = await fetch(`${ADMIN_API_URL}/projects/${projectId}/deployments`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create deployment');
-      }
-
-      return response.json();
-    },
+    mutationFn: ({ projectId, data }: CreateDeploymentArgs) => client.deployments.create(projectId, data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['deployments', variables.projectId] });
+    },
+  });
+}
+
+export function useUpdateDeployment(deploymentId: string) {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: Partial<{ autoShutdown: boolean }>) => client.deployments.update(deploymentId, data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
+      if (data?.projectId) {
+        queryClient.invalidateQueries({ queryKey: ['deployments', data.projectId] });
+      }
+    },
+  });
+}
+
+export function useDeleteDeployment() {
+  const client = useAdminClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ deploymentId, projectId }: { deploymentId: string; projectId: string }) =>
+      client.deployments.delete(deploymentId).then(() => ({ deploymentId, projectId })),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['deployments', variables.projectId] });
+      queryClient.removeQueries({ queryKey: ['deployment', variables.deploymentId] });
     },
   });
 }

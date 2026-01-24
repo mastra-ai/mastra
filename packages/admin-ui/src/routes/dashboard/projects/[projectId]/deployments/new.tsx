@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useCreateDeployment } from '@/hooks/deployments/use-create-deployment';
+import { DeploymentType } from '@/types/api';
 
 export function NewDeploymentPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [name, setName] = useState('');
+  const [branch, setBranch] = useState('main');
+  const [type, setType] = useState<(typeof DeploymentType)[keyof typeof DeploymentType]>(DeploymentType.PRODUCTION);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const createDeployment = useCreateDeployment();
@@ -15,7 +17,13 @@ export function NewDeploymentPage() {
     setError(null);
 
     try {
-      const deployment = await createDeployment.mutateAsync({ projectId, name });
+      const deployment = await createDeployment.mutateAsync({
+        projectId,
+        data: {
+          type,
+          branch,
+        },
+      });
       navigate(`/projects/${projectId}/deployments/${deployment.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create deployment');
@@ -30,14 +38,30 @@ export function NewDeploymentPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="name" className="block text-sm text-neutral6 mb-1">
-            Deployment Name
+          <label htmlFor="type" className="block text-sm text-neutral6 mb-1">
+            Deployment Type
+          </label>
+          <select
+            id="type"
+            value={type}
+            onChange={e => setType(e.target.value as typeof type)}
+            className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
+          >
+            <option value={DeploymentType.PRODUCTION}>Production</option>
+            <option value={DeploymentType.STAGING}>Staging</option>
+            <option value={DeploymentType.PREVIEW}>Preview</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="branch" className="block text-sm text-neutral6 mb-1">
+            Branch
           </label>
           <input
-            id="name"
+            id="branch"
             type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
+            value={branch}
+            onChange={e => setBranch(e.target.value)}
             required
             className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
           />

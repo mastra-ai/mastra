@@ -39,7 +39,7 @@ export function ProjectEnvVars() {
               envVars.map(envVar => (
                 <tr key={envVar.key} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 text-sm font-mono text-neutral9">{envVar.key}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-neutral6">{envVar.isSecret ? '••••••••' : envVar.value}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-neutral6">{envVar.isSecret ? '••••••••' : '(encrypted)'}</td>
                   <td className="px-4 py-3">
                     {envVar.isSecret && (
                       <span className="px-2 py-1 text-xs font-medium bg-yellow-500/10 text-yellow-500 rounded">Secret</span>

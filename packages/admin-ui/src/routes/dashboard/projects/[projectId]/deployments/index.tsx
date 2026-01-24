@@ -37,8 +37,8 @@ export function DeploymentsPage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-medium text-neutral9">{deployment.name}</h3>
-                  <p className="text-sm text-neutral6 mt-1">{deployment.slug}</p>
+                  <h3 className="text-lg font-medium text-neutral9">{deployment.slug}</h3>
+                  <p className="text-sm text-neutral6 mt-1">{deployment.type} - {deployment.branch}</p>
                 </div>
                 <span
                   className={`px-2 py-1 text-xs font-medium rounded ${

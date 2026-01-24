@@ -33,10 +33,10 @@ export function TracesPage() {
           <tbody>
             {traces?.data && traces.data.length > 0 ? (
               traces.data.map(trace => (
-                <tr key={trace.id} className="border-b border-border last:border-0 hover:bg-surface3 cursor-pointer">
-                  <td className="px-4 py-3 text-sm font-mono text-neutral9">{trace.id.slice(0, 8)}...</td>
+                <tr key={trace.traceId} className="border-b border-border last:border-0 hover:bg-surface3 cursor-pointer">
+                  <td className="px-4 py-3 text-sm font-mono text-neutral9">{trace.traceId.slice(0, 8)}...</td>
                   <td className="px-4 py-3 text-sm text-neutral9">{trace.name}</td>
-                  <td className="px-4 py-3 text-sm text-neutral6">{trace.duration}ms</td>
+                  <td className="px-4 py-3 text-sm text-neutral6">{trace.durationMs ?? '-'}ms</td>
                   <td className="px-4 py-3">
                     <span
                       className={`px-2 py-1 text-xs font-medium rounded ${
@@ -46,7 +46,7 @@ export function TracesPage() {
                       {trace.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-neutral6">{new Date(trace.timestamp).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-neutral6">{new Date(trace.startTime).toLocaleString()}</td>
                 </tr>
               ))
             ) : (

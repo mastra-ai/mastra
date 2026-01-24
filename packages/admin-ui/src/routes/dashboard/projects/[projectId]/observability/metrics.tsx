@@ -34,12 +34,12 @@ export function MetricsPage() {
 
         <div className="p-6 bg-surface2 rounded-lg border border-border">
           <h3 className="text-sm font-medium text-neutral6 mb-2">Avg Latency</h3>
-          <p className="text-2xl font-semibold text-neutral9">{metrics?.avgLatency ? `${metrics.avgLatency.toFixed(0)}ms` : '-'}</p>
+          <p className="text-2xl font-semibold text-neutral9">{metrics?.avgLatencyMs ? `${metrics.avgLatencyMs.toFixed(0)}ms` : '-'}</p>
         </div>
 
         <div className="p-6 bg-surface2 rounded-lg border border-border">
           <h3 className="text-sm font-medium text-neutral6 mb-2">P99 Latency</h3>
-          <p className="text-2xl font-semibold text-neutral9">{metrics?.p99Latency ? `${metrics.p99Latency.toFixed(0)}ms` : '-'}</p>
+          <p className="text-2xl font-semibold text-neutral9">{metrics?.p99LatencyMs ? `${metrics.p99LatencyMs.toFixed(0)}ms` : '-'}</p>
         </div>
       </div>
 
