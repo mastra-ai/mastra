@@ -7,6 +7,9 @@
  * @packageDocumentation
  */
 
+// Main class
+export { ObservabilityWriter } from './writer.js';
+
 // Types
 export type {
   // Configuration
@@ -41,3 +44,15 @@ export {
   estimateEventSize,
   parseJsonl,
 } from './serializer.js';
+
+// File naming utilities (for advanced usage and testing)
+export {
+  generateFilePath,
+  generateDirectoryPath,
+  parseFilePath,
+  isPendingFile,
+  getProcessedFilePath,
+} from './file-naming.js';
+
+// Batcher (for advanced usage)
+export { EventBatcher, type EventBatcherConfig } from './batcher.js';
