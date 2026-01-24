@@ -76,5 +76,9 @@ export {
 
 export type { TableName } from './schema/index.js';
 
+// Ingestion worker
+export { IngestionWorker, processFile, listPendingFiles, bulkInsert } from './ingestion/index.js';
+export type { FileProcessingResult, ParsedEvent } from './ingestion/index.js';
+
 // Version
 export const VERSION = '0.0.1';
