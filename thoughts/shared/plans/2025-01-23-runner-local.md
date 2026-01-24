@@ -1831,12 +1831,63 @@ runner.setSource(this.source);
 runner.setRouter(this.router);
 ```
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. **Build Caching**: Should we implement build caching to skip unchanged dependencies? (Future enhancement)
+### 1. Build Caching
 
-2. **Concurrent Builds**: Current implementation uses semaphore for `maxConcurrentBuilds` - should this be configurable per project?
+**Question**: Should we implement build caching to skip unchanged dependencies?
 
-3. **Graceful Shutdown**: On runner shutdown, should we wait for builds to complete or cancel them?
+**Decision**: **Deferred to future enhancement**. For MVP, every build runs a fresh install and build. This keeps the implementation simple and predictable. Build caching can be added later using:
 
-4. **Log Persistence**: Should logs be persisted to disk, or is memory-only sufficient? (Memory for MVP, disk for future)
+- Hash-based dependency tracking (package-lock.json hash)
+- Cached node_modules directories
+- Build output caching based on source file hashes
+
+**Rationale**: Build caching adds complexity around cache invalidation and storage management. For local development, build times are acceptable without caching. This can be revisited when performance becomes a bottleneck.
+
+### 2. Concurrent Builds
+
+**Question**: Should `maxConcurrentBuilds` be configurable per project?
+
+**Decision**: **Global configuration only for MVP**. The `maxConcurrentBuilds` setting (default: 3) applies to the entire runner instance.
+
+**Rationale**: Per-project configuration adds complexity without significant benefit for the MVP use case. The runner is typically used for a single team's projects on a single machine. Global limits prevent resource exhaustion regardless of which projects are building. Per-project limits could be added later via `BuildOptions` if needed.
+
+### 3. Graceful Shutdown
+
+**Question**: On runner shutdown, should we wait for builds to complete or cancel them?
+
+**Decision**: **Immediate termination**. The `shutdown()` method kills all running processes immediately using `SIGTERM` (with `SIGKILL` fallback).
+
+**Rationale**:
+
+- Builds in progress can be re-triggered after restart
+- Long-running builds shouldn't block shutdown
+- Orphaned processes are worse than interrupted builds
+- The `tree-kill` package ensures all child processes are terminated
+
+**Future consideration**: Could add a `gracefulShutdown(timeoutMs)` method that:
+
+1. Stops accepting new builds
+2. Waits for in-progress builds to complete (up to timeout)
+3. Forcefully terminates remaining processes
+
+### 4. Log Persistence
+
+**Question**: Should logs be persisted to disk, or is memory-only sufficient?
+
+**Decision**: **Memory-only for MVP**. Logs are stored in a ring buffer with configurable capacity (`logRetentionLines`, default: 10,000 lines per server).
+
+**Rationale**:
+
+- Memory storage is fast and simple
+- Ring buffer prevents unbounded memory growth
+- 10,000 lines is sufficient for debugging most issues
+- Log queries (tail, since) are efficient with in-memory storage
+- Real-time streaming works naturally with callback-based architecture
+
+**Future consideration**: Disk persistence could be added via a `LogPersister` component that:
+
+- Writes logs to rolling files (e.g., `/logs/{deploymentId}/server.log`)
+- Integrates with observability providers (file-local for LANE 6)
+- Maintains memory buffer for real-time streaming, persists to disk async
