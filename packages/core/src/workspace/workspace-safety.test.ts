@@ -6,7 +6,8 @@ import { FileReadRequiredError } from './filesystem';
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
 import { createWorkspaceTools } from './tools';
-import { Workspace, WorkspaceReadOnlyError } from './workspace';
+import { Workspace } from './workspace';
+import { WorkspaceReadOnlyError } from './errors';
 
 describe('Workspace Safety Features', () => {
   let tempDir: string;
