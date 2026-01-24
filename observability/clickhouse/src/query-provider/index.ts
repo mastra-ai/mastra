@@ -4,6 +4,9 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
+
+import { TABLE_NAMES } from '../schema/index.js';
+import { runMigrations, checkSchemaStatus } from '../schema/migrations.js';
 import type {
   QueryProviderConfig,
   TraceQueryOptions,
@@ -20,8 +23,6 @@ import type {
   Metric,
   Score,
 } from '../types.js';
-import { TABLE_NAMES } from '../schema/index.js';
-import { runMigrations, checkSchemaStatus } from '../schema/migrations.js';
 
 /**
  * Default pagination values
