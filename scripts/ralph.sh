@@ -33,9 +33,9 @@ echo "$PHASES"
 echo "================================"
 echo ""
 
-# Process each phase
+# Process each phase using a different file descriptor to avoid stdin conflicts
 PHASE_NUM=0
-while IFS= read -r PHASE; do
+while IFS= read -r PHASE <&3; do
   PHASE_NUM=$((PHASE_NUM + 1))
   echo ""
   echo "========================================"
@@ -59,7 +59,7 @@ Instructions:
 6. If you encounter blockers that prevent completion, describe them clearly.
 
 IMPORTANT: Only work on the current phase. Do not skip ahead.
-")
+" < /dev/null)
 
     echo "$result"
 
@@ -75,7 +75,7 @@ IMPORTANT: Only work on the current phase. Do not skip ahead.
       echo "Continuing to next phase..."
     fi
   done
-done <<< "$PHASES"
+done 3<<< "$PHASES"
 
 echo ""
 echo "========================================"
