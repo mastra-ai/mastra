@@ -10,6 +10,58 @@ pnpm add @mastra/runner-local
 
 ## Usage
 
+### With MastraAdmin (Recommended)
+
+The recommended way to use LocalProcessRunner is with MastraAdmin, which handles orchestration, storage, and lifecycle management:
+
+```typescript
+import { MastraAdmin } from '@mastra/admin';
+import { PostgresAdminStorage } from '@mastra/storage-pg';
+import { LocalProcessRunner } from '@mastra/runner-local';
+import { LocalProjectSource } from '@mastra/source-local';
+import { LocalEdgeRouter } from '@mastra/router-local';
+
+// Create the runner
+const runner = new LocalProcessRunner({
+  portRange: { start: 4111, end: 4200 },
+});
+
+// Create MastraAdmin with all providers
+const admin = new MastraAdmin({
+  licenseKey: 'dev',
+  storage: new PostgresAdminStorage({ connectionString: '...' }),
+  runner,
+  source: new LocalProjectSource({ basePaths: ['/projects'] }),
+  router: new LocalEdgeRouter({ baseDomain: 'localhost' }),
+});
+
+// Initialize
+await admin.init();
+
+// Use admin methods - runner is used internally
+const team = await admin.createTeam('user-123', { name: 'My Team', slug: 'my-team' });
+const project = await admin.createProject('user-123', team.id, {
+  name: 'My Project',
+  slug: 'my-project',
+  sourceType: 'local',
+  sourceConfig: { path: '/projects/my-project' },
+});
+const deployment = await admin.createDeployment('user-123', project.id, {
+  type: 'production',
+  branch: 'main',
+});
+
+// Deploy - triggers build and starts server
+const build = await admin.deploy('user-123', deployment.id);
+
+// Stop deployment
+await admin.stop('user-123', deployment.id);
+```
+
+### Standalone Usage
+
+For advanced use cases, you can use LocalProcessRunner directly:
+
 ```typescript
 import { LocalProcessRunner } from '@mastra/runner-local';
 import { LocalProjectSource } from '@mastra/source-local';
