@@ -79,11 +79,7 @@ export function assertValidBuild(build: Build): void {
 /**
  * Assert that an error matches expected properties.
  */
-export function assertErrorMatches(
-  error: unknown,
-  expectedMessage: string | RegExp,
-  expectedCode?: string,
-): void {
+export function assertErrorMatches(error: unknown, expectedMessage: string | RegExp, expectedCode?: string): void {
   expect(error).toBeDefined();
   expect(error).toBeInstanceOf(Error);
 
@@ -124,10 +120,7 @@ export async function waitFor(
 /**
  * Assert that an operation completes within a time limit.
  */
-export async function assertOperationTime<T>(
-  operation: () => Promise<T>,
-  maxDurationMs: number,
-): Promise<T> {
+export async function assertOperationTime<T>(operation: () => Promise<T>, maxDurationMs: number): Promise<T> {
   const startTime = Date.now();
   const result = await operation();
   const duration = Date.now() - startTime;

@@ -339,10 +339,7 @@ describe('Observability Data Flow Integration Tests', () => {
       const files = await fileStorage.list(`span/${testProjectId}`);
       if (files.length > 0) {
         const file = files[0];
-        const processedPath = file.path.replace(
-          `span/${testProjectId}`,
-          `span/${testProjectId}/processed`,
-        );
+        const processedPath = file.path.replace(`span/${testProjectId}`, `span/${testProjectId}/processed`);
 
         await fileStorage.move(file.path, processedPath);
 
@@ -413,10 +410,7 @@ describe('Observability Data Flow Integration Tests', () => {
         }
 
         // Move to processed
-        const processedPath = file.path.replace(
-          `span/${testProjectId}/`,
-          `span/${testProjectId}/processed/`,
-        );
+        const processedPath = file.path.replace(`span/${testProjectId}/`, `span/${testProjectId}/processed/`);
         await fileStorage.move(file.path, processedPath);
       }
 
@@ -549,7 +543,9 @@ describe('Observability Data Flow Integration Tests', () => {
       });
 
       testWriter.recordTrace(createTraceData({ projectId: 'shutdown-test', deploymentId: testDeploymentId }));
-      testWriter.recordSpan(createSpanData({ traceId: 'test', projectId: 'shutdown-test', deploymentId: testDeploymentId }));
+      testWriter.recordSpan(
+        createSpanData({ traceId: 'test', projectId: 'shutdown-test', deploymentId: testDeploymentId }),
+      );
 
       expect(testWriter.hasPendingEvents()).toBe(true);
 

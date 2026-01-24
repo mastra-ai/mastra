@@ -108,9 +108,7 @@ describe('Local Edge Router Integration Tests', () => {
     });
 
     it('should throw error when updating non-existent route', async () => {
-      await expect(
-        router.updateRoute('non-existent-route', { targetPort: 3000 }),
-      ).rejects.toThrow(/not found/i);
+      await expect(router.updateRoute('non-existent-route', { targetPort: 3000 })).rejects.toThrow(/not found/i);
     });
 
     it('should remove route', async () => {

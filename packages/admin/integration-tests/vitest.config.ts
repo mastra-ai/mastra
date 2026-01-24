@@ -18,13 +18,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
       reportsDirectory: './coverage',
-      exclude: [
-        '**/fixtures/**',
-        '**/setup/**',
-        '**/helpers/**',
-        '**/*.d.ts',
-        '**/node_modules/**',
-      ],
+      exclude: ['**/fixtures/**', '**/setup/**', '**/helpers/**', '**/*.d.ts', '**/node_modules/**'],
       thresholds: {
         // Minimum coverage thresholds aligned with plan success criteria
         statements: 80,

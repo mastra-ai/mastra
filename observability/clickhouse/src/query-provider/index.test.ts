@@ -7,14 +7,16 @@ import { TABLE_NAMES } from '../schema/tables.js';
 import { ClickHouseQueryProvider } from './index.js';
 
 // Mock ClickHouse client that returns configurable results
-function createMockClickHouseClient(mockData: {
-  traces?: Record<string, unknown>[];
-  spans?: Record<string, unknown>[];
-  logs?: Record<string, unknown>[];
-  metrics?: Record<string, unknown>[];
-  scores?: Record<string, unknown>[];
-  tables?: string[];
-} = {}) {
+function createMockClickHouseClient(
+  mockData: {
+    traces?: Record<string, unknown>[];
+    spans?: Record<string, unknown>[];
+    logs?: Record<string, unknown>[];
+    metrics?: Record<string, unknown>[];
+    scores?: Record<string, unknown>[];
+    tables?: string[];
+  } = {},
+) {
   const queries: Array<{ query: string; params: Record<string, unknown> }> = [];
   const commands: string[] = [];
 

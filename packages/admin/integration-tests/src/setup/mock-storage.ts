@@ -204,10 +204,12 @@ export class MockAdminStorage implements AdminStorage {
     pagination?: PaginationParams,
   ): Promise<PaginatedResult<TeamMember & { user: User }>> {
     const members = this.teamMembers.get(teamId) ?? [];
-    const membersWithUsers = members.map(m => ({
-      ...m,
-      user: this.users.get(m.userId)!,
-    })).filter(m => m.user);
+    const membersWithUsers = members
+      .map(m => ({
+        ...m,
+        user: this.users.get(m.userId)!,
+      }))
+      .filter(m => m.user);
 
     return this.paginate(membersWithUsers, pagination);
   }
@@ -330,7 +332,10 @@ export class MockAdminStorage implements AdminStorage {
     return fullProject;
   }
 
-  async updateProject(projectId: string, updates: Partial<Omit<Project, 'id' | 'teamId' | 'createdAt'>>): Promise<Project> {
+  async updateProject(
+    projectId: string,
+    updates: Partial<Omit<Project, 'id' | 'teamId' | 'createdAt'>>,
+  ): Promise<Project> {
     const project = this.projects.get(projectId);
     if (!project) {
       throw new Error(`Project ${projectId} not found`);
@@ -559,7 +564,10 @@ export class MockAdminStorage implements AdminStorage {
     return fullBuild;
   }
 
-  async updateBuild(buildId: string, updates: Partial<Omit<Build, 'id' | 'deploymentId' | 'queuedAt'>>): Promise<Build> {
+  async updateBuild(
+    buildId: string,
+    updates: Partial<Omit<Build, 'id' | 'deploymentId' | 'queuedAt'>>,
+  ): Promise<Build> {
     const build = this.builds.get(buildId);
     if (!build) {
       throw new Error(`Build ${buildId} not found`);
@@ -676,30 +684,41 @@ export class MockAdminStorage implements AdminStorage {
     const rolePermissions: Record<string, string[]> = {
       owner: ['*'],
       admin: [
-        'team:read', 'team:update',
-        'member:read', 'member:create', 'member:delete',
-        'invite:read', 'invite:create', 'invite:delete',
-        'project:read', 'project:create', 'project:update', 'project:delete',
-        'deployment:read', 'deployment:create', 'deployment:update', 'deployment:delete', 'deployment:deploy',
-        'build:read', 'build:delete',
-        'env_var:read', 'env_var:update', 'env_var:delete',
+        'team:read',
+        'team:update',
+        'member:read',
+        'member:create',
+        'member:delete',
+        'invite:read',
+        'invite:create',
+        'invite:delete',
+        'project:read',
+        'project:create',
+        'project:update',
+        'project:delete',
+        'deployment:read',
+        'deployment:create',
+        'deployment:update',
+        'deployment:delete',
+        'deployment:deploy',
+        'build:read',
+        'build:delete',
+        'env_var:read',
+        'env_var:update',
+        'env_var:delete',
       ],
       developer: [
         'team:read',
         'member:read',
         'project:read',
-        'deployment:read', 'deployment:create', 'deployment:deploy',
-        'build:read',
-        'env_var:read', 'env_var:update',
-      ],
-      viewer: [
-        'team:read',
-        'member:read',
-        'project:read',
         'deployment:read',
+        'deployment:create',
+        'deployment:deploy',
         'build:read',
         'env_var:read',
+        'env_var:update',
       ],
+      viewer: ['team:read', 'member:read', 'project:read', 'deployment:read', 'build:read', 'env_var:read'],
     };
 
     return rolePermissions[member.role] ?? [];

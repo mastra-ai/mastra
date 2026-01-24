@@ -74,12 +74,12 @@ pnpm test:ci
 
 The `.env.test` file contains test environment configuration:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://mastra:mastra@localhost:5444/mastra_admin_test` |
-| `CLICKHOUSE_URL` | ClickHouse HTTP endpoint | `http://localhost:8124` |
-| `ADMIN_LICENSE_KEY` | License key for dev mode | `dev` |
-| `ADMIN_ENCRYPTION_SECRET` | 32-byte encryption secret | `test-secret-key-32-bytes-long!!!` |
+| Variable                  | Description                  | Default                                                       |
+| ------------------------- | ---------------------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`            | PostgreSQL connection string | `postgresql://mastra:mastra@localhost:5444/mastra_admin_test` |
+| `CLICKHOUSE_URL`          | ClickHouse HTTP endpoint     | `http://localhost:8124`                                       |
+| `ADMIN_LICENSE_KEY`       | License key for dev mode     | `dev`                                                         |
+| `ADMIN_ENCRYPTION_SECRET` | 32-byte encryption secret    | `test-secret-key-32-bytes-long!!!`                            |
 
 ## Test Structure
 
@@ -109,14 +109,14 @@ src/
 
 ## Coverage Targets
 
-| Category | Target |
-|----------|--------|
-| Auth/User operations | 90%+ |
-| Team management | 90%+ |
-| Project CRUD | 90%+ |
-| Deployment lifecycle | 85%+ |
-| Build workflow | 85%+ |
-| Observability data flow | 80%+ |
-| RBAC permissions | 95%+ |
-| Error handling | 90%+ |
-| Route registration | 85%+ |
+| Category                | Target |
+| ----------------------- | ------ |
+| Auth/User operations    | 90%+   |
+| Team management         | 90%+   |
+| Project CRUD            | 90%+   |
+| Deployment lifecycle    | 85%+   |
+| Build workflow          | 85%+   |
+| Observability data flow | 80%+   |
+| RBAC permissions        | 95%+   |
+| Error handling          | 90%+   |
+| Route registration      | 85%+   |

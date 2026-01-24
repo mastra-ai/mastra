@@ -117,9 +117,7 @@ export async function createTestContext(): Promise<TestContext> {
  * @param connectionString PostgreSQL connection string
  * @returns TestContext with PostgreSQL-backed storage
  */
-export async function createTestContextWithPostgres(
-  _connectionString?: string,
-): Promise<TestContext> {
+export async function createTestContextWithPostgres(_connectionString?: string): Promise<TestContext> {
   // TODO: Implement once @mastra/admin-pg is available
   // For now, fall back to mock storage
   return createTestContext();

@@ -231,9 +231,9 @@ describe('IngestionWorker', () => {
       // Original file should be gone
       expect(await fileStorage.exists(filePath)).toBe(false);
       // Processed file should exist
-      expect(
-        await fileStorage.exists('observability/trace/proj_1/processed/20250123T120000Z_abc123def456.jsonl'),
-      ).toBe(true);
+      expect(await fileStorage.exists('observability/trace/proj_1/processed/20250123T120000Z_abc123def456.jsonl')).toBe(
+        true,
+      );
     });
 
     it('should delete files after processing when deleteAfterProcess is true', async () => {
@@ -265,9 +265,9 @@ describe('IngestionWorker', () => {
       // Original file should be deleted
       expect(await fileStorage.exists(filePath)).toBe(false);
       // Processed file should NOT exist
-      expect(
-        await fileStorage.exists('observability/trace/proj_1/processed/20250123T120000Z_abc123def456.jsonl'),
-      ).toBe(false);
+      expect(await fileStorage.exists('observability/trace/proj_1/processed/20250123T120000Z_abc123def456.jsonl')).toBe(
+        false,
+      );
     });
 
     it('should process multiple event types in a single file', async () => {

@@ -178,9 +178,7 @@ describe('Cross-Team Access Integration Tests', () => {
     });
 
     it('should NOT allow Team B user to deploy Team A deployment', async () => {
-      await expect(ctx.admin.deploy(teamBOwner.id, teamADeployment.id)).rejects.toThrow(
-        /permission|access|not found/i,
-      );
+      await expect(ctx.admin.deploy(teamBOwner.id, teamADeployment.id)).rejects.toThrow(/permission|access|not found/i);
     });
 
     it('should NOT allow outsider to deploy any deployment', async () => {
@@ -204,9 +202,7 @@ describe('Cross-Team Access Integration Tests', () => {
     });
 
     it('should NOT allow Team A owner to list Team B members', async () => {
-      await expect(ctx.admin.getTeamMembers(teamAOwner.id, teamB.id)).rejects.toThrow(
-        /permission|access|not found/i,
-      );
+      await expect(ctx.admin.getTeamMembers(teamAOwner.id, teamB.id)).rejects.toThrow(/permission|access|not found/i);
     });
   });
 

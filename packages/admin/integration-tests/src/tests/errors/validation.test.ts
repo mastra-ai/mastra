@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createUserData, createTeamData, uniqueId, uniqueSlug } from '../../fixtures/factories.js';
-import { createTestContext  } from '../../setup/test-context.js';
-import type {TestContext} from '../../setup/test-context.js';
+import { createTestContext } from '../../setup/test-context.js';
+import type { TestContext } from '../../setup/test-context.js';
 
 describe('Validation Integration Tests', () => {
   let ctx: TestContext;
@@ -26,15 +26,15 @@ describe('Validation Integration Tests', () => {
   describe('Team Validation', () => {
     describe('Name Validation', () => {
       it('should reject empty team name', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: '', slug: uniqueSlug('test') }),
-        ).rejects.toThrow(/name|empty|required/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: '', slug: uniqueSlug('test') })).rejects.toThrow(
+          /name|empty|required/i,
+        );
       });
 
       it('should reject whitespace-only team name', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: '   ', slug: uniqueSlug('test') }),
-        ).rejects.toThrow(/name|empty|required|whitespace/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: '   ', slug: uniqueSlug('test') })).rejects.toThrow(
+          /name|empty|required|whitespace/i,
+        );
       });
 
       it('should accept valid team name', async () => {
@@ -56,27 +56,27 @@ describe('Validation Integration Tests', () => {
 
     describe('Slug Validation', () => {
       it('should reject empty slug', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: '' }),
-        ).rejects.toThrow(/slug|empty|required/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: '' })).rejects.toThrow(
+          /slug|empty|required/i,
+        );
       });
 
       it('should reject slug with spaces', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'invalid slug' }),
-        ).rejects.toThrow(/slug|invalid|space/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'invalid slug' })).rejects.toThrow(
+          /slug|invalid|space/i,
+        );
       });
 
       it('should reject slug with uppercase letters', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'InvalidSlug' }),
-        ).rejects.toThrow(/slug|invalid|uppercase|lowercase/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'InvalidSlug' })).rejects.toThrow(
+          /slug|invalid|uppercase|lowercase/i,
+        );
       });
 
       it('should reject slug with special characters', async () => {
-        await expect(
-          ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'invalid!slug@' }),
-        ).rejects.toThrow(/slug|invalid|character/i);
+        await expect(ctx.admin.createTeam(testUser.id, { name: 'Valid Name', slug: 'invalid!slug@' })).rejects.toThrow(
+          /slug|invalid|character/i,
+        );
       });
 
       it('should accept valid slug with hyphens', async () => {
@@ -251,27 +251,25 @@ describe('Validation Integration Tests', () => {
   describe('User Validation', () => {
     describe('Email Validation', () => {
       it('should reject empty email', async () => {
-        await expect(
-          ctx.storage.createUser({ ...createUserData(), email: '' }),
-        ).rejects.toThrow(/email|empty|required/i);
+        await expect(ctx.storage.createUser({ ...createUserData(), email: '' })).rejects.toThrow(
+          /email|empty|required/i,
+        );
       });
 
       it('should reject invalid email format', async () => {
-        await expect(
-          ctx.storage.createUser({ ...createUserData(), email: 'invalid-email' }),
-        ).rejects.toThrow(/email|invalid|format/i);
+        await expect(ctx.storage.createUser({ ...createUserData(), email: 'invalid-email' })).rejects.toThrow(
+          /email|invalid|format/i,
+        );
       });
 
       it('should reject email without domain', async () => {
-        await expect(
-          ctx.storage.createUser({ ...createUserData(), email: 'user@' }),
-        ).rejects.toThrow(/email|invalid/i);
+        await expect(ctx.storage.createUser({ ...createUserData(), email: 'user@' })).rejects.toThrow(/email|invalid/i);
       });
 
       it('should reject email without local part', async () => {
-        await expect(
-          ctx.storage.createUser({ ...createUserData(), email: '@example.com' }),
-        ).rejects.toThrow(/email|invalid/i);
+        await expect(ctx.storage.createUser({ ...createUserData(), email: '@example.com' })).rejects.toThrow(
+          /email|invalid/i,
+        );
       });
 
       it('should accept valid email', async () => {
@@ -376,9 +374,9 @@ describe('Validation Integration Tests', () => {
 
   describe('Team Invite Validation', () => {
     it('should reject invalid email for invite', async () => {
-      await expect(
-        ctx.admin.inviteMember(testUser.id, testTeam.id, 'invalid-email', 'developer'),
-      ).rejects.toThrow(/email|invalid/i);
+      await expect(ctx.admin.inviteMember(testUser.id, testTeam.id, 'invalid-email', 'developer')).rejects.toThrow(
+        /email|invalid/i,
+      );
     });
 
     it('should reject invalid role for invite', async () => {
@@ -400,21 +398,15 @@ describe('Validation Integration Tests', () => {
 
   describe('Pagination Validation', () => {
     it('should reject negative page number', async () => {
-      await expect(
-        ctx.admin.listTeams(testUser.id, { page: -1 }),
-      ).rejects.toThrow(/page|negative|invalid/i);
+      await expect(ctx.admin.listTeams(testUser.id, { page: -1 })).rejects.toThrow(/page|negative|invalid/i);
     });
 
     it('should reject zero page number', async () => {
-      await expect(
-        ctx.admin.listTeams(testUser.id, { page: 0 }),
-      ).rejects.toThrow(/page|zero|invalid/i);
+      await expect(ctx.admin.listTeams(testUser.id, { page: 0 })).rejects.toThrow(/page|zero|invalid/i);
     });
 
     it('should reject negative perPage', async () => {
-      await expect(
-        ctx.admin.listTeams(testUser.id, { perPage: -10 }),
-      ).rejects.toThrow(/perPage|negative|invalid/i);
+      await expect(ctx.admin.listTeams(testUser.id, { perPage: -10 })).rejects.toThrow(/perPage|negative|invalid/i);
     });
 
     it('should accept valid pagination', async () => {

@@ -1,9 +1,4 @@
-import type {
-  EdgeRouterProvider,
-  RouteConfig,
-  RouteInfo,
-  RouteHealthStatus,
-} from '@mastra/admin';
+import type { EdgeRouterProvider, RouteConfig, RouteInfo, RouteHealthStatus } from '@mastra/admin';
 
 /**
  * In-memory router implementation for integration testing.
@@ -21,10 +16,12 @@ export class MockEdgeRouter implements EdgeRouterProvider {
   private portRange: { start: number; end: number };
   private nextPort: number;
 
-  constructor(config: {
-    baseDomain?: string;
-    portRange?: { start: number; end: number };
-  } = {}) {
+  constructor(
+    config: {
+      baseDomain?: string;
+      portRange?: { start: number; end: number };
+    } = {},
+  ) {
     this.baseDomain = config.baseDomain ?? 'localhost';
     this.portRange = config.portRange ?? { start: 4200, end: 4299 };
     this.nextPort = this.portRange.start;
@@ -139,9 +136,7 @@ export class MockEdgeRouter implements EdgeRouterProvider {
    */
   private allocatePort(): number {
     const port = this.nextPort;
-    this.nextPort = this.nextPort >= this.portRange.end
-      ? this.portRange.start
-      : this.nextPort + 1;
+    this.nextPort = this.nextPort >= this.portRange.end ? this.portRange.start : this.nextPort + 1;
     return port;
   }
 

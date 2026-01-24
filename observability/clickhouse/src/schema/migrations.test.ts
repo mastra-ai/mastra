@@ -95,8 +95,12 @@ describe('runMigrations', () => {
     await runMigrations(client as unknown as ClickHouseClient);
 
     // Find indices of table and view creation commands
-    const tracesTableIdx = client.commands.findIndex(c => c.includes('CREATE TABLE') && c.includes('mastra_admin_traces'));
-    const tracesViewIdx = client.commands.findIndex(c => c.includes('CREATE MATERIALIZED VIEW') && c.includes('mastra_admin_traces_hourly_stats'));
+    const tracesTableIdx = client.commands.findIndex(
+      c => c.includes('CREATE TABLE') && c.includes('mastra_admin_traces'),
+    );
+    const tracesViewIdx = client.commands.findIndex(
+      c => c.includes('CREATE MATERIALIZED VIEW') && c.includes('mastra_admin_traces_hourly_stats'),
+    );
 
     // Tables should be created before views
     expect(tracesTableIdx).toBeLessThan(tracesViewIdx);
@@ -197,16 +201,15 @@ describe('dropAllTables', () => {
   });
 
   it('should drop views before tables', async () => {
-    const client = createMockClickHouseClient([
-      'mastra_admin_traces',
-      'mastra_admin_traces_hourly_stats',
-    ]);
+    const client = createMockClickHouseClient(['mastra_admin_traces', 'mastra_admin_traces_hourly_stats']);
 
     await dropAllTables(client as unknown as ClickHouseClient);
 
     // Find indices of drop commands
     const dropViewIdx = client.commands.findIndex(c => c.includes('mastra_admin_traces_hourly_stats'));
-    const dropTableIdx = client.commands.findIndex(c => c.includes('DROP TABLE') && c.includes('mastra_admin_traces') && !c.includes('hourly'));
+    const dropTableIdx = client.commands.findIndex(
+      c => c.includes('DROP TABLE') && c.includes('mastra_admin_traces') && !c.includes('hourly'),
+    );
 
     // Views should be dropped before tables
     expect(dropViewIdx).toBeLessThan(dropTableIdx);

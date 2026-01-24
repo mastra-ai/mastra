@@ -1,12 +1,4 @@
-import type {
-  ObservabilityWriterInterface,
-  Trace,
-  Span,
-  Log,
-  Metric,
-  Score,
-  ObservabilityEvent,
-} from '@mastra/admin';
+import type { ObservabilityWriterInterface, Trace, Span, Log, Metric, Score, ObservabilityEvent } from '@mastra/admin';
 import type { LocalFileStorage } from './mock-file-storage.js';
 
 /**

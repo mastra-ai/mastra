@@ -13,8 +13,7 @@ export const uniqueId = (): string => randomUUID();
 /**
  * Generate a unique email address for testing.
  */
-export const uniqueEmail = (): string =>
-  `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+export const uniqueEmail = (): string => `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
 /**
  * Generate a unique slug for testing.
@@ -130,9 +129,7 @@ export interface CreateProjectOptions {
  * @param options Project options (teamId is required)
  * @returns Project data without timestamp and envVars fields
  */
-export function createProjectData(
-  options: CreateProjectOptions,
-): Omit<Project, 'createdAt' | 'updatedAt' | 'envVars'> {
+export function createProjectData(options: CreateProjectOptions): Omit<Project, 'createdAt' | 'updatedAt' | 'envVars'> {
   return {
     id: options.id ?? uniqueId(),
     teamId: options.teamId,
@@ -177,8 +174,7 @@ export function createDeploymentData(
   | 'expiresAt'
 > {
   const type = options.type ?? 'production';
-  const branch =
-    options.branch ?? (type === 'production' ? 'main' : type === 'staging' ? 'staging' : 'feature-branch');
+  const branch = options.branch ?? (type === 'production' ? 'main' : type === 'staging' ? 'staging' : 'feature-branch');
 
   return {
     id: options.id ?? uniqueId(),
