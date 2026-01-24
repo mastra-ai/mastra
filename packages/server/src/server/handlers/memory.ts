@@ -13,6 +13,8 @@ import {
   getThreadByIdQuerySchema,
   listMessagesQuerySchema,
   getWorkingMemoryQuerySchema,
+  deleteThreadQuerySchema,
+  deleteMessagesQuerySchema,
   getMemoryStatusNetworkQuerySchema,
   listThreadsNetworkQuerySchema,
   getThreadByIdNetworkQuerySchema,
@@ -271,10 +273,10 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, threadId, requestContext }) => {
+  handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -605,16 +607,16 @@ export const DELETE_THREAD_ROUTE = createRoute({
   path: '/memory/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
-  queryParamSchema: agentIdQuerySchema,
+  queryParamSchema: deleteThreadQuerySchema,
   responseSchema: deleteThreadResponseSchema,
   summary: 'Delete thread',
   description: 'Deletes a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, threadId, requestContext }) => {
+  handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -727,16 +729,16 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
   path: '/memory/messages/delete',
   responseType: 'json',
-  queryParamSchema: agentIdQuerySchema,
+  queryParamSchema: deleteMessagesQuerySchema,
   bodySchema: deleteMessagesBodySchema,
   responseSchema: deleteMessagesResponseSchema,
   summary: 'Delete messages',
   description: 'Deletes specific messages from memory',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, messageIds, requestContext }) => {
+  handler: async ({ mastra, agentId, resourceId, messageIds, requestContext }) => {
     try {
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (messageIds === undefined || messageIds === null) {
         throw new HTTPException(400, { message: 'messageIds is required' });
