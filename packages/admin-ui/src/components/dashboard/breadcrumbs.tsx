@@ -13,7 +13,7 @@ export function Breadcrumbs() {
   const location = useLocation();
   const params = useParams<{ teamId?: string; projectId?: string; deploymentId?: string; buildId?: string }>();
   const { currentTeam } = useCurrentTeam();
-  const { data: project } = useProject(params.projectId);
+  const { data: project } = useProject(params.projectId ?? '');
 
   const breadcrumbs = getBreadcrumbs(location.pathname, {
     teamId: params.teamId,

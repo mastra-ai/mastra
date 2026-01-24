@@ -53,7 +53,6 @@ export function DeploymentForm({
 
   const selectedType = watch('type');
   const autoShutdown = watch('autoShutdown');
-  const branch = watch('branch');
 
   // Auto-generate slug from branch
   const handleBranchChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { MoreHorizontal, FileText, GitCommit, XCircle, User } from 'lucide-react';
+import { MoreHorizontal, FileText, GitCommit, XCircle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { BuildStatusBadge } from './build-status-badge';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { BuildStatus, BuildTrigger, type Build } from '@/types/api';
 
 const triggerConfig: Record<BuildTrigger, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {

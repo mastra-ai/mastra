@@ -1,7 +1,6 @@
 import { Link } from 'react-router';
 import { ChevronRight, CheckCircle2, XCircle, Circle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import type { Trace } from '@/types/api';
 import { cn } from '@/lib/utils';

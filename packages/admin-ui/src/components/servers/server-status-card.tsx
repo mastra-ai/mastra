@@ -5,7 +5,6 @@ import { ServerHealthBadge } from './server-health-badge';
 import { ResourceUsageCompact } from './resource-usage';
 import type { RunningServer } from '@/types/api';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils';
 
 interface ServerStatusCardProps {
   server: RunningServer;

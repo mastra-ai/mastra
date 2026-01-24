@@ -29,7 +29,6 @@ export function TeamForm({ defaultValues, onSubmit, loading = false, submitText 
     register,
     handleSubmit,
     formState: { errors },
-    watch,
     setValue,
   } = useForm<TeamFormValues>({
     resolver: zodResolver(teamFormSchema),
@@ -39,8 +38,6 @@ export function TeamForm({ defaultValues, onSubmit, loading = false, submitText 
       ...defaultValues,
     },
   });
-
-  const name = watch('name');
 
   // Auto-generate slug from name
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
