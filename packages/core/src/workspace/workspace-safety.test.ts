@@ -392,29 +392,6 @@ describe('Workspace Safety Features', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools.workspace_execute_code.requireApproval).toBe(true);
-      expect(tools.workspace_execute_command.requireApproval).toBe(true);
-      expect(tools.workspace_install_package.requireApproval).toBe(true);
-
-      await workspace.destroy();
-    });
-
-    it('should set requireApproval on command tools when sandboxApproval is "commands"', async () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({
-          workingDirectory: tempDir,
-          safety: { requireApproval: 'commands' },
-        }),
-      });
-      await workspace.init();
-
-      const tools = createWorkspaceTools(workspace);
-
-      // execute_code should NOT require approval
-      expect(tools.workspace_execute_code.requireApproval).toBe(false);
-
-      // execute_command and install_package should require approval
       expect(tools.workspace_execute_command.requireApproval).toBe(true);
       expect(tools.workspace_install_package.requireApproval).toBe(true);
 
@@ -433,7 +410,6 @@ describe('Workspace Safety Features', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools.workspace_execute_code.requireApproval).toBe(false);
       expect(tools.workspace_execute_command.requireApproval).toBe(false);
       expect(tools.workspace_install_package.requireApproval).toBe(false);
 
@@ -450,7 +426,6 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       // Default is 'all' - all sandbox tools require approval
-      expect(tools.workspace_execute_code.requireApproval).toBe(true);
       expect(tools.workspace_execute_command.requireApproval).toBe(true);
       expect(tools.workspace_install_package.requireApproval).toBe(true);
 

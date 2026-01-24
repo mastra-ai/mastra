@@ -417,99 +417,13 @@ export function createWorkspaceTools(workspace: Workspace) {
       if (pathContext.sandbox?.workingDirectory) {
         pathInfo += ` Working directory (process.cwd()): "${pathContext.sandbox.workingDirectory}".`;
       }
-      if (pathContext.sandbox?.scriptDirectory) {
-        pathInfo += ` Script directory (__dirname): "${pathContext.sandbox.scriptDirectory}".`;
-      }
     } else if (pathContext.type === 'cross-context') {
       pathInfo =
-        ' Filesystem and sandbox are in different environments. Read file contents using workspace_read_file and pass them as variables to your code.';
+        ' Filesystem and sandbox are in different environments. Read file contents using workspace_read_file and pass them as variables to your commands.';
     } else if (pathContext.type === 'sandbox-only') {
       if (pathContext.sandbox?.workingDirectory) {
         pathInfo = ` Working directory: "${pathContext.sandbox.workingDirectory}".`;
       }
-    }
-
-    // Only add execute_code tool if sandbox implements it
-    if (workspace.sandbox.executeCode) {
-      tools.workspace_execute_code = createTool({
-        id: 'workspace_execute_code',
-        description: `Execute code in the workspace sandbox. Supports Node.js, Python, shell, and other runtimes. The output (stdout/stderr) is displayed to the user automatically in the tool result. ${pathInfo}`,
-        // Require approval when sandboxApproval is 'all'
-        requireApproval: sandboxApproval === 'all',
-        inputSchema: z.object({
-          code: z.string().describe('The code to execute'),
-          runtime: z
-            .enum(['node', 'python', 'bash', 'shell', 'ruby'])
-            .nullish()
-            .default('node')
-            .describe('The runtime to use for execution'),
-          timeout: z
-            .number()
-            .nullish()
-            .default(30000)
-            .describe(
-              'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
-            ),
-        }),
-        outputSchema: z.object({
-          success: z.boolean().describe('Whether the code executed successfully (exit code 0)'),
-          stdout: z.string().describe('Standard output from the execution'),
-          stderr: z.string().describe('Standard error output'),
-          exitCode: z.number().describe('Exit code (0 = success)'),
-          executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
-        }),
-        execute: async ({ code, runtime, timeout }, context) => {
-          const getExecutionMetadata = () => ({
-            workspace: {
-              id: workspace.id,
-              name: workspace.name,
-            },
-            sandbox: {
-              id: workspace.sandbox?.id,
-              name: workspace.sandbox?.name,
-              provider: workspace.sandbox?.provider,
-              status: workspace.sandbox?.status,
-            },
-          });
-
-          const result = await workspace.executeCode(code, {
-            runtime: runtime ?? undefined,
-            timeout: timeout ?? 30000,
-            // Stream stdout/stderr as tool-output chunks for proper UI integration
-            onStdout: async (data: string) => {
-              await context?.writer?.write({
-                type: 'sandbox-stdout',
-                data,
-                timestamp: Date.now(),
-                metadata: getExecutionMetadata(),
-              });
-            },
-            onStderr: async (data: string) => {
-              await context?.writer?.write({
-                type: 'sandbox-stderr',
-                data,
-                timestamp: Date.now(),
-                metadata: getExecutionMetadata(),
-              });
-            },
-          });
-          // Emit exit chunk so UI knows streaming is complete
-          await context?.writer?.write({
-            type: 'sandbox-exit',
-            exitCode: result.exitCode,
-            success: result.success,
-            executionTimeMs: result.executionTimeMs,
-            metadata: getExecutionMetadata(),
-          });
-          return {
-            success: result.success,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-            executionTimeMs: result.executionTimeMs,
-          };
-        },
-      });
     }
 
     // Only add execute_command tool if sandbox implements it
@@ -648,7 +562,6 @@ export const WORKSPACE_TOOL_NAMES = {
   SEARCH: 'workspace_search',
   INDEX: 'workspace_index',
   // Sandbox tools
-  EXECUTE_CODE: 'workspace_execute_code',
   EXECUTE_COMMAND: 'workspace_execute_command',
   INSTALL_PACKAGE: 'workspace_install_package',
 } as const;

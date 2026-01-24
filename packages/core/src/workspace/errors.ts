@@ -40,7 +40,7 @@ export class SandboxNotAvailableError extends WorkspaceError {
 }
 
 export class SandboxFeatureNotSupportedError extends WorkspaceError {
-  constructor(feature: 'executeCode' | 'executeCommand' | 'installPackage') {
+  constructor(feature: 'executeCommand' | 'installPackage') {
     super(`Sandbox does not support ${feature}`, 'FEATURE_NOT_SUPPORTED');
     this.name = 'SandboxFeatureNotSupportedError';
   }

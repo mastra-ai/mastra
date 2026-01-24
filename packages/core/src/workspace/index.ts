@@ -101,11 +101,8 @@ export { InMemoryFileReadTracker } from './file-read-tracker';
 
 export type {
   WorkspaceSandbox,
-  SandboxRuntime,
   ExecutionResult,
   CommandResult,
-  CodeResult,
-  ExecuteCodeOptions,
   ExecuteCommandOptions,
   InstallPackageOptions,
   SandboxStatus,
@@ -113,13 +110,7 @@ export type {
   SandboxSyncResult,
 } from './sandbox';
 
-export {
-  SandboxError,
-  SandboxExecutionError,
-  SandboxTimeoutError,
-  SandboxNotReadyError,
-  UnsupportedRuntimeError,
-} from './sandbox';
+export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
 
 export type { InstallPackageResult } from './sandbox';
 

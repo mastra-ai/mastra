@@ -26,7 +26,7 @@
  *
  * await fullWorkspace.init();
  * await fullWorkspace.writeFile('/code/app.py', 'print("Hello!")');
- * const result = await fullWorkspace.executeCode('print("Hello!")', { runtime: 'python' });
+ * const result = await fullWorkspace.executeCommand('python3', ['app.py'], { cwd: '/code' });
  * ```
  */
 
@@ -53,14 +53,7 @@ import type {
   WriteOptions,
   ListOptions,
 } from './filesystem';
-import type {
-  WorkspaceSandbox,
-  SandboxRuntime,
-  CodeResult,
-  CommandResult,
-  ExecuteCodeOptions,
-  ExecuteCommandOptions,
-} from './sandbox';
+import type { WorkspaceSandbox, CommandResult, ExecuteCommandOptions } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
@@ -257,7 +250,6 @@ export interface WorkspaceInfo {
   sandbox?: {
     provider: string;
     status: string;
-    supportedRuntimes: readonly SandboxRuntime[];
     resources?: {
       memoryMB?: number;
       memoryUsedMB?: number;
@@ -644,25 +636,6 @@ export class Workspace {
 
   /**
    * Execute code in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
-   * @throws {SandboxFeatureNotSupportedError} if sandbox doesn't support code execution
-   */
-  async executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult> {
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.executeCode) {
-      throw new SandboxFeatureNotSupportedError('executeCode');
-    }
-    this.lastAccessedAt = new Date();
-    return this._sandbox.executeCode(code, options);
-  }
-
-  /**
-   * Execute a command in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
-   /**
-   * Execute a shell command in the sandbox.
    * @throws {SandboxNotAvailableError} if no sandbox is configured
    * @throws {SandboxFeatureNotSupportedError} if sandbox doesn't support command execution
    */
@@ -1078,7 +1051,6 @@ export class Workspace {
       info.sandbox = {
         provider: this._sandbox.provider,
         status: sandboxInfo.status,
-        supportedRuntimes: this._sandbox.supportedRuntimes,
         resources: sandboxInfo.resources,
       };
     }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { WorkspaceFilesystem, FileEntry } from './filesystem';
-import type { WorkspaceSandbox, CodeResult, CommandResult } from './sandbox';
+import type { WorkspaceSandbox, CommandResult } from './sandbox';
 import { Workspace } from './workspace';
 
 import {
@@ -163,23 +163,11 @@ function createMockSandbox(): WorkspaceSandbox {
     name: 'Mock Sandbox',
     provider: 'mock-sandbox',
     status: 'running',
-    supportedRuntimes: ['node', 'python', 'bash'] as const,
-    defaultRuntime: 'node',
 
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn().mockResolvedValue(undefined),
     isReady: vi.fn().mockResolvedValue(true),
-
-    executeCode: vi.fn().mockImplementation(async (code: string): Promise<CodeResult> => {
-      return {
-        success: true,
-        stdout: `Executed: ${code.slice(0, 20)}...`,
-        stderr: '',
-        exitCode: 0,
-        executionTimeMs: 10,
-      };
-    }),
 
     executeCommand: vi.fn().mockImplementation(async (command: string): Promise<CommandResult> => {
       return {
@@ -441,13 +429,6 @@ describe('Workspace', () => {
       workspace = new Workspace({ sandbox: mockSandbox });
     });
 
-    it('should execute code in sandbox', async () => {
-      const result = await workspace.executeCode('console.log("hello")', { runtime: 'node' });
-
-      expect(result.success).toBe(true);
-      expect(mockSandbox.executeCode).toHaveBeenCalledWith('console.log("hello")', { runtime: 'node' });
-    });
-
     it('should execute command in sandbox', async () => {
       const result = await workspace.executeCommand('ls', ['-la']);
 
@@ -458,7 +439,6 @@ describe('Workspace', () => {
     it('should throw SandboxNotAvailableError when no sandbox', async () => {
       const fsOnly = new Workspace({ filesystem: mockFs });
 
-      await expect(fsOnly.executeCode('code')).rejects.toThrow(SandboxNotAvailableError);
       await expect(fsOnly.executeCommand('cmd')).rejects.toThrow(SandboxNotAvailableError);
     });
   });

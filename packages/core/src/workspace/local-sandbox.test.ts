@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
-import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
+import { SandboxNotReadyError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -54,11 +54,6 @@ describe('LocalSandbox', () => {
       // We can't directly check the working directory, but we can verify it's set by running a command
       expect(customSandbox).toBeDefined();
     });
-
-    it('should accept custom runtimes', () => {
-      const customSandbox = new LocalSandbox({ runtimes: ['node', 'python'] });
-      expect(customSandbox.supportedRuntimes).toEqual(['node', 'python']);
-    });
   });
 
   // ===========================================================================
@@ -87,13 +82,6 @@ describe('LocalSandbox', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
-    it('should detect runtimes on start', async () => {
-      await sandbox.start();
-
-      // Node should always be available since we're running in Node
-      expect(sandbox.supportedRuntimes).toContain('node');
-    });
-
     it('should report ready status', async () => {
       expect(await sandbox.isReady()).toBe(false);
 
@@ -120,77 +108,6 @@ describe('LocalSandbox', () => {
       expect(info.resources?.cpuCores).toBeGreaterThan(0);
       expect(info.metadata?.platform).toBe(os.platform());
       expect(info.metadata?.nodeVersion).toBe(process.version);
-    });
-  });
-
-  // ===========================================================================
-  // executeCode
-  // ===========================================================================
-  describe('executeCode', () => {
-    beforeEach(async () => {
-      await sandbox.start();
-    });
-
-    it('should execute Node.js code', async () => {
-      const result = await sandbox.executeCode('console.log("Hello, World!")', {
-        runtime: 'node',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('Hello, World!');
-      expect(result.exitCode).toBe(0);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
-    });
-
-    it('should handle code errors', async () => {
-      const result = await sandbox.executeCode('throw new Error("Test error")', {
-        runtime: 'node',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.stderr).toContain('Test error');
-      expect(result.exitCode).not.toBe(0);
-    });
-
-    it('should handle syntax errors', async () => {
-      const result = await sandbox.executeCode('this is not valid javascript {{{', {
-        runtime: 'node',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.exitCode).not.toBe(0);
-    });
-
-    it('should use default runtime when not specified', async () => {
-      // Default runtime is the first detected, which should be 'node'
-      const result = await sandbox.executeCode('console.log("default")');
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('default');
-    });
-
-    it('should pass environment variables', async () => {
-      const result = await sandbox.executeCode('console.log(process.env.MY_VAR)', {
-        runtime: 'node',
-        env: { MY_VAR: 'test-value' },
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('test-value');
-    });
-
-    it('should throw SandboxNotReadyError when not started', async () => {
-      const newSandbox = new LocalSandbox({ workingDirectory: tempDir });
-
-      await expect(newSandbox.executeCode('console.log("test")')).rejects.toThrow(SandboxNotReadyError);
-    });
-
-    it('should throw UnsupportedRuntimeError for unknown runtime', async () => {
-      await expect(
-        sandbox.executeCode('code', {
-          runtime: 'unknown-runtime' as any,
-        }),
-      ).rejects.toThrow(UnsupportedRuntimeError);
     });
   });
 
@@ -257,67 +174,6 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
-  // executeCode - Bash/Shell
-  // ===========================================================================
-  describe('executeCode - bash', () => {
-    beforeEach(async () => {
-      await sandbox.start();
-    });
-
-    it('should execute bash code', async () => {
-      // Skip if bash not available
-      if (!sandbox.supportedRuntimes.includes('bash')) {
-        return;
-      }
-
-      const result = await sandbox.executeCode('echo "Hello from bash"', {
-        runtime: 'bash',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('Hello from bash');
-    });
-
-    it('should handle bash script with variables', async () => {
-      if (!sandbox.supportedRuntimes.includes('bash')) {
-        return;
-      }
-
-      const code = `
-NAME="World"
-echo "Hello, $NAME!"
-`;
-      const result = await sandbox.executeCode(code, { runtime: 'bash' });
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('Hello, World!');
-    });
-  });
-
-  // ===========================================================================
-  // executeCode - Python (if available)
-  // ===========================================================================
-  describe('executeCode - python', () => {
-    beforeEach(async () => {
-      await sandbox.start();
-    });
-
-    it('should execute python code if available', async () => {
-      // Skip if python not available
-      if (!sandbox.supportedRuntimes.includes('python')) {
-        return;
-      }
-
-      const result = await sandbox.executeCode('print("Hello from Python")', {
-        runtime: 'python',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('Hello from Python');
-    });
-  });
-
-  // ===========================================================================
   // installPackage
   // ===========================================================================
   describe('installPackage', () => {
@@ -335,35 +191,6 @@ echo "Hello, $NAME!"
   });
 
   // ===========================================================================
-  // defaultRuntime
-  // ===========================================================================
-  describe('defaultRuntime', () => {
-    it('should return first detected runtime as default', async () => {
-      await sandbox.start();
-
-      // Node should be first since we're running in Node
-      expect(sandbox.defaultRuntime).toBe('node');
-    });
-
-    it('should return node if no runtimes detected', () => {
-      // Before start(), no runtimes are detected
-      const newSandbox = new LocalSandbox({ workingDirectory: tempDir });
-
-      // With no detected runtimes, falls back to 'node'
-      expect(newSandbox.defaultRuntime).toBe('node');
-    });
-
-    it('should use configured runtimes over detected', () => {
-      const configuredSandbox = new LocalSandbox({
-        workingDirectory: tempDir,
-        runtimes: ['python', 'bash'],
-      });
-
-      expect(configuredSandbox.defaultRuntime).toBe('python');
-    });
-  });
-
-  // ===========================================================================
   // Timeout Handling
   // ===========================================================================
   describe('timeout handling', () => {
@@ -371,19 +198,11 @@ echo "Hello, $NAME!"
       await sandbox.start();
     });
 
-    it('should respect custom timeout for code execution', async () => {
+    it('should respect custom timeout for command execution', async () => {
       // This should timeout quickly
-      const result = await sandbox.executeCode(
-        `
-        const start = Date.now();
-        while (Date.now() - start < 5000) { /* busy wait */ }
-        console.log("done");
-      `,
-        {
-          runtime: 'node',
-          timeout: 100, // Very short timeout
-        },
-      );
+      const result = await sandbox.executeCommand('sleep', ['5'], {
+        timeout: 100, // Very short timeout
+      });
 
       expect(result.success).toBe(false);
       // The error might be a timeout or killed signal
@@ -406,24 +225,17 @@ echo "Hello, $NAME!"
       await newSandbox.destroy();
     });
 
-    it('should execute code in working directory', async () => {
+    it('should execute command in working directory', async () => {
       await sandbox.start();
 
       // Create a file in the working directory
-      await fs.writeFile(path.join(tempDir, 'data.json'), '{"key": "value"}');
+      await fs.writeFile(path.join(tempDir, 'data.txt'), 'file-content');
 
-      // Read it from Node code
-      const result = await sandbox.executeCode(
-        `
-        const fs = require('fs');
-        const data = JSON.parse(fs.readFileSync('data.json', 'utf8'));
-        console.log(data.key);
-      `,
-        { runtime: 'node' },
-      );
+      // Read it using cat
+      const result = await sandbox.executeCommand('cat', ['data.txt']);
 
       expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('value');
+      expect(result.stdout.trim()).toBe('file-content');
     });
   });
 
@@ -440,9 +252,7 @@ echo "Hello, $NAME!"
 
       await envSandbox.start();
 
-      const result = await envSandbox.executeCode('console.log(process.env.CONFIGURED_VAR)', {
-        runtime: 'node',
-      });
+      const result = await envSandbox.executeCommand('printenv', ['CONFIGURED_VAR']);
 
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('configured-value');
@@ -459,8 +269,7 @@ echo "Hello, $NAME!"
 
       await envSandbox.start();
 
-      const result = await envSandbox.executeCode('console.log(process.env.OVERRIDE_VAR)', {
-        runtime: 'node',
+      const result = await envSandbox.executeCommand('printenv', ['OVERRIDE_VAR'], {
         env: { OVERRIDE_VAR: 'overridden' },
       });
 
@@ -484,18 +293,17 @@ echo "Hello, $NAME!"
         const isolatedSandbox = new LocalSandbox({
           workingDirectory: tempDir,
           inheritEnv: false,
-          // Provide PATH so node can be found
+          // Provide PATH so commands can be found
           env: { PATH: process.env.PATH! },
         });
 
         await isolatedSandbox.start();
 
-        const result = await isolatedSandbox.executeCode(`console.log(process.env.${testVarName} || 'undefined')`, {
-          runtime: 'node',
-        });
+        // Try to print the env var - should not be found
+        const result = await isolatedSandbox.executeCommand('printenv', [testVarName]);
 
-        expect(result.success).toBe(true);
-        expect(result.stdout.trim()).toBe('undefined');
+        // printenv returns exit code 1 when var is not found
+        expect(result.success).toBe(false);
 
         await isolatedSandbox.destroy();
       } finally {
@@ -516,9 +324,7 @@ echo "Hello, $NAME!"
 
         await inheritingSandbox.start();
 
-        const result = await inheritingSandbox.executeCode(`console.log(process.env.${testVarName} || 'undefined')`, {
-          runtime: 'node',
-        });
+        const result = await inheritingSandbox.executeCommand('printenv', [testVarName]);
 
         expect(result.success).toBe(true);
         expect(result.stdout.trim()).toBe('should-be-inherited');
@@ -540,85 +346,4 @@ echo "Hello, $NAME!"
     });
   });
 
-  // ===========================================================================
-  // scriptDirectory
-  // ===========================================================================
-  describe('scriptDirectory', () => {
-    it('should use os.tmpdir() by default', async () => {
-      await sandbox.start();
-
-      const info = await sandbox.getInfo();
-
-      expect(info.metadata?.scriptDirectory).toBe(os.tmpdir());
-    });
-
-    it('should use configured scriptDirectory', async () => {
-      const scriptDir = path.join(tempDir, '.mastra', 'sandbox');
-      const customSandbox = new LocalSandbox({
-        workingDirectory: tempDir,
-        scriptDirectory: scriptDir,
-        inheritEnv: true,
-      });
-
-      await customSandbox.start();
-
-      const info = await customSandbox.getInfo();
-      expect(info.metadata?.scriptDirectory).toBe(scriptDir);
-
-      await customSandbox.destroy();
-    });
-
-    it('should create scriptDirectory on start', async () => {
-      const scriptDir = path.join(tempDir, '.mastra', 'sandbox', 'scripts');
-      const customSandbox = new LocalSandbox({
-        workingDirectory: tempDir,
-        scriptDirectory: scriptDir,
-        inheritEnv: true,
-      });
-
-      await customSandbox.start();
-
-      // Verify directory was created
-      const stats = await fs.stat(scriptDir);
-      expect(stats.isDirectory()).toBe(true);
-
-      await customSandbox.destroy();
-    });
-
-    it('should resolve __dirname to scriptDirectory when configured', async () => {
-      const scriptDir = path.join(tempDir, '.mastra', 'sandbox');
-      const customSandbox = new LocalSandbox({
-        workingDirectory: tempDir,
-        scriptDirectory: scriptDir,
-        inheritEnv: true,
-      });
-
-      await customSandbox.start();
-
-      // Execute code that prints __dirname
-      const result = await customSandbox.executeCode('console.log(__dirname)', {
-        runtime: 'node',
-      });
-
-      expect(result.success).toBe(true);
-      // Use realpath to handle macOS symlinks (/var -> /private/var)
-      const expectedDir = await fs.realpath(scriptDir);
-      expect(result.stdout.trim()).toBe(expectedDir);
-
-      await customSandbox.destroy();
-    });
-
-    it('should resolve __dirname to os.tmpdir() when scriptDirectory not configured', async () => {
-      await sandbox.start();
-
-      const result = await sandbox.executeCode('console.log(__dirname)', {
-        runtime: 'node',
-      });
-
-      expect(result.success).toBe(true);
-      // Use realpath to handle macOS symlinks (/var -> /private/var)
-      const expectedDir = await fs.realpath(os.tmpdir());
-      expect(result.stdout.trim()).toBe(expectedDir);
-    });
-  });
 });

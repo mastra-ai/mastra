@@ -1,7 +1,7 @@
 /**
  * Local Sandbox Provider
  *
- * A sandbox implementation that executes code on the local machine.
+ * A sandbox implementation that executes commands on the local machine.
  * This is the default sandbox for development and local agents.
  */
 
@@ -14,18 +14,15 @@ import type { WorkspaceFilesystem } from './filesystem';
 import type {
   WorkspaceSandbox,
   SandboxStatus,
-  SandboxRuntime,
   SandboxInfo,
-  ExecuteCodeOptions,
   ExecuteCommandOptions,
-  CodeResult,
   CommandResult,
   InstallPackageOptions,
   InstallPackageResult,
   SandboxSyncResult,
   SandboxSafetyOptions,
 } from './sandbox';
-import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
+import { SandboxNotReadyError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
 
@@ -98,13 +95,6 @@ export interface LocalSandboxOptions {
   id?: string;
   /** Working directory for command execution */
   workingDirectory?: string;
-  /**
-   * Directory for temporary script files.
-   * If provided, scripts are written here instead of os.tmpdir().
-   * This enables __dirname to resolve within the workspace context.
-   * Should be gitignored if within the workspace (e.g., '.mastra/sandbox').
-   */
-  scriptDirectory?: string;
   /** Environment variables to set */
   env?: Record<string, string>;
   /**
@@ -117,11 +107,9 @@ export interface LocalSandboxOptions {
   inheritEnv?: boolean;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
-  /** Supported runtimes (default: auto-detect) */
-  runtimes?: SandboxRuntime[];
   /**
    * Safety options for this sandbox.
-   * Controls approval requirements for code/command execution.
+   * Controls approval requirements for command execution.
    */
   safety?: SandboxSafetyOptions;
 }
@@ -129,7 +117,7 @@ export interface LocalSandboxOptions {
 /**
  * Local sandbox implementation.
  *
- * Executes code directly on the host machine.
+ * Executes commands directly on the host machine.
  * This is the recommended sandbox for development and trusted local execution.
  *
  * @example
@@ -142,7 +130,7 @@ export interface LocalSandboxOptions {
  * });
  *
  * await workspace.init();
- * const result = await workspace.executeCode('console.log("Hello!")', { runtime: 'node' });
+ * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
  */
 export class LocalSandbox implements WorkspaceSandbox {
@@ -153,26 +141,15 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
-  private readonly _scriptDirectory?: string;
   private readonly env: Record<string, string>;
   private readonly _inheritEnv: boolean;
   private readonly timeout: number;
-  private detectedRuntimes: SandboxRuntime[] = [];
-  private configuredRuntimes?: SandboxRuntime[];
 
   /**
    * The working directory where commands are executed.
    */
   get workingDirectory(): string {
     return this._workingDirectory;
-  }
-
-  /**
-   * The directory where temporary script files are written.
-   * Returns os.tmpdir() if not explicitly configured.
-   */
-  get scriptDirectory(): string {
-    return this._scriptDirectory ?? os.tmpdir();
   }
 
   /**
@@ -185,11 +162,9 @@ export class LocalSandbox implements WorkspaceSandbox {
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
     this._workingDirectory = options.workingDirectory ?? process.cwd();
-    this._scriptDirectory = options.scriptDirectory;
     this.env = options.env ?? {};
     this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
-    this.configuredRuntimes = options.runtimes;
     this.safety = options.safety;
   }
 
@@ -212,26 +187,11 @@ export class LocalSandbox implements WorkspaceSandbox {
     return this._status;
   }
 
-  get supportedRuntimes(): readonly SandboxRuntime[] {
-    return this.configuredRuntimes ?? this.detectedRuntimes;
-  }
-
-  get defaultRuntime(): SandboxRuntime {
-    return this.supportedRuntimes[0] ?? 'node';
-  }
-
   async start(): Promise<void> {
     this._status = 'starting';
 
     try {
       await fs.mkdir(this.workingDirectory, { recursive: true });
-
-      // Create script directory if explicitly configured (enables __dirname to work within workspace)
-      if (this._scriptDirectory) {
-        await fs.mkdir(this._scriptDirectory, { recursive: true });
-      }
-
-      await this.detectRuntimes();
       this._status = 'running';
     } catch (error) {
       this._status = 'error';
@@ -264,331 +224,10 @@ export class LocalSandbox implements WorkspaceSandbox {
       },
       metadata: {
         workingDirectory: this.workingDirectory,
-        scriptDirectory: this.scriptDirectory ?? os.tmpdir(),
         platform: os.platform(),
         nodeVersion: process.version,
       },
     };
-  }
-
-  private async detectRuntimes(): Promise<void> {
-    const runtimes: SandboxRuntime[] = [];
-
-    const checks: Array<{ runtime: SandboxRuntime; command: string }> = [
-      { runtime: 'node', command: 'node' },
-      { runtime: 'python', command: 'python3' },
-      { runtime: 'bash', command: 'bash' },
-      { runtime: 'ruby', command: 'ruby' },
-      { runtime: 'go', command: 'go' },
-      { runtime: 'rust', command: 'cargo' },
-    ];
-
-    for (const check of checks) {
-      try {
-        await execFile(check.command, ['--version'], { timeout: 5000 });
-        runtimes.push(check.runtime);
-      } catch {
-        // Runtime not available
-      }
-    }
-
-    // Shell is always available
-    if (!runtimes.includes('bash')) {
-      runtimes.push('shell');
-    }
-
-    this.detectedRuntimes = runtimes;
-  }
-
-  async executeCode(code: string, options: ExecuteCodeOptions = {}): Promise<CodeResult> {
-    if (this._status !== 'running') {
-      throw new SandboxNotReadyError(this.id);
-    }
-
-    const runtime = options.runtime ?? this.defaultRuntime;
-
-    if (!this.supportedRuntimes.includes(runtime)) {
-      throw new UnsupportedRuntimeError(runtime, [...this.supportedRuntimes]);
-    }
-
-    const startTime = Date.now();
-    const timeout = options.timeout ?? this.timeout;
-
-    try {
-      const result = await this.executeCodeForRuntime(code, runtime, options, timeout);
-      return {
-        ...result,
-        executionTimeMs: Date.now() - startTime,
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        stdout: '',
-        stderr: error instanceof Error ? error.message : String(error),
-        exitCode: 1,
-        executionTimeMs: Date.now() - startTime,
-      };
-    }
-  }
-
-  private async executeCodeForRuntime(
-    code: string,
-    runtime: SandboxRuntime,
-    options: ExecuteCodeOptions,
-    timeout: number,
-  ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const scriptDir = this.scriptDirectory;
-    const tempFile = path.join(scriptDir, `mastra-code-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-
-    try {
-      switch (runtime) {
-        case 'node':
-          return await this.executeNodeCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
-        case 'python':
-          return await this.executePythonCode(
-            code,
-            tempFile,
-            timeout,
-            options.env,
-            options.onStdout,
-            options.onStderr,
-          );
-        case 'bash':
-        case 'shell':
-          return await this.executeShellCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
-        case 'ruby':
-          return await this.executeRubyCode(code, tempFile, timeout, options.env, options.onStdout, options.onStderr);
-        default:
-          throw new UnsupportedRuntimeError(runtime, [...this.supportedRuntimes]);
-      }
-    } finally {
-      try {
-        await fs.unlink(tempFile);
-      } catch {
-        // Ignore
-      }
-      try {
-        await fs.unlink(tempFile + '.js');
-      } catch {
-        // Ignore
-      }
-      try {
-        await fs.unlink(tempFile + '.py');
-      } catch {
-        // Ignore
-      }
-      try {
-        await fs.unlink(tempFile + '.sh');
-      } catch {
-        // Ignore
-      }
-      try {
-        await fs.unlink(tempFile + '.rb');
-      } catch {
-        // Ignore
-      }
-    }
-  }
-
-  private async executeNodeCode(
-    code: string,
-    tempFile: string,
-    timeout: number,
-    env?: Record<string, string>,
-    onStdout?: (data: string) => void,
-    onStderr?: (data: string) => void,
-  ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const file = tempFile + '.js';
-    await fs.writeFile(file, code);
-
-    // Use streaming execution when callbacks are provided
-    if (onStdout || onStderr) {
-      try {
-        const result = await execWithStreaming('node', [file], {
-          cwd: this.workingDirectory,
-          timeout,
-          env: this.buildEnv(env),
-          onStdout,
-          onStderr,
-        });
-        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-      } catch (error: unknown) {
-        return {
-          success: false,
-          stdout: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    try {
-      const { stdout, stderr } = await execFile('node', [file], {
-        cwd: this.workingDirectory,
-        timeout,
-        env: this.buildEnv(env),
-      });
-      return { success: true, stdout, stderr, exitCode: 0 };
-    } catch (error: unknown) {
-      const e = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        success: false,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(error),
-        exitCode: e.code ?? 1,
-      };
-    }
-  }
-
-  private async executePythonCode(
-    code: string,
-    tempFile: string,
-    timeout: number,
-    env?: Record<string, string>,
-    onStdout?: (data: string) => void,
-    onStderr?: (data: string) => void,
-  ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const file = tempFile + '.py';
-    await fs.writeFile(file, code);
-
-    // Use streaming execution when callbacks are provided
-    if (onStdout || onStderr) {
-      try {
-        const result = await execWithStreaming('python3', [file], {
-          cwd: this.workingDirectory,
-          timeout,
-          env: this.buildEnv(env),
-          onStdout,
-          onStderr,
-        });
-        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-      } catch (error: unknown) {
-        return {
-          success: false,
-          stdout: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    try {
-      const { stdout, stderr } = await execFile('python3', [file], {
-        cwd: this.workingDirectory,
-        timeout,
-        env: this.buildEnv(env),
-      });
-      return { success: true, stdout, stderr, exitCode: 0 };
-    } catch (error: unknown) {
-      const e = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        success: false,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(error),
-        exitCode: e.code ?? 1,
-      };
-    }
-  }
-
-  private async executeShellCode(
-    code: string,
-    tempFile: string,
-    timeout: number,
-    env?: Record<string, string>,
-    onStdout?: (data: string) => void,
-    onStderr?: (data: string) => void,
-  ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const file = tempFile + '.sh';
-    await fs.writeFile(file, code);
-    await fs.chmod(file, '755');
-
-    // Use streaming execution when callbacks are provided
-    if (onStdout || onStderr) {
-      try {
-        const result = await execWithStreaming('bash', [file], {
-          cwd: this.workingDirectory,
-          timeout,
-          env: this.buildEnv(env),
-          onStdout,
-          onStderr,
-        });
-        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-      } catch (error: unknown) {
-        return {
-          success: false,
-          stdout: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    try {
-      const { stdout, stderr } = await execFile('bash', [file], {
-        cwd: this.workingDirectory,
-        timeout,
-        env: this.buildEnv(env),
-      });
-      return { success: true, stdout, stderr, exitCode: 0 };
-    } catch (error: unknown) {
-      const e = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        success: false,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(error),
-        exitCode: e.code ?? 1,
-      };
-    }
-  }
-
-  private async executeRubyCode(
-    code: string,
-    tempFile: string,
-    timeout: number,
-    env?: Record<string, string>,
-    onStdout?: (data: string) => void,
-    onStderr?: (data: string) => void,
-  ): Promise<Omit<CodeResult, 'executionTimeMs'>> {
-    const file = tempFile + '.rb';
-    await fs.writeFile(file, code);
-
-    // Use streaming execution when callbacks are provided
-    if (onStdout || onStderr) {
-      try {
-        const result = await execWithStreaming('ruby', [file], {
-          cwd: this.workingDirectory,
-          timeout,
-          env: this.buildEnv(env),
-          onStdout,
-          onStderr,
-        });
-        return { success: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-      } catch (error: unknown) {
-        return {
-          success: false,
-          stdout: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    try {
-      const { stdout, stderr } = await execFile('ruby', [file], {
-        cwd: this.workingDirectory,
-        timeout,
-        env: this.buildEnv(env),
-      });
-      return { success: true, stdout, stderr, exitCode: 0 };
-    } catch (error: unknown) {
-      const e = error as { stdout?: string; stderr?: string; code?: number };
-      return {
-        success: false,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(error),
-        exitCode: e.code ?? 1,
-      };
-    }
   }
 
   async executeCommand(

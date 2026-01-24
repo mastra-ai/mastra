@@ -30,8 +30,6 @@ import type { WorkspaceFilesystem } from './filesystem';
 // Core Types
 // =============================================================================
 
-export type SandboxRuntime = 'python' | 'node' | 'bash' | 'shell' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
-
 export interface ExecutionResult {
   /** Whether execution completed successfully (exitCode === 0) */
   success: boolean;
@@ -56,33 +54,9 @@ export interface CommandResult extends ExecutionResult {
   args?: string[];
 }
 
-export interface CodeResult extends ExecutionResult {
-  /** The runtime used */
-  runtime?: SandboxRuntime;
-  /** Return value if the code produced one (runtime-dependent) */
-  returnValue?: unknown;
-}
-
 // =============================================================================
 // Execution Options
 // =============================================================================
-
-export interface ExecuteCodeOptions {
-  /** Runtime to use (default: infer from code or use sandbox default) */
-  runtime?: SandboxRuntime;
-  /** Timeout in milliseconds */
-  timeout?: number;
-  /** Environment variables */
-  env?: Record<string, string>;
-  /** Working directory */
-  cwd?: string;
-  /** Stream output instead of buffering */
-  stream?: boolean;
-  /** Callback for stdout chunks (enables streaming) */
-  onStdout?: (data: string) => void;
-  /** Callback for stderr chunks (enables streaming) */
-  onStderr?: (data: string) => void;
-}
 
 export interface ExecuteCommandOptions {
   /** Timeout in milliseconds */
@@ -137,16 +111,15 @@ export interface InstallPackageResult {
  */
 export interface SandboxSafetyOptions {
   /**
-   * Require approval for sandbox code/command execution.
-   * - 'all': Require approval for all sandbox operations (code, commands, package installs)
-   * - 'commands': Require approval only for executeCommand and installPackage (not executeCode)
+   * Require approval for sandbox command execution.
+   * - 'all': Require approval for all sandbox operations (commands, package installs)
    * - 'none': No approval required
    *
    * This setting is used by workspace tools to set the `requireApproval` flag.
    *
    * @default 'all'
    */
-  requireApproval?: 'all' | 'commands' | 'none';
+  requireApproval?: 'all' | 'none';
 }
 
 export interface SandboxSyncResult {
@@ -186,29 +159,11 @@ export interface WorkspaceSandbox {
   /** Current status */
   readonly status: SandboxStatus;
 
-  /** Supported runtimes */
-  readonly supportedRuntimes: readonly SandboxRuntime[];
-
-  /** Default runtime */
-  readonly defaultRuntime: SandboxRuntime;
-
   /**
    * Safety configuration for this sandbox.
    * Optional - if not provided, defaults apply.
    */
   readonly safety?: SandboxSafetyOptions;
-
-  // ---------------------------------------------------------------------------
-  // Code Execution
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Execute code in the sandbox.
-   * Optional - if not implemented, the workspace_execute_code tool won't be available.
-   * @throws {SandboxExecutionError} if execution fails catastrophically
-   * @throws {SandboxTimeoutError} if execution times out
-   */
-  executeCode?(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
 
   // ---------------------------------------------------------------------------
   // Command Execution
@@ -371,7 +326,7 @@ export class SandboxExecutionError extends SandboxError {
 export class SandboxTimeoutError extends SandboxError {
   constructor(
     public readonly timeoutMs: number,
-    public readonly operation: 'code' | 'command',
+    public readonly operation: 'command',
   ) {
     super(`Execution timed out after ${timeoutMs}ms`, 'TIMEOUT', { timeoutMs, operation });
     this.name = 'SandboxTimeoutError';
@@ -382,15 +337,5 @@ export class SandboxNotReadyError extends SandboxError {
   constructor(idOrStatus: string) {
     super(`Sandbox is not ready: ${idOrStatus}`, 'NOT_READY', { id: idOrStatus });
     this.name = 'SandboxNotReadyError';
-  }
-}
-
-export class UnsupportedRuntimeError extends SandboxError {
-  constructor(runtime: string, supported: readonly SandboxRuntime[]) {
-    super(`Runtime '${runtime}' is not supported. Supported: ${supported.join(', ')}`, 'UNSUPPORTED_RUNTIME', {
-      runtime,
-      supported,
-    });
-    this.name = 'UnsupportedRuntimeError';
   }
 }

@@ -83,7 +83,6 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_CODE);
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE);
     });
@@ -95,7 +94,6 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_CODE);
       expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
     });
 
@@ -119,7 +117,6 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.SEARCH);
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INDEX);
       // Sandbox tools
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_CODE);
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE);
     });
@@ -514,70 +511,6 @@ describe('createWorkspaceTools', () => {
   // ===========================================================================
   // Sandbox Tools
   // ===========================================================================
-  describe('workspace_execute_code', () => {
-    it('should execute code via workspace.executeCode', async () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true }),
-      });
-      await workspace.init();
-
-      // First verify the sandbox works directly
-      const directResult = await workspace.executeCode('console.log("direct")', {
-        runtime: 'node',
-      });
-
-      expect(directResult.success).toBe(true);
-      expect(directResult.stdout).toContain('direct');
-
-      await workspace.destroy();
-    });
-
-    it('should execute code via tool', async () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true }),
-      });
-      await workspace.init();
-      const tools = createWorkspaceTools(workspace);
-
-      // Execute via tool - pass empty context to avoid streaming issues
-      const result = await tools.workspace_execute_code.execute(
-        {
-          code: 'console.log("hello")',
-          runtime: 'node',
-        },
-        {} as any, // Empty context
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.stdout).toContain('hello');
-      expect(result.exitCode).toBe(0);
-      expect(result.executionTimeMs).toBeDefined();
-
-      await workspace.destroy();
-    });
-
-    it('should handle execution errors', async () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true }),
-      });
-      await workspace.init();
-      const tools = createWorkspaceTools(workspace);
-
-      const result = await tools.workspace_execute_code.execute(
-        {
-          code: 'throw new Error("test error")',
-          runtime: 'node',
-        },
-        {} as any,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.exitCode).not.toBe(0);
-
-      await workspace.destroy();
-    });
-  });
-
   describe('workspace_execute_command', () => {
     it('should execute command', async () => {
       const workspace = new Workspace({
@@ -648,7 +581,6 @@ describe('createWorkspaceTools', () => {
       expect(WORKSPACE_TOOL_NAMES.MKDIR).toBe('workspace_mkdir');
       expect(WORKSPACE_TOOL_NAMES.SEARCH).toBe('workspace_search');
       expect(WORKSPACE_TOOL_NAMES.INDEX).toBe('workspace_index');
-      expect(WORKSPACE_TOOL_NAMES.EXECUTE_CODE).toBe('workspace_execute_code');
       expect(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND).toBe('workspace_execute_command');
       expect(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE).toBe('workspace_install_package');
     });
