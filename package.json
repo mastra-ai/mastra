@@ -19,6 +19,7 @@
     "tsc-files": "^1.1.4",
     "turbo": "^2.5.8",
     "typescript": "catalog:",
+    "typescript-eslint": "^8.51.0",
     "vite": "^7.3.0",
     "vitest": "catalog:"
   },

@@ -1,0 +1,74 @@
+{
+  "name": "@mastra/admin-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Admin Dashboard UI for MastraAdmin platform",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/admin-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "scripts": {
+    "dev": "vite --port 3001",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.0.0",
+    "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-checkbox": "^1.1.0",
+    "@radix-ui/react-dialog": "^1.1.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-popover": "^1.1.0",
+    "@radix-ui/react-scroll-area": "^1.2.0",
+    "@radix-ui/react-select": "^2.1.0",
+    "@radix-ui/react-switch": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.0",
+    "@radix-ui/react-tooltip": "^1.1.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-table": "^8.21.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.0",
+    "cmdk": "^1.1.0",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.522.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-hook-form": "^7.59.0",
+    "react-router": "^7.6.0",
+    "sonner": "^2.0.0",
+    "tailwind-merge": "^2.5.0",
+    "zod": "^3.24.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@playwright/test": "^1.48.0",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.22",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.51.0",
+    "vite": "^7.3.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
