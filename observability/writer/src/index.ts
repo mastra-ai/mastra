@@ -32,3 +32,12 @@ export type {
   FlushError,
   WriterStats,
 } from './types.js';
+
+// Serializer utilities (for advanced usage and testing)
+export {
+  serializeEvent,
+  serializeEvents,
+  serializeEventsToBuffer,
+  estimateEventSize,
+  parseJsonl,
+} from './serializer.js';
