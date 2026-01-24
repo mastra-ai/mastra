@@ -47,8 +47,8 @@ importers:
         specifier: ^2.1.7
         version: 2.1.7
       '@google-cloud/monitoring':
-        specifier: 5.3.0
-        version: 5.3.0
+        specifier: 5.3.1
+        version: 5.3.1
       '@google-cloud/opentelemetry-cloud-trace-exporter':
         specifier: 3.0.0
         version: 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))
@@ -552,8 +552,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@google-cloud/monitoring@5.3.0':
-    resolution: {integrity: sha512-jAx0ASRcRqr+TZIgMTS3gFQR/FqkYzd4usCD0Y/QOkWt4vTT0SgYMaXn62gtuuEmY66VNBVROhpzOMeasgHuKw==}
+  '@google-cloud/monitoring@5.3.1':
+    resolution: {integrity: sha512-f88LJn4PrzhiDaK0VH5KPxEXZfzJ7X8AGfYnK3KTfZEfH3cyxlvCnpgQQaScNTPhv+zX2MrdW/lJHDOpLsm71Q==}
     engines: {node: '>=18'}
 
   '@google-cloud/opentelemetry-cloud-trace-exporter@3.0.0':
@@ -1871,7 +1871,7 @@ snapshots:
   '@esbuild/win32-x64@0.27.2':
     optional: true
 
-  '@google-cloud/monitoring@5.3.0':
+  '@google-cloud/monitoring@5.3.1':
     dependencies:
       google-gax: 5.0.6
     transitivePeerDependencies:
