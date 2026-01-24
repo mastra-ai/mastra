@@ -55,9 +55,9 @@ export function MainSidebarNavLink({
           '[&>a]:justify-start': !isCollapsed,
           '[&_svg]:text-neutral3': isCollapsed,
           // Featured variant
-          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1/75 [&>a:hover]:bg-accent1/85 [&>a]:text-black [&>a:hover]:text-black':
+          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-red-500 [&>a:hover]:bg-red-600 [&>a]:text-white [&>a:hover]:text-white':
             isFeatured,
-          '[&_svg]:text-black/75 [&>a:hover_svg]:text-black': isFeatured,
+          '[&_svg]:text-white/75 [&>a:hover_svg]:text-white': isFeatured,
         },
         className,
       )}
