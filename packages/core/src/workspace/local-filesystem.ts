@@ -17,6 +17,7 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  FilesystemSafetyOptions,
 } from './filesystem';
 import {
   FileNotFoundError,
@@ -38,6 +39,11 @@ export interface LocalFilesystemOptions {
   basePath: string;
   /** Restrict operations to basePath (default: true) */
   sandbox?: boolean;
+  /**
+   * Safety options for this filesystem.
+   * These control read-only mode, read-before-write, and approval requirements.
+   */
+  safety?: FilesystemSafetyOptions;
 }
 
 /**
@@ -62,9 +68,10 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
+  readonly safety?: FilesystemSafetyOptions;
 
   private readonly _basePath: string;
-  private readonly sandbox: boolean;
+  private readonly _sandbox: boolean;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -77,7 +84,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   constructor(options: LocalFilesystemOptions) {
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
-    this.sandbox = options.sandbox ?? true;
+    this._sandbox = options.sandbox ?? true;
+    this.safety = options.safety;
   }
 
   private generateId(): string {
@@ -115,7 +123,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     const normalizedInput = nodePath.normalize(cleanedPath);
     const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
 
-    if (this.sandbox) {
+    if (this._sandbox) {
       const relative = nodePath.relative(this._basePath, absolutePath);
       if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
         throw new PermissionError(inputPath, 'access');

@@ -5,7 +5,49 @@
  * @see https://github.com/anthropics/skills
  */
 
+import type { RequestContext } from '../../request-context';
 import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../../artifacts';
+
+// =============================================================================
+// Skills Paths Types
+// =============================================================================
+
+/**
+ * Context passed to skillsPaths resolver function.
+ * Contains request-scoped information for dynamic path resolution.
+ */
+export interface SkillsPathsContext {
+  /** Request context with user/thread information */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Resolver for skillsPaths - can be static array or dynamic function.
+ *
+ * Static: A fixed array of paths to scan for skills.
+ * Dynamic: A function that returns paths based on context (e.g., user tier, tenant).
+ *
+ * @example Static paths
+ * ```typescript
+ * const workspace = new Workspace({
+ *   skillsPaths: ['/skills', '/node_modules/@myorg/skills'],
+ * });
+ * ```
+ *
+ * @example Dynamic paths based on user tier
+ * ```typescript
+ * const workspace = new Workspace({
+ *   skillsPaths: (ctx) => {
+ *     const tier = ctx.requestContext?.get('userTier');
+ *     if (tier === 'premium') {
+ *       return ['/skills/basic', '/skills/premium'];
+ *     }
+ *     return ['/skills/basic'];
+ *   },
+ * });
+ * ```
+ */
+export type SkillsPathsResolver = string[] | ((context: SkillsPathsContext) => string[] | Promise<string[]>);
 
 /**
  * Skill source types indicating where the skill comes from and its access level.
@@ -171,10 +213,15 @@ export interface WorkspaceSkills {
    * Conditionally refresh skills if the skillsPaths have been modified.
    * Uses a staleness check to avoid unnecessary re-discovery on every call.
    *
+   * When skillsPaths is a dynamic function, pass context to resolve paths.
+   * If paths have changed, triggers a full refresh.
+   *
    * Call this in processInput before each agent turn to catch newly
    * added skills without the overhead of a full refresh every time.
+   *
+   * @param context - Optional context for dynamic path resolution
    */
-  maybeRefresh(): Promise<void>;
+  maybeRefresh(context?: SkillsPathsContext): Promise<void>;
 
   // ===========================================================================
   // Search

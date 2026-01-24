@@ -132,6 +132,28 @@ export interface InstallPackageResult {
   executionTimeMs: number;
 }
 
+// =============================================================================
+// Sandbox Safety Options
+// =============================================================================
+
+/**
+ * Safety options that can be configured per-sandbox.
+ * These options control how the sandbox behaves with regard to execution approval.
+ */
+export interface SandboxSafetyOptions {
+  /**
+   * Require approval for sandbox code/command execution.
+   * - 'all': Require approval for all sandbox operations (code, commands, package installs)
+   * - 'commands': Require approval only for executeCommand and installPackage (not executeCode)
+   * - 'none': No approval required
+   *
+   * This setting is used by workspace tools to set the `requireApproval` flag.
+   *
+   * @default 'all'
+   */
+  requireApproval?: 'all' | 'commands' | 'none';
+}
+
 export interface SandboxSyncResult {
   /** Paths that were successfully synced */
   synced: string[];
@@ -175,16 +197,23 @@ export interface WorkspaceSandbox {
   /** Default runtime */
   readonly defaultRuntime: SandboxRuntime;
 
+  /**
+   * Safety configuration for this sandbox.
+   * Optional - if not provided, defaults apply.
+   */
+  readonly safety?: SandboxSafetyOptions;
+
   // ---------------------------------------------------------------------------
   // Code Execution
   // ---------------------------------------------------------------------------
 
   /**
    * Execute code in the sandbox.
+   * Optional - some sandboxes may only support command execution.
    * @throws {SandboxExecutionError} if execution fails catastrophically
    * @throws {SandboxTimeoutError} if execution times out
    */
-  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
+  executeCode?(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
 
   /**
    * Execute code with streaming output.
@@ -197,10 +226,11 @@ export interface WorkspaceSandbox {
 
   /**
    * Execute a shell command.
+   * Optional - some sandboxes may only support code execution.
    * @throws {SandboxExecutionError} if command fails to start
    * @throws {SandboxTimeoutError} if command times out
    */
-  executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
   /**
    * Execute a command with streaming output.

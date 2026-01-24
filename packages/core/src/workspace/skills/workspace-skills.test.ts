@@ -1244,4 +1244,241 @@ Instructions for the new skill.`;
       expect(await skills.has('new-skill')).toBe(false);
     });
   });
+
+  describe('dynamic skillsPaths', () => {
+    const BASIC_SKILL_MD = `---
+name: basic-skill
+description: A basic skill
+---
+
+# Basic Skill
+
+Basic instructions.
+`;
+
+    const PREMIUM_SKILL_MD = `---
+name: premium-skill
+description: A premium skill
+---
+
+# Premium Skill
+
+Premium instructions.
+`;
+
+    it('should accept a function as skillsPaths', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: () => ['/skills/basic'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('basic-skill');
+    });
+
+    it('should accept an async function as skillsPaths', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: async () => {
+          // Simulate async operation (e.g., fetching config)
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return ['/skills/basic'];
+        },
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('basic-skill');
+    });
+
+    it('should pass context to skillsPaths function', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
+        '/skills/premium/premium-skill/SKILL.md': PREMIUM_SKILL_MD,
+      });
+
+      let capturedContext: { requestContext?: unknown } | undefined;
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: ctx => {
+          capturedContext = ctx;
+          return ['/skills/basic'];
+        },
+      });
+
+      // list() calls with empty context (requestContext is undefined)
+      await skills.list();
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.requestContext).toBeUndefined(); // No context provided on initial call
+
+      // maybeRefresh() can be called with explicit context
+      const mockRequestContext = { get: (key: string) => 'test-value' };
+      await skills.maybeRefresh({ requestContext: mockRequestContext as unknown as undefined });
+
+      // Now context should have requestContext
+      expect(capturedContext?.requestContext).toBeDefined();
+    });
+
+    it('should return different skills based on context', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
+        '/skills/premium/premium-skill/SKILL.md': PREMIUM_SKILL_MD,
+      });
+
+      // Create a mock RequestContext-like object
+      const createMockRequestContext = (tier: string) => ({
+        get: (key: string) => (key === 'userTier' ? tier : undefined),
+      });
+
+      let currentTier = 'basic';
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: ctx => {
+          const tier = (ctx.requestContext as ReturnType<typeof createMockRequestContext>)?.get?.('userTier');
+          if (tier === 'premium') {
+            return ['/skills/basic', '/skills/premium'];
+          }
+          return ['/skills/basic'];
+        },
+      });
+
+      // Initial list with basic tier (empty context)
+      const basicResult = await skills.list();
+      expect(basicResult).toHaveLength(1);
+      expect(basicResult[0]?.name).toBe('basic-skill');
+
+      // Now change tier to premium and call maybeRefresh with context
+      currentTier = 'premium';
+      await skills.maybeRefresh({
+        requestContext: createMockRequestContext(currentTier) as unknown as undefined,
+      });
+
+      const premiumResult = await skills.list();
+      expect(premiumResult).toHaveLength(2);
+      expect(premiumResult.map(s => s.name).sort()).toEqual(['basic-skill', 'premium-skill']);
+    });
+
+    it('should detect when dynamic paths change and trigger refresh', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/path-a/skill-a/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'skill-a'),
+        '/skills/path-b/skill-b/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'skill-b'),
+      });
+
+      let currentPath = '/skills/path-a';
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: () => [currentPath],
+      });
+
+      // Initial list
+      const initialResult = await skills.list();
+      expect(initialResult).toHaveLength(1);
+      expect(initialResult[0]?.name).toBe('skill-a');
+
+      // Change path and call maybeRefresh
+      currentPath = '/skills/path-b';
+      await skills.maybeRefresh();
+
+      const newResult = await skills.list();
+      expect(newResult).toHaveLength(1);
+      expect(newResult[0]?.name).toBe('skill-b');
+    });
+
+    it('should not refresh when dynamic paths return same result', async () => {
+      const pastTime = new Date(Date.now() - 10000);
+      const filesystem = createMockFilesystem({
+        '/skills/basic-skill/SKILL.md': BASIC_SKILL_MD,
+      });
+
+      // Override stat to return old modification time
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
+        path,
+        type: path.includes('.') ? ('file' as const) : ('directory' as const),
+        modifiedAt: pastTime,
+      }));
+
+      const pathsResolver = vi.fn(() => ['/skills']);
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: pathsResolver,
+      });
+
+      // Initial list
+      await skills.list();
+      const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // Call maybeRefresh multiple times - paths don't change, mtime is old
+      await skills.maybeRefresh();
+      await skills.maybeRefresh();
+      await skills.maybeRefresh();
+
+      // readFile should not be called again (no refresh triggered)
+      const afterMaybeRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(afterMaybeRefreshCalls).toBe(initialReadFileCalls);
+
+      // But pathsResolver should be called each time to check for path changes
+      expect(pathsResolver).toHaveBeenCalledTimes(4); // 1 initial + 3 maybeRefresh
+    });
+
+    it('should handle empty paths from dynamic resolver', async () => {
+      const filesystem = createMockFilesystem({});
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skillsPaths: () => [],
+      });
+
+      const result = await skills.list();
+      expect(result).toEqual([]);
+    });
+
+    it('should work with order-independent path comparison', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/a/skill-a/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'skill-a'),
+        '/skills/b/skill-b/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'skill-b'),
+      });
+
+      let callCount = 0;
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        // Return paths in different order but same content
+        skillsPaths: () => {
+          callCount++;
+          return callCount % 2 === 0 ? ['/skills/b', '/skills/a'] : ['/skills/a', '/skills/b'];
+        },
+      });
+
+      // Initial list
+      await skills.list();
+      const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // Call maybeRefresh - paths are same (just different order)
+      const pastTime = new Date(Date.now() - 10000);
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
+        path,
+        type: path.includes('.') ? ('file' as const) : ('directory' as const),
+        modifiedAt: pastTime,
+      }));
+
+      await skills.maybeRefresh();
+
+      // Should not trigger refresh since paths are the same (order-independent)
+      const afterMaybeRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(afterMaybeRefreshCalls).toBe(initialReadFileCalls);
+    });
+  });
 });

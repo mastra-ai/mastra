@@ -23,6 +23,7 @@ import type {
   InstallPackageOptions,
   InstallPackageResult,
   SandboxSyncResult,
+  SandboxSafetyOptions,
 } from './sandbox';
 import { SandboxNotReadyError, UnsupportedRuntimeError } from './sandbox';
 
@@ -57,6 +58,11 @@ export interface LocalSandboxOptions {
   timeout?: number;
   /** Supported runtimes (default: auto-detect) */
   runtimes?: SandboxRuntime[];
+  /**
+   * Safety options for this sandbox.
+   * Controls approval requirements for code/command execution.
+   */
+  safety?: SandboxSafetyOptions;
 }
 
 /**
@@ -82,6 +88,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
+  readonly safety?: SandboxSafetyOptions;
 
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
@@ -122,6 +129,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
     this.configuredRuntimes = options.runtimes;
+    this.safety = options.safety;
   }
 
   private generateId(): string {

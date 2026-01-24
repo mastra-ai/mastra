@@ -62,7 +62,7 @@ import type {
 } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
-import type { WorkspaceSkills } from './skills';
+import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import { FilesystemState } from './state';
 import type { WorkspaceStatus } from './types';
@@ -150,9 +150,26 @@ export interface WorkspaceConfig {
   /**
    * Paths where skills are located.
    * Workspace will discover SKILL.md files in these directories.
-   * @default ['/skills']
+   *
+   * Can be a static array of paths or a function that returns paths
+   * dynamically based on request context (e.g., user tier, tenant).
+   *
+   * @example Static paths
+   * ```typescript
+   * skillsPaths: ['/skills', '/node_modules/@myorg/skills']
+   * ```
+   *
+   * @example Dynamic paths
+   * ```typescript
+   * skillsPaths: (ctx) => {
+   *   const tier = ctx.requestContext?.get('userTier');
+   *   return tier === 'premium'
+   *     ? ['/skills/basic', '/skills/premium']
+   *     : ['/skills/basic'];
+   * }
+   * ```
    */
-  skillsPaths?: string[];
+  skillsPaths?: SkillsPathsResolver;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -167,60 +184,6 @@ export interface WorkspaceConfig {
   /** Timeout for individual operations in milliseconds */
   operationTimeout?: number;
 
-  // ---------------------------------------------------------------------------
-  // Safety Options
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Safety options for workspace operations.
-   */
-  safety?: WorkspaceSafetyConfig;
-}
-
-/**
- * Safety configuration for workspace operations.
- */
-export interface WorkspaceSafetyConfig {
-  /**
-   * Require files to be read before they can be written to.
-   * If enabled, writeFile will throw an error if:
-   * - The file exists but was never read in this session
-   * - The file was modified since the last read
-   *
-   * New files (that don't exist yet) can be written without reading.
-   *
-   * @default true
-   */
-  requireReadBeforeWrite?: boolean;
-
-  /**
-   * Require approval for sandbox code/command execution.
-   * - 'all': Require approval for all sandbox operations (code, commands, package installs)
-   * - 'commands': Require approval only for executeCommand and installPackage (not executeCode)
-   * - 'none': No approval required
-   *
-   * @default 'all'
-   */
-  requireSandboxApproval?: 'all' | 'commands' | 'none';
-
-  /**
-   * Require approval for filesystem operations.
-   * - 'all': Require approval for all filesystem operations (read, write, list, delete, mkdir)
-   * - 'write': Require approval only for write operations (write, delete, mkdir)
-   * - 'none': No approval required (default)
-   *
-   * @default 'none'
-   */
-  requireFilesystemApproval?: 'all' | 'write' | 'none';
-
-  /**
-   * When true, all write operations to the filesystem are blocked.
-   * Read operations and sandbox execution are still allowed.
-   * Write tools will not be included in the workspace tools.
-   *
-   * @default false
-   */
-  readOnly?: boolean;
 }
 
 // Re-export WorkspaceStatus from types
@@ -393,9 +356,9 @@ export class Workspace {
     this._fs = config.filesystem;
     this._sandbox = config.sandbox;
 
-    // Initialize safety features
-    this._readOnly = config.safety?.readOnly ?? false;
-    this._requireReadBeforeWrite = config.safety?.requireReadBeforeWrite ?? true;
+    // Initialize safety features from filesystem provider
+    this._readOnly = config.filesystem?.safety?.readOnly ?? false;
+    this._requireReadBeforeWrite = config.filesystem?.safety?.requireReadBeforeWrite ?? true;
     if (this._requireReadBeforeWrite) {
       this._readTracker = new InMemoryFileReadTracker();
     }
@@ -426,7 +389,9 @@ export class Workspace {
 
     // Validate at least one provider is given
     // Note: skillsPaths alone is also valid - uses LocalSkillSource for read-only skills
-    if (!this._fs && !this._sandbox && (!config.skillsPaths || config.skillsPaths.length === 0)) {
+    const hasSkillsPaths = config.skillsPaths !== undefined &&
+      (typeof config.skillsPaths === 'function' || config.skillsPaths.length > 0);
+    if (!this._fs && !this._sandbox && !hasSkillsPaths) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skillsPaths', 'NO_PROVIDERS');
     }
 
@@ -475,9 +440,10 @@ export class Workspace {
   }
 
   /**
-   * The configured skillsPaths (if any).
+   * The configured skillsPaths resolver (if any).
+   * Can be a static array or a function for dynamic paths.
    */
-  get skillsPaths(): string[] | undefined {
+  get skillsPaths(): SkillsPathsResolver | undefined {
     return this._config.skillsPaths;
   }
 
@@ -489,10 +455,21 @@ export class Workspace {
   }
 
   /**
-   * Get the safety configuration for this workspace.
+   * Get the effective safety configuration for this workspace.
+   * Reads safety settings from the configured providers.
    */
-  getSafetyConfig(): WorkspaceSafetyConfig | undefined {
-    return this._config.safety;
+  getSafetyConfig(): {
+    readOnly: boolean;
+    requireReadBeforeWrite: boolean;
+    requireFilesystemApproval: 'all' | 'write' | 'none';
+    requireSandboxApproval: 'all' | 'commands' | 'none';
+  } {
+    return {
+      readOnly: this._fs?.safety?.readOnly ?? false,
+      requireReadBeforeWrite: this._fs?.safety?.requireReadBeforeWrite ?? true,
+      requireFilesystemApproval: this._fs?.safety?.requireApproval ?? 'none',
+      requireSandboxApproval: this._sandbox?.safety?.requireApproval ?? 'all',
+    };
   }
 
   /**
@@ -528,7 +505,9 @@ export class Workspace {
    */
   get skills(): WorkspaceSkills | undefined {
     // Skills require skillsPaths
-    if (!this._config.skillsPaths || this._config.skillsPaths.length === 0) {
+    const hasSkillsPaths = this._config.skillsPaths !== undefined &&
+      (typeof this._config.skillsPaths === 'function' || this._config.skillsPaths.length > 0);
+    if (!hasSkillsPaths) {
       return undefined;
     }
 
@@ -539,7 +518,7 @@ export class Workspace {
 
       this._skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: this._config.skillsPaths,
+        skillsPaths: this._config.skillsPaths!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
       });
@@ -664,11 +643,14 @@ export class Workspace {
 
   /**
    * Execute code in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   * @throws {SandboxNotAvailableError} if no sandbox is configured or doesn't support code execution
    */
   async executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult> {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
+    }
+    if (!this._sandbox.executeCode) {
+      throw new SandboxNotAvailableError('Sandbox does not support code execution');
     }
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCode(code, options);
@@ -676,11 +658,14 @@ export class Workspace {
 
   /**
    * Execute a command in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   * @throws {SandboxNotAvailableError} if no sandbox is configured or doesn't support command execution
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
+    }
+    if (!this._sandbox.executeCommand) {
+      throw new SandboxNotAvailableError('Sandbox does not support command execution');
     }
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCommand(command, args, options);

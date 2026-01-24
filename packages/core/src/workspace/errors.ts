@@ -33,8 +33,8 @@ export class FilesystemNotAvailableError extends WorkspaceError {
 }
 
 export class SandboxNotAvailableError extends WorkspaceError {
-  constructor() {
-    super('Workspace does not have a sandbox configured', 'NO_SANDBOX');
+  constructor(message?: string) {
+    super(message ?? 'Workspace does not have a sandbox configured', 'NO_SANDBOX');
     this.name = 'SandboxNotAvailableError';
   }
 }

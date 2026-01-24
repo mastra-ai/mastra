@@ -11,6 +11,13 @@ import { Workspace } from './workspace';
 
 function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): WorkspaceFilesystem {
   const dirs = new Set<string>(['/']);
+  // Track modification times per file to avoid timing issues
+  const modTimes = new Map<string, Date>();
+
+  // Initialize modification times for existing files
+  for (const path of files.keys()) {
+    modTimes.set(path, new Date());
+  }
 
   return {
     provider: 'mock',
@@ -24,6 +31,7 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
 
     writeFile: vi.fn().mockImplementation(async (path: string, content: string | Buffer) => {
       files.set(path, content);
+      modTimes.set(path, new Date()); // Update modification time on write
     }),
 
     readdir: vi.fn().mockImplementation(async (path: string): Promise<FileEntry[]> => {
@@ -61,6 +69,7 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
         throw new Error(`File not found: ${path}`);
       }
       files.delete(path);
+      modTimes.delete(path);
     }),
 
     stat: vi.fn().mockImplementation(async (path: string): Promise<FileStat> => {
@@ -71,8 +80,8 @@ function createMockFilesystem(files: Map<string, string | Buffer> = new Map()): 
           path,
           type: 'file',
           size: typeof content === 'string' ? content.length : content.length,
-          createdAt: new Date(),
-          modifiedAt: new Date(),
+          createdAt: modTimes.get(path) || new Date(),
+          modifiedAt: modTimes.get(path) || new Date(),
         };
       }
       if (dirs.has(path)) {
@@ -600,6 +609,16 @@ describe('createWorkspaceTools', () => {
         timeout: 5000,
       });
     });
+
+    it('should not create tool when executeCode method is missing', async () => {
+      const mockSandbox = createMockSandbox();
+      delete (mockSandbox as any).executeCode;
+      const workspace = new Workspace({ sandbox: mockSandbox });
+      const tools = createWorkspaceTools(workspace);
+
+      // Tool should not be created when the sandbox doesn't support executeCode
+      expect(tools.workspace_execute_code).toBeUndefined();
+    });
   });
 
   describe('workspace_execute_command', () => {
@@ -635,6 +654,16 @@ describe('createWorkspaceTools', () => {
         cwd: '/project',
       });
     });
+
+    it('should not create tool when executeCommand method is missing', async () => {
+      const mockSandbox = createMockSandbox();
+      delete (mockSandbox as any).executeCommand;
+      const workspace = new Workspace({ sandbox: mockSandbox });
+      const tools = createWorkspaceTools(workspace);
+
+      // Tool should not be created when the sandbox doesn't support executeCommand
+      expect(tools.workspace_execute_command).toBeUndefined();
+    });
   });
 
   describe('workspace_install_package', () => {
@@ -652,18 +681,14 @@ describe('createWorkspaceTools', () => {
       expect(result.packageName).toBe('lodash');
     });
 
-    it('should handle missing installPackage method', async () => {
+    it('should not create tool when installPackage method is missing', async () => {
       const mockSandbox = createMockSandbox();
       delete (mockSandbox as any).installPackage;
       const workspace = new Workspace({ sandbox: mockSandbox });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_install_package.execute({
-        packageName: 'lodash',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.errorMessage).toContain('not supported');
+      // Tool should not be created when the sandbox doesn't support installPackage
+      expect(tools.workspace_install_package).toBeUndefined();
     });
   });
 

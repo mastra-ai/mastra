@@ -21,6 +21,8 @@ export type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
+  SkillsPathsResolver,
+  SkillsPathsContext,
 } from './types';
 
 // =============================================================================

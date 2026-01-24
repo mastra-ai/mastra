@@ -24,6 +24,8 @@ import type {
   UpdateSkillInput,
   WorkspaceSkills,
   SkillSource,
+  SkillsPathsResolver,
+  SkillsPathsContext,
 } from './types';
 
 // =============================================================================
@@ -71,8 +73,11 @@ export interface WorkspaceSkillsImplConfig {
    * Can be a WorkspaceFilesystem (full CRUD) or SkillSource (read-only).
    */
   source: SkillSourceInterface;
-  /** Paths to scan for skills */
-  skillsPaths: string[];
+  /**
+   * Paths to scan for skills.
+   * Can be a static array or a function that returns paths based on context.
+   */
+  skillsPaths: SkillsPathsResolver;
   /** Search engine for skill search (optional) */
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
@@ -88,7 +93,7 @@ export interface WorkspaceSkillsImplConfig {
  */
 export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #source: SkillSourceInterface;
-  readonly #skillsPaths: string[];
+  readonly #skillsPathsResolver: SkillsPathsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
   readonly #isWritable: boolean;
@@ -105,9 +110,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Timestamp of last skills discovery (for staleness check) */
   #lastDiscoveryTime = 0;
 
+  /** Currently resolved skillsPaths (used to detect changes) */
+  #resolvedPaths: string[] = [];
+
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
-    this.#skillsPaths = config.skillsPaths;
+    this.#skillsPathsResolver = config.skillsPaths;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
     this.#isWritable = isWritableSource(this.#source);
@@ -167,15 +175,47 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     await this.#discoverSkills();
   }
 
-  async maybeRefresh(): Promise<void> {
+  async maybeRefresh(context?: SkillsPathsContext): Promise<void> {
     // Ensure initial discovery is complete
     await this.#ensureInitialized();
+
+    // Resolve current paths (may be dynamic based on context)
+    const currentPaths = await this.#resolvePaths(context);
+
+    // Check if paths have changed (for dynamic resolvers)
+    const pathsChanged = !this.#arePathsEqual(this.#resolvedPaths, currentPaths);
+    if (pathsChanged) {
+      // Paths changed - need full refresh with new paths
+      this.#resolvedPaths = currentPaths;
+      await this.refresh();
+      return;
+    }
 
     // Check if any skillsPath has been modified since last discovery
     const isStale = await this.#isSkillsPathStale();
     if (isStale) {
       await this.refresh();
     }
+  }
+
+  /**
+   * Resolve skillsPaths from the resolver (static array or function).
+   */
+  async #resolvePaths(context?: SkillsPathsContext): Promise<string[]> {
+    if (Array.isArray(this.#skillsPathsResolver)) {
+      return this.#skillsPathsResolver;
+    }
+    return this.#skillsPathsResolver(context ?? {});
+  }
+
+  /**
+   * Compare two path arrays for equality (order-independent).
+   */
+  #arePathsEqual(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((path, i) => path === sortedB[i]);
   }
 
   // ===========================================================================
@@ -262,8 +302,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
     }
 
-    // Use first skills path for creating new skills
-    const skillsPath = this.#skillsPaths[0];
+    // Use first resolved skills path for creating new skills
+    const skillsPath = this.#resolvedPaths[0];
     if (!skillsPath) {
       throw new Error('No skills path configured for creating skills');
     }
@@ -534,19 +574,25 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     // Start initialization and store the promise
-    this.#initPromise = this.#discoverSkills().then(() => {
+    this.#initPromise = (async () => {
+      // Resolve paths on first initialization (uses empty context)
+      if (this.#resolvedPaths.length === 0) {
+        this.#resolvedPaths = await this.#resolvePaths();
+      }
+      await this.#discoverSkills();
       this.#initialized = true;
       this.#initPromise = null;
-    });
+    })();
 
     await this.#initPromise;
   }
 
   /**
-   * Discover skills from all skillsPaths
+   * Discover skills from all skillsPaths.
+   * Uses currently resolved paths (must be set before calling).
    */
   async #discoverSkills(): Promise<void> {
-    for (const skillsPath of this.#skillsPaths) {
+    for (const skillsPath of this.#resolvedPaths) {
       const source = this.#determineSource(skillsPath);
       await this.#discoverSkillsInPath(skillsPath, source);
     }
@@ -604,7 +650,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       return true;
     }
 
-    for (const skillsPath of this.#skillsPaths) {
+    for (const skillsPath of this.#resolvedPaths) {
       try {
         if (!(await this.#source.exists(skillsPath))) {
           continue;

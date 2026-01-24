@@ -26,10 +26,10 @@ describe('Workspace Safety Features', () => {
   describe('requireReadBeforeWrite', () => {
     it('should allow writing new files without reading first', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace.init();
 
@@ -43,10 +43,10 @@ describe('Workspace Safety Features', () => {
 
     it('should throw error when writing existing file without reading first', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace.init();
 
@@ -55,10 +55,10 @@ describe('Workspace Safety Features', () => {
 
       // Create new workspace instance (simulates fresh session)
       const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace2.init();
 
@@ -72,10 +72,10 @@ describe('Workspace Safety Features', () => {
 
     it('should allow writing after reading', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace.init();
 
@@ -84,10 +84,10 @@ describe('Workspace Safety Features', () => {
 
       // Create new workspace to simulate fresh session
       const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace2.init();
 
@@ -105,10 +105,10 @@ describe('Workspace Safety Features', () => {
 
     it('should throw error when file was modified externally after reading', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace.init();
 
@@ -117,10 +117,10 @@ describe('Workspace Safety Features', () => {
 
       // Create new workspace
       const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace2.init();
 
@@ -141,10 +141,10 @@ describe('Workspace Safety Features', () => {
 
     it('should require re-reading after successful write', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace.init();
 
@@ -153,10 +153,10 @@ describe('Workspace Safety Features', () => {
 
       // Create new workspace
       const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: true },
+        }),
       });
       await workspace2.init();
 
@@ -180,10 +180,10 @@ describe('Workspace Safety Features', () => {
 
     it('should not require read-before-write when disabled', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: false,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { requireReadBeforeWrite: false },
+        }),
       });
       await workspace.init();
 
@@ -204,10 +204,10 @@ describe('Workspace Safety Features', () => {
       await fs.writeFile(path.join(tempDir, 'existing.txt'), 'content');
 
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          readOnly: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
       });
       await workspace.init();
 
@@ -221,10 +221,10 @@ describe('Workspace Safety Features', () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
 
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          readOnly: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
       });
       await workspace.init();
 
@@ -238,10 +238,10 @@ describe('Workspace Safety Features', () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
 
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          readOnly: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
       });
       await workspace.init();
 
@@ -256,10 +256,10 @@ describe('Workspace Safety Features', () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
 
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          readOnly: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
       });
       await workspace.init();
 
@@ -271,10 +271,10 @@ describe('Workspace Safety Features', () => {
 
     it('should expose readOnly property', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          readOnly: true,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
       });
 
       expect(workspace.readOnly).toBe(true);
@@ -288,39 +288,57 @@ describe('Workspace Safety Features', () => {
   });
 
   describe('getSafetyConfig', () => {
-    it('should return safety config', () => {
+    it('should return safety config from filesystem provider', () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        safety: {
-          requireReadBeforeWrite: true,
-          requireSandboxApproval: 'commands',
-          readOnly: false,
-        },
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: {
+            requireReadBeforeWrite: false,
+            readOnly: true,
+            requireApproval: 'write',
+          },
+        }),
       });
 
       const config = workspace.getSafetyConfig();
-      expect(config?.requireReadBeforeWrite).toBe(true);
-      expect(config?.requireSandboxApproval).toBe('commands');
-      expect(config?.readOnly).toBe(false);
+      expect(config.requireReadBeforeWrite).toBe(false);
+      expect(config.readOnly).toBe(true);
+      expect(config.requireFilesystemApproval).toBe('write');
     });
 
-    it('should return undefined when no safety config', () => {
+    it('should return safety config from sandbox provider', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({
+          workingDirectory: tempDir,
+          safety: { requireApproval: 'commands' },
+        }),
+      });
+
+      const config = workspace.getSafetyConfig();
+      expect(config.requireSandboxApproval).toBe('commands');
+    });
+
+    it('should return default values when no safety config provided', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
 
-      expect(workspace.getSafetyConfig()).toBeUndefined();
+      const config = workspace.getSafetyConfig();
+      expect(config.readOnly).toBe(false);
+      expect(config.requireReadBeforeWrite).toBe(true);
+      expect(config.requireFilesystemApproval).toBe('none');
+      expect(config.requireSandboxApproval).toBe('all');
     });
   });
 
   describe('createWorkspaceTools with safety config', () => {
     it('should exclude write tools in readonly mode', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: true },
+        }),
         bm25: true,
-        safety: {
-          readOnly: true,
-        },
       });
       await workspace.init();
 
@@ -343,11 +361,11 @@ describe('Workspace Safety Features', () => {
 
     it('should include write tools when not readonly', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          safety: { readOnly: false },
+        }),
         bm25: true,
-        safety: {
-          readOnly: false,
-        },
       });
       await workspace.init();
 
@@ -364,10 +382,10 @@ describe('Workspace Safety Features', () => {
     it('should set requireApproval on sandbox tools when sandboxApproval is "all"', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-        safety: {
-          requireSandboxApproval: 'all',
-        },
+        sandbox: new LocalSandbox({
+          workingDirectory: tempDir,
+          safety: { requireApproval: 'all' },
+        }),
       });
       await workspace.init();
 
@@ -383,10 +401,10 @@ describe('Workspace Safety Features', () => {
     it('should set requireApproval on command tools when sandboxApproval is "commands"', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-        safety: {
-          requireSandboxApproval: 'commands',
-        },
+        sandbox: new LocalSandbox({
+          workingDirectory: tempDir,
+          safety: { requireApproval: 'commands' },
+        }),
       });
       await workspace.init();
 
@@ -405,10 +423,10 @@ describe('Workspace Safety Features', () => {
     it('should not set requireApproval when sandboxApproval is "none"', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-        safety: {
-          requireSandboxApproval: 'none',
-        },
+        sandbox: new LocalSandbox({
+          workingDirectory: tempDir,
+          safety: { requireApproval: 'none' },
+        }),
       });
       await workspace.init();
 
@@ -430,7 +448,7 @@ describe('Workspace Safety Features', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      // Default is now 'all' - all sandbox tools require approval
+      // Default is 'all' - all sandbox tools require approval
       expect(tools.workspace_execute_code.requireApproval).toBe(true);
       expect(tools.workspace_execute_command.requireApproval).toBe(true);
       expect(tools.workspace_install_package.requireApproval).toBe(true);

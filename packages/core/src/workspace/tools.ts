@@ -423,7 +423,9 @@ export function createWorkspaceTools(workspace: Workspace) {
       }
     }
 
-    tools.workspace_execute_code = createTool({
+    // Only add executeCode tool if the sandbox supports it
+    if (workspace.sandbox.executeCode) {
+      tools.workspace_execute_code = createTool({
       id: 'workspace_execute_code',
       description: `Execute code in the workspace sandbox. Supports multiple runtimes including Node.js, Python, and shell.${pathInfo}`,
       // Require approval when sandboxApproval is 'all'
@@ -464,8 +466,11 @@ export function createWorkspaceTools(workspace: Workspace) {
         };
       },
     });
+    }
 
-    tools.workspace_execute_command = createTool({
+    // Only add executeCommand tool if the sandbox supports it
+    if (workspace.sandbox.executeCommand) {
+      tools.workspace_execute_command = createTool({
       id: 'workspace_execute_command',
       description: `Execute a shell command in the workspace sandbox.${pathInfo}`,
       // Require approval when sandboxApproval is 'all' or 'commands'
@@ -503,8 +508,11 @@ export function createWorkspaceTools(workspace: Workspace) {
         };
       },
     });
+    }
 
-    tools.workspace_install_package = createTool({
+    // Only add installPackage tool if the sandbox supports it
+    if (workspace.sandbox.installPackage) {
+      tools.workspace_install_package = createTool({
       id: 'workspace_install_package',
       description: 'Install a package in the workspace sandbox environment',
       // Require approval when sandboxApproval is 'all' or 'commands'
@@ -526,15 +534,7 @@ export function createWorkspaceTools(workspace: Workspace) {
         executionTimeMs: z.number(),
       }),
       execute: async ({ packageName, packageManager, version }) => {
-        if (!workspace.sandbox!.installPackage) {
-          return {
-            success: false,
-            packageName,
-            errorMessage: 'Package installation not supported by this sandbox',
-            executionTimeMs: 0,
-          };
-        }
-        const result = await workspace.sandbox!.installPackage(packageName, { packageManager, version });
+        const result = await workspace.sandbox!.installPackage!(packageName, { packageManager, version });
         return {
           success: result.success,
           packageName: result.packageName,
@@ -544,6 +544,7 @@ export function createWorkspaceTools(workspace: Workspace) {
         };
       },
     });
+    }
   }
 
   return tools;

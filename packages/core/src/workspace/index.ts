@@ -40,7 +40,6 @@
 export {
   Workspace,
   type WorkspaceConfig,
-  type WorkspaceSafetyConfig,
   type WorkspaceScope,
   type WorkspaceOwner,
   type WorkspaceStatus,
@@ -201,6 +200,8 @@ export type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
+  SkillsPathsResolver,
+  SkillsPathsContext,
 } from './skills';
 
 export {
