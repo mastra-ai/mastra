@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Surface colors (dark theme) */
+  --surface1: #0a0a0a;
+  --surface2: #121212;
+  --surface3: #1a1a1a;
+  --surface4: #222222;
+  --surface5: #2a2a2a;
+
+  /* Neutral colors */
+  --neutral1: #333333;
+  --neutral2: #444444;
+  --neutral3: #666666;
+  --neutral6: #999999;
+  --neutral9: #f5f5f5;
+
+  /* Accent colors */
+  --accent1: #3b82f6;
+  --accent2: #60a5fa;
+
+  /* Border */
+  --border: #2a2a2a;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--surface1);
+  color: var(--neutral9);
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
