@@ -670,22 +670,29 @@ packages/admin/
 │   │   ├── validator.ts                 # LicenseValidator class
 │   │   ├── types.ts                     # License tiers, features
 │   │   └── features.ts                  # Feature gating logic
-│   ├── providers/
-│   │   ├── storage/base.ts              # AdminStorage interface
-│   │   ├── file-storage/base.ts         # FileStorageProvider interface
-│   │   ├── observability/
-│   │   │   ├── writer.ts                # ObservabilityWriter interface
-│   │   │   ├── query-provider.ts        # ObservabilityQueryProvider interface
-│   │   │   └── types.ts                 # Trace, Span, Log, Metric, Score types
-│   │   ├── runner/base.ts               # ProjectRunner interface
-│   │   ├── router/base.ts               # EdgeRouterProvider interface
-│   │   ├── source/base.ts               # ProjectSourceProvider interface
-│   │   ├── billing/base.ts
-│   │   ├── billing/no-billing.ts
-│   │   ├── email/base.ts
-│   │   ├── email/console.ts
-│   │   ├── encryption/base.ts
-│   │   └── encryption/node-crypto.ts
+│   ├── storage/
+│   │   └── base.ts                      # AdminStorage interface
+│   ├── file-storage/
+│   │   └── base.ts                      # FileStorageProvider interface
+│   ├── observability/
+│   │   ├── writer.ts                    # ObservabilityWriter interface
+│   │   ├── query-provider.ts            # ObservabilityQueryProvider interface
+│   │   └── types.ts                     # Trace, Span, Log, Metric, Score types
+│   ├── runner/
+│   │   └── base.ts                      # ProjectRunner interface
+│   ├── router/
+│   │   └── base.ts                      # EdgeRouterProvider interface
+│   ├── source/
+│   │   └── base.ts                      # ProjectSourceProvider interface
+│   ├── billing/
+│   │   ├── base.ts
+│   │   └── no-billing.ts
+│   ├── email/
+│   │   ├── base.ts
+│   │   └── console.ts
+│   ├── encryption/
+│   │   ├── base.ts
+│   │   └── node-crypto.ts
 │   ├── rbac/
 │   │   ├── manager.ts
 │   │   ├── roles.ts

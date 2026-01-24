@@ -631,7 +631,7 @@ export class MastraAdmin extends MastraBase {
 
 ### 4. Directory Structure (Following Existing Patterns)
 
-The structure follows established Mastra conventions where implementations live in top-level directories:
+The structure follows established Mastra conventions with a flat domain-based layout (matching @mastra/core):
 
 ```
 # Core package with base classes and interfaces
@@ -641,17 +641,29 @@ packages/admin/
 │   ├── mastra-admin.ts          # MastraAdmin class
 │   ├── types.ts                 # Shared types
 │   ├── errors.ts                # Error classes
-│   ├── providers/
-│   │   ├── storage/base.ts      # AdminStorage abstract class
-│   │   ├── runner/base.ts       # ProjectRunner abstract class
-│   │   ├── source/base.ts       # ProjectSourceProvider interface
-│   │   ├── observability/base.ts
-│   │   ├── billing/base.ts
-│   │   ├── billing/no-billing.ts      # Built-in NoBillingProvider
-│   │   ├── email/base.ts
-│   │   ├── email/console.ts           # Built-in ConsoleEmailProvider
-│   │   ├── encryption/base.ts
-│   │   └── encryption/node-crypto.ts  # Built-in NodeCryptoProvider
+│   ├── storage/
+│   │   └── base.ts              # AdminStorage interface
+│   ├── runner/
+│   │   └── base.ts              # ProjectRunner interface
+│   ├── router/
+│   │   └── base.ts              # EdgeRouterProvider interface
+│   ├── source/
+│   │   └── base.ts              # ProjectSourceProvider interface
+│   ├── file-storage/
+│   │   └── base.ts              # FileStorageProvider interface
+│   ├── observability/
+│   │   ├── writer.ts            # ObservabilityWriter interface
+│   │   ├── query-provider.ts    # ObservabilityQueryProvider interface
+│   │   └── types.ts             # Trace, Span, Log, Metric, Score types
+│   ├── billing/
+│   │   ├── base.ts
+│   │   └── no-billing.ts        # Built-in NoBillingProvider
+│   ├── email/
+│   │   ├── base.ts
+│   │   └── console.ts           # Built-in ConsoleEmailProvider
+│   ├── encryption/
+│   │   ├── base.ts
+│   │   └── node-crypto.ts       # Built-in NodeCryptoProvider
 │   └── rbac/
 │       ├── manager.ts           # RBACManager for admin authorization
 │       ├── roles.ts
