@@ -48,6 +48,7 @@
     "build:schema-compat": "pnpm turbo build --filter ./packages/schema-compat",
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\"",
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
+    "build:sources": "pnpm turbo build --filter \"./sources/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "generate:docs": "pnpx tsx ./scripts/generate-package-docs.ts",

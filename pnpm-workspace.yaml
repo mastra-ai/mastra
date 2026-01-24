@@ -12,6 +12,7 @@ packages:
   - examples/dane
   - auth/*
   - observability/*
+  - sources/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
