@@ -13,7 +13,7 @@ Systematic evaluation infrastructure for Mastra agents and workflows. Build from
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning ✓
-- [ ] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring
+- [x] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring ✓
 - [ ] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows
 - [ ] **Phase 4: Scorer & Processor Targets** - Extend targets to scorers and processors
 - [ ] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection
@@ -55,10 +55,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — RunsStorage types, schemas, and base class
-- [ ] 02-02-PLAN.md — RunsInMemory implementation and exports
-- [ ] 02-03-PLAN.md — Run orchestration with p-map execution and scoring
-- [ ] 02-04-PLAN.md — Test suite for RunsInMemory and runDataset
+- [x] 02-01-PLAN.md — RunsStorage types, schemas, and base class
+- [x] 02-02-PLAN.md — RunsInMemory implementation and exports
+- [x] 02-03-PLAN.md — Run orchestration with p-map execution and scoring
+- [x] 02-04-PLAN.md — Test suite for RunsInMemory and runDataset
 
 ### Phase 3: Agent & Workflow Targets
 **Goal**: Complete integration with Agent.generate() and Workflow.run()
@@ -159,7 +159,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
-| 2. Execution Core | 0/4 | Ready | - |
+| 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
 | 3. Agent & Workflow Targets | 0/TBD | Not started | - |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
 | 5. Run Analytics | 0/TBD | Not started | - |
