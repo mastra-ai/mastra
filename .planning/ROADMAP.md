@@ -61,7 +61,7 @@ Plans:
 - [x] 02-04-PLAN.md — Test suite for RunsInMemory and runDataset
 
 ### Phase 3: Agent & Workflow Targets
-**Goal**: Complete integration with Agent.generate() and Workflow.run()
+**Goal**: Verify Agent.generate() and Workflow.run() integration handles all input variations
 **Depends on**: Phase 2
 **Requirements**: TARGET-01 (Workflow target), TARGET-02 (Agent target)
 **Success Criteria** (what must be TRUE):
@@ -70,10 +70,10 @@ Plans:
   3. User can run dataset against agent by passing agentId
   4. Agent execution respects request context (auth, threading)
   5. Both streaming and non-streaming targets work correctly
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Executor edge case tests for agent/workflow input variations
 
 ### Phase 4: Scorer & Processor Targets
 **Goal**: Enable scoring scorers and processors in isolation
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
 | 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
-| 3. Agent & Workflow Targets | 0/TBD | Not started | - |
+| 3. Agent & Workflow Targets | 0/1 | Not started | - |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
 | 5. Run Analytics | 0/TBD | Not started | - |
 | 6. Playground Integration | 0/TBD | Not started | - |
