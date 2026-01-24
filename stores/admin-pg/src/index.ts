@@ -10,3 +10,7 @@ export type {
 } from './shared/config';
 
 export { isPoolConfig, isConnectionStringConfig, isHostConfig, validateConfig, parseSqlIdentifier } from './shared/config';
+
+// Client types
+export type { DbClient, TxClient, QueryValues } from './client';
+export { PoolAdapter } from './client';
