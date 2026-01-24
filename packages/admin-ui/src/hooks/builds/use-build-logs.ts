@@ -1,44 +1,27 @@
 import { useState, useEffect } from 'react';
-import { ADMIN_WS_URL } from '@/lib/constants';
-import { useAuth } from '../use-auth';
+import { useWebSocket } from '../use-websocket';
+import type { BuildLogEvent, BuildStatusEvent } from '@/lib/websocket-client';
 
 export function useBuildLogs(buildId: string | undefined) {
   const [logs, setLogs] = useState<string[]>([]);
   const [status, setStatus] = useState<string | null>(null);
-  const { session } = useAuth();
+  const { subscribe } = useWebSocket();
 
   useEffect(() => {
-    if (!buildId || !session?.access_token) return;
+    if (!buildId) return;
 
-    const url = new URL(ADMIN_WS_URL);
-    url.searchParams.set('token', session.access_token);
-
-    const ws = new WebSocket(url.toString());
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', payload: { channel: `build:${buildId}` } }));
-    };
-
-    ws.onmessage = event => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === 'build:log') {
-          const payload = message.payload as { line: string; timestamp: string };
-          setLogs(prev => [...prev, `[${payload.timestamp}] ${payload.line}`]);
-        } else if (message.type === 'build:status') {
-          const payload = message.payload as { status: string };
-          setStatus(payload.status);
-        }
-      } catch {
-        // Ignore parse errors
+    const unsubscribe = subscribe(`build:${buildId}`, event => {
+      if (event.type === 'build:log') {
+        const payload = event.payload as BuildLogEvent['payload'];
+        setLogs(prev => [...prev, `[${payload.timestamp}] ${payload.line}`]);
+      } else if (event.type === 'build:status') {
+        const payload = event.payload as BuildStatusEvent['payload'];
+        setStatus(payload.status);
       }
-    };
+    });
 
-    return () => {
-      ws.close();
-    };
-  }, [buildId, session?.access_token]);
+    return unsubscribe;
+  }, [buildId, subscribe]);
 
   const clearLogs = () => setLogs([]);
 
