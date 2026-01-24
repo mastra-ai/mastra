@@ -5,7 +5,7 @@ services:
     image: postgres:16
     container_name: 'admin-integration-test-postgres'
     ports:
-      - '5433:5432'
+      - '5444:5432'
     environment:
       POSTGRES_USER: mastra
       POSTGRES_PASSWORD: mastra
@@ -24,8 +24,8 @@ services:
     image: clickhouse/clickhouse-server:24
     container_name: 'admin-integration-test-clickhouse'
     ports:
-      - '8123:8123' # HTTP interface
-      - '9000:9000' # Native interface
+      - '8124:8123' # HTTP interface
+      - '9001:9000' # Native interface
     environment:
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: password
@@ -45,7 +45,7 @@ services:
     image: redis:7-alpine
     container_name: 'admin-integration-test-redis'
     ports:
-      - '6379:6379'
+      - '6380:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 2s
