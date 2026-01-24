@@ -467,8 +467,11 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
+      // Use effective resourceId (context key takes precedence over client-provided value)
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -479,7 +482,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const _run = await workflow.createRun({ runId });
+      const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = await _run.start(params);
       return result;
     } catch (error) {
@@ -997,8 +1000,10 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
   description: 'Time travels a workflow run, starting from a specific step, and streams the results in real-time',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -1012,9 +1017,17 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
+
+      // Validate ownership of existing run before time traveling
+      const existingRun = await workflow.getWorkflowRunById(runId);
+      if (!existingRun) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
+      await validateRunOwnership(existingRun, effectiveResourceId);
+
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
       const result = run.timeTravelStream(params);
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
@@ -1093,8 +1106,10 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   description: 'Legacy endpoint for streaming workflow execution. Use /workflows/:workflowId/stream instead.',
   tags: ['Workflows', 'Legacy'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -1111,7 +1126,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = run.streamLegacy({
         ...params,
         onChunk: async chunk => {

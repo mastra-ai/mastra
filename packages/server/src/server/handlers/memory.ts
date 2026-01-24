@@ -763,26 +763,30 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       // If effectiveResourceId is set, validate ownership of all messages before deletion
+      // Fail closed: if we can't verify ownership, deny deletion
       if (effectiveResourceId && stringIds.length > 0) {
         const storage = memory?.storage || getStorageFromContext({ mastra });
-        if (storage) {
-          const memoryStore = await storage.getStore('memory');
-          if (memoryStore) {
-            // Get messages to find their threads
-            const { messages } = await memoryStore.listMessagesById({ messageIds: stringIds });
+        if (!storage) {
+          throw new HTTPException(403, { message: 'Access denied: unable to verify message ownership' });
+        }
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) {
+          throw new HTTPException(400, { message: 'Memory is not initialized' });
+        }
 
-            // Collect unique thread IDs
-            const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        // Get messages to find their threads
+        const { messages } = await memoryStore.listMessagesById({ messageIds: stringIds });
 
-            // Validate ownership of all threads
-            for (const threadId of threadIds) {
-              const thread = await memoryStore.getThreadById({ threadId });
-              if (thread && thread.resourceId !== effectiveResourceId) {
-                throw new HTTPException(403, {
-                  message: 'Access denied: message belongs to a thread owned by a different resource',
-                });
-              }
-            }
+        // Collect unique thread IDs
+        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+
+        // Validate ownership of all threads
+        for (const threadId of threadIds) {
+          const thread = await memoryStore.getThreadById({ threadId });
+          if (thread && thread.resourceId && thread.resourceId !== effectiveResourceId) {
+            throw new HTTPException(403, {
+              message: 'Access denied: message belongs to a thread owned by a different resource',
+            });
           }
         }
       }
