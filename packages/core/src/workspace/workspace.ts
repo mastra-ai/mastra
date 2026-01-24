@@ -37,6 +37,7 @@ import {
   WorkspaceError,
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
+  SandboxFeatureNotSupportedError,
   SearchNotAvailableError,
   WorkspaceReadOnlyError,
 } from './errors';
@@ -643,14 +644,15 @@ export class Workspace {
 
   /**
    * Execute code in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured or doesn't support code execution
+   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   * @throws {SandboxFeatureNotSupportedError} if sandbox doesn't support code execution
    */
   async executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult> {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
     }
     if (!this._sandbox.executeCode) {
-      throw new SandboxNotAvailableError('Sandbox does not support code execution');
+      throw new SandboxFeatureNotSupportedError('executeCode');
     }
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCode(code, options);
@@ -658,14 +660,18 @@ export class Workspace {
 
   /**
    * Execute a command in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured or doesn't support command execution
+   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   /**
+   * Execute a shell command in the sandbox.
+   * @throws {SandboxNotAvailableError} if no sandbox is configured
+   * @throws {SandboxFeatureNotSupportedError} if sandbox doesn't support command execution
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     if (!this._sandbox) {
       throw new SandboxNotAvailableError();
     }
     if (!this._sandbox.executeCommand) {
-      throw new SandboxNotAvailableError('Sandbox does not support command execution');
+      throw new SandboxFeatureNotSupportedError('executeCommand');
     }
     this.lastAccessedAt = new Date();
     return this._sandbox.executeCommand(command, args, options);

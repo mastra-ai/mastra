@@ -15,8 +15,11 @@ import {
   FolderPlus,
   Trash2,
 } from 'lucide-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Button } from '@/ds/components/Button';
 import { AlertDialog } from '@/ds/components/AlertDialog';
+import { CopyButton } from '@/ds/components/CopyButton';
 import type { FileEntry } from '../hooks/use-workspace';
 
 // =============================================================================
@@ -31,8 +34,12 @@ export interface FileBrowserProps {
   onFileSelect?: (path: string) => void;
   onRefresh?: () => void;
   onUpload?: () => void;
-  onCreateDirectory?: (path: string) => void;
-  onDelete?: (path: string) => void;
+  onCreateDirectory?: (path: string) => void | Promise<void>;
+  onDelete?: (path: string) => void | Promise<void>;
+  /** Shows loading state on create directory button */
+  isCreatingDirectory?: boolean;
+  /** Shows loading state on delete confirmation */
+  isDeleting?: boolean;
 }
 
 // =============================================================================
@@ -130,6 +137,8 @@ export function FileBrowser({
   onUpload,
   onCreateDirectory,
   onDelete,
+  isCreatingDirectory,
+  isDeleting,
 }: FileBrowserProps) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
@@ -169,6 +178,7 @@ export function FileBrowser({
             <Button
               variant="ghost"
               size="md"
+              disabled={isCreatingDirectory}
               onClick={() => {
                 const name = prompt('Directory name:');
                 if (name) {
@@ -177,7 +187,7 @@ export function FileBrowser({
                 }
               }}
             >
-              <FolderPlus className="h-4 w-4" />
+              {isCreatingDirectory ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
             </Button>
           )}
           {onUpload && (
@@ -244,7 +254,7 @@ export function FileBrowser({
       </div>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => !isDeleting && !open && setDeleteTarget(null)}>
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>Delete Item</AlertDialog.Title>
@@ -253,8 +263,9 @@ export function FileBrowser({
             </AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action
+              disabled={isDeleting}
               onClick={() => {
                 if (deleteTarget && onDelete) {
                   onDelete(deleteTarget);
@@ -262,6 +273,7 @@ export function FileBrowser({
                 setDeleteTarget(null);
               }}
             >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Delete
             </AlertDialog.Action>
           </AlertDialog.Footer>
@@ -275,6 +287,75 @@ export function FileBrowser({
 // File Viewer Component
 // =============================================================================
 
+/**
+ * Map file extensions to Prism language names for syntax highlighting.
+ */
+function getLanguageFromExtension(ext?: string): string | null {
+  if (!ext) return null;
+  const map: Record<string, string> = {
+    js: 'javascript',
+    jsx: 'jsx',
+    ts: 'typescript',
+    tsx: 'tsx',
+    json: 'json',
+    md: 'markdown',
+    mdx: 'mdx',
+    py: 'python',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    css: 'css',
+    scss: 'scss',
+    less: 'less',
+    html: 'html',
+    xml: 'xml',
+    yaml: 'yaml',
+    yml: 'yaml',
+    toml: 'toml',
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    sql: 'sql',
+    graphql: 'graphql',
+    gql: 'graphql',
+    dockerfile: 'dockerfile',
+    makefile: 'makefile',
+    vue: 'vue',
+    svelte: 'svelte',
+  };
+  return map[ext.toLowerCase()] || null;
+}
+
+/**
+ * Highlighted code display component using Prism.
+ */
+function HighlightedCode({ content, language }: { content: string; language: string }) {
+  return (
+    <SyntaxHighlighter
+      language={language}
+      style={coldarkDark}
+      customStyle={{
+        margin: 0,
+        padding: '1rem',
+        backgroundColor: 'transparent',
+        fontSize: '0.875rem',
+      }}
+      codeTagProps={{
+        style: {
+          fontFamily: 'var(--geist-mono), ui-monospace, monospace',
+        },
+      }}
+    >
+      {content}
+    </SyntaxHighlighter>
+  );
+}
+
 export interface FileViewerProps {
   path: string;
   content: string;
@@ -287,6 +368,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
   const fileName = path.split('/').pop() || path;
   const ext = fileName.split('.').pop()?.toLowerCase();
   const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+  const language = getLanguageFromExtension(ext);
 
   return (
     <div className="rounded-lg border border-border1 overflow-hidden">
@@ -296,15 +378,18 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
           {getFileIcon(fileName, 'file')}
           <span className="text-sm font-medium text-icon6">{fileName}</span>
         </div>
-        {onClose && (
-          <Button variant="ghost" size="md" onClick={onClose}>
-            Close
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <CopyButton content={content} copyMessage="Copied file content" />
+          {onClose && (
+            <Button variant="ghost" size="md" onClick={onClose}>
+              Close
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
-      <div className="max-h-[500px] overflow-auto bg-surface2">
+      <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-icon3" />
@@ -317,6 +402,8 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
               className="max-w-full max-h-[400px] object-contain"
             />
           </div>
+        ) : language ? (
+          <HighlightedCode content={content} language={language} />
         ) : (
           <pre className="p-4 text-sm text-icon5 whitespace-pre-wrap font-mono overflow-x-auto">{content}</pre>
         )}

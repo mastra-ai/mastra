@@ -39,6 +39,13 @@ export class SandboxNotAvailableError extends WorkspaceError {
   }
 }
 
+export class SandboxFeatureNotSupportedError extends WorkspaceError {
+  constructor(feature: 'executeCode' | 'executeCommand' | 'installPackage') {
+    super(`Sandbox does not support ${feature}`, 'FEATURE_NOT_SUPPORTED');
+    this.name = 'SandboxFeatureNotSupportedError';
+  }
+}
+
 export class SearchNotAvailableError extends WorkspaceError {
   constructor() {
     super('Workspace does not have search configured (enable bm25 or provide vectorStore + embedder)', 'NO_SEARCH');

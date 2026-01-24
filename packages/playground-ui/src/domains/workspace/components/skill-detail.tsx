@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Wand2, FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown } from 'lucide-react';
+import { Wand2, FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown, Eye, FileCode2 } from 'lucide-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import type { Skill, SkillSource } from '../hooks/use-workspace-skills';
 
 export interface SkillDetailProps {
@@ -32,6 +35,7 @@ function getSourceInfo(source: SkillSource): { icon: React.ReactNode; label: str
 
 export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['instructions']));
+  const [showRawInstructions, setShowRawInstructions] = useState(false);
   const sourceInfo = getSourceInfo(skill.source);
 
   const toggleSection = (section: string) => {
@@ -47,7 +51,7 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="p-3 rounded-lg bg-surface5">
@@ -94,12 +98,38 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
         title="Instructions"
         isExpanded={expandedSections.has('instructions')}
         onToggle={() => toggleSection('instructions')}
+        headerAction={
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              setShowRawInstructions(!showRawInstructions);
+            }}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-icon4 hover:text-icon5 hover:bg-surface4 transition-colors"
+            title={showRawInstructions ? 'Show rendered' : 'Show source'}
+          >
+            {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
+            {showRawInstructions ? 'Rendered' : 'Source'}
+          </button>
+        }
       >
-        <div className="prose prose-sm prose-invert max-w-none">
-          <pre className="whitespace-pre-wrap text-sm text-icon5 bg-surface3 p-4 rounded-lg overflow-auto">
-            {skill.instructions}
-          </pre>
-        </div>
+        {showRawInstructions ? (
+          <div style={{ backgroundColor: 'black' }} className="rounded-lg overflow-x-auto w-0 min-w-full">
+            <SyntaxHighlighter
+              language="markdown"
+              style={coldarkDark}
+              customStyle={{
+                margin: 0,
+                padding: '1rem',
+                backgroundColor: 'transparent',
+                fontSize: '0.875rem',
+              }}
+            >
+              {skill.instructions}
+            </SyntaxHighlighter>
+          </div>
+        ) : (
+          <MarkdownRenderer>{skill.instructions}</MarkdownRenderer>
+        )}
       </CollapsibleSection>
 
       {/* References */}
@@ -186,23 +216,29 @@ function CollapsibleSection({
   title,
   isExpanded,
   onToggle,
+  headerAction,
   children,
 }: {
   title: string;
   isExpanded: boolean;
   onToggle: () => void;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-border1 rounded-lg overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="flex items-center gap-2 w-full px-4 py-3 bg-surface3 hover:bg-surface4 transition-colors"
-      >
-        {isExpanded ? <ChevronDown className="h-4 w-4 text-icon3" /> : <ChevronRight className="h-4 w-4 text-icon3" />}
-        <span className="text-sm font-medium text-icon5">{title}</span>
-      </button>
-      {isExpanded && <div className="p-4 bg-surface2">{children}</div>}
+    <div className="border border-border1 rounded-lg overflow-hidden min-w-0">
+      <div className="flex items-center bg-surface3 hover:bg-surface4 transition-colors">
+        <button onClick={onToggle} className="flex items-center gap-2 flex-1 px-4 py-3">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-icon3" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-icon3" />
+          )}
+          <span className="text-sm font-medium text-icon5">{title}</span>
+        </button>
+        {headerAction && <div className="pr-3">{headerAction}</div>}
+      </div>
+      {isExpanded && <div className="p-4 bg-surface2 overflow-x-auto w-0 min-w-full">{children}</div>}
     </div>
   );
 }

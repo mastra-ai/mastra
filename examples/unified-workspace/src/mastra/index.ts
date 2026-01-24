@@ -14,6 +14,8 @@ import {
   skillsOnlyAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Memory } from '@mastra/memory';
 
 // Re-export workspaces for demo scripts
 export {
@@ -67,6 +69,20 @@ export const mastra = new Mastra({
   },
   workspace: globalWorkspace,
   storage,
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
+  }),
 });
 
 // Export workspace alias for convenience
