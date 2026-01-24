@@ -8,3 +8,4 @@ export * from './memory';
 export * from './inmemory-db';
 export * from './shared';
 export * from './datasets';
+export * from './runs';
