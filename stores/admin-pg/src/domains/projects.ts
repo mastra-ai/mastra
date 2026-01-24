@@ -144,7 +144,12 @@ export class ProjectsPG {
 
   // API token operations
   async createApiToken(data: Omit<ProjectApiToken, 'createdAt' | 'lastUsedAt'>): Promise<ProjectApiToken> {
-    return this.db.insert<Omit<ProjectApiToken, 'id'>>(TABLES.project_api_tokens, data as unknown as Record<string, unknown>);
+    // Serialize scopes array to JSON for JSONB column
+    const insertData = {
+      ...data,
+      scopes: JSON.stringify(data.scopes),
+    };
+    return this.db.insert<Omit<ProjectApiToken, 'id'>>(TABLES.project_api_tokens, insertData as unknown as Record<string, unknown>);
   }
 
   async getApiTokenById(id: string): Promise<ProjectApiToken | null> {

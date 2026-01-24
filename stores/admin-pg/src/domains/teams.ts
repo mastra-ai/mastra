@@ -102,7 +102,7 @@ export class TeamsPG {
       FROM "${this.db.schemaName}"."${TABLES.team_members}" tm
       INNER JOIN "${this.db.schemaName}"."${TABLES.users}" u ON tm.user_id = u.id
       WHERE tm.team_id = $1
-      ORDER BY tm.created_at
+      ORDER BY tm.joined_at
     `;
 
     if (options?.limit) {
@@ -118,8 +118,8 @@ export class TeamsPG {
       teamId: row.team_id,
       userId: row.user_id,
       role: row.role as TeamRole,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: row.joined_at,
+      updatedAt: row.joined_at, // Schema doesn't have updated_at, use joined_at
       user: {
         id: row.user_id,
         email: row.user_email,
@@ -140,8 +140,13 @@ export class TeamsPG {
   }
 
   // Team invite operations
-  async createInvite(data: Omit<TeamInvite, 'id' | 'createdAt'>): Promise<TeamInvite> {
-    return this.db.insert<Omit<TeamInvite, 'id'>>(TABLES.team_invites, data as unknown as Record<string, unknown>);
+  async createInvite(data: Omit<TeamInvite, 'id' | 'createdAt'> & { token?: string }): Promise<TeamInvite> {
+    // Generate a unique token if not provided
+    const insertData = {
+      ...data,
+      token: data.token ?? crypto.randomUUID(),
+    };
+    return this.db.insert<Omit<TeamInvite, 'id'>>(TABLES.team_invites, insertData as unknown as Record<string, unknown>);
   }
 
   async getInviteById(id: string): Promise<TeamInvite | null> {
