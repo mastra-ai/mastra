@@ -107,15 +107,15 @@ Calculate statistical significance on score deltas between runs.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STORE-01 | Phase 1 | Pending |
-| STORE-02 | Phase 1 | Pending |
-| STORE-03 | Phase 1 | Pending |
-| STORE-04 | Phase 1 | Pending |
-| VERS-01 | Phase 1 | Pending |
-| EXEC-01 | Phase 2 | Pending |
-| EXEC-02 | Phase 2 | Pending |
-| EXEC-03 | Phase 2 | Pending |
-| SCORE-01 | Phase 2 | Pending |
+| STORE-01 | Phase 1 | Complete |
+| STORE-02 | Phase 1 | Complete |
+| STORE-03 | Phase 1 | Complete |
+| STORE-04 | Phase 1 | Complete |
+| VERS-01 | Phase 1 | Complete |
+| EXEC-01 | Phase 2 | Complete |
+| EXEC-02 | Phase 2 | Complete |
+| EXEC-03 | Phase 2 | Complete |
+| SCORE-01 | Phase 2 | Complete |
 | TARGET-01 | Phase 3 | Pending |
 | TARGET-02 | Phase 3 | Pending |
 | TARGET-03 | Phase 4 | Pending |
