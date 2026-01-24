@@ -52,10 +52,13 @@ Plans:
   4. Scorers are applied to results and scores persist to ScoresStorage
   5. Run status tracks pending/running/completed/failed states
   6. Run results include output, latency, error info per item
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — RunsStorage types, schemas, and base class
+- [ ] 02-02-PLAN.md — RunsInMemory implementation and exports
+- [ ] 02-03-PLAN.md — Run orchestration with p-map execution and scoring
+- [ ] 02-04-PLAN.md — Test suite for RunsInMemory and runDataset
 
 ### Phase 3: Agent & Workflow Targets
 **Goal**: Complete integration with Agent.generate() and Workflow.run()
@@ -156,7 +159,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
-| 2. Execution Core | 0/TBD | Not started | - |
+| 2. Execution Core | 0/4 | Ready | - |
 | 3. Agent & Workflow Targets | 0/TBD | Not started | - |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
 | 5. Run Analytics | 0/TBD | Not started | - |
