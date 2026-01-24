@@ -166,6 +166,50 @@ For efficient aggregation queries:
 - `mastra_admin_metrics_hourly_stats`
 - `mastra_admin_scores_hourly_stats`
 
+## Development
+
+### Running Tests
+
+```bash
+# Run unit tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Run integration tests (requires Docker)
+pnpm docker:up
+pnpm test:integration
+pnpm docker:down
+```
+
+### Docker Compose
+
+A Docker Compose setup is provided for running integration tests locally:
+
+```bash
+# Start ClickHouse
+docker compose up -d
+
+# ClickHouse will be available at:
+# - HTTP API: http://localhost:8123
+# - Native protocol: localhost:9000
+
+# Stop ClickHouse
+docker compose down
+
+# Stop and remove data
+docker compose down -v
+```
+
+### Environment Variables
+
+The following environment variables can be used to configure the integration tests:
+
+- `CLICKHOUSE_URL` - ClickHouse HTTP URL (default: `http://localhost:8123`)
+- `CLICKHOUSE_USER` - ClickHouse username (default: `default`)
+- `CLICKHOUSE_PASSWORD` - ClickHouse password (default: empty)
+
 ## Related Packages
 
 - `@mastra/admin` - Core types and interfaces

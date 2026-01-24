@@ -37,8 +37,11 @@
     "build:watch": "pnpm build:lib --watch",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
+    "test": "vitest run --exclude src/integration.test.ts",
+    "test:watch": "vitest watch --exclude src/integration.test.ts",
+    "test:integration": "RUN_INTEGRATION_TESTS=1 vitest run src/integration.test.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
     "lint": "eslint ."
   },
   "dependencies": {
