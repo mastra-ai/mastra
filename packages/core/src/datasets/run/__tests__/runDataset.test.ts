@@ -347,4 +347,32 @@ describe('runDataset', () => {
       }
     });
   });
+
+  describe('workflow target', () => {
+    it('executes dataset items against workflow', async () => {
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        createRun: vi.fn().mockImplementation(async () => ({
+          start: vi.fn().mockResolvedValue({
+            status: 'success',
+            result: { answer: 'Workflow result' },
+          }),
+        })),
+      };
+
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(mockWorkflow);
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(mockWorkflow);
+
+      const result = await runDataset(mastra, {
+        datasetId,
+        targetType: 'workflow',
+        targetId: 'test-workflow',
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+      expect(mockWorkflow.createRun).toHaveBeenCalledTimes(2);
+    });
+  });
 });
