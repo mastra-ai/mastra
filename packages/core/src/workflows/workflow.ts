@@ -3401,19 +3401,32 @@ export class Run<
       }
     });
 
+    // Build tracing options for the resumed span, linking to the original suspended span if available
+    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
+    const persistedTracingContext = snapshot?.tracingContext;
+    const resumeTracingOptions = {
+      ...params.tracingOptions,
+      // Use persisted traceId to keep spans in the same trace, unless user explicitly provides one
+      traceId: params.tracingOptions?.traceId ?? persistedTracingContext?.traceId,
+      // Link the resumed span as a child of the original suspended span
+      parentSpanId: params.tracingOptions?.parentSpanId ?? persistedTracingContext?.spanId,
+    };
+
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
-      name: `workflow run: '${this.workflowId}'`,
+      name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
       input: resumeDataToUse,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        resumed: true,
+        resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: params.tracingOptions,
+      tracingOptions: resumeTracingOptions,
       tracingContext: params.tracingContext,
       requestContext: requestContextToUse,
       mastra: this.#mastra,
