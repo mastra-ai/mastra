@@ -16,6 +16,9 @@ You can add `ArizeExporter` to your Mastra configuration to export traces to Ari
 
 The exporter automatically reads credentials from environment variables, enabling zero-config setup.
 
+> [!TIP]
+> For a simpler setup with optimized defaults, see the [Simplified Configuration with `createArizeConfig`](#simplified-configuration-with-createarizeconfig) section below.
+
 ### Phoenix (Zero-Config)
 
 Set environment variables and use zero-config:
@@ -141,6 +144,77 @@ const mastra = new Mastra({
 
 > [!TIP]
 > Need an Arize AX API key? [Get one here](https://app.arize.com/).
+
+## Simplified Configuration with `createArizeConfig`
+
+For a simpler setup with sensible defaults, use `createArizeConfig`. This helper function provides:
+
+- **Optimized serialization options** - Large payload limits by default (no truncation)
+- **Built-in workflow filter** - Automatically filters out workflow loop/parallel/conditional spans to reduce noise
+- **Simplified API** - Less boilerplate than manual configuration
+
+### Basic Usage
+
+```typescript
+import { Observability } from '@mastra/observability';
+import { createArizeConfig } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          apiKey: process.env.PHOENIX_API_KEY,
+          projectName: process.env.PHOENIX_PROJECT_NAME,
+        },
+      }),
+    },
+  }),
+});
+```
+
+### With Custom Options
+
+```typescript
+import { Observability } from '@mastra/observability';
+import { createArizeConfig } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          apiKey: process.env.PHOENIX_API_KEY,
+          projectName: process.env.PHOENIX_PROJECT_NAME,
+        },
+        serviceName: 'my-custom-service', // Optional: defaults to env var or 'mastra-tracing'
+        serializationOptions: {
+          // Optional: customize serialization limits
+          // By default, outputs won't be truncated
+        },
+        spanProcessors: [
+          // Optional: add additional span processors
+          // Default workflow filter is always included first
+        ],
+      }),
+    },
+  }),
+});
+```
+
+### Serialization Options
+
+By default, `createArizeConfig` uses optimized serialization options that prevent truncation of outputs and large payloads. You can customize these options by providing `serializationOptions` to control how span data is serialized.
+
+### Span Processors
+
+The config includes a built-in workflow filter that automatically filters out internal workflow spans (like "Workflow loop", "Workflow parallel", etc.) so you won't see internal steps of building an agent. You can add additional custom span processors via the `spanProcessors` option, and they will be appended after the default filter.
 
 ## Optional Configuration
 

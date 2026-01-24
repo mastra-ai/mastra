@@ -141,9 +141,166 @@ async shutdown(): Promise<void>
 
 Flushes pending data and shuts down the client.
 
+## createArizeConfig
+
+Helper function that creates a pre-configured Arize observability config with sensible defaults.
+
+```typescript
+function createArizeConfig(options: CreateArizeConfigOptions): Omit<ObservabilityInstanceConfig, 'name'>
+```
+
+### CreateArizeConfigOptions
+
+```typescript
+interface CreateArizeConfigOptions {
+  exporter: ArizeExporterConfig;
+  serviceName?: string;
+  serializationOptions?: SerializationOptions;
+  spanProcessors?: SpanOutputProcessor[];
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "exporter",
+      type: "ArizeExporterConfig",
+      description: "Exporter configuration. At minimum, endpoint should be provided (or spaceId for Arize AX).",
+      required: true,
+    },
+    {
+      name: "serviceName",
+      type: "string",
+      description:
+        "Service name for tracing. Defaults to PHOENIX_PROJECT_NAME or ARIZE_PROJECT_NAME env var, or 'mastra-tracing'.",
+      required: false,
+    },
+    {
+      name: "serializationOptions",
+      type: "SerializationOptions",
+      description:
+        "Custom serialization options (merged with defaults). By default, outputs won't be truncated due to optimized serialization limits.",
+      required: false,
+    },
+    {
+      name: "spanProcessors",
+      type: "SpanOutputProcessor[]",
+      description:
+        "Additional span output processors (appended to defaults). A default workflow filter is always included first that filters out internal workflow spans (like 'Workflow loop') so you won't see internal steps of building an agent.",
+      required: false,
+    },
+  ]}
+/>
+
 ## Usage
 
-### Zero-Config (using environment variables)
+### Simplified Configuration with `createArizeConfig`
+
+For a simpler setup with optimized defaults, use `createArizeConfig`. This helper function provides:
+
+- **Optimized serialization options** - Large payload limits by default (no truncation)
+- **Built-in workflow filter** - Automatically filters out workflow loop/parallel/conditional spans to reduce noise
+- **Simplified API** - Less boilerplate than manual configuration
+
+#### Basic Usage
+
+`createArizeConfig` works with both Phoenix and Arize AX:
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+// For Phoenix
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          apiKey: process.env.PHOENIX_API_KEY,
+          projectName: process.env.PHOENIX_PROJECT_NAME,
+        },
+      }),
+    },
+  }),
+});
+
+// For Arize AX
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          spaceId: process.env.ARIZE_SPACE_ID!,
+          apiKey: process.env.ARIZE_API_KEY!,
+          projectName: process.env.ARIZE_PROJECT_NAME,
+        },
+      }),
+    },
+  }),
+});
+```
+
+#### Customizing Serialization Options
+
+By default, `createArizeConfig` uses optimized serialization options that prevent truncation of outputs and large payloads. You can customize these options by providing `serializationOptions` to control how span data is serialized. This works for both Phoenix and Arize AX:
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          // or
+          // spaceId: process.env.ARIZE_SPACE_ID!,
+        },
+        serializationOptions: {
+          // Customize serialization limits as needed
+        },
+      }),
+    },
+  }),
+});
+```
+
+#### Customizing Span Processors
+
+The config includes a built-in workflow filter that automatically filters out internal workflow spans (like "Workflow loop", "Workflow parallel", etc.) so you won't see internal steps of building an agent. You can add additional custom span processors. This works for both Phoenix and Arize AX:
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          // or
+          // spaceId: process.env.ARIZE_SPACE_ID!,
+        },
+        spanProcessors: [
+          // Add your custom span processors here
+          // The default workflow filter is always included first
+        ],
+      }),
+    },
+  }),
+});
+```
+
+### Manual Configuration with `ArizeExporter`
+
+For direct control over the configuration, you can use `ArizeExporter` directly:
+
+#### Zero-Config (using environment variables)
 
 ```typescript
 import { ArizeExporter } from "@mastra/arize";

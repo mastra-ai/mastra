@@ -60,6 +60,35 @@ export const mastra = new Mastra({
 });
 ```
 
+#### Simplified Configuration with `createArizeConfig`
+
+For a simpler setup with optimized defaults, use `createArizeConfig`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          apiKey: process.env.PHOENIX_API_KEY,
+          projectName: process.env.PHOENIX_PROJECT_NAME,
+        },
+      }),
+    },
+  }),
+});
+```
+
+This provides:
+- **Optimized serialization options** - Large payload limits by default (no truncation)
+- **Built-in workflow filter** - Automatically filters out workflow loop/parallel/conditional spans
+- **Simplified API** - Less boilerplate than manual configuration
+
 #### Explicit Configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
@@ -144,6 +173,30 @@ export const mastra = new Mastra({
 });
 ```
 
+#### Simplified Configuration with `createArizeConfig`
+
+For a simpler setup with optimized defaults:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          spaceId: process.env.ARIZE_SPACE_ID!,
+          apiKey: process.env.ARIZE_API_KEY!,
+          projectName: process.env.ARIZE_PROJECT_NAME,
+        },
+      }),
+    },
+  }),
+});
+```
+
 #### Explicit Configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
@@ -166,6 +219,65 @@ export const mastra = new Mastra({
           }),
         ],
       },
+    },
+  }),
+});
+```
+
+## Customizing `createArizeConfig`
+
+The `createArizeConfig` helper works with both Phoenix and Arize AX. You can customize serialization options and span processors regardless of which platform you're using.
+
+### Customizing Serialization Options
+
+By default, `createArizeConfig` uses optimized serialization options that prevent truncation of outputs and large payloads. You can customize these options by providing `serializationOptions`:
+
+```typescript title="src/mastra/index.ts"
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          // or
+          // spaceId: process.env.ARIZE_SPACE_ID!,
+        },
+        serializationOptions: {
+          // Customize serialization limits as needed
+        },
+      }),
+    },
+  }),
+});
+```
+
+### Customizing Span Processors
+
+The config includes a built-in workflow filter that automatically filters out internal workflow spans (like "Workflow loop", "Workflow parallel", etc.) so you won't see internal steps of building an agent. You can add additional custom span processors:
+
+```typescript title="src/mastra/index.ts"
+import { Observability } from "@mastra/observability";
+import { createArizeConfig } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporter: {
+          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
+          endpoint: process.env.PHOENIX_ENDPOINT!,
+          // or
+          // spaceId: process.env.ARIZE_SPACE_ID!,
+        },
+        spanProcessors: [
+          // Add your custom span processors here
+          // The default workflow filter is always included first
+        ],
+      }),
     },
   }),
 });
