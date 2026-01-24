@@ -634,3 +634,107 @@ export interface ListDatasetItemsOutput {
   items: DatasetItem[];
   pagination: PaginationInfo;
 }
+
+// Run Types (Dataset execution tracking)
+
+/** Run record - tracks overall run state */
+export interface Run {
+  id: string;
+  datasetId: string;
+  /** Version snapshot at run start */
+  datasetVersion: Date;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Per-item result record */
+export interface RunResult {
+  id: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown | null;
+  expectedOutput: unknown | null;
+  /** Latency in milliseconds */
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  createdAt: Date;
+}
+
+/** Target type for runs */
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
+/** Run status */
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+/** Input for creating a run */
+export interface CreateRunInput {
+  id?: string;
+  datasetId: string;
+  datasetVersion: Date;
+  targetType: TargetType;
+  targetId: string;
+  totalItems: number;
+}
+
+/** Input for updating a run */
+export interface UpdateRunInput {
+  id: string;
+  status?: RunStatus;
+  succeededCount?: number;
+  failedCount?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+/** Input for adding a run result */
+export interface AddRunResultInput {
+  id?: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown | null;
+  expectedOutput: unknown | null;
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+}
+
+/** Input for listing runs */
+export interface ListRunsInput {
+  datasetId?: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing runs */
+export interface ListRunsOutput {
+  runs: Run[];
+  pagination: PaginationInfo;
+}
+
+/** Input for listing run results */
+export interface ListRunResultsInput {
+  runId: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing run results */
+export interface ListRunResultsOutput {
+  results: RunResult[];
+  pagination: PaginationInfo;
+}
