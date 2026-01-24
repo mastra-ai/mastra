@@ -1,4 +1,12 @@
 // @mastra/admin-pg - PostgreSQL storage adapter for MastraAdmin
-// This file will be populated with exports in Phase 8
 
-export {};
+// Configuration types
+export type {
+  PostgresAdminStorageConfig,
+  PostgresAdminBaseConfig,
+  PoolInstanceConfig,
+  ConnectionStringConfig,
+  HostConfig,
+} from './shared/config';
+
+export { isPoolConfig, isConnectionStringConfig, isHostConfig, validateConfig, parseSqlIdentifier } from './shared/config';
