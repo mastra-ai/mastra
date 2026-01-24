@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronRight, ChevronDown, Brain, ExternalLink } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -13,14 +13,34 @@ const formatTokens = (n: number) => {
   return n.toString();
 };
 
-// Get bar color based on percentage: green 0-60%, yellow 60-99%, blue 100%
-const getBarColor = (percentage: number, isActive: boolean) => {
-  if (percentage >= 100) {
-    // Subtle pulse using opacity animation instead of full animate-pulse
-    return isActive ? 'bg-blue-500 animate-[pulse_3s_ease-in-out_infinite]' : 'bg-blue-500';
-  }
-  if (percentage >= 60) return 'bg-yellow-500';
+// Get bar color based on percentage: green 0-60%, blue 60%+
+const getBarColor = (percentage: number) => {
+  if (percentage >= 60) return 'bg-blue-500';
   return 'bg-green-500';
+};
+
+// Hook to track elapsed time when active
+const useElapsedTime = (isActive: boolean) => {
+  const [elapsed, setElapsed] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isActive) {
+      startTimeRef.current = Date.now();
+      setElapsed(0);
+      const interval = setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsed((Date.now() - startTimeRef.current) / 1000);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    } else {
+      startTimeRef.current = null;
+      setElapsed(0);
+    }
+  }, [isActive]);
+
+  return elapsed;
 };
 
 // Progress bar component with percent label inside bar
@@ -36,38 +56,49 @@ const ProgressBar = ({
   isActive?: boolean;
 }) => {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
-  const barColor = getBarColor(percentage, isActive);
+  const barColor = getBarColor(percentage);
+  const elapsed = useElapsedTime(isActive && percentage >= 100);
+  const isProcessing = isActive && percentage >= 100;
+  const activeText = label === 'Messages' ? 'observing' : 'reflecting';
+  
+  // When processing: use blue observing badge style (bg-blue-500/10 text-blue-600)
+  const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
+  const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
+  const textColor = isProcessing ? 'text-blue-600' : 'text-neutral4';
+  const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
+  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-surface5';
+  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-neutral3';
   
   return (
     <div className="flex-1 min-w-0">
-      {/* Label above bar */}
-      <span className="text-[10px] text-neutral4 uppercase tracking-wider block mb-1">{label}</span>
+      {/* Label above bar - fixed height to prevent layout shift */}
+      <div className="flex items-center gap-1.5 mb-1 h-4">
+        <span className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">{label}</span>
+      </div>
       
-      {/* Bar row with tokens on right */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-stretch">
         {/* Progress bar with percentage inside */}
-        <div className="relative flex-1 h-5 bg-surface4 rounded overflow-hidden">
+        <div className={`relative flex-1 h-5 ${containerBg} rounded-l overflow-hidden`}>
           <div 
-            className={`h-full ${barColor} transition-all duration-300 ease-out`}
+            className={`h-full ${fillColor} transition-all`}
             style={{ width: `${percentage}%` }}
           />
-          {/* Percentage text - dark on unfilled, white on filled */}
           <span 
-            className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-neutral4 pointer-events-none"
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColor} pointer-events-none`}
           >
-            {Math.round(percentage)}%
+            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : `${Math.round(percentage)}%`}
           </span>
           <span 
-            className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white pointer-events-none"
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
-            {Math.round(percentage)}%
+            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : `${Math.round(percentage)}%`}
           </span>
         </div>
         
-        {/* Token count on right */}
-        <span className="text-[11px] text-neutral3 tabular-nums whitespace-nowrap font-mono">
-          {formatTokens(value)}<span className="text-neutral4">/{formatTokens(max)}</span>
+        {/* Token count connected to bar */}
+        <span className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center rounded-r -ml-px`}>
+          {formatTokens(value)}<span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
         </span>
       </div>
     </div>
@@ -85,7 +116,12 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const [showHistory, setShowHistory] = useState(false);
 
   // Get real-time observation status and progress from streaming context
-  const { isObservingFromStream, streamProgress } = useObservationalMemoryContext();
+  const { isObservingFromStream, streamProgress, clearProgress } = useObservationalMemoryContext();
+
+  // Clear progress when thread changes
+  useEffect(() => {
+    clearProgress();
+  }, [threadId, clearProgress]);
 
   // Get OM config to get thresholds
   const { data: configData } = useMemoryConfig(agentId);
@@ -219,20 +255,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-4 h-4 text-purple-400" />
         <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-        {/* Status label in header */}
-        {isObserving ? (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400 animate-pulse">
-            observing
-          </span>
-        ) : isReflecting ? (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 animate-pulse">
-            reflecting
-          </span>
-        ) : hasObservations ? (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-            active
-          </span>
-        ) : null}
+
       </div>
 
       {/* Progress Bars for Thresholds - Side by side */}
@@ -250,13 +273,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
           isActive={isReflecting}
         />
       </div>
-
-      {/* No observations message - show when no observations exist */}
-      {!hasObservations && (
-        <p className="text-sm text-neutral3">
-          No observations yet, start a conversation to begin building memory.
-        </p>
-      )}
 
       {/* Observations Content */}
       {hasObservations && (

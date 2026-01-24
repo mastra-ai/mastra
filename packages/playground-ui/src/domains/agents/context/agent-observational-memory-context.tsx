@@ -29,6 +29,8 @@ interface ObservationalMemoryContextValue {
   streamProgress: OmProgressData | null;
   /** Update progress data from stream */
   setStreamProgress: (data: OmProgressData | null) => void;
+  /** Clear all progress state (e.g., on thread change) */
+  clearProgress: () => void;
 }
 
 const ObservationalMemoryContext = createContext<ObservationalMemoryContextValue | null>(null);
@@ -42,6 +44,11 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
     setObservationsUpdatedAt(Date.now());
   }, []);
 
+  const clearProgress = useCallback(() => {
+    setStreamProgress(null);
+    setIsObservingFromStream(false);
+  }, []);
+
   return (
     <ObservationalMemoryContext.Provider
       value={{
@@ -51,6 +58,7 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
         signalObservationsUpdated,
         streamProgress,
         setStreamProgress,
+        clearProgress,
       }}
     >
       {children}
@@ -69,6 +77,7 @@ export function useObservationalMemoryContext() {
       signalObservationsUpdated: () => {},
       streamProgress: null,
       setStreamProgress: () => {},
+      clearProgress: () => {},
     };
   }
   return context;

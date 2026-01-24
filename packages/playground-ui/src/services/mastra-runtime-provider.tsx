@@ -326,6 +326,10 @@ export function MastraRuntimeProvider({
 
   // Helper to update progress from streamed data-om-progress parts
   const handleProgressUpdate = (data: any) => {
+    // Ignore progress from a different thread (e.g., if user switched threads mid-stream)
+    if (data.threadId && data.threadId !== threadId) {
+      return;
+    }
     setStreamProgress({
       pendingTokens: data.pendingTokens,
       threshold: data.threshold,
