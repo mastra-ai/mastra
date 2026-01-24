@@ -3404,12 +3404,23 @@ export class Run<
     // Build tracing options for the resumed span, linking to the original suspended span if available
     // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
+    const userProvidedTraceId = params.tracingOptions?.traceId;
+    const effectiveTraceId = userProvidedTraceId ?? persistedTracingContext?.traceId;
+
+    // Only use persisted spanId as parentSpanId if:
+    // 1. User didn't provide their own parentSpanId, AND
+    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
+    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
+    const shouldUsePersistedParentSpan =
+      !params.tracingOptions?.parentSpanId &&
+      (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
+
     const resumeTracingOptions = {
       ...params.tracingOptions,
-      // Use persisted traceId to keep spans in the same trace, unless user explicitly provides one
-      traceId: params.tracingOptions?.traceId ?? persistedTracingContext?.traceId,
-      // Link the resumed span as a child of the original suspended span
-      parentSpanId: params.tracingOptions?.parentSpanId ?? persistedTracingContext?.spanId,
+      traceId: effectiveTraceId,
+      parentSpanId: shouldUsePersistedParentSpan
+        ? persistedTracingContext?.spanId
+        : params.tracingOptions?.parentSpanId,
     };
 
     // note: this span is ended inside this.executionEngine.execute()
