@@ -1,0 +1,1 @@
+export { SubdomainGenerator } from './generator';
