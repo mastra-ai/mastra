@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*", "tsup.config.ts", "vitest.config.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"],
+  "compilerOptions": {
+    "lib": ["ES2023"]
+  }
+}

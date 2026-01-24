@@ -1,0 +1,92 @@
+{
+  "name": "@mastra/admin",
+  "version": "0.1.0",
+  "description": "MastraAdmin core - enterprise platform for running many Mastra servers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./license": {
+      "import": {
+        "types": "./dist/license/index.d.ts",
+        "default": "./dist/license/index.js"
+      },
+      "require": {
+        "types": "./dist/license/index.d.ts",
+        "default": "./dist/license/index.cjs"
+      }
+    },
+    "./providers": {
+      "import": {
+        "types": "./dist/providers/index.d.ts",
+        "default": "./dist/providers/index.js"
+      },
+      "require": {
+        "types": "./dist/providers/index.d.ts",
+        "default": "./dist/providers/index.cjs"
+      }
+    },
+    "./rbac": {
+      "import": {
+        "types": "./dist/rbac/index.d.ts",
+        "default": "./dist/rbac/index.js"
+      },
+      "require": {
+        "types": "./dist/rbac/index.d.ts",
+        "default": "./dist/rbac/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build": "pnpm build:lib",
+    "build:watch": "pnpm build:lib --watch",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/admin"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
