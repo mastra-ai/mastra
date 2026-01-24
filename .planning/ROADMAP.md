@@ -33,10 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Dataset version increments automatically when items are added/modified
   4. Items are queryable by dataset and version
   5. Storage works with libsql and in-memory backends (pg deferred)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Types, schemas, and DatasetsStorage base class
+- [ ] 01-02-PLAN.md — DatasetsInMemory implementation and core registration
+- [ ] 01-03-PLAN.md — DatasetsLibSQL implementation
 
 ### Phase 2: Execution Core
 **Goal**: Run datasets against targets with automatic scoring and result persistence
@@ -152,7 +154,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Storage Foundation | 0/TBD | Not started | - |
+| 1. Storage Foundation | 0/3 | Planned | - |
 | 2. Execution Core | 0/TBD | Not started | - |
 | 3. Agent & Workflow Targets | 0/TBD | Not started | - |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
