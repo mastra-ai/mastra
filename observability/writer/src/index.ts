@@ -7,5 +7,28 @@
  * @packageDocumentation
  */
 
-// Placeholder - implementation will be added in subsequent phases
-export {};
+// Types
+export type {
+  // Configuration
+  ObservabilityWriterConfig,
+
+  // Event types (re-exported from @mastra/admin)
+  Trace,
+  Span,
+  SpanEvent,
+  Log,
+  Metric,
+  Score,
+  ObservabilityEvent,
+  ObservabilityEventType,
+
+  // File storage (re-exported from @mastra/admin)
+  FileStorageProvider,
+  FileInfo,
+
+  // Writer types
+  EventBuffer,
+  FlushResult,
+  FlushError,
+  WriterStats,
+} from './types.js';
