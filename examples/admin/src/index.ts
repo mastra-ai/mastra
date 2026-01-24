@@ -6,6 +6,9 @@
  * - Project management
  * - Deployment management
  * - Environment variable handling
+ * - Local process runner (build & run Mastra servers)
+ * - Local edge router (expose deployed servers)
+ * - File-based observability storage
  *
  * Run with: pnpm dev
  */
@@ -15,6 +18,9 @@ import 'dotenv/config';
 import { MastraAdmin, TeamRole } from '@mastra/admin';
 import { PostgresAdminStorage } from '@mastra/admin-pg';
 import { LocalProjectSource } from '@mastra/source-local';
+import { LocalProcessRunner } from '@mastra/runner-local';
+import { LocalEdgeRouter } from '@mastra/router-local';
+import { LocalFileStorage } from '@mastra/observability-file-local';
 import { resolve } from 'path';
 
 // Demo configuration - use valid UUIDs
@@ -43,25 +49,55 @@ async function main() {
     maxDepth: 3,
   });
 
-  // 3. Create MastraAdmin instance
-  console.log('[3] Creating MastraAdmin instance...');
+  // 3. Initialize Local Process Runner (builds and runs Mastra servers)
+  console.log('[3] Initializing local process runner...');
+  const runner = new LocalProcessRunner({
+    portRange: { start: 4111, end: 4200 },
+    maxConcurrentBuilds: 3,
+    defaultBuildTimeoutMs: 600000, // 10 minutes
+    logRetentionLines: 10000,
+    buildDir: resolve(process.cwd(), '.mastra/builds'),
+  });
+
+  // 4. Initialize Local Edge Router (exposes deployed servers)
+  console.log('[4] Initializing local edge router...');
+  const router = new LocalEdgeRouter({
+    strategy: 'port-mapping',
+    baseDomain: 'localhost',
+    portRange: { start: 3100, end: 3199 },
+    logRoutes: true,
+  });
+
+  // 5. Initialize File Storage (for observability data)
+  console.log('[5] Initializing local file storage...');
+  const fileStorage = new LocalFileStorage({
+    baseDir: resolve(process.cwd(), '.mastra/observability'),
+    atomicWrites: true,
+  });
+
+  // 6. Create MastraAdmin instance
+  console.log('[6] Creating MastraAdmin instance...');
   const admin = new MastraAdmin({
     licenseKey: 'dev', // Development license
     storage,
     source,
-    // Note: runner and router are not yet implemented
-    // They will be added once @mastra/runner-local and @mastra/router-local are available
+    runner,
+    router,
+    fileStorage,
   });
 
-  // 4. Initialize
-  console.log('[4] Initializing MastraAdmin...');
+  // 7. Initialize
+  console.log('[7] Initializing MastraAdmin...');
   await admin.init();
   console.log('    License tier:', admin.getLicenseInfo().tier);
+  console.log('    Runner: LocalProcessRunner');
+  console.log('    Router: LocalEdgeRouter');
+  console.log('    FileStorage: LocalFileStorage');
   console.log();
 
   try {
     // Create demo user first
-    console.log('[5] Ensuring demo user exists...');
+    console.log('[8] Ensuring demo user exists...');
     let demoUser = await admin.getUser(DEMO_USER_ID);
     if (!demoUser) {
       // Create user directly via storage (since this would normally come from auth)
@@ -78,8 +114,8 @@ async function main() {
     }
     console.log();
 
-    // 5. Create a team
-    console.log('[6] Creating a team...');
+    // 9. Create a team
+    console.log('[9] Creating a team...');
     let team;
     try {
       team = await admin.createTeam(DEMO_USER_ID, {
@@ -105,8 +141,8 @@ async function main() {
       throw new Error('Failed to create or find team');
     }
 
-    // 6. List team members
-    console.log('[7] Listing team members...');
+    // 10. List team members
+    console.log('[10] Listing team members...');
     const members = await admin.getTeamMembers(DEMO_USER_ID, team.id);
     console.log(`    Team has ${members.total} member(s):`);
     for (const member of members.data) {
@@ -114,8 +150,8 @@ async function main() {
     }
     console.log();
 
-    // 7. Discover local projects
-    console.log('[8] Discovering local Mastra projects...');
+    // 11. Discover local projects
+    console.log('[11] Discovering local Mastra projects...');
     const discoveredProjects = await source.listProjects(team.id);
     console.log(`    Found ${discoveredProjects.length} project(s) in ${projectsDir}:`);
     for (const proj of discoveredProjects.slice(0, 5)) {
@@ -126,8 +162,8 @@ async function main() {
     }
     console.log();
 
-    // 8. Create a project (using first discovered project or a mock)
-    console.log('[9] Creating a project in MastraAdmin...');
+    // 12. Create a project (using first discovered project or a mock)
+    console.log('[12] Creating a project in MastraAdmin...');
     let project;
     try {
       const sourceConfig = discoveredProjects[0]
@@ -160,8 +196,8 @@ async function main() {
       throw new Error('Failed to create or find project');
     }
 
-    // 9. Set environment variables
-    console.log('[10] Setting environment variables...');
+    // 13. Set environment variables
+    console.log('[13] Setting environment variables...');
     await admin.setEnvVar(DEMO_USER_ID, project.id, 'DEMO_API_KEY', 'demo-api-key-12345', true);
     await admin.setEnvVar(DEMO_USER_ID, project.id, 'NODE_ENV', 'development', false);
     console.log('    Set DEMO_API_KEY (secret)');
@@ -171,8 +207,8 @@ async function main() {
     console.log(`    Project has ${envVars.length} env var(s)`);
     console.log();
 
-    // 10. Create a deployment
-    console.log('[11] Creating a deployment...');
+    // 14. Create a deployment
+    console.log('[14] Creating a deployment...');
     let deployment;
     try {
       deployment = await admin.createDeployment(DEMO_USER_ID, project.id, {
@@ -199,8 +235,8 @@ async function main() {
     }
     console.log();
 
-    // 11. List all deployments
-    console.log('[12] Listing project deployments...');
+    // 15. List all deployments
+    console.log('[15] Listing project deployments...');
     const deployments = await admin.listDeployments(DEMO_USER_ID, project.id);
     console.log(`    Project has ${deployments.total} deployment(s):`);
     for (const dep of deployments.data) {
@@ -208,12 +244,13 @@ async function main() {
     }
     console.log();
 
-    // Note about deploy functionality
-    console.log('[13] Deploy functionality...');
-    console.log('    Note: The deploy() method creates a build and queues it for processing.');
-    console.log('    However, actual deployment requires @mastra/runner-local which is not yet implemented.');
-    console.log('    Once runner-local is available, you can deploy with:');
-    console.log('      const build = await admin.deploy(userId, deploymentId);');
+    // 16. Deploy functionality
+    console.log('[16] Deploy functionality...');
+    console.log('    The deploy() method creates a build and queues it for processing.');
+    console.log('    With @mastra/runner-local, the build will be executed locally.');
+    console.log('    With @mastra/router-local, the deployed server will be exposed via HTTP.');
+    console.log('    To deploy, run: const build = await admin.deploy(userId, deploymentId);');
+    console.log('    For a full deployment demo, run: pnpm demo:full');
     console.log();
 
     // Summary
@@ -227,10 +264,18 @@ async function main() {
     console.log(`  - Deployments: ${deployments.total}`);
     console.log(`  - Discovered local projects: ${discoveredProjects.length}`);
     console.log();
+    console.log('MVP Infrastructure:');
+    console.log('  - @mastra/admin (Core orchestrator)');
+    console.log('  - @mastra/admin-server (HTTP API)');
+    console.log('  - @mastra/admin-pg (PostgreSQL storage)');
+    console.log('  - @mastra/source-local (Local project discovery)');
+    console.log('  - @mastra/runner-local (Local process runner)');
+    console.log('  - @mastra/router-local (Local edge router)');
+    console.log('  - @mastra/observability-file-local (Local file storage)');
+    console.log();
     console.log('Next Steps:');
-    console.log('  1. Run "pnpm demo:full" for a more comprehensive demo');
-    console.log('  2. Check out AdminServer for HTTP API access');
-    console.log('  3. Wait for @mastra/runner-local to enable actual deployments');
+    console.log('  1. Run "pnpm demo:full" for a comprehensive demo with HTTP API');
+    console.log('  2. Try deploying a project with admin.deploy()');
     console.log();
 
   } finally {

@@ -1,3 +1,4 @@
+import type { ProjectSourceProvider } from '../source/base';
 import type { Build, Deployment, Project, RunningServer } from '../types';
 
 /**
@@ -39,6 +40,14 @@ export type LogStreamCallback = (log: string) => void;
 export interface ProjectRunner {
   /** Runner type identifier */
   readonly type: 'local' | 'k8s' | string;
+
+  /**
+   * Set the project source provider.
+   * Called by MastraAdmin during initialization to inject the source.
+   *
+   * @param source - The source provider for fetching project files
+   */
+  setSource?(source: ProjectSourceProvider): void;
 
   /**
    * Build a project from source.

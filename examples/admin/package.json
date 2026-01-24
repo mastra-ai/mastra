@@ -11,6 +11,7 @@
     "dev": "npx tsx src/index.ts",
     "demo:teams": "npx tsx src/demo-teams.ts",
     "demo:projects": "npx tsx src/demo-projects.ts",
+    "demo:deploy": "npx tsx src/demo-deploy.ts",
     "demo:full": "npx tsx src/demo-full.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
@@ -21,7 +22,9 @@
     "@mastra/admin-pg": "latest",
     "@mastra/admin-server": "latest",
     "@mastra/source-local": "latest",
-    "@mastra/observability-writer": "latest",
+    "@mastra/runner-local": "latest",
+    "@mastra/router-local": "latest",
+    "@mastra/observability-file-local": "latest",
     "dotenv": "^16.4.7"
   },
   "pnpm": {
@@ -30,7 +33,9 @@
       "@mastra/admin-pg": "link:../../stores/admin-pg",
       "@mastra/admin-server": "link:../../packages/admin-server",
       "@mastra/source-local": "link:../../sources/local",
-      "@mastra/observability-writer": "link:../../observability/writer"
+      "@mastra/runner-local": "link:../../runners/local",
+      "@mastra/router-local": "link:../../routers/local",
+      "@mastra/observability-file-local": "link:../../observability/file-local"
     }
   },
   "devDependencies": {

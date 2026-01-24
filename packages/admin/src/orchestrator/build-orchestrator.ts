@@ -104,12 +104,20 @@ export class BuildOrchestrator {
     await this.#storage.updateBuild(buildId, { startedAt: new Date() });
 
     try {
-      // 1. Get project source
+      // 1. Get project source path
       if (!this.#source) {
         throw new Error('No source provider configured');
       }
 
-      const projectSource = await this.#source.getProject(project.id);
+      // Construct ProjectSource from the stored project configuration
+      // The project entity stores sourceType and sourceConfig (e.g., { path: '/path/to/project' })
+      const projectSource = {
+        id: project.id,
+        name: project.name,
+        type: project.sourceType as 'local' | 'github',
+        path: (project.sourceConfig as { path: string }).path,
+      };
+
       // Ensure source is fetched/cloned to local path
       const _sourceDir = await this.#source.getProjectPath(projectSource, `/tmp/builds/${buildId}`);
 

@@ -1,9 +1,14 @@
 /**
  * MastraAdmin Full Demo
  *
- * This comprehensive demo showcases all available admin functionality:
- * - MastraAdmin direct usage
+ * This comprehensive demo showcases the complete MVP infrastructure:
+ * - MastraAdmin core orchestration
  * - AdminServer HTTP API
+ * - PostgreSQL storage
+ * - Local project source (discovers Mastra projects)
+ * - Local process runner (builds & runs Mastra servers)
+ * - Local edge router (exposes deployed servers)
+ * - File-based observability storage
  * - Team/Project/Deployment lifecycle
  * - RBAC and permissions
  */
@@ -21,6 +26,9 @@ import {
 import { PostgresAdminStorage } from '@mastra/admin-pg';
 import { AdminServer } from '@mastra/admin-server';
 import { LocalProjectSource } from '@mastra/source-local';
+import { LocalProcessRunner } from '@mastra/runner-local';
+import { LocalEdgeRouter } from '@mastra/router-local';
+import { LocalFileStorage } from '@mastra/observability-file-local';
 import { resolve } from 'path';
 
 // Configuration - use valid UUIDs
@@ -32,17 +40,21 @@ class AdminDemo {
   private admin!: MastraAdmin;
   private server!: AdminServer;
   private storage!: PostgresAdminStorage;
+  private runner!: LocalProcessRunner;
+  private router!: LocalEdgeRouter;
 
   async setup() {
     console.log('\n[Setup] Initializing MastraAdmin platform...\n');
 
     // Initialize storage
+    console.log('  Initializing PostgreSQL storage...');
     this.storage = new PostgresAdminStorage({
       connectionString: process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5432/mastra_admin',
       schemaName: 'mastra_admin',
     });
 
     // Initialize project source
+    console.log('  Initializing local project source...');
     const projectsDir = process.env['PROJECTS_DIR'] ?? resolve(process.cwd(), '../');
     const source = new LocalProjectSource({
       basePaths: [projectsDir],
@@ -50,16 +62,49 @@ class AdminDemo {
       maxDepth: 3,
     });
 
-    // Create MastraAdmin
+    // Initialize runner
+    console.log('  Initializing local process runner...');
+    this.runner = new LocalProcessRunner({
+      portRange: { start: 4111, end: 4200 },
+      maxConcurrentBuilds: 3,
+      defaultBuildTimeoutMs: 600000, // 10 minutes
+      logRetentionLines: 10000,
+      buildDir: resolve(process.cwd(), '.mastra/builds'),
+    });
+
+    // Initialize router
+    console.log('  Initializing local edge router...');
+    this.router = new LocalEdgeRouter({
+      strategy: 'port-mapping',
+      baseDomain: 'localhost',
+      portRange: { start: 3100, end: 3199 },
+      logRoutes: true,
+    });
+
+    // Initialize file storage
+    console.log('  Initializing local file storage...');
+    const fileStorage = new LocalFileStorage({
+      baseDir: resolve(process.cwd(), '.mastra/observability'),
+      atomicWrites: true,
+    });
+
+    // Create MastraAdmin with full MVP infrastructure
+    console.log('  Creating MastraAdmin instance...');
     this.admin = new MastraAdmin({
       licenseKey: 'dev',
       storage: this.storage,
       source,
+      runner: this.runner,
+      router: this.router,
+      fileStorage,
     });
 
     await this.admin.init();
     console.log('  MastraAdmin initialized');
     console.log('  License:', this.admin.getLicenseInfo().tier);
+    console.log('  Runner: LocalProcessRunner');
+    console.log('  Router: LocalEdgeRouter');
+    console.log('  FileStorage: LocalFileStorage');
 
     // Create AdminServer
     this.server = new AdminServer({
@@ -303,6 +348,36 @@ class AdminDemo {
     console.log();
   }
 
+  async demoInfrastructure() {
+    console.log('[Infrastructure] MVP Infrastructure Summary...');
+    console.log();
+    console.log('  Core Components:');
+    console.log('    @mastra/admin          - Core orchestrator (MastraAdmin class)');
+    console.log('    @mastra/admin-server   - HTTP API server (Hono-based)');
+    console.log('    @mastra/admin-pg       - PostgreSQL storage for all entities');
+    console.log();
+    console.log('  Local Development:');
+    console.log('    @mastra/source-local           - Discovers Mastra projects from filesystem');
+    console.log('    @mastra/runner-local           - Builds & runs Mastra servers locally');
+    console.log('    @mastra/router-local           - Exposes servers via port mapping/reverse proxy');
+    console.log('    @mastra/observability-file-local - Stores observability data locally');
+    console.log();
+    console.log('  Runner Configuration:');
+    console.log('    Port Range: 4111-4200');
+    console.log('    Max Concurrent Builds: 3');
+    console.log('    Build Timeout: 10 minutes');
+    console.log('    Log Retention: 10,000 lines per server');
+    console.log();
+    console.log('  Router Configuration:');
+    console.log('    Strategy: port-mapping');
+    console.log('    Base Domain: localhost');
+    console.log('    Port Range: 3100-3199');
+    console.log();
+    console.log('  Deploy a project with:');
+    console.log('    const build = await admin.deploy(userId, deploymentId);');
+    console.log();
+  }
+
   async cleanup() {
     console.log('[Cleanup] Shutting down...');
     await this.server.stop();
@@ -320,13 +395,23 @@ class AdminDemo {
       const deployment = await this.demoDeploymentManagement(project);
 
       await this.demoLicenseFeatures();
+      await this.demoInfrastructure();
       await this.demoHttpApi(team, project);
 
       console.log('='.repeat(60));
-      console.log('Demo Complete!');
+      console.log('Demo Complete - MVP Infrastructure Ready!');
       console.log('='.repeat(60));
       console.log();
-      console.log('The AdminServer is still running. Press Ctrl+C to stop.');
+      console.log('All core packages are integrated:');
+      console.log('  - Core orchestrator: @mastra/admin');
+      console.log('  - HTTP API: @mastra/admin-server');
+      console.log('  - Storage: @mastra/admin-pg');
+      console.log('  - Project Source: @mastra/source-local');
+      console.log('  - Runner: @mastra/runner-local');
+      console.log('  - Router: @mastra/router-local');
+      console.log('  - File Storage: @mastra/observability-file-local');
+      console.log();
+      console.log('The AdminServer is running. Press Ctrl+C to stop.');
       console.log();
 
       // Keep running until interrupted

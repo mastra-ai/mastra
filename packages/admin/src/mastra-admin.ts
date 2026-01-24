@@ -267,6 +267,12 @@ export class MastraAdmin<
       throw MastraAdminError.storageError('Failed to initialize storage', error);
     }
 
+    // Inject source provider into runner if both are configured
+    if (this.#runner && this.#source && this.#runner.setSource) {
+      this.#runner.setSource(this.#source);
+      this.logger.info('Source provider injected into runner');
+    }
+
     this.#initialized = true;
     this.logger.info('MastraAdmin initialized successfully');
   }

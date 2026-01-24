@@ -9,7 +9,9 @@ overrides:
   '@mastra/admin-pg': link:../../stores/admin-pg
   '@mastra/admin-server': link:../../packages/admin-server
   '@mastra/source-local': link:../../sources/local
-  '@mastra/observability-writer': link:../../observability/writer
+  '@mastra/runner-local': link:../../runners/local
+  '@mastra/router-local': link:../../routers/local
+  '@mastra/observability-file-local': link:../../observability/file-local
 
 importers:
 
@@ -24,9 +26,15 @@ importers:
       '@mastra/admin-server':
         specifier: link:../../packages/admin-server
         version: link:../../packages/admin-server
-      '@mastra/observability-writer':
-        specifier: link:../../observability/writer
-        version: link:../../observability/writer
+      '@mastra/observability-file-local':
+        specifier: link:../../observability/file-local
+        version: link:../../observability/file-local
+      '@mastra/router-local':
+        specifier: link:../../routers/local
+        version: link:../../routers/local
+      '@mastra/runner-local':
+        specifier: link:../../runners/local
+        version: link:../../runners/local
       '@mastra/source-local':
         specifier: link:../../sources/local
         version: link:../../sources/local
