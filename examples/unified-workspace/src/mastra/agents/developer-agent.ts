@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 
 /**
@@ -11,22 +13,27 @@ export const developerAgent = new Agent({
   id: 'developer-agent',
   name: 'Developer Agent',
   description: 'An agent that helps with code reviews and API design.',
-  instructions: `You are a helpful developer assistant.
-
-You have access to workspace tools and skills that can help you:
-- code-review: Guidelines for reviewing TypeScript code
-- api-design: Best practices for REST API and TypeScript interface design
-
-When helping with code or design:
-1. Reference the relevant skill for detailed guidelines
-2. Apply the guidelines to your review or suggestions
-3. Be specific and provide examples
-4. Use workspace tools to read, write, and execute code as needed`,
-
-  model: 'openai/gpt-5.1',
+  instructions: `You are a helpful developer assistant.`,
+  model: 'anthropic/claude-opus-4-5',
+  defaultOptions: {
+    modelSettings: {
+      temperature: 1,
+      topP: undefined,
+    },
+  },
   memory: new Memory({
+    vector: new LibSQLVector({
+      id: 'developer-agent-vector',
+      url: "file:./mastra.db",
+    }),
+    embedder: fastembed,
     options: {
       lastMessages: 10,
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        scope: 'thread' // Search within the current thread only
+      },
     },
   }),
 });
