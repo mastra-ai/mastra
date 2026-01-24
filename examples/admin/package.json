@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Demo application showcasing Mastra Admin functionality",
+  "description": "Demo application showcasing Mastra Admin functionality with full UI",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node --experimental-specifier-resolution=node dist/index.js",
     "dev": "npx tsx src/index.ts",
+    "dev:server": "npx tsx src/server.ts",
+    "dev:ui": "cd ../../packages/admin-ui && VITE_ADMIN_API_URL=http://localhost:3001/api VITE_DEV_MODE=true pnpm dev --port 3002",
+    "dev:full": "concurrently -n server,ui -c blue,green \"pnpm dev:server\" \"sleep 2 && pnpm dev:ui\"",
     "demo:teams": "npx tsx src/demo-teams.ts",
     "demo:projects": "npx tsx src/demo-projects.ts",
     "demo:deploy": "npx tsx src/demo-deploy.ts",
@@ -21,11 +24,12 @@
     "@mastra/admin": "latest",
     "@mastra/admin-pg": "latest",
     "@mastra/admin-server": "latest",
-    "@mastra/source-local": "latest",
-    "@mastra/runner-local": "latest",
-    "@mastra/router-local": "latest",
     "@mastra/observability-file-local": "latest",
-    "dotenv": "^16.4.7"
+    "@mastra/router-local": "latest",
+    "@mastra/runner-local": "latest",
+    "@mastra/source-local": "latest",
+    "dotenv": "^16.4.7",
+    "http-proxy": "^1.18.1"
   },
   "pnpm": {
     "overrides": {
@@ -40,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
     "tsx": "^4.7.0",
     "typescript": "^5.5.4"
   },
