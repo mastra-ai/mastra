@@ -24,8 +24,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build:lib --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "pnpm build --watch",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
