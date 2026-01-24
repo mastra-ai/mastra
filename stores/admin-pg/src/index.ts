@@ -1,5 +1,8 @@
 // @mastra/admin-pg - PostgreSQL storage adapter for MastraAdmin
 
+// Main storage class
+export { PostgresAdminStorage } from './storage';
+
 // Configuration types
 export type {
   PostgresAdminStorageConfig,
