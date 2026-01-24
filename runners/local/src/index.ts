@@ -2,13 +2,7 @@
 export { LocalProcessRunner } from './runner';
 
 // Types
-export type {
-  LocalProcessRunnerConfig,
-  TrackedProcess,
-  BuildContext,
-  PackageManager,
-  LogCollector,
-} from './types';
+export type { LocalProcessRunnerConfig, TrackedProcess, BuildContext, PackageManager, LogCollector } from './types';
 
 // Components (for advanced use cases)
 export { PortAllocator } from './port/allocator';
@@ -21,5 +15,12 @@ export { RingBuffer, type LogEntry } from './logs/ring-buffer';
 
 // Utilities
 export { detectPackageManager, getInstallArgs, getBuildArgs, hasBuildScript } from './build/package-manager';
+export {
+  createBuildLogStream,
+  createMultiLogStream,
+  createFilteredLogStream,
+  formatLogLine,
+  type BuildLogStreamConfig,
+} from './build/log-stream';
 export { spawnCommand, runCommand, type SpawnOptions } from './process/spawner';
 export { getProcessResourceUsage, cleanupResourceMonitor, type ResourceUsage } from './process/resource-monitor';
