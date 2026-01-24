@@ -46,6 +46,16 @@
         "default": "./dist/websocket/index.cjs"
       }
     },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.js"
+      },
+      "require": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

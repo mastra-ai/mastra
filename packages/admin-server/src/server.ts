@@ -25,6 +25,8 @@ import type {
 import { AdminWebSocketServer } from './websocket';
 import { BuildLogStreamer } from './websocket/build-logs';
 import { ServerLogStreamer } from './websocket/server-logs';
+import { BuildWorker } from './worker/build-worker';
+import { HealthCheckWorker } from './worker/health-checker';
 
 /**
  * Default logger for AdminServer route handlers.
@@ -65,6 +67,8 @@ export class AdminServer {
   private wsServer?: AdminWebSocketServer;
   private buildLogStreamer?: BuildLogStreamer;
   private serverLogStreamer?: ServerLogStreamer;
+  private buildWorker?: BuildWorker;
+  private healthWorker?: HealthCheckWorker;
   private startTime?: Date;
 
   constructor(config: AdminServerConfig) {
@@ -349,6 +353,28 @@ export class AdminServer {
             }
           }
 
+          // Start build worker if enabled
+          if (this.config.enableBuildWorker) {
+            this.buildWorker = new BuildWorker({
+              admin: this.admin,
+              wsServer: this.wsServer,
+              intervalMs: this.config.buildWorkerIntervalMs,
+            });
+            this.buildWorker.start();
+            console.info(`Build worker started (interval: ${this.config.buildWorkerIntervalMs}ms)`);
+          }
+
+          // Start health check worker if enabled
+          if (this.config.enableHealthWorker) {
+            this.healthWorker = new HealthCheckWorker({
+              admin: this.admin,
+              wsServer: this.wsServer,
+              intervalMs: this.config.healthCheckIntervalMs,
+            });
+            this.healthWorker.start();
+            console.info(`Health check worker started (interval: ${this.config.healthCheckIntervalMs}ms)`);
+          }
+
           this.startTime = new Date();
           resolve();
         },
@@ -361,6 +387,14 @@ export class AdminServer {
    */
   async stop(): Promise<void> {
     console.info('AdminServer shutting down...');
+
+    // Stop workers first (they may have active work)
+    if (this.buildWorker) {
+      await this.buildWorker.stop();
+    }
+    if (this.healthWorker) {
+      await this.healthWorker.stop();
+    }
 
     // Close WebSocket server (this closes all client connections)
     if (this.wsServer) {
@@ -405,8 +439,8 @@ export class AdminServer {
     return {
       running: this.isHealthy(),
       uptime,
-      buildWorkerActive: false, // Will be implemented in Phase 5
-      healthWorkerActive: false, // Will be implemented in Phase 5
+      buildWorkerActive: this.buildWorker?.isRunning() ?? false,
+      healthWorkerActive: this.healthWorker?.isRunning() ?? false,
       wsConnectionCount: this.wsServer?.getConnectionCount() ?? 0,
       port: this.config.port,
       host: this.config.host,
@@ -435,5 +469,21 @@ export class AdminServer {
    */
   getServerLogStreamer(): ServerLogStreamer | undefined {
     return this.serverLogStreamer;
+  }
+
+  /**
+   * Get the build worker instance.
+   * Returns undefined if build worker is not enabled.
+   */
+  getBuildWorker(): BuildWorker | undefined {
+    return this.buildWorker;
+  }
+
+  /**
+   * Get the health check worker instance.
+   * Returns undefined if health worker is not enabled.
+   */
+  getHealthWorker(): HealthCheckWorker | undefined {
+    return this.healthWorker;
   }
 }

@@ -59,3 +59,10 @@ export type { BuildLogStreamerConfig } from './websocket/build-logs';
 
 export { ServerLogStreamer } from './websocket/server-logs';
 export type { ServerLogStreamerConfig } from './websocket/server-logs';
+
+// Worker exports
+export { BuildWorker } from './worker/build-worker';
+export type { BuildWorkerConfig } from './worker/build-worker';
+
+export { HealthCheckWorker } from './worker/health-checker';
+export type { HealthCheckWorkerConfig, ServerHealthDetails } from './worker/health-checker';
