@@ -155,15 +155,12 @@ export function tokenize(text: string, options: TokenizeOptions = {}): string[] 
   return tokens;
 }
 
-// Re-export line utilities from line-utils.ts for backwards compatibility
+// Re-export line utilities from line-utils.ts
 export {
   findLineRange,
   extractLines,
-  charIndexToLineNumber,
-  charRangeToLineRange,
   extractLinesWithLimit,
   formatWithLineNumbers,
-  countOccurrences,
   replaceString,
   StringNotFoundError,
   StringNotUniqueError,

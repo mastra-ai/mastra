@@ -167,13 +167,9 @@ export {
   extractLinesWithLimit,
   formatWithLineNumbers,
   findLineRange,
-  charIndexToLineNumber,
-  charRangeToLineRange,
-  countOccurrences,
   replaceString,
   StringNotFoundError,
   StringNotUniqueError,
-  type LineRange,
 } from './line-utils';
 
 // =============================================================================

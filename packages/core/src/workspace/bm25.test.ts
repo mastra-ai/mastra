@@ -1,14 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  BM25Index,
-  tokenize,
-  findLineRange,
-  extractLines,
-  charIndexToLineNumber,
-  charRangeToLineRange,
-  DEFAULT_STOPWORDS,
-} from './bm25';
+import { BM25Index, tokenize, findLineRange, extractLines, DEFAULT_STOPWORDS } from './bm25';
+import { charIndexToLineNumber, charRangeToLineRange } from './line-utils';
 
 describe('tokenize', () => {
   it('should tokenize text into words', () => {
