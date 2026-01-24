@@ -126,7 +126,7 @@ export default function WorkspaceSkillDetailPage() {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/skills/overview" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview#skills" target="_blank">
             <Icon>
               <DocsIcon />
             </Icon>

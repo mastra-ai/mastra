@@ -153,7 +153,7 @@ function SkillsNotConfigured() {
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>
-        <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/skills/overview" target="_blank">
+        <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/overview#skills" target="_blank">
           <Icon>
             <BookOpen className="h-4 w-4" />
           </Icon>

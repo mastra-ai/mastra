@@ -11,7 +11,7 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
+import { AlertTriangleIcon, GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
@@ -26,6 +26,7 @@ import {
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
+import { useActivatedSkills } from '../../context/activated-skills-context';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -84,6 +85,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
   const skills = (agent as any).skills ?? [];
+  const workspaceTools: string[] = (agent as any).workspaceTools ?? [];
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
 
@@ -190,12 +192,24 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       <AgentMetadataSection
         title="Skills"
         hint={{
-          link: 'https://mastra.ai/en/docs/skills/overview',
+          link: 'https://mastra.ai/en/docs/workspace/overview#skills',
           title: 'Skills documentation',
         }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} />
       </AgentMetadataSection>
+
+      {workspaceTools.length > 0 && (
+        <AgentMetadataSection
+          title="Workspace Tools"
+          hint={{
+            link: 'https://mastra.ai/en/docs/workspace/overview#workspace-tools',
+            title: 'Workspace tools documentation',
+          }}
+        >
+          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
+        </AgentMetadataSection>
+      )}
 
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
@@ -321,6 +335,7 @@ export interface AgentMetadataSkillListProps {
 
 export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillListProps) => {
   const { Link, paths } = useLinkComponent();
+  const { isSkillActivated } = useActivatedSkills();
 
   if (skills.length === 0) {
     return <AgentMetadataListEmpty>No skills</AgentMetadataListEmpty>;
@@ -328,11 +343,67 @@ export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillLi
 
   return (
     <AgentMetadataList>
-      {skills.map(skill => (
-        <AgentMetadataListItem key={skill.name}>
-          <Link href={paths.agentSkillLink(agentId, skill.name)} data-testid="skill-badge">
-            <Badge icon={<SkillIcon className="text-accent2" />}>{skill.name}</Badge>
-          </Link>
+      {skills.map(skill => {
+        const isActivated = isSkillActivated(skill.name);
+        return (
+          <AgentMetadataListItem
+            key={skill.name}
+            className={`flex-col items-start gap-1 ${isActivated ? 'bg-green-500/10 rounded-md p-1 -m-1' : ''}`}
+          >
+            <div className="flex items-center gap-2">
+              <Link href={paths.agentSkillLink(agentId, skill.name)} data-testid="skill-badge">
+                <Badge
+                  icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
+                  variant={isActivated ? 'success' : 'default'}
+                >
+                  {skill.name}
+                </Badge>
+              </Link>
+              {isActivated && (
+                <span className="text-[10px] text-green-400 font-medium">Active</span>
+              )}
+            </div>
+            {skill.allowedTools && skill.allowedTools.length > 0 && (
+              <div className="flex flex-wrap gap-1 pl-1">
+                {skill.allowedTools.map(tool => (
+                  <span
+                    key={tool}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4"
+                  >
+                    {tool}
+                  </span>
+                ))}
+              </div>
+            )}
+          </AgentMetadataListItem>
+        );
+      })}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataWorkspaceToolsListProps {
+  tools: string[];
+}
+
+/**
+ * Format a workspace tool name for display.
+ * Converts "workspace_read_file" to "read_file"
+ */
+function formatWorkspaceToolName(toolName: string): string {
+  return toolName.replace(/^workspace_/, '');
+}
+
+export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspaceToolsListProps) => {
+  if (tools.length === 0) {
+    return <AgentMetadataListEmpty>No workspace tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {tools.map(tool => (
+        <AgentMetadataListItem key={tool}>
+          <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

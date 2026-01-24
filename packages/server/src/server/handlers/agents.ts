@@ -102,6 +102,7 @@ export interface SerializedAgent {
   agents: Record<string, SerializedAgentDefinition>;
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
+  workspaceTools: string[];
   inputProcessors: SerializedProcessor[];
   outputProcessors: SerializedProcessor[];
   provider?: string;
@@ -226,6 +227,64 @@ export async function getSerializedSkillsFromAgent(
   }
 }
 
+/**
+ * Get the list of available workspace tools for an agent.
+ * Returns tool names based on workspace configuration (filesystem, sandbox, search).
+ */
+export async function getWorkspaceToolsFromAgent(
+  agent: Agent,
+  requestContext?: RequestContext,
+): Promise<string[]> {
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    if (!workspace) {
+      return [];
+    }
+
+    const tools: string[] = [];
+    const safetyConfig = workspace.getSafetyConfig();
+    const isReadOnly = safetyConfig?.readOnly ?? false;
+
+    // Filesystem tools
+    if (workspace.filesystem) {
+      // Read tools are always available
+      tools.push('workspace_read_file');
+      tools.push('workspace_list_files');
+      tools.push('workspace_file_exists');
+
+      // Write tools only if not readonly
+      if (!isReadOnly) {
+        tools.push('workspace_write_file');
+        tools.push('workspace_edit_file');
+        tools.push('workspace_delete_file');
+        tools.push('workspace_mkdir');
+      }
+    }
+
+    // Search tools (available if BM25 or vector search is enabled)
+    if (workspace.canBM25 || workspace.canVector) {
+      tools.push('workspace_search');
+      if (!isReadOnly) {
+        tools.push('workspace_index');
+      }
+    }
+
+    // Sandbox tools
+    if (workspace.sandbox) {
+      if (workspace.sandbox.executeCommand) {
+        tools.push('workspace_execute_command');
+      }
+      if (workspace.sandbox.installPackage) {
+        tools.push('workspace_install_package');
+      }
+    }
+
+    return tools;
+  } catch {
+    return [];
+  }
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -318,8 +377,9 @@ async function formatAgentList({
     logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
-  // Extract skills from agent's workspace
+  // Extract skills and workspace tools from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -341,6 +401,7 @@ async function formatAgentList({
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
+    workspaceTools,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -508,8 +569,9 @@ async function formatAgent({
     mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
-  // Extract skills from agent's workspace
+  // Extract skills and workspace tools from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
 
   return {
     name: agent.name,
@@ -519,6 +581,7 @@ async function formatAgent({
     agents: serializedAgentAgents,
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
+    workspaceTools,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),

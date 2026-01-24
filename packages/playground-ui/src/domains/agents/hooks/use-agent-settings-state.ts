@@ -10,8 +10,8 @@ export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
     maxSteps: 5,
-    temperature: 0.5,
-    topP: 1,
+    // temperature: 0.5,
+    // topP: 1,
     chatWithGenerateLegacy: false,
     chatWithGenerate: false,
   },

@@ -10,6 +10,7 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  ActivatedSkillsProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -89,7 +90,8 @@ function Agent() {
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
             <ThreadInputProvider>
-              <AgentLayout
+              <ActivatedSkillsProvider>
+                <AgentLayout
                 agentId={agentId!}
                 leftSlot={
                   Boolean(memory?.result) && (
@@ -115,7 +117,8 @@ function Agent() {
                   messageId={messageId}
                   isNewThread={isNewThread}
                 />
-              </AgentLayout>
+                </AgentLayout>
+              </ActivatedSkillsProvider>
             </ThreadInputProvider>
           </WorkingMemoryProvider>
         </AgentSettingsProvider>
