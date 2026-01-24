@@ -1,4 +1,4 @@
-import type { ChangeEvent, ProjectSource } from '../../types';
+import type { ChangeEvent, ProjectSource } from '../types';
 
 /**
  * Abstract interface for project source operations.

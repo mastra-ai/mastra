@@ -27,14 +27,94 @@
         "default": "./dist/license/index.cjs"
       }
     },
-    "./providers": {
+    "./storage": {
       "import": {
-        "types": "./dist/providers/index.d.ts",
-        "default": "./dist/providers/index.js"
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
       },
       "require": {
-        "types": "./dist/providers/index.d.ts",
-        "default": "./dist/providers/index.cjs"
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.cjs"
+      }
+    },
+    "./billing": {
+      "import": {
+        "types": "./dist/billing/index.d.ts",
+        "default": "./dist/billing/index.js"
+      },
+      "require": {
+        "types": "./dist/billing/index.d.ts",
+        "default": "./dist/billing/index.cjs"
+      }
+    },
+    "./email": {
+      "import": {
+        "types": "./dist/email/index.d.ts",
+        "default": "./dist/email/index.js"
+      },
+      "require": {
+        "types": "./dist/email/index.d.ts",
+        "default": "./dist/email/index.cjs"
+      }
+    },
+    "./encryption": {
+      "import": {
+        "types": "./dist/encryption/index.d.ts",
+        "default": "./dist/encryption/index.js"
+      },
+      "require": {
+        "types": "./dist/encryption/index.d.ts",
+        "default": "./dist/encryption/index.cjs"
+      }
+    },
+    "./file-storage": {
+      "import": {
+        "types": "./dist/file-storage/index.d.ts",
+        "default": "./dist/file-storage/index.js"
+      },
+      "require": {
+        "types": "./dist/file-storage/index.d.ts",
+        "default": "./dist/file-storage/index.cjs"
+      }
+    },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.js"
+      },
+      "require": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.cjs"
+      }
+    },
+    "./runner": {
+      "import": {
+        "types": "./dist/runner/index.d.ts",
+        "default": "./dist/runner/index.js"
+      },
+      "require": {
+        "types": "./dist/runner/index.d.ts",
+        "default": "./dist/runner/index.cjs"
+      }
+    },
+    "./router": {
+      "import": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/router/index.js"
+      },
+      "require": {
+        "types": "./dist/router/index.d.ts",
+        "default": "./dist/router/index.cjs"
+      }
+    },
+    "./source": {
+      "import": {
+        "types": "./dist/source/index.d.ts",
+        "default": "./dist/source/index.js"
+      },
+      "require": {
+        "types": "./dist/source/index.d.ts",
+        "default": "./dist/source/index.cjs"
       }
     },
     "./rbac": {

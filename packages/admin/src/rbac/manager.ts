@@ -1,5 +1,5 @@
 import { MastraAdminError } from '../errors';
-import type { AdminStorage } from '../providers/storage/base';
+import type { AdminStorage } from '../storage/base';
 
 import { getSystemRole, roleHasPermission, SYSTEM_ROLES } from './roles';
 import type { Permission, PermissionContext, Role , RBACResource } from './types';

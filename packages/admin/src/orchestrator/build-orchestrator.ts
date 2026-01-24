@@ -1,8 +1,8 @@
-import type { EncryptionProvider } from '../providers/encryption/base';
-import type { EdgeRouterProvider } from '../providers/router/base';
-import type { ProjectRunner } from '../providers/runner/base';
-import type { ProjectSourceProvider } from '../providers/source/base';
-import type { AdminStorage } from '../providers/storage/base';
+import type { EncryptionProvider } from '../encryption/base';
+import type { EdgeRouterProvider } from '../router/base';
+import type { ProjectRunner } from '../runner/base';
+import type { ProjectSourceProvider } from '../source/base';
+import type { AdminStorage } from '../storage/base';
 import type { BuildJob } from './types';
 
 /**

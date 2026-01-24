@@ -1,4 +1,4 @@
-import type { Build, Deployment, Project, RunningServer } from '../../types';
+import type { Build, Deployment, Project, RunningServer } from '../types';
 
 /**
  * Build options for the runner.

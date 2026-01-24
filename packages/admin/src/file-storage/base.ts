@@ -1,4 +1,4 @@
-import type { FileInfo } from '../../types';
+import type { FileInfo } from '../types';
 
 /**
  * Abstract interface for file storage operations.

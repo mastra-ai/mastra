@@ -1,20 +1,24 @@
+import type { BillingProvider } from './billing/base';
+import { NoBillingProvider } from './billing/no-billing';
 import { TeamRole } from './constants';
+import type { EmailProvider } from './email/base';
+import { ConsoleEmailProvider } from './email/console';
+import type { EncryptionProvider } from './encryption/base';
+import { NodeCryptoEncryptionProvider } from './encryption/node-crypto';
 import { MastraAdminError } from './errors';
+import type { FileStorageProvider } from './file-storage/base';
 import type { LicenseFeature, LicenseInfo } from './license/types';
 import { LicenseValidator } from './license/validator';
 import type { AdminLogger } from './logger';
 import { ConsoleAdminLogger } from './logger';
+import type { ObservabilityWriterInterface, ObservabilityQueryProvider } from './observability';
 import { BuildOrchestrator } from './orchestrator/build-orchestrator';
-import type { BillingProvider, EmailProvider, EncryptionProvider } from './providers';
-import { ConsoleEmailProvider, NoBillingProvider, NodeCryptoEncryptionProvider } from './providers';
-import type { FileStorageProvider } from './providers/file-storage/base';
-import type { ObservabilityWriterInterface, ObservabilityQueryProvider } from './providers/observability';
-import type { EdgeRouterProvider } from './providers/router/base';
-import type { ProjectRunner } from './providers/runner/base';
-import type { ProjectSourceProvider } from './providers/source/base';
-import type { AdminStorage, PaginationParams, PaginatedResult } from './providers/storage/base';
 import { RBACManager } from './rbac/manager';
 import { RBACResource, RBACAction } from './rbac/types';
+import type { EdgeRouterProvider } from './router/base';
+import type { ProjectRunner } from './runner/base';
+import type { ProjectSourceProvider } from './source/base';
+import type { AdminStorage, PaginationParams, PaginatedResult } from './storage/base';
 import type {
   Build,
   Deployment,

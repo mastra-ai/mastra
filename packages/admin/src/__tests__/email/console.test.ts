@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { ConsoleEmailProvider } from '../../../providers/email/console';
+import { ConsoleEmailProvider } from '../../email/console';
 
 describe('ConsoleEmailProvider', () => {
   const provider = new ConsoleEmailProvider();

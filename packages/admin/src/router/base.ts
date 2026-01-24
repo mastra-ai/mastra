@@ -1,4 +1,4 @@
-import type { RouteConfig, RouteHealthStatus, RouteInfo } from '../../types';
+import type { RouteConfig, RouteHealthStatus, RouteInfo } from '../types';
 
 /**
  * Abstract interface for edge routing.

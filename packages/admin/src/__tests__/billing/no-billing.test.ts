@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { NoBillingProvider } from '../../../providers/billing/no-billing';
+import { NoBillingProvider } from '../../billing/no-billing';
 
 describe('NoBillingProvider', () => {
   const provider = new NoBillingProvider();

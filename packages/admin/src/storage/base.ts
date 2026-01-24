@@ -1,4 +1,4 @@
-import type { BuildStatus, DeploymentStatus, TeamRole } from '../../constants';
+import type { BuildStatus, DeploymentStatus, TeamRole } from '../constants';
 import type {
   Build,
   Deployment,
@@ -10,7 +10,7 @@ import type {
   TeamInvite,
   TeamMember,
   User,
-} from '../../types';
+} from '../types';
 
 /**
  * Pagination parameters for list operations.

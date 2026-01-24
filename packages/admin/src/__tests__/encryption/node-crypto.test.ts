@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { NodeCryptoEncryptionProvider } from '../../../providers/encryption/node-crypto';
+import { NodeCryptoEncryptionProvider } from '../../encryption/node-crypto';
 
 describe('NodeCryptoEncryptionProvider', () => {
   const secret = 'test-secret-key-that-is-at-least-32-chars-long';
