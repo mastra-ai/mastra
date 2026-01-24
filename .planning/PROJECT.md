@@ -91,6 +91,7 @@ Catch quality regressions before they reach users — when you modify a prompt o
 | Runs persist forever | Simplifies v1, can add cleanup later | ✓ Confirmed |
 | Allow cross-version comparison with clear warnings | Real use case (added edge cases), but surface caveats | ✓ Confirmed |
 | Auto-versioning on item changes | Simpler than explicit versioning, better UX (Braintrust pattern) | ✓ Confirmed |
+| Timestamp-based versioning | Follows Langfuse pattern: version is Date, not integer. Avoids breaking change later | ✓ Confirmed |
 | Schema validation optional | Some datasets are exploratory, don't force schema upfront | ✓ Confirmed |
 | Scorer/processor as valid targets | Unique Mastra capability, test components in isolation | ✓ Confirmed |
 | Item selection via `itemIds[]` param | Quick iteration on subsets before full runs, cost control | ✓ Confirmed |
