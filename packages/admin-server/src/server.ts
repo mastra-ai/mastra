@@ -350,6 +350,15 @@ export class AdminServer {
               this.serverLogStreamer = new ServerLogStreamer({
                 wsServer: this.wsServer,
               });
+
+              // Wire up orchestrator callbacks to broadcast via WebSocket
+              const orchestrator = this.admin.getOrchestrator();
+              orchestrator.setOnLog((buildId, log) => {
+                this.buildLogStreamer?.broadcastLog(buildId, log);
+              });
+              orchestrator.setOnStatus((buildId, status) => {
+                this.buildLogStreamer?.broadcastStatus(buildId, status);
+              });
             }
           }
 

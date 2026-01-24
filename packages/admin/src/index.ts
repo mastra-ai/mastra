@@ -16,7 +16,7 @@ export { ConsoleAdminLogger, NoopAdminLogger } from './logger';
 
 // Orchestrator
 export { BuildOrchestrator } from './orchestrator';
-export type { BuildJob, BuildContext, BuildResult } from './orchestrator';
+export type { BuildJob, BuildContext, BuildResult, BuildLogCallback, BuildStatusCallback } from './orchestrator';
 
 // Types
 export type {
@@ -68,19 +68,8 @@ export type { AdminStorage, PaginationParams, PaginatedResult } from './storage/
 export type { FileStorageProvider } from './file-storage/base';
 
 // Observability
-export type {
-  Trace,
-  Span,
-  SpanEvent,
-  Log,
-  Metric,
-  Score,
-  ObservabilityEvent,
-} from './observability/types';
-export type {
-  ObservabilityWriterConfig,
-  ObservabilityWriterInterface,
-} from './observability/writer';
+export type { Trace, Span, SpanEvent, Log, Metric, Score, ObservabilityEvent } from './observability/types';
+export type { ObservabilityWriterConfig, ObservabilityWriterInterface } from './observability/writer';
 export type {
   TimeRange,
   QueryPagination,

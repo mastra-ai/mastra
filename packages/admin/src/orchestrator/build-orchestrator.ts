@@ -6,6 +6,19 @@ import type { AdminStorage } from '../storage/base';
 import type { BuildJob } from './types';
 
 /**
+ * Callback for build log events.
+ */
+export type BuildLogCallback = (buildId: string, log: string) => void;
+
+/**
+ * Callback for build status events.
+ */
+export type BuildStatusCallback = (
+  buildId: string,
+  status: 'queued' | 'building' | 'deploying' | 'succeeded' | 'failed' | 'cancelled',
+) => void;
+
+/**
  * BuildOrchestrator manages the build queue and deployment flow.
  *
  * This is used internally by MastraAdmin. The admin-server's build worker
@@ -20,6 +33,8 @@ export class BuildOrchestrator {
   readonly #queue: BuildJob[] = [];
   #processing = false;
   #shutdown = false;
+  #onLog?: BuildLogCallback;
+  #onStatus?: BuildStatusCallback;
 
   constructor(
     storage: AdminStorage,
@@ -64,6 +79,22 @@ export class BuildOrchestrator {
    */
   getStorage(): AdminStorage {
     return this.#storage;
+  }
+
+  /**
+   * Set callback for build log events.
+   * Used by admin-server to broadcast logs via WebSocket.
+   */
+  setOnLog(callback: BuildLogCallback): void {
+    this.#onLog = callback;
+  }
+
+  /**
+   * Set callback for build status events.
+   * Used by admin-server to broadcast status via WebSocket.
+   */
+  setOnStatus(callback: BuildStatusCallback): void {
+    this.#onStatus = callback;
   }
 
   /**
@@ -148,6 +179,7 @@ export class BuildOrchestrator {
     // Update build status
     await this.#storage.updateBuildStatus(buildId, 'building');
     await this.#storage.updateBuild(buildId, { startedAt: new Date() });
+    this.#onStatus?.(buildId, 'building');
 
     try {
       // 1. Get project source path
@@ -178,6 +210,8 @@ export class BuildOrchestrator {
       const updatedBuild = await this.#runner.build(project, build, { envVars }, log => {
         // Append logs as they come in
         void this.#storage.appendBuildLogs(buildId, log);
+        // Broadcast via WebSocket if callback is set
+        this.#onLog?.(buildId, log);
       });
 
       if (updatedBuild.status === 'failed') {
@@ -186,6 +220,7 @@ export class BuildOrchestrator {
 
       // 4. Deploy the artifact
       await this.#storage.updateBuildStatus(buildId, 'deploying');
+      this.#onStatus?.(buildId, 'deploying');
 
       const server = await this.#runner.deploy(project, deployment, updatedBuild, { envVars });
 
@@ -215,6 +250,7 @@ export class BuildOrchestrator {
         internalHost: `${server.host}:${server.port}`,
       });
 
+      this.#onStatus?.(buildId, 'succeeded');
       console.log(`[BuildOrchestrator] Build ${buildId} succeeded!`);
     } catch (error) {
       console.log(
@@ -229,6 +265,7 @@ export class BuildOrchestrator {
       });
 
       await this.#storage.updateDeploymentStatus(deployment.id, 'failed');
+      this.#onStatus?.(buildId, 'failed');
     }
   }
 
