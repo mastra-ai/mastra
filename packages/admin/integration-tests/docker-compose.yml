@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: 'admin-integration-test-postgres'
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: mastra
+      POSTGRES_PASSWORD: mastra
+      POSTGRES_DB: mastra_admin_test
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mastra -d mastra_admin_test']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - admin_test_pgdata:/var/lib/postgresql/data
+    networks:
+      - admin-test-network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    container_name: 'admin-integration-test-clickhouse'
+    ports:
+      - '8123:8123' # HTTP interface
+      - '9000:9000' # Native interface
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ['CMD', 'clickhouse-client', '--query', 'SELECT 1']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - admin_test_clickhouse:/var/lib/clickhouse
+    networks:
+      - admin-test-network
+
+  # Optional: Redis for caching tests (future)
+  redis:
+    image: redis:7-alpine
+    container_name: 'admin-integration-test-redis'
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - admin-test-network
+
+volumes:
+  admin_test_pgdata:
+  admin_test_clickhouse:
+
+networks:
+  admin-test-network:
+    driver: bridge

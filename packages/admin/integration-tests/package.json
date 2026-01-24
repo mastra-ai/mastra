@@ -1,0 +1,37 @@
+{
+  "name": "@mastra/admin-integration-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Integration tests for MastraAdmin",
+  "type": "module",
+  "scripts": {
+    "pretest": "docker compose up -d && pnpm run wait-for-services",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "posttest": "docker compose down --volumes",
+    "wait-for-services": "node ./scripts/wait-for-services.js",
+    "test:auth": "vitest run ./src/tests/auth/",
+    "test:teams": "vitest run ./src/tests/teams/",
+    "test:projects": "vitest run ./src/tests/projects/",
+    "test:deployments": "vitest run ./src/tests/deployments/",
+    "test:observability": "vitest run ./src/tests/observability/",
+    "test:rbac": "vitest run ./src/tests/rbac/",
+    "test:errors": "vitest run ./src/tests/errors/",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down --volumes",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@mastra/admin": "workspace:*",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "dotenv": "^16.0.0",
+    "eslint": "^9.37.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
