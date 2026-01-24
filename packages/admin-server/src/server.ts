@@ -6,8 +6,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { timeout } from 'hono/timeout';
 
+import { createAuthMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error-handler';
+import { createRBACMiddleware } from './middleware/rbac';
 import { createRequestLoggerMiddleware } from './middleware/request-logger';
+import { createTeamContextMiddleware } from './middleware/team-context';
 import { ADMIN_SERVER_ROUTES } from './routes';
 import type {
   AdminServerConfig,
@@ -15,19 +18,9 @@ import type {
   ServerStatus,
   AdminServerContext,
   AdminServerRoute,
+  AdminServerVariables,
   CorsOptions,
 } from './types';
-
-/**
- * Hono context variables for AdminServer.
- */
-interface AdminServerVariables {
-  admin: MastraAdmin;
-  userId?: string;
-  teamId?: string;
-  requestId: string;
-  abortSignal: AbortSignal;
-}
 
 /**
  * Default logger for AdminServer route handlers.
@@ -108,7 +101,7 @@ export class AdminServer {
    * Setup middleware.
    */
   private setupMiddleware(): void {
-    const { cors: corsConfig } = this.config;
+    const { cors: corsConfig, basePath } = this.config;
 
     // CORS
     if (corsConfig) {
@@ -118,7 +111,7 @@ export class AdminServer {
     // Timeout
     this.app.use('*', timeout(this.config.timeout));
 
-    // Request logging
+    // Request logging (also sets requestId)
     if (this.config.enableRequestLogging) {
       this.app.use('*', createRequestLoggerMiddleware());
     }
@@ -137,12 +130,22 @@ export class AdminServer {
       return errorHandler(err, c);
     });
 
-    // Context middleware - sets admin instance
+    // Context middleware - sets admin instance and basePath
     this.app.use('*', async (c, next) => {
       c.set('admin', this.admin);
+      c.set('basePath', basePath);
       c.set('abortSignal', c.req.raw.signal);
       return next();
     });
+
+    // Auth middleware (validates tokens, sets user and userId)
+    this.app.use(`${basePath}/*`, createAuthMiddleware(this.admin));
+
+    // RBAC middleware (resolves team context, sets permissions)
+    this.app.use(`${basePath}/*`, createRBACMiddleware(this.admin));
+
+    // Team context middleware (additional team context extraction)
+    this.app.use(`${basePath}/*`, createTeamContextMiddleware(this.admin));
   }
 
   /**
@@ -192,11 +195,14 @@ export class AdminServer {
 
     this.app[method](path, async c => {
       try {
-        // Build context
+        // Build context from middleware-set variables
         const context: AdminServerContext = {
           admin: this.admin,
+          user: c.get('user'),
           userId: c.get('userId') ?? '',
+          team: c.get('team'),
           teamId: c.get('teamId'),
+          permissions: c.get('permissions') ?? [],
           abortSignal: c.get('abortSignal'),
           logger: serverLogger,
         };

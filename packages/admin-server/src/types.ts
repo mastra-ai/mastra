@@ -1,4 +1,4 @@
-import type { MastraAdmin, AdminLogger } from '@mastra/admin';
+import type { MastraAdmin, AdminLogger, User, Team, TeamMember, Permission, TeamRole } from '@mastra/admin';
 import type { z } from 'zod';
 
 /**
@@ -198,14 +198,29 @@ export interface AdminServerContext {
   admin: MastraAdmin;
 
   /**
+   * Authenticated user (null if not authenticated).
+   */
+  user?: User;
+
+  /**
    * Authenticated user ID.
    */
   userId: string;
 
   /**
-   * Current team context (if applicable).
+   * Current team (if applicable).
+   */
+  team?: Team;
+
+  /**
+   * Current team ID (if applicable).
    */
   teamId?: string;
+
+  /**
+   * User's permissions for the current team.
+   */
+  permissions: Permission[];
 
   /**
    * Request abort signal.
@@ -318,13 +333,63 @@ export interface ErrorResponse {
 
 /**
  * Hono context variables for AdminServer.
+ * These are set by middleware and available to route handlers.
  */
 export interface AdminServerVariables {
+  /**
+   * MastraAdmin instance for business logic.
+   */
   admin: MastraAdmin;
-  userId?: string;
-  teamId?: string;
+
+  /**
+   * Base path for the API (e.g., '/api').
+   */
+  basePath: string;
+
+  /**
+   * Unique request ID for tracing.
+   */
   requestId: string;
+
+  /**
+   * Request abort signal.
+   */
   abortSignal: AbortSignal;
+
+  /**
+   * Authenticated user object (set by auth middleware).
+   */
+  user?: User;
+
+  /**
+   * Authenticated user ID (set by auth middleware).
+   */
+  userId?: string;
+
+  /**
+   * Current team object (set by RBAC/team context middleware).
+   */
+  team?: Team;
+
+  /**
+   * Current team ID (set by RBAC/team context middleware).
+   */
+  teamId?: string;
+
+  /**
+   * Current team member record (set by RBAC/team context middleware).
+   */
+  teamMember?: TeamMember;
+
+  /**
+   * Current team role (set by team context middleware).
+   */
+  teamRole?: TeamRole;
+
+  /**
+   * User's permissions for the current team (set by RBAC middleware).
+   */
+  permissions?: Permission[];
 }
 
 /**
