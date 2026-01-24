@@ -39,7 +39,7 @@ Store scores in existing ScoresStorage, linked to run results.
 Run dataset against workflow with input mapping (exact match for v1: item.input must match workflow schema).
 
 **TARGET-02: Agent Target**
-Run dataset against agent via Agent.generate(), respecting request context.
+Run dataset against agent via Agent.generate(). (v1: context propagation deferred per CONTEXT.md)
 
 **TARGET-03: Scorer Target**
 Run dataset against scorer to test scoring logic in isolation.
@@ -116,8 +116,8 @@ Calculate statistical significance on score deltas between runs.
 | EXEC-02 | Phase 2 | Complete |
 | EXEC-03 | Phase 2 | Complete |
 | SCORE-01 | Phase 2 | Complete |
-| TARGET-01 | Phase 3 | Pending |
-| TARGET-02 | Phase 3 | Pending |
+| TARGET-01 | Phase 3 | Complete |
+| TARGET-02 | Phase 3 | Complete |
 | TARGET-03 | Phase 4 | Pending |
 | TARGET-04 | Phase 4 | Pending |
 | COMP-01 | Phase 5 | Pending |

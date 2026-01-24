@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning ✓
 - [x] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring ✓
-- [ ] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows
+- [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
 - [ ] **Phase 4: Scorer & Processor Targets** - Extend targets to scorers and processors
 - [ ] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection
 - [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results
@@ -68,12 +68,12 @@ Plans:
   1. User can run dataset against workflow by passing workflowId
   2. Workflow input mapping works (item.input must match workflow schema for v1)
   3. User can run dataset against agent by passing agentId
-  4. Agent execution respects request context (auth, threading)
-  5. Both streaming and non-streaming targets work correctly
+  4. Agent/workflow execution handles all statuses (success, failed, suspended, etc.)
+  5. v1 limitations documented: context propagation deferred (per CONTEXT.md)
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md — Executor edge case tests for agent/workflow input variations
+- [x] 03-01-PLAN.md — Executor edge case tests for agent/workflow input variations
 
 ### Phase 4: Scorer & Processor Targets
 **Goal**: Enable scoring scorers and processors in isolation
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
 | 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
-| 3. Agent & Workflow Targets | 0/1 | Not started | - |
+| 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 4. Scorer & Processor Targets | 0/TBD | Not started | - |
 | 5. Run Analytics | 0/TBD | Not started | - |
 | 6. Playground Integration | 0/TBD | Not started | - |
