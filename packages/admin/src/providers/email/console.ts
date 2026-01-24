@@ -6,7 +6,7 @@ import type { EmailOptions, EmailProvider } from './base';
  */
 export class ConsoleEmailProvider implements EmailProvider {
   async send(options: EmailOptions): Promise<void> {
-    console.log('[Email]', {
+    console.info('[Email]', {
       to: options.to,
       subject: options.subject,
       template: options.template,

@@ -1,5 +1,3 @@
-import { MastraBaseError } from '@mastra/core/error';
-
 /**
  * Error domains for MastraAdmin.
  */
@@ -39,21 +37,51 @@ export const AdminErrorCategory = {
 export type AdminErrorCategory = (typeof AdminErrorCategory)[keyof typeof AdminErrorCategory];
 
 /**
+ * Error definition interface.
+ */
+interface ErrorDefinition {
+  id: Uppercase<string>;
+  text?: string;
+  domain: AdminErrorDomain;
+  category: AdminErrorCategory;
+  details?: Record<string, unknown>;
+}
+
+/**
  * Base error class for all MastraAdmin errors.
  */
-export class MastraAdminError extends MastraBaseError<AdminErrorDomain, AdminErrorCategory> {
+export class MastraAdminError extends Error {
+  public readonly id: Uppercase<string>;
+  public readonly domain: AdminErrorDomain;
+  public readonly category: AdminErrorCategory;
+  public readonly details?: Record<string, unknown>;
+  public readonly originalError?: unknown;
+
   constructor(
-    definition: {
-      id: Uppercase<string>;
-      text?: string;
-      domain: AdminErrorDomain;
-      category: AdminErrorCategory;
-      details?: Record<string, unknown>;
-    },
+    definition: ErrorDefinition,
     originalError?: unknown,
   ) {
-    super(definition, originalError);
+    const message = definition.text ?? 'Unknown error';
+    super(message);
+    this.id = definition.id;
+    this.domain = definition.domain;
+    this.category = definition.category;
+    this.details = definition.details ?? {};
+    this.originalError = originalError;
     Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  /**
+   * Returns a structured representation of the error for logging or API responses.
+   */
+  public toJSON() {
+    return {
+      message: this.message,
+      code: this.id,
+      domain: this.domain,
+      category: this.category,
+      details: this.details,
+    };
   }
 
   // ============================================================================

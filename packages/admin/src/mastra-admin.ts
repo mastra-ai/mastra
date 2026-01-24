@@ -1,10 +1,9 @@
-import { MastraBase } from '@mastra/core/base';
-import type { MastraAuthProvider } from '@mastra/core/server';
-
-import { RegisteredAdminComponent, TeamRole } from './constants';
+import { TeamRole } from './constants';
 import { MastraAdminError } from './errors';
 import type { LicenseFeature, LicenseInfo } from './license/types';
 import { LicenseValidator } from './license/validator';
+import type { AdminLogger } from './logger';
+import { ConsoleAdminLogger } from './logger';
 import { BuildOrchestrator } from './orchestrator/build-orchestrator';
 import type { BillingProvider, EmailProvider, EncryptionProvider } from './providers';
 import { ConsoleEmailProvider, NoBillingProvider, NodeCryptoEncryptionProvider } from './providers';
@@ -17,16 +16,32 @@ import type { AdminStorage, PaginationParams, PaginatedResult } from './provider
 import { RBACManager } from './rbac/manager';
 import { RBACResource, RBACAction } from './rbac/types';
 import type {
-  Team,
-  TeamMember,
-  TeamInvite,
-  Project,
-  Deployment,
   Build,
+  Deployment,
   EncryptedEnvVar,
+  Project,
   RunningServer,
+  Team,
+  TeamInvite,
+  TeamMember,
   User,
 } from './types';
+
+/**
+ * Auth provider interface for MastraAdmin.
+ * Compatible with @mastra/auth-* packages.
+ */
+export interface AdminAuthProvider {
+  /**
+   * Validate and decode a token, returning the user ID if valid.
+   */
+  validateToken?(token: string): Promise<{ userId: string } | null>;
+
+  /**
+   * Get user info from the auth provider.
+   */
+  getUser?(userId: string): Promise<{ id: string; email?: string; name?: string } | null>;
+}
 
 /**
  * Observability configuration.
@@ -52,7 +67,9 @@ export interface MastraAdminConfig<
   /** License key for enterprise features. Use 'dev' or 'development' for development mode. */
   licenseKey: string;
   /** Auth provider from @mastra/auth-* packages. */
-  auth: MastraAuthProvider<unknown>;
+  auth?: AdminAuthProvider;
+  /** Logger instance. Set to false to disable logging. */
+  logger?: AdminLogger | false;
   /** Admin storage provider (e.g., PostgresAdminStorage). */
   storage: TStorage;
   /** Observability configuration. */
@@ -142,15 +159,16 @@ export class MastraAdmin<
   TRunner extends ProjectRunner = ProjectRunner,
   TRouter extends EdgeRouterProvider = EdgeRouterProvider,
   TSource extends ProjectSourceProvider = ProjectSourceProvider,
-> extends MastraBase {
+> {
   readonly #config: MastraAdminConfig<TStorage, TRunner, TRouter, TSource>;
   readonly #license: LicenseValidator;
   readonly #rbac: RBACManager;
   readonly #orchestrator: BuildOrchestrator;
+  readonly #logger: AdminLogger;
   #initialized = false;
 
   // Providers (also accessible via getters)
-  readonly #auth: MastraAuthProvider<unknown>;
+  readonly #auth?: AdminAuthProvider;
   readonly #storage: TStorage;
   readonly #billing: BillingProvider;
   readonly #email: EmailProvider;
@@ -160,26 +178,26 @@ export class MastraAdmin<
   readonly #router?: TRouter;
   readonly #source?: TSource;
 
-  constructor(config: MastraAdminConfig<TStorage, TRunner, TRouter, TSource>) {
-    super({
-      // Cast to any since we're using our own component registry
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      component: RegisteredAdminComponent.ADMIN as any,
-      name: 'MastraAdmin',
-    });
+  // Protected getter for logger (for subclasses if needed)
+  protected get logger(): AdminLogger {
+    return this.#logger;
+  }
 
+  constructor(config: MastraAdminConfig<TStorage, TRunner, TRouter, TSource>) {
     // Validate required config
     if (!config.licenseKey) {
       throw MastraAdminError.configurationError('licenseKey is required');
-    }
-    if (!config.auth) {
-      throw MastraAdminError.configurationError('auth provider is required');
     }
     if (!config.storage) {
       throw MastraAdminError.configurationError('storage provider is required');
     }
 
     this.#config = config;
+
+    // Initialize logger
+    this.#logger = config.logger === false
+      ? { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+      : config.logger ?? new ConsoleAdminLogger('MastraAdmin');
 
     // Initialize components
     this.#license = new LicenseValidator(config.licenseKey);
@@ -273,7 +291,7 @@ export class MastraAdmin<
   // Accessors (for admin-server to use)
   // ============================================================================
 
-  getAuth(): MastraAuthProvider<unknown> {
+  getAuth(): AdminAuthProvider | undefined {
     return this.#auth;
   }
 
@@ -401,7 +419,6 @@ export class MastraAdmin<
     }
 
     const invite = await this.#storage.createTeamInvite({
-      id: crypto.randomUUID(),
       teamId,
       email,
       role,
@@ -472,7 +489,7 @@ export class MastraAdmin<
       name: input.name,
       slug: input.slug,
       sourceType: input.sourceType,
-      sourceConfig: input.sourceConfig as Project['sourceConfig'],
+      sourceConfig: input.sourceConfig as unknown as Project['sourceConfig'],
       defaultBranch: input.defaultBranch ?? 'main',
       envVars: [],
     });

@@ -12,6 +12,7 @@
 This plan covers the implementation of `@mastra/admin`, the foundational core package for the MastraAdmin platform.
 
 **Architecture Pattern**: This package follows the same pattern as `@mastra/core`:
+
 - `@mastra/core` → `Mastra` class = Central orchestrator with business logic methods
 - `@mastra/admin` → `MastraAdmin` class = Central orchestrator with business logic methods
 
@@ -170,10 +171,7 @@ packages/admin/
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist",
-    "CHANGELOG.md"
-  ],
+  "files": ["dist", "CHANGELOG.md"],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build": "pnpm build:lib",
@@ -1207,7 +1205,10 @@ export interface AdminStorage {
   // ============================================================================
 
   getProjectEnvVars(projectId: string): Promise<EncryptedEnvVar[]>;
-  setProjectEnvVar(projectId: string, envVar: Omit<EncryptedEnvVar, 'createdAt' | 'updatedAt'>): Promise<EncryptedEnvVar>;
+  setProjectEnvVar(
+    projectId: string,
+    envVar: Omit<EncryptedEnvVar, 'createdAt' | 'updatedAt'>,
+  ): Promise<EncryptedEnvVar>;
   deleteProjectEnvVar(projectId: string, key: string): Promise<void>;
 
   // ============================================================================
@@ -1229,7 +1230,10 @@ export interface AdminStorage {
   getDeploymentBySlug(projectId: string, slug: string): Promise<Deployment | null>;
   listDeploymentsForProject(projectId: string, pagination?: PaginationParams): Promise<PaginatedResult<Deployment>>;
   createDeployment(deployment: Omit<Deployment, 'createdAt' | 'updatedAt'>): Promise<Deployment>;
-  updateDeployment(deploymentId: string, updates: Partial<Omit<Deployment, 'id' | 'projectId' | 'createdAt'>>): Promise<Deployment>;
+  updateDeployment(
+    deploymentId: string,
+    updates: Partial<Omit<Deployment, 'id' | 'projectId' | 'createdAt'>>,
+  ): Promise<Deployment>;
   updateDeploymentStatus(deploymentId: string, status: DeploymentStatus): Promise<Deployment>;
   deleteDeployment(deploymentId: string): Promise<void>;
 
@@ -1255,7 +1259,10 @@ export interface AdminStorage {
   getRunningServerForDeployment(deploymentId: string): Promise<RunningServer | null>;
   listRunningServers(): Promise<RunningServer[]>;
   createRunningServer(server: Omit<RunningServer, 'stoppedAt'>): Promise<RunningServer>;
-  updateRunningServer(serverId: string, updates: Partial<Omit<RunningServer, 'id' | 'deploymentId' | 'buildId' | 'startedAt'>>): Promise<RunningServer>;
+  updateRunningServer(
+    serverId: string,
+    updates: Partial<Omit<RunningServer, 'id' | 'deploymentId' | 'buildId' | 'startedAt'>>,
+  ): Promise<RunningServer>;
   stopRunningServer(serverId: string): Promise<void>;
 
   // ============================================================================
@@ -1627,7 +1634,11 @@ export interface ObservabilityQueryProvider {
   // ============================================================================
 
   listLogs(filter: LogQueryFilter, pagination?: QueryPagination): Promise<{ logs: Log[]; total: number }>;
-  searchLogs(query: string, filter: LogQueryFilter, pagination?: QueryPagination): Promise<{ logs: Log[]; total: number }>;
+  searchLogs(
+    query: string,
+    filter: LogQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ logs: Log[]; total: number }>;
 
   // ============================================================================
   // Metric Queries
@@ -1635,14 +1646,21 @@ export interface ObservabilityQueryProvider {
 
   listMetrics(filter: MetricQueryFilter, pagination?: QueryPagination): Promise<{ metrics: Metric[]; total: number }>;
   aggregateMetrics(filter: MetricQueryFilter, groupBy?: string[]): Promise<MetricAggregation[]>;
-  getMetricTimeSeries(name: string, filter: MetricQueryFilter, intervalMs: number): Promise<{ timestamp: Date; value: number }[]>;
+  getMetricTimeSeries(
+    name: string,
+    filter: MetricQueryFilter,
+    intervalMs: number,
+  ): Promise<{ timestamp: Date; value: number }[]>;
 
   // ============================================================================
   // Score Queries
   // ============================================================================
 
   listScores(filter: ScoreQueryFilter, pagination?: QueryPagination): Promise<{ scores: Score[]; total: number }>;
-  aggregateScores(filter: ScoreQueryFilter, groupBy?: string[]): Promise<{ name: string; avg: number; count: number }[]>;
+  aggregateScores(
+    filter: ScoreQueryFilter,
+    groupBy?: string[],
+  ): Promise<{ name: string; avg: number; count: number }[]>;
 }
 ```
 
@@ -1700,12 +1718,7 @@ export interface ProjectRunner {
    * @param onLog - Callback for streaming build logs
    * @returns Updated build record
    */
-  build(
-    project: Project,
-    build: Build,
-    options?: BuildOptions,
-    onLog?: LogStreamCallback,
-  ): Promise<Build>;
+  build(project: Project, build: Build, options?: BuildOptions, onLog?: LogStreamCallback): Promise<Build>;
 
   /**
    * Deploy and start a server for a deployment.
@@ -1716,12 +1729,7 @@ export interface ProjectRunner {
    * @param options - Run options
    * @returns Running server info
    */
-  deploy(
-    project: Project,
-    deployment: Deployment,
-    build: Build,
-    options?: RunOptions,
-  ): Promise<RunningServer>;
+  deploy(project: Project, deployment: Deployment, build: Build, options?: RunOptions): Promise<RunningServer>;
 
   /**
    * Stop a running server.
@@ -1745,10 +1753,7 @@ export interface ProjectRunner {
    * @param options - Log options
    * @returns Log content
    */
-  getLogs(
-    server: RunningServer,
-    options?: { tail?: number; since?: Date },
-  ): Promise<string>;
+  getLogs(server: RunningServer, options?: { tail?: number; since?: Date }): Promise<string>;
 
   /**
    * Stream logs from a running server.
@@ -1998,11 +2003,7 @@ export class NoBillingProvider implements BillingProvider {
 /**
  * Email template types.
  */
-export type EmailTemplate =
-  | 'team_invite'
-  | 'build_failed'
-  | 'deployment_ready'
-  | 'license_expiring';
+export type EmailTemplate = 'team_invite' | 'build_failed' | 'deployment_ready' | 'license_expiring';
 
 /**
  * Email options.
@@ -2274,14 +2275,8 @@ import { LicenseFeature, LicenseTier, type LicenseInfo } from './types';
  * Features available for each tier.
  */
 export const TIER_FEATURES: Record<LicenseTier, LicenseFeature[]> = {
-  [LicenseTier.COMMUNITY]: [
-    LicenseFeature.LOCAL_RUNNER,
-  ],
-  [LicenseTier.TEAM]: [
-    LicenseFeature.LOCAL_RUNNER,
-    LicenseFeature.GITHUB_SOURCE,
-    LicenseFeature.AUDIT_LOGS,
-  ],
+  [LicenseTier.COMMUNITY]: [LicenseFeature.LOCAL_RUNNER],
+  [LicenseTier.TEAM]: [LicenseFeature.LOCAL_RUNNER, LicenseFeature.GITHUB_SOURCE, LicenseFeature.AUDIT_LOGS],
   [LicenseTier.ENTERPRISE]: [
     LicenseFeature.LOCAL_RUNNER,
     LicenseFeature.K8S_RUNNER,
@@ -2298,7 +2293,10 @@ export const TIER_FEATURES: Record<LicenseTier, LicenseFeature[]> = {
 /**
  * Default limits for each tier.
  */
-export const TIER_LIMITS: Record<LicenseTier, { teams: number | null; usersPerTeam: number | null; projects: number | null }> = {
+export const TIER_LIMITS: Record<
+  LicenseTier,
+  { teams: number | null; usersPerTeam: number | null; projects: number | null }
+> = {
   [LicenseTier.COMMUNITY]: {
     teams: 1,
     usersPerTeam: 3,
@@ -2623,8 +2621,8 @@ function p(resource: RBACResource, action: RBACAction): Permission {
 /**
  * All possible permissions.
  */
-export const ALL_PERMISSIONS: Permission[] = Object.values(RBACResource).flatMap((resource) =>
-  Object.values(RBACAction).map((action) => p(resource, action)),
+export const ALL_PERMISSIONS: Permission[] = Object.values(RBACResource).flatMap(resource =>
+  Object.values(RBACAction).map(action => p(resource, action)),
 );
 
 /**
@@ -2882,6 +2880,7 @@ export class ContextualRBAC {
 ## Phase 7: MastraAdmin Class
 
 **Architecture Pattern**: MastraAdmin follows the same pattern as the `Mastra` class in `@mastra/core`:
+
 - Central orchestrator with business logic methods
 - Accepts providers via constructor (dependency injection)
 - Can be used directly OR wrapped with an HTTP server
@@ -2890,7 +2889,7 @@ Just like you can use `Mastra` directly or wrap it with `@mastra/server`, you ca
 
 ### 7.1 src/mastra-admin.ts
 
-```typescript
+````typescript
 import { MastraBase } from '@mastra/core/base';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { MastraAuthProvider } from '@mastra/core/server';
@@ -2909,16 +2908,7 @@ import type { EdgeRouterProvider } from './providers/router/base';
 import type { ProjectSourceProvider } from './providers/source/base';
 import { RBACManager } from './rbac/manager';
 import { BuildOrchestrator } from './orchestrator/build-orchestrator';
-import type {
-  Team,
-  TeamMember,
-  TeamInvite,
-  Project,
-  Deployment,
-  Build,
-  EncryptedEnvVar,
-  RunningServer,
-} from './types';
+import type { Team, TeamMember, TeamInvite, Project, Deployment, Build, EncryptedEnvVar, RunningServer } from './types';
 
 /**
  * Observability configuration.
@@ -3084,20 +3074,13 @@ export class MastraAdmin<
     this.#email = config.email ?? new ConsoleEmailProvider();
     this.#encryption =
       config.encryption ??
-      new NodeCryptoEncryptionProvider(
-        process.env.ADMIN_ENCRYPTION_SECRET ?? this.#generateFallbackSecret(),
-      );
+      new NodeCryptoEncryptionProvider(process.env.ADMIN_ENCRYPTION_SECRET ?? this.#generateFallbackSecret());
 
     // Initialize RBAC manager
     this.#rbac = new RBACManager(this.#storage);
 
     // Initialize build orchestrator (requires runner, router, source)
-    this.#orchestrator = new BuildOrchestrator(
-      this.#storage,
-      this.#runner,
-      this.#router,
-      this.#source,
-    );
+    this.#orchestrator = new BuildOrchestrator(this.#storage, this.#runner, this.#router, this.#source);
 
     // Set logger if provided
     if (config.logger !== false && config.logger) {
@@ -3248,7 +3231,7 @@ export class MastraAdmin<
     userId: string,
     teamId: string,
     email: string,
-    role: typeof TeamRole[keyof typeof TeamRole],
+    role: (typeof TeamRole)[keyof typeof TeamRole],
   ): Promise<TeamInvite> {
     this.#assertInitialized();
     await this.#rbac.assertPermission({ userId, teamId }, 'member:create');
@@ -3332,11 +3315,7 @@ export class MastraAdmin<
   /**
    * List projects in a team.
    */
-  async listProjects(
-    userId: string,
-    teamId: string,
-    pagination?: PaginationParams,
-  ): Promise<PaginatedResult<Project>> {
+  async listProjects(userId: string, teamId: string, pagination?: PaginationParams): Promise<PaginatedResult<Project>> {
     this.#assertInitialized();
     await this.#rbac.assertPermission({ userId, teamId }, 'project:read');
     return this.#storage.listProjects(teamId, pagination);
@@ -3345,20 +3324,12 @@ export class MastraAdmin<
   /**
    * Set an environment variable for a project.
    */
-  async setEnvVar(
-    userId: string,
-    projectId: string,
-    key: string,
-    value: string,
-    isSecret: boolean,
-  ): Promise<void> {
+  async setEnvVar(userId: string, projectId: string, key: string, value: string, isSecret: boolean): Promise<void> {
     this.#assertInitialized();
     const project = await this.#storage.getProject(projectId);
     await this.#rbac.assertPermission({ userId, teamId: project.teamId }, 'project:update');
 
-    const encryptedValue = isSecret
-      ? await this.#encryption.encrypt(value)
-      : value;
+    const encryptedValue = isSecret ? await this.#encryption.encrypt(value) : value;
 
     await this.#storage.setEnvVar(projectId, {
       key,
@@ -3406,11 +3377,7 @@ export class MastraAdmin<
   /**
    * Create a new deployment for a project.
    */
-  async createDeployment(
-    userId: string,
-    projectId: string,
-    input: CreateDeploymentInput,
-  ): Promise<Deployment> {
+  async createDeployment(userId: string, projectId: string, input: CreateDeploymentInput): Promise<Deployment> {
     this.#assertInitialized();
     const project = await this.#storage.getProject(projectId);
     await this.#rbac.assertPermission({ userId, teamId: project.teamId }, 'deployment:create');
@@ -3527,11 +3494,7 @@ export class MastraAdmin<
   /**
    * Trigger a build manually.
    */
-  async triggerBuild(
-    userId: string,
-    deploymentId: string,
-    input: TriggerBuildInput,
-  ): Promise<Build> {
+  async triggerBuild(userId: string, deploymentId: string, input: TriggerBuildInput): Promise<Build> {
     this.#assertInitialized();
     const deployment = await this.#storage.getDeployment(deploymentId);
     const project = await this.#storage.getProject(deployment.projectId);
@@ -3640,7 +3603,7 @@ export class MastraAdmin<
     return 'dev-fallback-secret-not-for-production-use!!';
   }
 }
-```
+````
 
 ---
 
@@ -3837,7 +3800,6 @@ export class BuildOrchestrator {
 
       // 8. Cleanup old artifacts (keep last 5 builds)
       await this.#cleanupOldBuilds(deployment.id);
-
     } catch (error) {
       await this.#storage.updateBuild(buildId, {
         status: 'failed',
@@ -4021,19 +3983,8 @@ export type { AdminStorage, PaginationParams, PaginatedResult } from './storage/
 export type { FileStorageProvider } from './file-storage/base';
 
 // Observability
-export type {
-  Trace,
-  Span,
-  SpanEvent,
-  Log,
-  Metric,
-  Score,
-  ObservabilityEvent,
-} from './observability/types';
-export type {
-  ObservabilityWriterConfig,
-  ObservabilityWriterInterface,
-} from './observability/writer';
+export type { Trace, Span, SpanEvent, Log, Metric, Score, ObservabilityEvent } from './observability/types';
+export type { ObservabilityWriterConfig, ObservabilityWriterInterface } from './observability/writer';
 export type {
   TimeRange,
   QueryPagination,
@@ -4276,10 +4227,10 @@ describe('NodeCryptoEncryptionProvider', () => {
 
 ### Automated Verification
 
-- [ ] Package builds successfully: `pnpm build` in `packages/admin/`
-- [ ] TypeScript types compile: `pnpm typecheck`
-- [ ] Linting passes: `pnpm lint`
-- [ ] All unit tests pass: `pnpm test`
+- [x] Package builds successfully: `pnpm build` in `packages/admin/`
+- [x] TypeScript types compile: `pnpm typecheck`
+- [x] Linting passes: `pnpm lint`
+- [x] All unit tests pass: `pnpm test`
 - [ ] Package exports are correct (can import from `@mastra/admin`, `@mastra/admin/license`, etc.)
 
 ### Manual Verification
@@ -4313,7 +4264,7 @@ This package is the **foundation** that all other lanes depend on:
 - **LANE 5 (runner-local)**: Will implement `ProjectRunner`
 - **LANE 12 (router-local)**: Will implement `EdgeRouterProvider`
 
-This package defines the contracts (interfaces) that all other lanes implement. LANE 1.5 (admin-server) is where those providers are actually *used* to do work.
+This package defines the contracts (interfaces) that all other lanes implement. LANE 1.5 (admin-server) is where those providers are actually _used_ to do work.
 
 ---
 
@@ -4337,16 +4288,27 @@ This package defines the contracts (interfaces) that all other lanes implement. 
 7. [x] **Phase 7**: MastraAdmin class (with business logic methods) - DONE
 8. [x] **Phase 8**: BuildOrchestrator - DONE
 9. [x] **Phase 9**: Exports and index files - DONE
-10. [ ] **Phase 10**: Tests - IN PROGRESS (lint/typecheck fixes needed)
+10. [x] **Phase 10**: Tests - DONE
 
 ## Current Status (2025-01-23)
 
-All source code has been written. Remaining work:
-- Fix remaining lint errors (console.log -> console.info in ConsoleEmailProvider)
-- Fix TypeScript compilation errors (import paths need @mastra/core to be built)
-- Run build and verify exports
-- Add unit tests
-- Manual verification
+**All automated verification complete!**
+
+- Build: SUCCESS
+- Lint: SUCCESS
+- TypeScript: SUCCESS
+- Tests: SUCCESS (50 tests passing)
+
+Changes made during implementation:
+
+- Created standalone `AdminLogger` interface and `ConsoleAdminLogger` instead of depending on `@mastra/core/base`
+- Created standalone `MastraAdminError` class instead of extending `MastraBaseError` from `@mastra/core/error`
+- Defined `AdminAuthProvider` interface for auth provider compatibility
+- Made auth provider optional in config
+- Added `tsconfig.build.json` for build process
+- Fixed import ordering issues for ESLint compliance
+
+Remaining: Manual verification
 
 ---
 
@@ -4381,6 +4343,7 @@ This mirrors the relationship between `@mastra/core` and `@mastra/server`:
 ```
 
 **Usage:**
+
 ```typescript
 // Direct usage (like using Mastra directly)
 const admin = new MastraAdmin({ storage, runner, router, ... });

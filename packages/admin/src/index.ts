@@ -3,11 +3,16 @@ export { MastraAdmin } from './mastra-admin';
 export type {
   MastraAdminConfig,
   ObservabilityConfig,
+  AdminAuthProvider,
   CreateTeamInput,
   CreateProjectInput,
   CreateDeploymentInput,
   TriggerBuildInput,
 } from './mastra-admin';
+
+// Logger
+export type { AdminLogger } from './logger';
+export { ConsoleAdminLogger, NoopAdminLogger } from './logger';
 
 // Orchestrator
 export { BuildOrchestrator } from './orchestrator';
