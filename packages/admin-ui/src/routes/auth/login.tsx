@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useSearchParams, useNavigate } from 'react-router';
 import { useAuth } from '@/hooks/use-auth';
 
 export function LoginPage() {
@@ -8,8 +8,10 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const message = searchParams.get('message');
+  const redirect = searchParams.get('redirect');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +20,8 @@ export function LoginPage() {
 
     try {
       await signIn(email, password);
+      // Navigate to redirect URL if provided, otherwise go to dashboard
+      navigate(redirect || '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in');
     } finally {
