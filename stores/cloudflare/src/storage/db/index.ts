@@ -8,6 +8,8 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
@@ -100,6 +102,12 @@ export class CloudflareKVDB extends MastraBase {
       case TABLE_SCORERS:
         if (!record.id) throw new Error('Score ID is required');
         return `${prefix}${tableName}:${record.id}`;
+      case TABLE_DATASETS:
+        if (!record.id) throw new Error('Dataset ID is required');
+        return `${prefix}${tableName}:${record.id}`;
+      case TABLE_DATASET_ITEMS:
+        if (!record.datasetId || !record.id) throw new Error('Dataset ID and Item ID are required');
+        return `${prefix}${tableName}:${record.datasetId}:${record.id}`;
       default:
         throw new Error(`Unsupported table: ${tableName}`);
     }
@@ -382,6 +390,16 @@ export class CloudflareKVDB extends MastraBase {
         case TABLE_SCORERS:
           if (!('id' in recordTyped) || !('scorerId' in recordTyped)) {
             throw new Error('Score record missing required fields');
+          }
+          break;
+        case TABLE_DATASETS:
+          if (!('id' in recordTyped) || !('name' in recordTyped)) {
+            throw new Error('Dataset record missing required fields');
+          }
+          break;
+        case TABLE_DATASET_ITEMS:
+          if (!('id' in recordTyped) || !('datasetId' in recordTyped) || !('input' in recordTyped)) {
+            throw new Error('Dataset item record missing required fields');
           }
           break;
         default:
