@@ -18,11 +18,30 @@ if [ ! -f "$PLAN_FILE" ]; then
   exit 1
 fi
 
-# Extract phase headers from the plan file
-PHASES=$(grep -E "^### Phase [0-9]+:" "$PLAN_FILE" | sed 's/^### //')
+# Try to extract phases - support multiple formats
+# Format 1: ### Phase N: Description
+PHASES=$(grep -E "^### Phase [0-9]+:" "$PLAN_FILE" 2>/dev/null | sed 's/^### //' || true)
+
+# Format 2: ## Section headers that have numbered sub-sections (### N.N)
+if [ -z "$PHASES" ]; then
+  # Get ## headers that are implementation sections
+  # Exclude common non-phase headers and version numbers (like ## 1.0.0)
+  PHASES=$(grep -E "^## " "$PLAN_FILE" | \
+    grep -v -E "^## (Overview|Summary|Success Criteria|Dependencies|Notes|References|Background|Introduction|Conclusion|Implementation Order|[0-9]+\.[0-9])" | \
+    sed 's/^## //' || true)
+fi
+
+# Format 3: Numbered ## headers like ## 1. Setup, ## 2. Implementation
+if [ -z "$PHASES" ]; then
+  PHASES=$(grep -E "^## [0-9]+\." "$PLAN_FILE" 2>/dev/null | sed 's/^## //' || true)
+fi
 
 if [ -z "$PHASES" ]; then
-  echo "Error: No phases found in plan file. Expected headers like '### Phase 1: Description'"
+  echo "Error: No phases found in plan file."
+  echo "Expected one of these formats:"
+  echo "  - '### Phase 1: Description'"
+  echo "  - '## Section Name' (with ### N.N sub-sections)"
+  echo "  - '## 1. Section Name'"
   exit 1
 fi
 
