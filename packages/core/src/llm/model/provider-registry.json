@@ -1342,8 +1342,6 @@
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Zen",
       "models": [
-        "alpha-gd4",
-        "alpha-glm-4.7",
         "big-pickle",
         "claude-3-5-haiku",
         "claude-haiku-4-5",
@@ -1364,7 +1362,6 @@
         "gpt-5.1-codex-mini",
         "gpt-5.2",
         "gpt-5.2-codex",
-        "grok-code",
         "kimi-k2",
         "kimi-k2-thinking",
         "qwen3-coder"
@@ -3534,8 +3531,6 @@
       "zai-org/GLM-4.7-Flash"
     ],
     "opencode": [
-      "alpha-gd4",
-      "alpha-glm-4.7",
       "big-pickle",
       "claude-3-5-haiku",
       "claude-haiku-4-5",
@@ -3556,7 +3551,6 @@
       "gpt-5.1-codex-mini",
       "gpt-5.2",
       "gpt-5.2-codex",
-      "grok-code",
       "kimi-k2",
       "kimi-k2-thinking",
       "qwen3-coder"

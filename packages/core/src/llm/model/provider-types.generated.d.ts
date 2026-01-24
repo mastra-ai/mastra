@@ -1091,8 +1091,6 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-Flash',
   ];
   readonly opencode: readonly [
-    'alpha-gd4',
-    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -1113,7 +1111,6 @@ export type ProviderModelsMap = {
     'gpt-5.1-codex-mini',
     'gpt-5.2',
     'gpt-5.2-codex',
-    'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
     'qwen3-coder',
