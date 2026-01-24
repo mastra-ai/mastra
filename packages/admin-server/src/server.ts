@@ -1,3 +1,4 @@
+import type { Server as HTTPServer } from 'node:http';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import type { MastraAdmin, AdminLogger } from '@mastra/admin';
@@ -21,6 +22,9 @@ import type {
   AdminServerVariables,
   CorsOptions,
 } from './types';
+import { AdminWebSocketServer } from './websocket';
+import { BuildLogStreamer } from './websocket/build-logs';
+import { ServerLogStreamer } from './websocket/server-logs';
 
 /**
  * Default logger for AdminServer route handlers.
@@ -58,6 +62,9 @@ export class AdminServer {
   private readonly config: ResolvedAdminServerConfig;
   private readonly admin: MastraAdmin;
   private server?: ServerType;
+  private wsServer?: AdminWebSocketServer;
+  private buildLogStreamer?: BuildLogStreamer;
+  private serverLogStreamer?: ServerLogStreamer;
   private startTime?: Date;
 
   constructor(config: AdminServerConfig) {
@@ -303,7 +310,7 @@ export class AdminServer {
    * Start the HTTP server.
    */
   async start(): Promise<void> {
-    const { port, host, basePath } = this.config;
+    const { port, host, basePath, enableWebSocket } = this.config;
 
     return new Promise(resolve => {
       this.server = serve(
@@ -312,11 +319,35 @@ export class AdminServer {
           port,
           hostname: host,
         },
-        () => {
+        _info => {
           console.info(`AdminServer listening on http://${host}:${port}`);
           console.info(`API available at http://${host}:${port}${basePath}`);
           console.info(`Health check at http://${host}:${port}/health`);
           console.info(`Readiness check at http://${host}:${port}/ready`);
+
+          // Setup WebSocket server if enabled
+          if (enableWebSocket && this.server) {
+            // Get the underlying HTTP server
+            // The serve() function returns a ServerType which has server property
+            const httpServer = (this.server as unknown as { server?: HTTPServer }).server;
+            if (httpServer) {
+              this.wsServer = new AdminWebSocketServer({
+                admin: this.admin,
+                server: httpServer,
+                path: '/ws',
+              });
+              console.info(`WebSocket server listening on ws://${host}:${port}/ws`);
+
+              // Setup log streamers
+              this.buildLogStreamer = new BuildLogStreamer({
+                wsServer: this.wsServer,
+              });
+
+              this.serverLogStreamer = new ServerLogStreamer({
+                wsServer: this.wsServer,
+              });
+            }
+          }
 
           this.startTime = new Date();
           resolve();
@@ -330,6 +361,11 @@ export class AdminServer {
    */
   async stop(): Promise<void> {
     console.info('AdminServer shutting down...');
+
+    // Close WebSocket server (this closes all client connections)
+    if (this.wsServer) {
+      this.wsServer.close();
+    }
 
     // Close HTTP server
     if (this.server) {
@@ -371,9 +407,33 @@ export class AdminServer {
       uptime,
       buildWorkerActive: false, // Will be implemented in Phase 5
       healthWorkerActive: false, // Will be implemented in Phase 5
-      wsConnectionCount: 0, // Will be implemented in Phase 4
+      wsConnectionCount: this.wsServer?.getConnectionCount() ?? 0,
       port: this.config.port,
       host: this.config.host,
     };
+  }
+
+  /**
+   * Get the WebSocket server instance.
+   * Returns undefined if WebSocket is not enabled.
+   */
+  getWebSocketServer(): AdminWebSocketServer | undefined {
+    return this.wsServer;
+  }
+
+  /**
+   * Get the build log streamer instance.
+   * Returns undefined if WebSocket is not enabled.
+   */
+  getBuildLogStreamer(): BuildLogStreamer | undefined {
+    return this.buildLogStreamer;
+  }
+
+  /**
+   * Get the server log streamer instance.
+   * Returns undefined if WebSocket is not enabled.
+   */
+  getServerLogStreamer(): ServerLogStreamer | undefined {
+    return this.serverLogStreamer;
   }
 }

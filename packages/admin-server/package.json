@@ -36,6 +36,16 @@
         "default": "./dist/middleware/index.cjs"
       }
     },
+    "./websocket": {
+      "import": {
+        "types": "./dist/websocket/index.d.ts",
+        "default": "./dist/websocket/index.js"
+      },
+      "require": {
+        "types": "./dist/websocket/index.d.ts",
+        "default": "./dist/websocket/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -64,13 +74,15 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
-    "hono": "^4.11.3"
+    "hono": "^4.11.3",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/admin": "workspace:*",
     "@types/node": "22.13.17",
+    "@types/ws": "^8.5.13",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",

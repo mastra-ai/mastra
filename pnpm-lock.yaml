@@ -1933,6 +1933,9 @@ importers:
       hono:
         specifier: ^4.11.3
         version: 4.11.3
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1946,6 +1949,9 @@ importers:
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)

@@ -33,3 +33,29 @@ export { errorHandler } from './middleware/error-handler';
 
 export { createRequestLoggerMiddleware } from './middleware/request-logger';
 export type { RequestLoggerConfig } from './middleware/request-logger';
+
+// WebSocket exports
+export { AdminWebSocketServer } from './websocket';
+export type { AdminWebSocketServerConfig } from './websocket';
+export type {
+  WSEvent,
+  WSEventType,
+  WSMessage,
+  WSClient,
+  WSServerConfig,
+  BuildLogEvent,
+  BuildStatusEvent,
+  ServerLogEvent,
+  ServerHealthEvent,
+  DeploymentStatusEvent,
+  SubscribePayload,
+  UnsubscribePayload,
+  ChannelType,
+  WSErrorMessage,
+} from './websocket/types';
+
+export { BuildLogStreamer } from './websocket/build-logs';
+export type { BuildLogStreamerConfig } from './websocket/build-logs';
+
+export { ServerLogStreamer } from './websocket/server-logs';
+export type { ServerLogStreamerConfig } from './websocket/server-logs';
