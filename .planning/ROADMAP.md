@@ -85,10 +85,10 @@ Plans:
   3. Scorer receives input mapped to scorer.run({ input, output, groundTruth })
   4. Results store scorer output alongside human label for alignment analysis
   5. Optional meta-scorers can evaluate scorer output
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — TDD executeScorer implementation with DatasetItem.output field
 
 ### Phase 5: Run Analytics
 **Goal**: Compare runs to detect score regressions and track performance
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
 | 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
 | 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
-| 4. Scorer & Processor Targets | 0/TBD | Not started | - |
+| 4. Scorer Targets | 0/1 | Not started | - |
 | 5. Run Analytics | 0/TBD | Not started | - |
 | 6. Playground Integration | 0/TBD | Not started | - |
 | 7. CSV Import | 0/TBD | Not started | - |
