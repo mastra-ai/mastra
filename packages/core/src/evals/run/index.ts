@@ -8,20 +8,8 @@ import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
-import type { MastraScorer } from '../base';
+import type { MastraScorer, MastraScorerEntry } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
-
-/**
- * Configuration for a scorer with optional model settings and temperature variations.
- * Used in runEvals to configure how each scorer should be executed.
- */
-export type ScorerWithConfig = {
-  scorer: MastraScorer<any, any, any, any>;
-  /** Model settings applied to all LLM judge calls (e.g., temperature, maxTokens) */
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
-  /** Run scorer multiple times with different temperature values for varied LLM judge opinions */
-  temperatures?: number[];
-};
 
 type RunEvalsDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
@@ -49,7 +37,7 @@ type RunEvalsResult = {
 // Agent with scorers array (bare scorers or with config)
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
-  scorers: (MastraScorer<any, any, any, any> | ScorerWithConfig)[];
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[];
   target: TAgent;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
@@ -62,7 +50,7 @@ export function runEvals<TAgent extends Agent>(config: {
 // Workflow with scorers array (bare scorers or with config)
 export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
-  scorers: (MastraScorer<any, any, any, any> | ScorerWithConfig)[];
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[];
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
@@ -89,7 +77,7 @@ export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any
 }): Promise<RunEvalsResult>;
 export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
-  scorers: (MastraScorer<any, any, any, any> | ScorerWithConfig)[] | WorkflowScorerConfig;
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig;
   target: Agent | Workflow;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
@@ -160,7 +148,7 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
 
 function validateEvalsInputs(
   data: RunEvalsDataItem<any>[],
-  scorers: (MastraScorer<any, any, any, any> | ScorerWithConfig)[] | WorkflowScorerConfig,
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig,
   target: Agent | Workflow,
 ): void {
   if (data.length === 0) {
@@ -273,16 +261,16 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
 }
 
 /**
- * Helper to check if a scorer item is a ScorerWithConfig object
+ * Helper to check if a scorer item is a MastraScorerEntry object
  */
-function isScorerWithConfig(
-  item: MastraScorer<any, any, any, any> | ScorerWithConfig,
-): item is ScorerWithConfig {
+function isMastraScorerEntry(
+  item: MastraScorer<any, any, any, any> | MastraScorerEntry,
+): item is MastraScorerEntry {
   return typeof item === 'object' && 'scorer' in item;
 }
 
 async function runScorers(
-  scorers: (MastraScorer<any, any, any, any> | ScorerWithConfig)[] | WorkflowScorerConfig,
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig,
   targetResult: any,
   item: RunEvalsDataItem<any>,
 ): Promise<Record<string, any>> {
@@ -290,8 +278,8 @@ async function runScorers(
 
   if (Array.isArray(scorers)) {
     for (const scorerItem of scorers) {
-      // Normalize to ScorerWithConfig format
-      const scorerConfig: ScorerWithConfig = isScorerWithConfig(scorerItem)
+      // Normalize to MastraScorerEntry format
+      const scorerConfig: MastraScorerEntry = isMastraScorerEntry(scorerItem)
         ? scorerItem
         : { scorer: scorerItem };
 

@@ -54,9 +54,9 @@ console.log(`Processed ${result.summary.totalItems} items`);
     },
     {
       name: "scorers",
-      type: "(MastraScorer | ScorerWithConfig)[] | WorkflowScorerConfig",
+      type: "(MastraScorer | MastraScorerEntry)[] | WorkflowScorerConfig",
       description:
-        "Array of scorers (or scorer configs) for agents, or configuration object for workflows specifying scorers for the workflow and individual steps. Use ScorerWithConfig to specify modelSettings or run scorers multiple times with different temperatures.",
+        "Array of scorers (or scorer entries with config) for agents, or configuration object for workflows specifying scorers for the workflow and individual steps. Use MastraScorerEntry to specify modelSettings or run scorers multiple times with different temperatures.",
       isOptional: false,
     },
     {
@@ -131,9 +131,9 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
   ]}
 />
 
-## Scorer Configuration (ScorerWithConfig)
+## Scorer Configuration (MastraScorerEntry)
 
-For LLM-based scorers, you can configure model settings and run scorers multiple times with different temperatures using `ScorerWithConfig`:
+For LLM-based scorers, you can configure model settings and run scorers multiple times with different temperatures using `MastraScorerEntry`:
 
 <PropertiesTable
   content={[

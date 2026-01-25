@@ -761,7 +761,7 @@ describe('runEvals', () => {
       expect(result.scores['temp-scorer@0.7']).toBeCloseTo(0.9, 5);
     });
 
-    it('should use ScorerWithConfig format correctly', async () => {
+    it('should use MastraScorerEntry format correctly', async () => {
       const scorer = createMockScorer('config-scorer', 0.75);
       const scorerSpy = vi.spyOn(scorer, 'run');
 
@@ -806,7 +806,7 @@ describe('runEvals', () => {
       );
     });
 
-    it('should handle bare scorers alongside ScorerWithConfig', async () => {
+    it('should handle bare scorers alongside MastraScorerEntry', async () => {
       const bareScorer = createMockScorer('bare-scorer', 0.7);
       const configScorer = createMockScorer('config-scorer', 0.8);
       const bareSpy = vi.spyOn(bareScorer, 'run');
