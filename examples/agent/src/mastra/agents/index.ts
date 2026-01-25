@@ -1,42 +1,14 @@
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
-import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
-import { cookingTool } from '../tools/index.js';
+import { cookingTool, weatherInfo } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 const memory = new Memory();
-
-// Define schema directly compatible with OpenAI's requirements
-const mySchema = jsonSchema({
-  type: 'object',
-  properties: {
-    city: {
-      type: 'string',
-      description: 'The city to get weather information for',
-    },
-  },
-  required: ['city'],
-});
-
-export const weatherInfo = tool({
-  description: 'Fetches the current weather information for a given city',
-  parameters: mySchema,
-  execute: async ({ city }) => {
-    return {
-      city,
-      weather: 'sunny',
-      temperature_celsius: 19,
-      temperature_fahrenheit: 66,
-      humidity: 50,
-      wind: '10 mph',
-    };
-  },
-});
 
 export const chefAgent = new Agent({
   id: 'chef-agent',
