@@ -268,6 +268,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/moark",
+          label: "Moark",
+        },
+        {
+          type: "doc",
           id: "providers/modelscope",
           label: "ModelScope",
         },

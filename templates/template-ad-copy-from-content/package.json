@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
-    "@browserbasehq/stagehand": "^2.5.2",
+    "@browserbasehq/stagehand": "^2.5.6",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "mastra": "latest",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "typescript": "^5.9.3"
   }
 }
