@@ -1749,6 +1749,11 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
 
     // Mastra tools passed into the Agent
+    // Set threadId in requestContext so dynamic tools functions can access it
+    // This enables patterns like dynamic tool loading where tools need thread context
+    if (threadId && !requestContext.get(MASTRA_THREAD_ID_KEY)) {
+      requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    }
 
     const assignedTools = await this.listTools({ requestContext });
 

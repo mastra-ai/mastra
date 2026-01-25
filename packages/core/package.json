@@ -41,6 +41,16 @@
         "default": "./dist/tools/is-vercel-tool.cjs"
       }
     },
+    "./tools/dynamic": {
+      "import": {
+        "types": "./dist/tools/dynamic/index.d.ts",
+        "default": "./dist/tools/dynamic/index.js"
+      },
+      "require": {
+        "types": "./dist/tools/dynamic/index.d.ts",
+        "default": "./dist/tools/dynamic/index.cjs"
+      }
+    },
     "./workflows/_constants": {
       "import": {
         "types": "./dist/workflows/constants.d.ts",

@@ -3,7 +3,14 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
-import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
+import {
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+  dynamicToolsAgent,
+} from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {
@@ -50,6 +57,7 @@ const config = {
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
     chefModelV2Agent,
