@@ -375,4 +375,65 @@ describe('runDataset', () => {
       expect(mockWorkflow.createRun).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('scorer target', () => {
+    it('executes scorer target and applies meta-scorers', async () => {
+      // Create dataset with item containing full scorer input (user structures it)
+      const scorerDataset = await datasetsStorage.createDataset({ name: 'Scorer Test' });
+      await datasetsStorage.addItem({
+        datasetId: scorerDataset.id,
+        // item.input contains exactly what scorer expects - direct passthrough
+        input: {
+          input: { question: 'What is AI?' },
+          output: { response: 'AI is artificial intelligence.' },
+          groundTruth: { label: 'good' },
+        },
+        // Human label for alignment analysis (Phase 5 analytics)
+        expectedOutput: { humanScore: 1.0 },
+      });
+
+      // Mock scorer as target (the scorer being calibrated)
+      const mockTargetScorer = {
+        id: 'target-scorer',
+        name: 'Target Scorer',
+        description: 'Scorer under test',
+        run: vi.fn().mockResolvedValue({ score: 0.9, reason: 'Accurate' }),
+      };
+
+      // Mock meta-scorer (scores the scorer's output)
+      const mockMetaScorer = {
+        id: 'meta-scorer',
+        name: 'Meta Scorer',
+        description: 'Evaluates scorer calibration',
+        run: vi.fn().mockResolvedValue({ score: 0.95, reason: 'Good calibration' }),
+      };
+
+      (mastra.getScorerById as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'target-scorer') return mockTargetScorer;
+        if (id === 'meta-scorer') return mockMetaScorer;
+        return null;
+      });
+
+      const runResult = await runDataset(mastra, {
+        datasetId: scorerDataset.id,
+        targetId: 'target-scorer',
+        targetType: 'scorer',
+        scorers: [mockMetaScorer],
+      });
+
+      expect(runResult.status).toBe('completed');
+      expect(runResult.results).toHaveLength(1);
+      // Scorer's output is stored in result.output
+      expect(runResult.results[0].output).toEqual({ score: 0.9, reason: 'Accurate' });
+      // Verify scorer received item.input directly (no field mapping)
+      expect(mockTargetScorer.run).toHaveBeenCalledWith({
+        input: { question: 'What is AI?' },
+        output: { response: 'AI is artificial intelligence.' },
+        groundTruth: { label: 'good' },
+      });
+      // Meta-scorer should have been applied
+      expect(runResult.results[0].scores).toHaveLength(1);
+      expect(runResult.results[0].scores[0].scorerId).toBe('meta-scorer');
+    });
+  });
 });

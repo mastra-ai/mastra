@@ -21,8 +21,44 @@ export interface ExecutionResult {
 }
 
 /**
+ * Execute a dataset item against a scorer (LLM-as-judge calibration).
+ * item.input should contain exactly what the scorer expects - direct passthrough.
+ * For calibration: item.input = { input, output, groundTruth } (user structures it)
+ */
+async function executeScorer(
+  scorer: MastraScorer<any, any, any, any>,
+  item: DatasetItem,
+): Promise<ExecutionResult> {
+  try {
+    // Direct passthrough - scorer receives item.input exactly as provided
+    // User structures item.input to match scorer's expected shape (e.g., { input, output, groundTruth })
+    const result = await scorer.run(item.input as any);
+
+    // Validate score is a number
+    const score = typeof result.score === 'number' && !isNaN(result.score) ? result.score : null;
+
+    if (score === null && result.score !== undefined) {
+      console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
+    }
+
+    return {
+      output: {
+        score,
+        reason: typeof result.reason === 'string' ? result.reason : null,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      output: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * Execute a dataset item against a target (agent, workflow, scorer, processor).
- * Phase 2 focuses on agent and workflow; scorer/processor deferred to Phase 4.
+ * Phase 2: agent/workflow. Phase 4: scorer. Processor deferred.
  */
 export async function executeTarget(
   target: Target,
@@ -36,9 +72,10 @@ export async function executeTarget(
       case 'workflow':
         return await executeWorkflow(target as Workflow, item);
       case 'scorer':
+        return await executeScorer(target as MastraScorer<any, any, any, any>, item);
       case 'processor':
-        // Deferred to Phase 4 - for now throw clear error
-        throw new Error(`Target type '${targetType}' not yet supported. Coming in Phase 4.`);
+        // Processor targets dropped from roadmap - not a core use case
+        throw new Error(`Target type '${targetType}' not yet supported.`);
       default:
         throw new Error(`Unknown target type: ${targetType}`);
     }

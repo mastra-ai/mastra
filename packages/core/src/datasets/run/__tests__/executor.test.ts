@@ -303,4 +303,117 @@ describe('executeTarget', () => {
       expect(callArgs).not.toHaveProperty('context');
     });
   });
+
+  describe('scorer target', () => {
+    // Helper to create mock scorer
+    const createMockScorer = (score: number, reason?: string, shouldFail = false) => ({
+      id: 'test-scorer',
+      name: 'Test Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        if (shouldFail) throw new Error('Scorer error');
+        return { score, reason };
+      }),
+    });
+
+    it('calls scorer.run with item.input directly', async () => {
+      const mockScorer = createMockScorer(0.85, 'Good answer');
+      // item.input contains exactly what scorer expects (user structures it)
+      const scorerInput = {
+        input: { question: 'What is 2+2?' },
+        output: { response: '4' },
+        groundTruth: { score: 1.0, label: 'correct' },
+      };
+
+      const result = await executeTarget(mockScorer as any, 'scorer', {
+        id: 'item-1',
+        datasetId: 'ds-1',
+        input: scorerInput, // Full scorer input in item.input
+        expectedOutput: { humanScore: 1.0 }, // Human label for alignment analysis
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Scorer receives item.input directly - no field mapping
+      expect(mockScorer.run).toHaveBeenCalledWith(scorerInput);
+      expect(result.output).toEqual({ score: 0.85, reason: 'Good answer' });
+      expect(result.error).toBeNull();
+    });
+
+    it('returns null score and warns on NaN score', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockScorer = createMockScorer(NaN, 'Invalid');
+
+      const result = await executeTarget(mockScorer as any, 'scorer', {
+        id: 'item-2',
+        datasetId: 'ds-1',
+        input: { output: 'test response' },
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toEqual({ score: null, reason: 'Invalid' });
+      expect(result.error).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('invalid score'));
+      consoleSpy.mockRestore();
+    });
+
+    it('returns null score and warns on non-number score', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockScorer = {
+        id: 'test-scorer',
+        name: 'Test Scorer',
+        run: vi.fn().mockResolvedValue({ score: 'not-a-number', reason: 'Bad type' }),
+      };
+
+      const result = await executeTarget(mockScorer as any, 'scorer', {
+        id: 'item-3',
+        datasetId: 'ds-1',
+        input: { output: 'test' },
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toEqual({ score: null, reason: 'Bad type' });
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('captures error when scorer throws', async () => {
+      const mockScorer = createMockScorer(0, '', true);
+
+      const result = await executeTarget(mockScorer as any, 'scorer', {
+        id: 'item-4',
+        datasetId: 'ds-1',
+        input: { output: 'test' },
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toBe('Scorer error');
+    });
+
+    it('handles null reason in scorer result', async () => {
+      const mockScorer = {
+        id: 'test-scorer',
+        name: 'Test Scorer',
+        run: vi.fn().mockResolvedValue({ score: 0.7, reason: null }),
+      };
+
+      const result = await executeTarget(mockScorer as any, 'scorer', {
+        id: 'item-5',
+        datasetId: 'ds-1',
+        input: { output: 'response' },
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toEqual({ score: 0.7, reason: null });
+    });
+  });
 });
