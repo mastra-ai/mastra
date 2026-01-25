@@ -213,3 +213,30 @@ export const evalAgent = new Agent({
     },
   },
 });
+
+// Same as evalAgent but with temperature array for testing scorer temperature variations
+export const evalAgentWithTemperatures = new Agent({
+  id: 'eval-agent-with-temperatures',
+  name: 'Eval Agent (With Temperatures)',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+      // Run the scorer at multiple temperatures to get varied LLM judge opinions
+      temperatures: [0.0, 0.5, 1.0],
+    },
+  },
+});
