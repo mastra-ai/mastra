@@ -11,6 +11,7 @@ import type { LicenseFeature, LicenseInfo } from './license/types';
 import { LicenseValidator } from './license/validator';
 import type { AdminLogger } from './logger';
 import { ConsoleAdminLogger } from './logger';
+import { BuildLogWriter } from './logs/build-log-writer';
 import type { ObservabilityWriterInterface, ObservabilityQueryProvider } from './observability';
 import { BuildOrchestrator } from './orchestrator/build-orchestrator';
 import { RBACManager } from './rbac/manager';
@@ -60,6 +61,16 @@ export interface ObservabilityConfig {
 }
 
 /**
+ * Build logs configuration.
+ */
+export interface BuildLogsConfig {
+  /** File storage provider for persisting build logs */
+  fileStorage: FileStorageProvider;
+  /** Base path for build logs. @default 'builds' */
+  basePath?: string;
+}
+
+/**
  * MastraAdmin configuration options.
  */
 export interface MastraAdminConfig<
@@ -76,6 +87,8 @@ export interface MastraAdminConfig<
   logger?: AdminLogger | false;
   /** Admin storage provider (e.g., PostgresAdminStorage). */
   storage: TStorage;
+  /** Build logs configuration for persisting logs to file storage. */
+  buildLogs?: BuildLogsConfig;
   /** Observability configuration. */
   observability?: ObservabilityConfig;
   /** Project runner for building and deploying. */
@@ -178,6 +191,7 @@ export class MastraAdmin<
   readonly #email: EmailProvider;
   readonly #encryption: EncryptionProvider;
   readonly #observability?: ObservabilityConfig;
+  readonly #buildLogWriter?: BuildLogWriter;
   readonly #runner?: TRunner;
   readonly #router?: TRouter;
   readonly #source?: TSource;
@@ -225,6 +239,14 @@ export class MastraAdmin<
     // Initialize RBAC manager
     this.#rbac = new RBACManager(this.#storage);
 
+    // Initialize build log writer if configured
+    if (config.buildLogs?.fileStorage) {
+      this.#buildLogWriter = new BuildLogWriter({
+        fileStorage: config.buildLogs.fileStorage,
+        basePath: config.buildLogs.basePath,
+      });
+    }
+
     // Initialize build orchestrator (requires runner, router, source)
     this.#orchestrator = new BuildOrchestrator(
       this.#storage,
@@ -232,6 +254,7 @@ export class MastraAdmin<
       this.#runner,
       this.#router,
       this.#source,
+      this.#buildLogWriter,
     );
   }
 
@@ -332,6 +355,10 @@ export class MastraAdmin<
 
   getSource(): TSource | undefined {
     return this.#source;
+  }
+
+  getBuildLogWriter(): BuildLogWriter | undefined {
+    return this.#buildLogWriter;
   }
 
   hasFeature(feature: LicenseFeature): boolean {

@@ -1,9 +1,5 @@
 import type { AdminServerContext, AdminServerRoute } from '../types';
-import {
-  deploymentIdParamSchema,
-  buildIdParamSchema,
-  successResponseSchema,
-} from '../schemas/common';
+import { deploymentIdParamSchema, buildIdParamSchema, successResponseSchema } from '../schemas/common';
 import {
   buildResponseSchema,
   buildLogsResponseSchema,
@@ -23,6 +19,7 @@ function toBuildResponse(build: {
   commitMessage: string | null;
   status: string;
   logs: string;
+  logPath: string | null;
   queuedAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -99,6 +96,11 @@ export const GET_BUILD_ROUTE: AdminServerRoute = {
 /**
  * GET /builds/:buildId/logs - Get build logs.
  * Supports streaming via Accept header or query param.
+ *
+ * Log retrieval priority:
+ * 1. If build has logPath, read from file storage (completed builds)
+ * 2. If build is in-progress, return buffered logs from orchestrator
+ * 3. Fall back to database logs field
  */
 export const GET_BUILD_LOGS_ROUTE: AdminServerRoute = {
   method: 'GET',
@@ -122,17 +124,39 @@ export const GET_BUILD_LOGS_ROUTE: AdminServerRoute = {
       throw new Error('Build not found');
     }
 
-    // For streaming, this would be handled differently via WebSocket or SSE
-    // For now, return the full logs
-    const logs = since !== undefined
-      ? build.logs.substring(since)
-      : build.logs;
-
     const isComplete = ['succeeded', 'failed', 'cancelled'].includes(build.status);
+    let logs: string;
+
+    // Priority 1: Read from file storage if logPath exists (completed builds)
+    if (build.logPath) {
+      const buildLogWriter = admin.getBuildLogWriter();
+      if (buildLogWriter) {
+        try {
+          logs = await buildLogWriter.read(buildId);
+        } catch {
+          // Fall back to database logs if file read fails
+          logs = build.logs;
+        }
+      } else {
+        logs = build.logs;
+      }
+    } else if (!isComplete) {
+      // Priority 2: In-progress build - try buffered logs from orchestrator
+      const orchestrator = admin.getOrchestrator();
+      const bufferedLogs = orchestrator.getBufferedLogs(buildId);
+      logs = bufferedLogs ?? build.logs;
+    } else {
+      // Priority 3: Fall back to database logs
+      logs = build.logs;
+    }
+
+    // For streaming, this would be handled differently via WebSocket or SSE
+    // Apply 'since' offset if provided
+    const finalLogs = since !== undefined ? logs.substring(since) : logs;
 
     return {
       buildId: build.id,
-      logs,
+      logs: finalLogs,
       complete: isComplete,
     };
   },

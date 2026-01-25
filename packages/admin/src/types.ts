@@ -201,8 +201,11 @@ export interface Build {
   /** Build status */
   status: BuildStatus;
 
-  /** Build logs (streamed/appended) */
+  /** Build logs (streamed/appended during build) */
   logs: string;
+
+  /** Path to persisted log file in file storage (set after build completes) */
+  logPath: string | null;
 
   /** When the build was queued */
   queuedAt: Date;

@@ -16,6 +16,7 @@ export class BuildsPG {
   async createBuild(data: Omit<Build, 'startedAt' | 'completedAt'>): Promise<Build> {
     return this.db.insert<Omit<Build, 'id'>>(TABLES.builds, {
       ...data,
+      logPath: data.logPath ?? null,
       startedAt: null,
       completedAt: null,
     } as unknown as Record<string, unknown>);

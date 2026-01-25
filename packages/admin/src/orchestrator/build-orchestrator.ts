@@ -1,4 +1,5 @@
 import type { EncryptionProvider } from '../encryption/base';
+import type { BuildLogWriter } from '../logs/build-log-writer';
 import type { EdgeRouterProvider } from '../router/base';
 import type { ProjectRunner } from '../runner/base';
 import type { ProjectSourceProvider } from '../source/base';
@@ -30,6 +31,7 @@ export class BuildOrchestrator {
   readonly #runner?: ProjectRunner;
   readonly #router?: EdgeRouterProvider;
   readonly #source?: ProjectSourceProvider;
+  readonly #buildLogWriter?: BuildLogWriter;
   readonly #queue: BuildJob[] = [];
   #processing = false;
   #shutdown = false;
@@ -42,12 +44,14 @@ export class BuildOrchestrator {
     runner?: ProjectRunner,
     router?: EdgeRouterProvider,
     source?: ProjectSourceProvider,
+    buildLogWriter?: BuildLogWriter,
   ) {
     this.#storage = storage;
     this.#encryption = encryption;
     this.#runner = runner;
     this.#router = router;
     this.#source = source;
+    this.#buildLogWriter = buildLogWriter;
   }
 
   /**
@@ -208,13 +212,25 @@ export class BuildOrchestrator {
       }
 
       const updatedBuild = await this.#runner.build(project, build, { envVars }, log => {
-        // Append logs as they come in
+        // Buffer logs for file storage (if configured)
+        this.#buildLogWriter?.append(buildId, log);
+        // Also append to database for in-progress querying
         void this.#storage.appendBuildLogs(buildId, log);
         // Broadcast via WebSocket if callback is set
         this.#onLog?.(buildId, log);
       });
 
+      // Flush logs to file storage when build completes (success or fail)
+      let logPath: string | undefined;
+      if (this.#buildLogWriter) {
+        logPath = await this.#buildLogWriter.flush(buildId);
+      }
+
       if (updatedBuild.status === 'failed') {
+        // Update build with logPath even on failure
+        if (logPath) {
+          await this.#storage.updateBuild(buildId, { logPath });
+        }
         throw new Error(updatedBuild.errorMessage ?? 'Build failed');
       }
 
@@ -251,10 +267,11 @@ export class BuildOrchestrator {
       // 6. Save running server info
       await this.#storage.createRunningServer(server);
 
-      // 7. Update build and deployment status
+      // 7. Update build and deployment status (include logPath)
       await this.#storage.updateBuild(buildId, {
         status: 'succeeded',
         completedAt: new Date(),
+        ...(logPath && { logPath }),
       });
 
       await this.#storage.updateDeployment(deployment.id, {
@@ -271,10 +288,21 @@ export class BuildOrchestrator {
         error instanceof Error ? error.message : String(error),
       );
 
+      // Flush logs to file storage even on error (if not already flushed)
+      let logPath: string | undefined;
+      if (this.#buildLogWriter) {
+        try {
+          logPath = await this.#buildLogWriter.flush(buildId);
+        } catch {
+          // Ignore flush errors during error handling
+        }
+      }
+
       await this.#storage.updateBuild(buildId, {
         status: 'failed',
         completedAt: new Date(),
         errorMessage: error instanceof Error ? error.message : String(error),
+        ...(logPath && { logPath }),
       });
 
       await this.#storage.updateDeploymentStatus(deployment.id, 'failed');
@@ -325,6 +353,22 @@ export class BuildOrchestrator {
       length: this.#queue.length,
       processing: this.#processing,
     };
+  }
+
+  /**
+   * Get buffered logs for an in-progress build.
+   * Returns undefined if no buffer exists (build not in progress or no log writer configured).
+   */
+  getBufferedLogs(buildId: string): string | undefined {
+    return this.#buildLogWriter?.getBuffered(buildId);
+  }
+
+  /**
+   * Get the build log writer instance.
+   * Used by admin-server routes for reading persisted logs.
+   */
+  getBuildLogWriter(): BuildLogWriter | undefined {
+    return this.#buildLogWriter;
   }
 
   /**

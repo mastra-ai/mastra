@@ -3,6 +3,7 @@ export { MastraAdmin } from './mastra-admin';
 export type {
   MastraAdminConfig,
   ObservabilityConfig,
+  BuildLogsConfig,
   AdminAuthProvider,
   CreateTeamInput,
   CreateProjectInput,
@@ -66,6 +67,10 @@ export type { AdminStorage, PaginationParams, PaginatedResult } from './storage/
 
 // File Storage
 export type { FileStorageProvider } from './file-storage/base';
+
+// Build Logs
+export { BuildLogWriter } from './logs/build-log-writer';
+export type { BuildLogWriterConfig } from './logs/build-log-writer';
 
 // Observability
 export type { Trace, Span, SpanEvent, Log, Metric, Score, ObservabilityEvent } from './observability/types';
