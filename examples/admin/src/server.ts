@@ -110,9 +110,16 @@ async function main() {
     logRoutes: true,
   });
 
-  // Initialize file storage
-  console.log('[5] Initializing local file storage...');
-  const fileStorage = new LocalFileStorage({
+  // Initialize file storage for build logs
+  console.log('[5] Initializing local file storage for build logs...');
+  const buildLogStorage = new LocalFileStorage({
+    baseDir: resolve(process.cwd(), '.mastra/build-logs'),
+    atomicWrites: true,
+  });
+
+  // Initialize file storage for observability (server logs, traces, metrics)
+  console.log('[5a] Initializing local file storage for observability...');
+  const observabilityStorage = new LocalFileStorage({
     baseDir: resolve(process.cwd(), '.mastra/observability'),
     atomicWrites: true,
   });
@@ -122,7 +129,7 @@ async function main() {
   let ingestionWorker: IngestionWorker | undefined;
 
   if (ENABLE_CLICKHOUSE) {
-    console.log('[5a] Initializing ClickHouse query provider...');
+    console.log('[5b] Initializing ClickHouse query provider...');
     queryProvider = new ClickHouseQueryProvider({
       clickhouse: {
         url: CLICKHOUSE_URL,
@@ -138,9 +145,9 @@ async function main() {
     console.log('    ClickHouse query provider initialized');
 
     // Initialize ingestion worker
-    console.log('[5b] Initializing ClickHouse ingestion worker...');
+    console.log('[5c] Initializing ClickHouse ingestion worker...');
     ingestionWorker = new IngestionWorker({
-      fileStorage,
+      fileStorage: observabilityStorage,
       clickhouse: {
         url: CLICKHOUSE_URL,
         database: CLICKHOUSE_DATABASE,
@@ -171,8 +178,13 @@ async function main() {
     source,
     runner,
     router,
+    // Build logs configuration - persists build output to file storage
+    buildLogs: {
+      fileStorage: buildLogStorage,
+    },
+    // Observability configuration - for server logs, traces, metrics
     observability: {
-      fileStorage,
+      fileStorage: observabilityStorage,
       // Cast to ObservabilityQueryProvider - ClickHouseQueryProvider implements the interface
       queryProvider: queryProvider as unknown as ObservabilityQueryProvider,
     },
