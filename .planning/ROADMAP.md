@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning ✓
 - [x] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring ✓
 - [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
-- [ ] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment
+- [x] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment ✓
 - [ ] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection
 - [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results
 - [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files
@@ -88,7 +88,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 04-01-PLAN.md — TDD executeScorer implementation with DatasetItem.output field
+- [x] 04-01-PLAN.md — TDD executeScorer implementation with DatasetItem.output field
 
 ### Phase 5: Run Analytics
 **Goal**: Compare runs to detect score regressions and track performance
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Storage Foundation | 4/4 | ✓ Complete | 2026-01-24 |
 | 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
 | 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
-| 4. Scorer Targets | 0/1 | Not started | - |
+| 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 5. Run Analytics | 0/TBD | Not started | - |
 | 6. Playground Integration | 0/TBD | Not started | - |
 | 7. CSV Import | 0/TBD | Not started | - |
