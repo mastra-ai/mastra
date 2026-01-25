@@ -31,6 +31,12 @@ export interface RunOptions {
 export type LogStreamCallback = (log: string) => void;
 
 /**
+ * Server log callback for real-time log streaming.
+ * Called when a running server outputs to stdout/stderr.
+ */
+export type ServerLogCallback = (serverId: string, line: string, stream: 'stdout' | 'stderr') => void;
+
+/**
  * Abstract interface for running Mastra projects.
  *
  * Implementations:
@@ -50,6 +56,14 @@ export interface ProjectRunner {
   setSource?(source: ProjectSourceProvider): void;
 
   /**
+   * Set the callback for server log events.
+   * Called by MastraAdmin or AdminServer to receive real-time logs from running servers.
+   *
+   * @param callback - Function called for each log line from running servers
+   */
+  setOnServerLog?(callback: ServerLogCallback): void;
+
+  /**
    * Build a project from source.
    *
    * @param project - The project to build
@@ -58,12 +72,7 @@ export interface ProjectRunner {
    * @param onLog - Callback for streaming build logs
    * @returns Updated build record
    */
-  build(
-    project: Project,
-    build: Build,
-    options?: BuildOptions,
-    onLog?: LogStreamCallback,
-  ): Promise<Build>;
+  build(project: Project, build: Build, options?: BuildOptions, onLog?: LogStreamCallback): Promise<Build>;
 
   /**
    * Deploy and start a server for a deployment.
@@ -74,12 +83,7 @@ export interface ProjectRunner {
    * @param options - Run options
    * @returns Running server info
    */
-  deploy(
-    project: Project,
-    deployment: Deployment,
-    build: Build,
-    options?: RunOptions,
-  ): Promise<RunningServer>;
+  deploy(project: Project, deployment: Deployment, build: Build, options?: RunOptions): Promise<RunningServer>;
 
   /**
    * Stop a running server.
@@ -103,10 +107,7 @@ export interface ProjectRunner {
    * @param options - Log options
    * @returns Log content
    */
-  getLogs(
-    server: RunningServer,
-    options?: { tail?: number; since?: Date },
-  ): Promise<string>;
+  getLogs(server: RunningServer, options?: { tail?: number; since?: Date }): Promise<string>;
 
   /**
    * Stream logs from a running server.

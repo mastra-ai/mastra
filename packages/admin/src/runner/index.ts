@@ -1,1 +1,1 @@
-export type { ProjectRunner, BuildOptions, RunOptions, LogStreamCallback } from './base';
+export type { ProjectRunner, BuildOptions, RunOptions, LogStreamCallback, ServerLogCallback } from './base';

@@ -88,7 +88,7 @@ export type {
 } from './observability/query-provider';
 
 // Runner
-export type { ProjectRunner, BuildOptions, RunOptions, LogStreamCallback } from './runner/base';
+export type { ProjectRunner, BuildOptions, RunOptions, LogStreamCallback, ServerLogCallback } from './runner/base';
 
 // Router
 export type { EdgeRouterProvider } from './router/base';

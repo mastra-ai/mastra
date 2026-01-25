@@ -9,6 +9,7 @@ import type {
   BuildOptions,
   RunOptions,
   LogStreamCallback,
+  ServerLogCallback,
   ProjectSourceProvider,
   EdgeRouterProvider,
 } from '@mastra/admin';
@@ -134,6 +135,9 @@ export class LocalProcessRunner implements ProjectRunner {
   private source?: ProjectSourceProvider;
   private router?: EdgeRouterProvider;
 
+  // Server log callback for real-time streaming
+  private onServerLog?: ServerLogCallback;
+
   constructor(config: LocalProcessRunnerConfig = {}) {
     this.config = {
       ...DEFAULT_CONFIG,
@@ -177,14 +181,17 @@ export class LocalProcessRunner implements ProjectRunner {
   }
 
   /**
+   * Set the callback for server log events.
+   * Called by AdminServer to receive real-time logs from running servers.
+   */
+  setOnServerLog(callback: ServerLogCallback): void {
+    this.onServerLog = callback;
+  }
+
+  /**
    * Build a project from source.
    */
-  async build(
-    project: Project,
-    build: Build,
-    options?: BuildOptions,
-    onLog?: LogStreamCallback,
-  ): Promise<Build> {
+  async build(project: Project, build: Build, options?: BuildOptions, onLog?: LogStreamCallback): Promise<Build> {
     this.logger.info('Starting build', { projectId: project.id, buildId: build.id });
 
     // Get project path (copies to build-specific temp directory)
@@ -206,12 +213,7 @@ export class LocalProcessRunner implements ProjectRunner {
   /**
    * Deploy and start a server for a deployment.
    */
-  async deploy(
-    project: Project,
-    deployment: Deployment,
-    build: Build,
-    options?: RunOptions,
-  ): Promise<RunningServer> {
+  async deploy(project: Project, deployment: Deployment, build: Build, options?: RunOptions): Promise<RunningServer> {
     this.logger.info('Starting deployment', {
       projectId: project.id,
       deploymentId: deployment.id,
@@ -239,6 +241,18 @@ export class LocalProcessRunner implements ProjectRunner {
     // Create log collector
     const logCollector = new LogCollector(this.config.logRetentionLines);
 
+    // Generate server ID (before starting process so we can use it in callbacks)
+    const serverId = crypto.randomUUID();
+
+    // Wire log collector to broadcast callback if set
+    if (this.onServerLog) {
+      logCollector.stream(line => {
+        // Currently we don't distinguish stdout/stderr in spawnCommand
+        // Default to stdout for now
+        this.onServerLog!(serverId, line, 'stdout');
+      });
+    }
+
     // Start the server process
     const entryPoint = path.join(outputDir, 'index.mjs');
     const proc = spawnCommand(process.execPath, [entryPoint], {
@@ -247,17 +261,13 @@ export class LocalProcessRunner implements ProjectRunner {
       onOutput: (line: string) => logCollector.append(line),
     });
 
-    // Generate server ID
-    const serverId = crypto.randomUUID();
-
     // Track the process
     this.processManager.track(serverId, deployment.id, proc, port, logCollector);
 
     // Wait for health check
     try {
       const healthTimeoutMs =
-        options?.healthCheckTimeoutMs ??
-        this.config.healthCheck.maxRetries * this.config.healthCheck.retryIntervalMs;
+        options?.healthCheckTimeoutMs ?? this.config.healthCheck.maxRetries * this.config.healthCheck.retryIntervalMs;
 
       this.logger.debug('Waiting for server health', { port, timeoutMs: healthTimeoutMs });
       await this.healthChecker.waitForHealthy('localhost', port);
@@ -345,10 +355,7 @@ export class LocalProcessRunner implements ProjectRunner {
   /**
    * Get logs from a running server.
    */
-  async getLogs(
-    server: RunningServer,
-    options?: { tail?: number; since?: Date },
-  ): Promise<string> {
+  async getLogs(server: RunningServer, options?: { tail?: number; since?: Date }): Promise<string> {
     const tracked = this.processManager.get(server.id);
     if (!tracked) {
       return '';

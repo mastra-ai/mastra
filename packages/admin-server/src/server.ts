@@ -354,6 +354,15 @@ export class AdminServer {
           orchestrator.setOnStatus((buildId, status) => {
             this.buildLogStreamer?.broadcastStatus(buildId, status);
           });
+
+          // Wire up runner server log callback to broadcast via WebSocket
+          const runner = this.admin.getRunner();
+          if (runner?.setOnServerLog) {
+            runner.setOnServerLog((serverId, line, stream) => {
+              this.serverLogStreamer?.broadcastLog(serverId, line, stream);
+            });
+            console.info('Server log streaming enabled via WebSocket');
+          }
         }
 
         // Start build worker if enabled

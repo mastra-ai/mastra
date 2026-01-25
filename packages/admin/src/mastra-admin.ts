@@ -357,6 +357,10 @@ export class MastraAdmin<
     return this.#source;
   }
 
+  getRunner(): TRunner | undefined {
+    return this.#runner;
+  }
+
   getBuildLogWriter(): BuildLogWriter | undefined {
     return this.#buildLogWriter;
   }
@@ -747,6 +751,7 @@ export class MastraAdmin<
       commitMessage: input?.commitMessage ?? null,
       status: 'queued',
       logs: '',
+      logPath: null,
       queuedAt: new Date(),
       errorMessage: null,
     });
@@ -820,6 +825,7 @@ export class MastraAdmin<
       commitMessage: `Rollback to ${buildId}`,
       status: 'queued',
       logs: '',
+      logPath: null,
       queuedAt: new Date(),
       errorMessage: null,
     });
