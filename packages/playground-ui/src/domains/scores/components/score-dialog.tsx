@@ -108,6 +108,15 @@ export function ScoreDialog({
                 value: score?.createdAt ? format(new Date(score?.createdAt), 'MMM d, h:mm:ss aaa') : 'n/a',
                 key: 'date',
               },
+              ...((score?.metadata as Record<string, unknown>)?.temperature !== undefined
+                ? [
+                    {
+                      label: 'Temperature',
+                      value: String((score?.metadata as Record<string, unknown>)?.temperature),
+                      key: 'temperature',
+                    },
+                  ]
+                : []),
               ...(usageContext !== 'SpanDialog'
                 ? [
                     {
