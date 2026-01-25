@@ -850,7 +850,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/z-ai/glm-4.7",
+    "model": "nvidia/z-ai/glm4.7",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -892,7 +892,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "nvidia/z-ai/glm-4.7"
+      ? "nvidia/z-ai/glm4.7"
       : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
