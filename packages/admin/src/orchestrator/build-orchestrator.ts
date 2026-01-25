@@ -224,15 +224,28 @@ export class BuildOrchestrator {
 
       const server = await this.#runner.deploy(project, deployment, updatedBuild, { envVars });
 
-      // 5. Configure routing
+      // 5. Configure routing (upsert - update if exists, register if not)
       if (this.#router && deployment.slug) {
-        await this.#router.registerRoute({
-          deploymentId: deployment.id,
-          projectId: project.id,
-          subdomain: deployment.slug,
-          targetHost: server.host,
-          targetPort: server.port,
-        });
+        const existingRoute = await this.#router.getRoute(deployment.id);
+        if (existingRoute) {
+          // Route already exists - update it to point to the new server
+          await this.#router.updateRoute(existingRoute.routeId, {
+            deploymentId: deployment.id,
+            projectId: project.id,
+            subdomain: deployment.slug,
+            targetHost: server.host,
+            targetPort: server.port,
+          });
+        } else {
+          // No existing route - register a new one
+          await this.#router.registerRoute({
+            deploymentId: deployment.id,
+            projectId: project.id,
+            subdomain: deployment.slug,
+            targetHost: server.host,
+            targetPort: server.port,
+          });
+        }
       }
 
       // 6. Save running server info
