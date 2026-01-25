@@ -3983,6 +3983,9 @@ importers:
 
   runners/local:
     dependencies:
+      '@mastra/deployer':
+        specifier: workspace:*
+        version: link:../../packages/deployer
       '@mastra/observability-writer':
         specifier: workspace:*
         version: link:../../observability/writer

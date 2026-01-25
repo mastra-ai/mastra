@@ -32,6 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/deployer": "workspace:*",
     "@mastra/observability-writer": "workspace:*",
     "get-port": "^7.1.0",
     "pidusage": "^3.0.2",
