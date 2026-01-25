@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 3 - Agent/Workflow Targets
+**Current focus:** Phase 4 - Scorer Targets
 
 ## Current Position
 
-Phase: 3 of 8 (Agent/Workflow Targets)
+Phase: 4 of 8 (Scorer Targets)
 Plan: 1 of 1 in current phase
-Status: Phase 3 complete
-Last activity: 2026-01-24 — Completed 03-01-PLAN.md (Agent/Workflow Target Tests)
+Status: Phase 4 complete
+Last activity: 2026-01-24 — Completed 04-01-PLAN.md (Scorer Target Implementation)
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 4 min
-- Total execution time: 0.5 hours
+- Total execution time: 0.6 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [████░░░░░░] 38%
 | 01-storage-foundation | 4 | 20 min | 5 min |
 | 02-execution-core | 4 | 15 min | 4 min |
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
+| 04-scorer-targets | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (4 min), 02-02 (2 min), 02-03 (5 min), 02-04 (4 min), 03-01 (2 min)
+- Last 5 plans: 02-02 (2 min), 02-03 (5 min), 02-04 (4 min), 03-01 (2 min), 04-01 (3 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -55,6 +56,8 @@ Recent decisions affecting current work:
 - Inline scoring: scorers run immediately after each item execution (not batched)
 - Error isolation: failing scorer doesn't affect other scorers or item results
 - v1 context limitation: Request context not passed to agent (documented in tests per CONTEXT.md deferral)
+- Direct passthrough: item.input contains exactly what scorer expects (no field mapping)
+- User structures item.input for scorer calibration: { input, output, groundTruth }
 
 ### Pending Todos
 
@@ -66,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-24 23:40
-Stopped at: Completed 03-01-PLAN.md — Agent/Workflow Target Tests (Phase 3 complete)
+Last session: 2026-01-24 20:29
+Stopped at: Completed 04-01-PLAN.md — Scorer Target Implementation (Phase 4 complete)
 Resume file: None
