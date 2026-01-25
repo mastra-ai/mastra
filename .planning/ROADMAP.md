@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring ✓
 - [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
 - [x] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment ✓
-- [ ] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection
+- [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
 - [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results
 - [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files
 - [ ] **Phase 8: Item Selection** - Run subsets via itemIds parameter
@@ -103,7 +103,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Run comparison and analytics with regression detection
+- [x] 05-01-PLAN.md — Run comparison and analytics with regression detection
 
 ### Phase 6: Playground Integration
 **Goal**: Full UI workflow from dataset creation through result review
@@ -163,7 +163,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Execution Core | 4/4 | ✓ Complete | 2026-01-24 |
 | 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
-| 5. Run Analytics | 0/TBD | Not started | - |
+| 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
 | 6. Playground Integration | 0/TBD | Not started | - |
 | 7. CSV Import | 0/TBD | Not started | - |
 | 8. Item Selection | 0/TBD | Not started | - |
