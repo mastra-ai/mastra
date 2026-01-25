@@ -61,7 +61,7 @@ export class ScoresPG extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext', 'temperature'],
+      ifNotExists: ['spanId', 'requestContext'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();

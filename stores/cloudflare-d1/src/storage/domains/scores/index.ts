@@ -38,12 +38,6 @@ export class ScoresStorageD1 extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
-    // Add columns for backwards compatibility
-    await this.#db.alterTable({
-      tableName: TABLE_SCORERS,
-      schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext', 'temperature'],
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

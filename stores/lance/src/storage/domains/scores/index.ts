@@ -31,7 +31,7 @@ export class StoreScoresLance extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'temperature'],
+      ifNotExists: ['spanId', 'requestContext'],
     });
   }
 
