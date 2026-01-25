@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Storage Foundation** - Datasets domain with CRUD and versioning ✓
 - [x] **Phase 2: Execution Core** - Run orchestration against targets with auto-scoring ✓
 - [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
-- [ ] **Phase 4: Scorer & Processor Targets** - Extend targets to scorers and processors
+- [ ] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment
 - [ ] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection
 - [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results
 - [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files
@@ -75,15 +75,16 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Executor edge case tests for agent/workflow input variations
 
-### Phase 4: Scorer & Processor Targets
-**Goal**: Enable scoring scorers and processors in isolation
+### Phase 4: Scorer Targets
+**Goal**: Enable running datasets against scorers to calibrate/align LLM-as-judge evaluation
 **Depends on**: Phase 3
-**Requirements**: TARGET-03 (Scorer target), TARGET-04 (Processor target)
+**Requirements**: TARGET-03 (Scorer target)
 **Success Criteria** (what must be TRUE):
-  1. User can run dataset against scorer to test scoring logic
-  2. User can run dataset against processor to test data transformations
-  3. Target adapter normalizes input for scorer/processor execution
-  4. Results capture scorer outputs and processor transformations
+  1. User can run dataset against scorer to test scoring logic alignment
+  2. Dataset item provides input, output (thing being judged), expectedOutput (human label)
+  3. Scorer receives input mapped to scorer.run({ input, output, groundTruth })
+  4. Results store scorer output alongside human label for alignment analysis
+  5. Optional meta-scorers can evaluate scorer output
 **Plans**: TBD
 
 Plans:
