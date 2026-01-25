@@ -56,6 +56,12 @@ export class ScoresMSSQL extends ScoresStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    // Add columns for backwards compatibility
+    await this.db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId', 'requestContext', 'temperature'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

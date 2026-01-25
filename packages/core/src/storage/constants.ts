@@ -57,6 +57,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  temperature: { type: 'float', nullable: true }, // Temperature used for LLM scorer runs
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };
