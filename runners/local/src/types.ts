@@ -52,10 +52,11 @@ export interface LocalProcessRunnerConfig {
   logRetentionLines?: number;
 
   /**
-   * Working directory for build artifacts.
-   * @default '.mastra/builds'
+   * Base directory for build artifacts.
+   * Each build gets its own subdirectory: {buildBaseDir}/builds/{buildId}
+   * @default os.tmpdir()/mastra (e.g., /tmp/mastra on Linux)
    */
-  buildDir?: string;
+  buildBaseDir?: string;
 
   /**
    * Environment variables to inject into all builds.

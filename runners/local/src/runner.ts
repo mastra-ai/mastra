@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type {
   ProjectRunner,
@@ -78,7 +79,7 @@ interface ResolvedConfig {
   defaultBuildTimeoutMs: number;
   healthCheck: RequiredHealthCheckConfig;
   logRetentionLines: number;
-  buildDir: string;
+  buildBaseDir: string;
   globalEnvVars: Record<string, string>;
 }
 
@@ -95,7 +96,7 @@ const DEFAULT_CONFIG: Omit<ResolvedConfig, 'globalEnvVars'> = {
   defaultBuildTimeoutMs: 600000,
   healthCheck: DEFAULT_HEALTH_CHECK,
   logRetentionLines: 10000,
-  buildDir: '.mastra/builds',
+  buildBaseDir: path.join(tmpdir(), 'mastra'),
 };
 
 /**
@@ -137,6 +138,7 @@ export class LocalProcessRunner implements ProjectRunner {
     this.config = {
       ...DEFAULT_CONFIG,
       ...config,
+      buildBaseDir: config.buildBaseDir ?? DEFAULT_CONFIG.buildBaseDir,
       healthCheck: { ...DEFAULT_HEALTH_CHECK, ...config.healthCheck },
       globalEnvVars: config.globalEnvVars ?? {},
     };
@@ -146,7 +148,6 @@ export class LocalProcessRunner implements ProjectRunner {
     this.processManager = new ProcessManager();
     this.projectBuilder = new ProjectBuilder({
       defaultTimeoutMs: this.config.defaultBuildTimeoutMs,
-      buildDir: this.config.buildDir,
       globalEnvVars: this.config.globalEnvVars,
     });
     this.subdomainGenerator = new SubdomainGenerator();
@@ -155,6 +156,7 @@ export class LocalProcessRunner implements ProjectRunner {
     this.logger.info('LocalProcessRunner initialized', {
       portRange: this.config.portRange,
       maxConcurrentBuilds: this.config.maxConcurrentBuilds,
+      buildBaseDir: this.config.buildBaseDir,
     });
   }
 
@@ -185,8 +187,9 @@ export class LocalProcessRunner implements ProjectRunner {
   ): Promise<Build> {
     this.logger.info('Starting build', { projectId: project.id, buildId: build.id });
 
-    // Get project path from source provider
-    const projectPath = await this.getProjectPath(project);
+    // Get project path (copies to build-specific temp directory)
+    const projectPath = await this.getProjectPath(project, build.id);
+    this.logger.debug('Project copied to build directory', { projectPath });
 
     // Run the build
     const result = await this.projectBuilder.build(project, build, projectPath, options, onLog);
@@ -215,9 +218,9 @@ export class LocalProcessRunner implements ProjectRunner {
       buildId: build.id,
     });
 
-    // Get project path
-    const projectPath = await this.getProjectPath(project);
-    const outputDir = path.join(projectPath, '.mastra/output');
+    // Use the build directory (project was copied during build phase)
+    const buildDir = this.getBuildDir(build.id);
+    const outputDir = path.join(buildDir, '.mastra/output');
 
     // Allocate port
     const port = await this.portAllocator.allocate(options?.port);
@@ -416,15 +419,25 @@ export class LocalProcessRunner implements ProjectRunner {
   }
 
   /**
-   * Get project path from source provider.
+   * Get the build directory for a specific build.
+   * Uses temp directory structure: {buildBaseDir}/builds/{buildId}
    */
-  private async getProjectPath(project: Project): Promise<string> {
+  private getBuildDir(buildId: string): string {
+    return path.join(this.config.buildBaseDir, 'builds', buildId);
+  }
+
+  /**
+   * Get project path from source provider, copying to build-specific directory.
+   */
+  private async getProjectPath(project: Project, buildId: string): Promise<string> {
     if (!this.source) {
       throw new Error('Project source provider not configured');
     }
 
-    // For local source, this returns the path directly
-    // For GitHub source (future), this would clone the repo
+    // Get build-specific directory
+    const buildDir = this.getBuildDir(buildId);
+
+    // Copy project to build directory
     return this.source.getProjectPath(
       {
         id: project.id,
@@ -432,7 +445,7 @@ export class LocalProcessRunner implements ProjectRunner {
         type: project.sourceType,
         path: (project.sourceConfig as { path: string }).path,
       },
-      this.config.buildDir,
+      buildDir,
     );
   }
 }

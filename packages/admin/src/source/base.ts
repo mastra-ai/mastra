@@ -37,14 +37,15 @@ export interface ProjectSourceProvider {
 
   /**
    * Get the local path to the project.
-   * For local sources, returns the path directly.
-   * For GitHub, clones to targetDir.
+   *
+   * If targetDir is provided, the project is copied/cloned to that directory.
+   * If targetDir is not provided, returns the source path directly (for listing/validation).
    *
    * @param source - Project source
-   * @param targetDir - Target directory for cloning (used by GitHub)
-   * @returns Local filesystem path
+   * @param targetDir - Optional target directory for copying/cloning
+   * @returns Local filesystem path (either source path or targetDir)
    */
-  getProjectPath(source: ProjectSource, targetDir: string): Promise<string>;
+  getProjectPath(source: ProjectSource, targetDir?: string): Promise<string>;
 
   /**
    * Watch for file changes in a project.

@@ -9,15 +9,12 @@ import type { BuildContext, PackageManager } from '../types';
 export interface BuilderConfig {
   /** Default build timeout (ms) */
   defaultTimeoutMs: number;
-  /** Working directory for builds */
-  buildDir: string;
   /** Global env vars to inject */
   globalEnvVars: Record<string, string>;
 }
 
 const DEFAULT_CONFIG: BuilderConfig = {
   defaultTimeoutMs: 600000, // 10 minutes
-  buildDir: '.mastra/builds',
   globalEnvVars: {},
 };
 
