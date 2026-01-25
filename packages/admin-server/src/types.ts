@@ -70,6 +70,37 @@ export interface ErrorContext {
 }
 
 /**
+ * Ingestion worker configuration options.
+ */
+export interface IngestionWorkerConfig {
+  /**
+   * Enable ingestion worker (processes observability files into ClickHouse).
+   * Default: false (must be explicitly enabled)
+   */
+  enabled?: boolean;
+
+  /**
+   * Polling interval in ms (default: 10000).
+   */
+  pollIntervalMs?: number;
+
+  /**
+   * Number of files to process per batch (default: 10).
+   */
+  batchSize?: number;
+
+  /**
+   * Delete files after processing (default: false - moves to processed/).
+   */
+  deleteAfterProcess?: boolean;
+
+  /**
+   * Enable debug logging (default: false).
+   */
+  debug?: boolean;
+}
+
+/**
  * AdminServer configuration options.
  */
 export interface AdminServerConfig {
@@ -147,6 +178,11 @@ export interface AdminServerConfig {
    * Default: true in development
    */
   enableRequestLogging?: boolean;
+
+  /**
+   * Ingestion worker configuration.
+   */
+  ingestionWorker?: IngestionWorkerConfig;
 
   /**
    * Custom error handler.

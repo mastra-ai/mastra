@@ -24,6 +24,7 @@
     "@mastra/admin": "latest",
     "@mastra/admin-pg": "latest",
     "@mastra/admin-server": "latest",
+    "@mastra/observability-clickhouse": "latest",
     "@mastra/observability-file-local": "latest",
     "@mastra/router-local": "latest",
     "@mastra/runner-local": "latest",
@@ -39,6 +40,7 @@
       "@mastra/source-local": "link:../../sources/local",
       "@mastra/runner-local": "link:../../runners/local",
       "@mastra/router-local": "link:../../routers/local",
+      "@mastra/observability-clickhouse": "link:../../observability/clickhouse",
       "@mastra/observability-file-local": "link:../../observability/file-local"
     }
   },

@@ -11,13 +11,14 @@
 
 import 'dotenv/config';
 
-import { MastraAdmin, type AdminAuthProvider } from '@mastra/admin';
+import { MastraAdmin, type AdminAuthProvider, type ObservabilityQueryProvider } from '@mastra/admin';
 import { PostgresAdminStorage } from '@mastra/admin-pg';
 import { AdminServer } from '@mastra/admin-server';
 import { LocalProjectSource } from '@mastra/source-local';
 import { LocalProcessRunner } from '@mastra/runner-local';
 import { LocalEdgeRouter } from '@mastra/router-local';
 import { LocalFileStorage } from '@mastra/observability-file-local';
+import { ClickHouseQueryProvider, IngestionWorker } from '@mastra/observability-clickhouse';
 import { resolve } from 'path';
 
 // Configuration
@@ -27,6 +28,13 @@ const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
 const DEMO_USER_EMAIL = 'demo@example.com';
 const DEMO_USER_NAME = 'Demo User';
 const DEV_TOKEN = 'dev-token';
+
+// ClickHouse configuration
+const CLICKHOUSE_URL = process.env['CLICKHOUSE_URL'] ?? 'http://localhost:8123';
+const CLICKHOUSE_DATABASE = process.env['CLICKHOUSE_DATABASE'] ?? 'mastra_observability';
+const CLICKHOUSE_USER = process.env['CLICKHOUSE_USER'] ?? 'default';
+const CLICKHOUSE_PASSWORD = process.env['CLICKHOUSE_PASSWORD'] ?? 'clickhouse';
+const ENABLE_CLICKHOUSE = process.env['ENABLE_CLICKHOUSE'] === 'true';
 
 /**
  * Development Auth Provider
@@ -109,6 +117,48 @@ async function main() {
     atomicWrites: true,
   });
 
+  // Initialize ClickHouse query provider if enabled
+  let queryProvider: ClickHouseQueryProvider | undefined;
+  let ingestionWorker: IngestionWorker | undefined;
+
+  if (ENABLE_CLICKHOUSE) {
+    console.log('[5a] Initializing ClickHouse query provider...');
+    queryProvider = new ClickHouseQueryProvider({
+      clickhouse: {
+        url: CLICKHOUSE_URL,
+        database: CLICKHOUSE_DATABASE,
+        username: CLICKHOUSE_USER,
+        password: CLICKHOUSE_PASSWORD,
+      },
+      debug: true,
+    });
+
+    // Initialize the query provider (runs migrations if needed)
+    await queryProvider.init();
+    console.log('    ClickHouse query provider initialized');
+
+    // Initialize ingestion worker
+    console.log('[5b] Initializing ClickHouse ingestion worker...');
+    ingestionWorker = new IngestionWorker({
+      fileStorage,
+      clickhouse: {
+        url: CLICKHOUSE_URL,
+        database: CLICKHOUSE_DATABASE,
+        username: CLICKHOUSE_USER,
+        password: CLICKHOUSE_PASSWORD,
+      },
+      pollIntervalMs: 10000,
+      batchSize: 10,
+      deleteAfterProcess: false,
+      debug: true,
+    });
+
+    // Initialize and start the ingestion worker
+    await ingestionWorker.init();
+    await ingestionWorker.start();
+    console.log('    ClickHouse ingestion worker started');
+  }
+
   // Initialize dev auth provider
   console.log('[6] Initializing dev auth provider...');
   const auth = new DevAuthProvider();
@@ -123,6 +173,8 @@ async function main() {
     router,
     observability: {
       fileStorage,
+      // Cast to ObservabilityQueryProvider - ClickHouseQueryProvider implements the interface
+      queryProvider: queryProvider as unknown as ObservabilityQueryProvider,
     },
     auth,
   });
@@ -202,6 +254,19 @@ async function main() {
     console.log(`For clean URLs, run: sudo PROXY_PORT=80 pnpm dev:server`);
   }
   console.log();
+
+  if (ENABLE_CLICKHOUSE) {
+    console.log('ClickHouse Observability:');
+    console.log(`  URL:      ${CLICKHOUSE_URL}`);
+    console.log(`  Database: ${CLICKHOUSE_DATABASE}`);
+    console.log(`  Ingestion Worker: Running (poll: 10s)`);
+    console.log();
+  } else {
+    console.log('ClickHouse Observability: Disabled');
+    console.log('  Set ENABLE_CLICKHOUSE=true to enable');
+    console.log('  Start ClickHouse: docker-compose up -d clickhouse');
+    console.log();
+  }
   console.log('Dev Authentication:');
   console.log(`  User ID: ${DEMO_USER_ID}`);
   console.log(`  Email:   ${DEMO_USER_EMAIL}`);
@@ -219,6 +284,13 @@ async function main() {
   // Handle shutdown
   const shutdown = async () => {
     console.log('\nShutting down...');
+
+    // Stop ingestion worker if running
+    if (ingestionWorker) {
+      console.log('Stopping ingestion worker...');
+      await ingestionWorker.stop();
+    }
+
     await router.stopProxy();
     await server.stop();
     await admin.shutdown();

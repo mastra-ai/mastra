@@ -203,6 +203,7 @@ export class ClickHouseQueryProvider {
 
   /**
    * Get spans for a trace.
+   * Alias: getTraceSpans (for interface compatibility)
    */
   async getSpansForTrace(traceId: string): Promise<Span[]> {
     const query = `
@@ -219,6 +220,35 @@ export class ClickHouseQueryProvider {
 
     const rows = await result.json<Record<string, unknown>>();
     return rows.map(row => this.transformSpan(row as Record<string, unknown>));
+  }
+
+  /**
+   * Get trace spans (alias for getSpansForTrace).
+   * Implements ObservabilityQueryProvider.getTraceSpans
+   */
+  async getTraceSpans(traceId: string): Promise<Span[]> {
+    return this.getSpansForTrace(traceId);
+  }
+
+  /**
+   * Get a single span by ID.
+   */
+  async getSpan(spanId: string): Promise<Span | null> {
+    const query = `
+      SELECT * FROM ${TABLE_NAMES.SPANS} FINAL
+      WHERE span_id = {spanId:String}
+      LIMIT 1
+    `;
+
+    const result = await this.client.query({
+      query,
+      query_params: { spanId },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<Record<string, unknown>>();
+    const firstRow = rows[0];
+    return firstRow ? this.transformSpan(firstRow) : null;
   }
 
   // ============================================================
@@ -276,6 +306,20 @@ export class ClickHouseQueryProvider {
     };
   }
 
+  /**
+   * Search logs with a query string.
+   */
+  async searchLogs(
+    searchQuery: string,
+    options: LogQueryOptions = {},
+  ): Promise<{ logs: Log[]; pagination: PaginationInfo }> {
+    // Use message contains for search
+    return this.listLogs({
+      ...options,
+      message: searchQuery,
+    });
+  }
+
   // ============================================================
   // Metric Queries
   // ============================================================
@@ -331,6 +375,105 @@ export class ClickHouseQueryProvider {
     };
   }
 
+  /**
+   * Aggregate metrics by name with statistics.
+   */
+  async aggregateMetrics(
+    options: MetricQueryOptions = {},
+    groupBy: string[] = ['name'],
+  ): Promise<
+    {
+      name: string;
+      count: number;
+      sum: number;
+      avg: number;
+      min: number;
+      max: number;
+      p50: number;
+      p90: number;
+      p99: number;
+    }[]
+  > {
+    const { conditions, params } = this.buildMetricConditions(options);
+
+    const groupByClause = groupBy.length > 0 ? groupBy.join(', ') : 'name';
+
+    const query = `
+      SELECT
+        ${groupByClause} as name,
+        count() as count,
+        sum(value) as sum,
+        avg(value) as avg,
+        min(value) as min,
+        max(value) as max,
+        quantile(0.5)(value) as p50,
+        quantile(0.9)(value) as p90,
+        quantile(0.99)(value) as p99
+      FROM ${TABLE_NAMES.METRICS}
+      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+      GROUP BY ${groupByClause}
+      ORDER BY name ASC
+    `;
+
+    const result = await this.client.query({
+      query,
+      query_params: params,
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<{
+      name: string;
+      count: number;
+      sum: number;
+      avg: number;
+      min: number;
+      max: number;
+      p50: number;
+      p90: number;
+      p99: number;
+    }>();
+
+    return rows;
+  }
+
+  /**
+   * Get metric time series data.
+   */
+  async getMetricTimeSeries(
+    metricName: string,
+    options: MetricQueryOptions = {},
+    intervalMs: number = 60000,
+  ): Promise<{ timestamp: Date; value: number }[]> {
+    const { conditions, params } = this.buildMetricConditions({
+      ...options,
+      name: metricName,
+    });
+
+    const intervalSeconds = Math.max(1, Math.floor(intervalMs / 1000));
+
+    const query = `
+      SELECT
+        toStartOfInterval(timestamp, INTERVAL {intervalSeconds:UInt32} SECOND) AS timestamp,
+        avg(value) AS value
+      FROM ${TABLE_NAMES.METRICS}
+      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `;
+
+    const result = await this.client.query({
+      query,
+      query_params: { ...params, intervalSeconds },
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<{ timestamp: string; value: number }>();
+    return rows.map(r => ({
+      timestamp: new Date(r.timestamp),
+      value: r.value,
+    }));
+  }
+
   // ============================================================
   // Score Queries
   // ============================================================
@@ -384,6 +527,38 @@ export class ClickHouseQueryProvider {
         hasMore: (page + 1) * perPage < total,
       },
     };
+  }
+
+  /**
+   * Aggregate scores by name.
+   */
+  async aggregateScores(
+    options: ScoreQueryOptions = {},
+    groupBy: string[] = ['name'],
+  ): Promise<{ name: string; avg: number; count: number }[]> {
+    const { conditions, params } = this.buildScoreConditions(options);
+
+    const groupByClause = groupBy.length > 0 ? groupBy.join(', ') : 'name';
+
+    const query = `
+      SELECT
+        ${groupByClause} as name,
+        avg(value) as avg,
+        count() as count
+      FROM ${TABLE_NAMES.SCORES}
+      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+      GROUP BY ${groupByClause}
+      ORDER BY name ASC
+    `;
+
+    const result = await this.client.query({
+      query,
+      query_params: params,
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json<{ name: string; avg: number; count: number }>();
+    return rows;
   }
 
   // ============================================================

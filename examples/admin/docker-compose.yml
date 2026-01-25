@@ -9,14 +9,33 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: mastra_admin
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    container_name: mastra-admin-clickhouse
+    environment:
+      CLICKHOUSE_DB: mastra_observability
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    ports:
+      - '8123:8123' # HTTP
+      - '9000:9000' # Native
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ['CMD', 'clickhouse-client', '--query', 'SELECT 1']
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
   postgres_data:
+  clickhouse_data:

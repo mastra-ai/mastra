@@ -365,6 +365,14 @@ export class MastraAdmin<
     return this.#buildLogWriter;
   }
 
+  getObservabilityQueryProvider(): ObservabilityQueryProvider | undefined {
+    return this.#observability?.queryProvider;
+  }
+
+  getObservabilityFileStorage(): FileStorageProvider | undefined {
+    return this.#observability?.fileStorage;
+  }
+
   hasFeature(feature: LicenseFeature): boolean {
     return this.#license.hasFeature(feature);
   }
