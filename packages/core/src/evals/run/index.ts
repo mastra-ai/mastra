@@ -309,7 +309,7 @@ async function runScorers(
           // Key by scorer ID + temperature (if temperature was specified)
           const resultKey = temperature !== undefined ? `${scorer.id}@${temperature}` : scorer.id;
           // Store base scorer ID for lookups (needed when resultKey has temperature suffix)
-          scorerResults[resultKey] = { ...score, temperature, baseScorerIdId: scorer.id };
+          scorerResults[resultKey] = { ...score, temperature, baseScorerId: scorer.id };
         } catch (error) {
           throw new MastraError(
             {
@@ -493,7 +493,7 @@ async function saveSingleScore({
 }): Promise<void> {
   try {
     // Get scorer information using base scorer ID if available (handles temperature-suffixed keys)
-    const lookupId = scoreResult.baseScorerIdId || scorerId;
+    const lookupId = scoreResult.baseScorerId || scorerId;
     let scorer = mastra?.getScorerById?.(lookupId);
 
     if (!scorer) {
@@ -523,8 +523,11 @@ async function saveSingleScore({
       additionalContext.groundTruth = item.groundTruth;
     }
 
+    // Exclude internal baseScorerId field from persistence payload
+    const { baseScorerId: _, ...scoreResultForPayload } = scoreResult;
+
     const payload = {
-      ...scoreResult,
+      ...scoreResultForPayload,
       scorerId,
       entityId,
       entityType,
