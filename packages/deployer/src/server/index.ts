@@ -264,7 +264,7 @@ export async function createHonoServer(
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/openapi.json' }),
+      swaggerUI({ url: '/api/openapi.json' }),
     );
   }
 
