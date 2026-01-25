@@ -3983,6 +3983,9 @@ importers:
 
   runners/local:
     dependencies:
+      '@mastra/observability-writer':
+        specifier: workspace:*
+        version: link:../../observability/writer
       get-port:
         specifier: ^7.1.0
         version: 7.1.0

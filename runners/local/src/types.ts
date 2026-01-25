@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import type { LogStreamCallback } from '@mastra/admin';
+import type { ObservabilityWriter } from '@mastra/observability-writer';
 
 /**
  * Package manager types supported by the runner.
@@ -72,6 +73,8 @@ export interface TrackedProcess {
   serverId: string;
   /** Deployment ID */
   deploymentId: string;
+  /** Project ID */
+  projectId: string;
   /** Node.js child process */
   process: ChildProcess;
   /** Allocated port */
@@ -80,6 +83,8 @@ export interface TrackedProcess {
   startedAt: Date;
   /** Log collector reference */
   logCollector: LogCollector;
+  /** Observability writer for persisting logs (optional) */
+  observabilityWriter?: ObservabilityWriter;
 }
 
 /**

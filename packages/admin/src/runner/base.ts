@@ -1,3 +1,4 @@
+import type { FileStorageProvider } from '../file-storage/base';
 import type { ProjectSourceProvider } from '../source/base';
 import type { Build, Deployment, Project, RunningServer } from '../types';
 
@@ -62,6 +63,14 @@ export interface ProjectRunner {
    * @param callback - Function called for each log line from running servers
    */
   setOnServerLog?(callback: ServerLogCallback): void;
+
+  /**
+   * Set the file storage provider for observability data persistence.
+   * Called by MastraAdmin during initialization to enable log file writing.
+   *
+   * @param storage - The file storage provider for writing observability files
+   */
+  setObservabilityStorage?(storage: FileStorageProvider): void;
 
   /**
    * Build a project from source.

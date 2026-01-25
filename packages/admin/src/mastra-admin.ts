@@ -297,6 +297,12 @@ export class MastraAdmin<
       this.logger.info('Source provider injected into runner');
     }
 
+    // Inject observability storage into runner if both are configured
+    if (this.#runner && this.#observability?.fileStorage && this.#runner.setObservabilityStorage) {
+      this.#runner.setObservabilityStorage(this.#observability.fileStorage);
+      this.logger.info('Observability storage injected into runner');
+    }
+
     this.#initialized = true;
     this.logger.info('MastraAdmin initialized successfully');
   }

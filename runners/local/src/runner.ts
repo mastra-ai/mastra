@@ -12,8 +12,10 @@ import type {
   ServerLogCallback,
   ProjectSourceProvider,
   EdgeRouterProvider,
+  FileStorageProvider,
 } from '@mastra/admin';
 import { HealthStatus } from '@mastra/admin';
+import { ObservabilityWriter } from '@mastra/observability-writer';
 import { ProjectBuilder } from './build/builder';
 import { HealthChecker } from './health/checker';
 import { LogCollector } from './logs/collector';
@@ -134,6 +136,7 @@ export class LocalProcessRunner implements ProjectRunner {
   // Injected providers
   private source?: ProjectSourceProvider;
   private router?: EdgeRouterProvider;
+  private observabilityStorage?: FileStorageProvider;
 
   // Server log callback for real-time streaming
   private onServerLog?: ServerLogCallback;
@@ -186,6 +189,15 @@ export class LocalProcessRunner implements ProjectRunner {
    */
   setOnServerLog(callback: ServerLogCallback): void {
     this.onServerLog = callback;
+  }
+
+  /**
+   * Set the file storage provider for observability data persistence.
+   * Called by MastraAdmin during initialization to enable log file writing.
+   */
+  setObservabilityStorage(storage: FileStorageProvider): void {
+    this.observabilityStorage = storage;
+    this.logger.info('Observability storage configured', { type: storage.type });
   }
 
   /**
@@ -244,6 +256,41 @@ export class LocalProcessRunner implements ProjectRunner {
     // Generate server ID (before starting process so we can use it in callbacks)
     const serverId = crypto.randomUUID();
 
+    // Create observability writer if storage is configured
+    let observabilityWriter: ObservabilityWriter | undefined;
+    if (this.observabilityStorage) {
+      observabilityWriter = new ObservabilityWriter({
+        fileStorage: this.observabilityStorage,
+        projectId: project.id,
+        deploymentId: deployment.id,
+        batchSize: 100, // Smaller batch for logs
+        flushIntervalMs: 5000,
+        debug: false,
+      });
+      this.logger.debug('ObservabilityWriter created', {
+        projectId: project.id,
+        deploymentId: deployment.id,
+      });
+
+      // Wire log collector to observability writer for persistence
+      logCollector.stream(line => {
+        observabilityWriter!.recordLog({
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          deploymentId: deployment.id,
+          traceId: null,
+          spanId: null,
+          level: 'info',
+          message: line,
+          attributes: {
+            serverId,
+            source: 'server',
+          },
+          timestamp: new Date(),
+        });
+      });
+    }
+
     // Wire log collector to broadcast callback if set
     if (this.onServerLog) {
       logCollector.stream(line => {
@@ -262,7 +309,7 @@ export class LocalProcessRunner implements ProjectRunner {
     });
 
     // Track the process
-    this.processManager.track(serverId, deployment.id, proc, port, logCollector);
+    this.processManager.track(serverId, deployment.id, project.id, proc, port, logCollector, observabilityWriter);
 
     // Wait for health check
     try {
