@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { runScorer } from './hooks';
+
 import * as hooks from '../hooks';
+import { RequestContext } from '../request-context';
+
 import type { MastraScorerEntry } from './base';
 import { createScorer } from './base';
-import { RequestContext } from '../request-context';
+import { runScorer } from './hooks';
 
 // Mock the hooks module
 vi.mock('../hooks', () => ({

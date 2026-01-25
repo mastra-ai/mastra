@@ -1,6 +1,9 @@
 import type { CallSettings } from '@internal/ai-sdk-v5';
+
 import { AvailableHooks, executeHook } from '../hooks';
 import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
+
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
@@ -24,7 +27,7 @@ export function runScorer({
   runId: string;
   input: any;
   output: any;
-  requestContext: Record<string, any>;
+  requestContext: RequestContext | Record<string, any>;
   entity: Record<string, any>;
   structuredOutput: boolean;
   source: ScoringSource;
@@ -75,7 +78,10 @@ export function runScorer({
       },
       input,
       output,
-      requestContext: Object.fromEntries(requestContext.entries()),
+      requestContext:
+        typeof requestContext?.entries === 'function'
+          ? Object.fromEntries(requestContext.entries())
+          : { ...requestContext },
       runId,
       source,
       entity,
