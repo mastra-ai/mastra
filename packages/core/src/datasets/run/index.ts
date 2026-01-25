@@ -8,6 +8,9 @@ export type { RunConfig, RunSummary, ItemWithScores, ItemResult, ScorerResult } 
 export { executeTarget, type Target, type ExecutionResult } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
 
+// Re-export analytics
+export * from './analytics';
+
 /**
  * Run a dataset against a target with optional scoring.
  *
