@@ -309,7 +309,7 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwq-32b",
-        "z-ai/glm-4.7"
+        "z-ai/glm4.7"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
       "gateway": "models.dev"
@@ -846,6 +846,7 @@
         "MiniMaxAI/MiniMax-M1-80k",
         "MiniMaxAI/MiniMax-M2",
         "Pro/MiniMaxAI/MiniMax-M2.1",
+        "Pro/zai-org/GLM-4.7",
         "Qwen/QwQ-32B",
         "Qwen/Qwen2.5-14B-Instruct",
         "Qwen/Qwen2.5-32B-Instruct",
@@ -1126,6 +1127,15 @@
         "zai-org/GLM-4.7"
       ],
       "docUrl": "https://docs.baseten.co/development/model-apis/overview",
+      "gateway": "models.dev"
+    },
+    "moark": {
+      "url": "https://moark.com/v1",
+      "apiKeyEnvVar": "MOARK_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Moark",
+      "models": ["GLM-4.7", "MiniMax-M2.1"],
+      "docUrl": "https://moark.com/docs/openapi/v1#tag/%E6%96%87%E6%9C%AC%E7%94%9F%E6%88%90",
       "gateway": "models.dev"
     },
     "siliconflow": {
@@ -2674,7 +2684,7 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b",
-      "z-ai/glm-4.7"
+      "z-ai/glm4.7"
     ],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
     "groq": [
@@ -3125,6 +3135,7 @@
       "MiniMaxAI/MiniMax-M1-80k",
       "MiniMaxAI/MiniMax-M2",
       "Pro/MiniMaxAI/MiniMax-M2.1",
+      "Pro/zai-org/GLM-4.7",
       "Qwen/QwQ-32B",
       "Qwen/Qwen2.5-14B-Instruct",
       "Qwen/Qwen2.5-32B-Instruct",
@@ -3348,6 +3359,7 @@
       "zai-org/GLM-4.6",
       "zai-org/GLM-4.7"
     ],
+    "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "siliconflow": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
       "MiniMaxAI/MiniMax-M1-80k",
