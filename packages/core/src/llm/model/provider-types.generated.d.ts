@@ -232,7 +232,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
-    'z-ai/glm-4.7',
+    'z-ai/glm4.7',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly groq: readonly [
@@ -682,6 +682,8 @@ export type ProviderModelsMap = {
     'Kwaipilot/KAT-Dev',
     'MiniMaxAI/MiniMax-M1-80k',
     'MiniMaxAI/MiniMax-M2',
+    'Pro/MiniMaxAI/MiniMax-M2.1',
+    'Pro/zai-org/GLM-4.7',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -905,10 +907,12 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
   ];
+  readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M1-80k',
     'MiniMaxAI/MiniMax-M2',
+    'MiniMaxAI/MiniMax-M2.1',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -1091,8 +1095,6 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-Flash',
   ];
   readonly opencode: readonly [
-    'alpha-gd4',
-    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -1113,7 +1115,6 @@ export type ProviderModelsMap = {
     'gpt-5.1-codex-mini',
     'gpt-5.2',
     'gpt-5.2-codex',
-    'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
     'qwen3-coder',
