@@ -100,10 +100,10 @@ Plans:
   3. Analytics show success rate (% items without errors)
   4. Analytics show average scores and score distributions
   5. Analytics show latency distribution (p50, p95, p99)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Run comparison and analytics with regression detection
 
 ### Phase 6: Playground Integration
 **Goal**: Full UI workflow from dataset creation through result review
