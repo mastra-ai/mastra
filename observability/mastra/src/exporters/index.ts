@@ -13,4 +13,5 @@ export * from './span-formatters';
 export * from './cloud';
 export * from './console';
 export * from './default';
+export * from './file';
 export * from './test';
