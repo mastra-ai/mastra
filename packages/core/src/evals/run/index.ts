@@ -1,5 +1,5 @@
-import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
