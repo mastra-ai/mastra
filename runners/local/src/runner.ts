@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type {
@@ -14,60 +15,20 @@ import type {
   EdgeRouterProvider,
   FileStorageProvider,
 } from '@mastra/admin';
-import { HealthStatus } from '@mastra/admin';
+import { BuildStatus, HealthStatus } from '@mastra/admin';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import { ObservabilityWriter } from '@mastra/observability-writer';
-import { ProjectBuilder } from './build/builder';
+import { AdminBundler } from './bundler';
+import { detectPackageManager, getInstallArgs } from './build/package-manager';
 import { HealthChecker } from './health/checker';
 import { LogCollector } from './logs/collector';
 import { PortAllocator } from './port/allocator';
 import { ProcessManager } from './process/manager';
 import { getProcessResourceUsage, cleanupResourceMonitor } from './process/resource-monitor';
-import { spawnCommand } from './process/spawner';
+import { runCommand, spawnCommand } from './process/spawner';
 import { SubdomainGenerator } from './subdomain/generator';
 import type { LocalProcessRunnerConfig } from './types';
-
-/**
- * Simple logger interface for LocalProcessRunner.
- */
-interface Logger {
-  debug(message: string, data?: Record<string, unknown>): void;
-  info(message: string, data?: Record<string, unknown>): void;
-  warn(message: string, data?: Record<string, unknown>): void;
-  error(message: string, data?: Record<string, unknown>): void;
-}
-
-/**
- * Default console logger.
- */
-class ConsoleLogger implements Logger {
-  private readonly name: string;
-
-  constructor(name: string) {
-    this.name = name;
-  }
-
-  private format(level: string, message: string, data?: Record<string, unknown>): string {
-    const timestamp = new Date().toISOString();
-    const dataStr = data ? ` ${JSON.stringify(data)}` : '';
-    return `[${timestamp}] [${level}] [${this.name}] ${message}${dataStr}`;
-  }
-
-  debug(message: string, data?: Record<string, unknown>): void {
-    console.info(this.format('DEBUG', message, data));
-  }
-
-  info(message: string, data?: Record<string, unknown>): void {
-    console.info(this.format('INFO', message, data));
-  }
-
-  warn(message: string, data?: Record<string, unknown>): void {
-    console.warn(this.format('WARN', message, data));
-  }
-
-  error(message: string, data?: Record<string, unknown>): void {
-    console.error(this.format('ERROR', message, data));
-  }
-}
 
 interface RequiredHealthCheckConfig {
   timeoutMs: number;
@@ -129,9 +90,8 @@ export class LocalProcessRunner implements ProjectRunner {
   private readonly portAllocator: PortAllocator;
   private readonly healthChecker: HealthChecker;
   private readonly processManager: ProcessManager;
-  private readonly projectBuilder: ProjectBuilder;
   private readonly subdomainGenerator: SubdomainGenerator;
-  private readonly logger: Logger;
+  private readonly logger: IMastraLogger;
 
   // Injected providers
   private source?: ProjectSourceProvider;
@@ -153,12 +113,8 @@ export class LocalProcessRunner implements ProjectRunner {
     this.portAllocator = new PortAllocator(this.config.portRange);
     this.healthChecker = new HealthChecker(this.config.healthCheck);
     this.processManager = new ProcessManager();
-    this.projectBuilder = new ProjectBuilder({
-      defaultTimeoutMs: this.config.defaultBuildTimeoutMs,
-      globalEnvVars: this.config.globalEnvVars,
-    });
     this.subdomainGenerator = new SubdomainGenerator();
-    this.logger = new ConsoleLogger('LocalProcessRunner');
+    this.logger = new ConsoleLogger({ name: 'LocalProcessRunner', level: LogLevel.INFO });
 
     this.logger.info('LocalProcessRunner initialized', {
       portRange: this.config.portRange,
@@ -201,25 +157,88 @@ export class LocalProcessRunner implements ProjectRunner {
   }
 
   /**
-   * Build a project from source.
+   * Build a project from source using AdminBundler with observability injection.
    */
   async build(project: Project, build: Build, options?: BuildOptions, onLog?: LogStreamCallback): Promise<Build> {
     this.logger.info('Starting build', { projectId: project.id, buildId: build.id });
 
-    // Get project path (copies to build-specific temp directory)
-    const projectPath = await this.getProjectPath(project, build.id);
-    this.logger.debug('Project copied to build directory', { projectPath });
+    const log = (message: string) => onLog?.(`[${new Date().toISOString()}] ${message}`);
 
-    // Run the build
-    const result = await this.projectBuilder.build(project, build, projectPath, options, onLog);
+    try {
+      // Get project path (copies to build-specific temp directory)
+      const projectPath = await this.getProjectPath(project, build.id);
+      this.logger.debug('Project copied to build directory', { projectPath });
 
-    this.logger.info('Build completed', {
-      projectId: project.id,
-      buildId: build.id,
-      status: result.status,
-    });
+      const outputDir = path.join(projectPath, '.mastra');
 
-    return result;
+      // Observability path is alongside the build
+      const observabilityPath = path.join(this.getBuildDir(build.id), 'observability');
+
+      // Detect package manager and install dependencies
+      const packageManager = await detectPackageManager(projectPath);
+      const installArgs = getInstallArgs(packageManager);
+
+      log(`Installing dependencies with ${packageManager}...`);
+      const installResult = await runCommand(packageManager, installArgs, {
+        cwd: projectPath,
+        env: {
+          ...this.config.globalEnvVars,
+          ...options?.envVars,
+          NODE_ENV: 'production',
+        },
+        onOutput: onLog,
+      });
+
+      if (installResult.exitCode !== 0) {
+        throw new Error(`Dependency installation failed with exit code ${installResult.exitCode}`);
+      }
+      log('Dependencies installed successfully');
+
+      // Create AdminBundler instance
+      const bundler = new AdminBundler();
+      bundler.__setLogger(this.logger);
+
+      // Bundle with FileExporter injection
+      log('Bundling project with observability injection...');
+
+      await bundler.bundleForAdmin(projectPath, outputDir, {
+        projectId: project.id,
+        deploymentId: build.deploymentId || build.id,
+        serverId: build.id,
+        observabilityPath,
+      });
+
+      // Verify output exists
+      const outputPath = path.join(outputDir, 'output', 'index.mjs');
+      if (!existsSync(outputPath)) {
+        throw new Error('Bundle failed: no output produced at ' + outputPath);
+      }
+
+      log('Build completed successfully');
+
+      this.logger.info('Build completed', {
+        projectId: project.id,
+        buildId: build.id,
+        status: 'succeeded',
+      });
+
+      return {
+        ...build,
+        status: BuildStatus.SUCCEEDED as Build['status'],
+        completedAt: new Date(),
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.logger.error('Build failed', { error: errorMessage });
+      log(`Build failed: ${errorMessage}`);
+
+      return {
+        ...build,
+        status: BuildStatus.FAILED as Build['status'],
+        completedAt: new Date(),
+        errorMessage,
+      };
+    }
   }
 
   /**
