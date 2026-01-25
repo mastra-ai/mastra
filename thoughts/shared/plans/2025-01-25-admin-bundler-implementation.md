@@ -806,9 +806,9 @@ The injected entry code handles SIGTERM/SIGINT to flush remaining spans before e
 - [x] FileExporter flushes on batch size (`file.test.ts: should flush when batch size is reached`)
 - [x] FileExporter flushes on timer (verified via flush timer initialization)
 - [x] FileExporter handles shutdown gracefully (`file.test.ts: should flush remaining buffer on shutdown`)
-- [ ] AdminBundler.getMastraEntryFile finds correct file
-- [ ] AdminBundler.getMastraAppDir finds correct directory
-- [ ] getEntry() generates valid JavaScript
+- [x] AdminBundler.getMastraEntryFile finds correct file (`admin-bundler.test.ts: getMastraEntryFile tests`)
+- [x] AdminBundler.getMastraAppDir finds correct directory (`admin-bundler.test.ts: getMastraAppDir tests`)
+- [x] getEntry() generates valid JavaScript (`admin-bundler.test.ts: getEntry tests`)
 
 ### Integration Tests
 
