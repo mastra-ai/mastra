@@ -14,10 +14,10 @@ Run datasets against scorers to calibrate/align LLM-as-judge evaluation. Test if
 ## Implementation Decisions
 
 ### Scorer input contract
-- Dataset item provides: input, output (thing being judged), expectedOutput (human label)
-- Scorer receives: `scorer.run({ input: item.input, output: item.output, groundTruth: item.expectedOutput })`
-- Claude decides: Whether to add explicit `item.output` field or nest scorer data in `item.input`
-- Follow pattern that aligns with existing Mastra conventions
+- `item.input` contains exactly what the scorer expects (user structures it)
+- Scorer receives: `scorer.run(item.input)` — direct passthrough, no field mapping
+- `item.expectedOutput` holds human label for alignment comparison (Phase 5 analytics)
+- No new fields on DatasetItem — matches agent/workflow pattern
 
 ### Score comparison
 - Don't auto-compare scorer output to expectedOutput
@@ -38,11 +38,6 @@ Run datasets against scorers to calibrate/align LLM-as-judge evaluation. Test if
 - Invalid score (NaN, wrong type): Store null + warning, continue run
 - Scorer throws: Catch and store error message, continue run
 - Match existing `runScorersForItem` isolation pattern
-
-### Claude's Discretion
-- Input schema design (nested vs flat fields)
-- Adapter normalization logic
-- Validation rules for scorer input
 
 </decisions>
 
