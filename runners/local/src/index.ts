@@ -1,6 +1,9 @@
 // Main runner
 export { LocalProcessRunner } from './runner';
 
+// Bundler
+export { AdminBundler, type AdminBundlerOptions } from './bundler';
+
 // Types
 export type { LocalProcessRunnerConfig, TrackedProcess, BuildContext, PackageManager, LogCollector } from './types';
 
