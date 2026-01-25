@@ -6,6 +6,7 @@ import {
   MainContentContent,
   useScorers,
   CreateScorerDialog,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 import { Header, HeaderTitle, MainContentLayout, ScorersTable } from '@mastra/playground-ui';
 import { GaugeIcon, Plus } from 'lucide-react';
@@ -16,6 +17,7 @@ export default function Scorers() {
   const { data: scorers = {}, isLoading } = useScorers();
   const navigate = useNavigate();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   return (
     <MainContentLayout>
@@ -28,12 +30,14 @@ export default function Scorers() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Icon>
-              <Plus />
-            </Icon>
-            Create Scorer
-          </Button>
+          {experimentalFeaturesEnabled && (
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Icon>
+                <Plus />
+              </Icon>
+              Create Scorer
+            </Button>
+          )}
           <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
             <Icon>
               <DocsIcon />
@@ -47,11 +51,13 @@ export default function Scorers() {
         <ScorersTable isLoading={isLoading} scorers={scorers} />
       </MainContentContent>
 
-      <CreateScorerDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        onSuccess={id => navigate(`/scorers/${id}`)}
-      />
+      {experimentalFeaturesEnabled && (
+        <CreateScorerDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onSuccess={id => navigate(`/scorers/${id}`)}
+        />
+      )}
     </MainContentLayout>
   );
 }

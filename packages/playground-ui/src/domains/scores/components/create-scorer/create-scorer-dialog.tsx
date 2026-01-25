@@ -43,7 +43,7 @@ export function CreateScorerDialog({ open, onOpenChange, onSuccess }: CreateScor
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-surface1 border-border1 max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Scorer</DialogTitle>
         </DialogHeader>

@@ -24,6 +24,7 @@ import {
   toast,
   Spinner,
   EditScorerDialog,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router';
 import { GaugeIcon, Pencil } from 'lucide-react';
@@ -40,6 +41,7 @@ export default function Scorer() {
   const [scoresPage, setScoresPage] = useState<number>(0);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
@@ -180,7 +182,7 @@ export default function Scorer() {
           </HeaderGroup>
 
           <HeaderAction>
-            {scorer?.isRegistered && (
+            {experimentalFeaturesEnabled && scorer?.isRegistered && (
               <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
                 <Icon>
                   <Pencil />
@@ -247,7 +249,7 @@ export default function Scorer() {
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
 
-      {scorer?.isRegistered && (
+      {experimentalFeaturesEnabled && scorer?.isRegistered && (
         <EditScorerDialog
           scorerId={scorerId}
           open={isEditDialogOpen}

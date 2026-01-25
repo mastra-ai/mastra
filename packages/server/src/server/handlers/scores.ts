@@ -120,6 +120,42 @@ async function listScorersFromSystem({
     }
   }
 
+  // Process stored scorers (database-backed scorers created via UI)
+  try {
+    const storage = mastra.getStorage();
+    if (storage) {
+      const storedScorersStore = await storage.getStore('storedScorers');
+      if (storedScorersStore) {
+        const storedScorersResult = await storedScorersStore.listScorers({});
+        if (storedScorersResult?.scorers) {
+          for (const storedScorer of storedScorersResult.scorers) {
+            const scorerId = storedScorer.id;
+            // Don't overwrite code-defined scorers with same ID
+            if (!scorersMap.has(scorerId)) {
+              // Create a scorer-like object that matches the expected response schema
+              // The response schema expects { scorer: { config: { id, name, description } } }
+              scorersMap.set(scorerId, {
+                scorer: {
+                  config: {
+                    id: storedScorer.id,
+                    name: storedScorer.name,
+                    description: storedScorer.description ?? '',
+                  },
+                } as MastraScorerEntry['scorer'],
+                agentIds: [],
+                agentNames: [],
+                workflowIds: [],
+                isRegistered: true,
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if stored scorers storage is not configured
+  }
+
   return Object.fromEntries(scorersMap.entries());
 }
 

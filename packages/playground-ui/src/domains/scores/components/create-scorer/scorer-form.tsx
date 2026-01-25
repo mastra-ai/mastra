@@ -117,7 +117,7 @@ export function ScorerForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
       {/* Scorer ID badge and version info in edit mode */}
       {mode === 'edit' && scorerId && (
         <div className="flex items-center gap-3">
@@ -255,7 +255,7 @@ export function ScorerForm({
       </div>
 
       {/* Form Actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-border1">
+      <div className="flex items-center justify-between pt-4 border-t border-border1">
         <div>
           {mode === 'edit' && onDelete && (
             <Button
@@ -267,12 +267,12 @@ export function ScorerForm({
             >
               {isDeleting ? (
                 <>
-                  <Spinner className="h-3 w-3 mr-2" />
+                  <Spinner className="h-4 w-4 mr-2" />
                   Deleting...
                 </>
               ) : (
                 <>
-                  <Trash2 className="h-3 w-3 mr-2" />
+                  <Trash2 className="h-4 w-4 mr-2" />
                   Delete
                 </>
               )}
@@ -286,7 +286,7 @@ export function ScorerForm({
           <Button type="submit" variant="light" disabled={isSubmitting || isDeleting}>
             {isSubmitting ? (
               <>
-                <Spinner className="h-3 w-3 mr-2" />
+                <Spinner className="h-4 w-4 mr-2" />
                 {mode === 'create' ? 'Creating...' : 'Updating...'}
               </>
             ) : mode === 'create' ? (
