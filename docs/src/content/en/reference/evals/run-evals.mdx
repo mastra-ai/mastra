@@ -146,13 +146,13 @@ For LLM-based scorers, you can configure model settings and run scorers multiple
     {
       name: "modelSettings",
       type: "Omit<CallSettings, 'abortSignal'>",
-      description: "Model settings applied to all LLM judge calls (e.g., temperature, maxTokens, topP).",
+      description: "Model settings applied to all LLM judge calls (e.g., temperature, maxTokens, topP). Note: If temperatures array is also provided, it will override modelSettings.temperature.",
       isOptional: true,
     },
     {
       name: "temperatures",
       type: "number[]",
-      description: "Run the scorer multiple times with different temperature values. Useful for getting varied opinions from the LLM judge. Each temperature run creates a separate score entry.",
+      description: "Run the scorer multiple times with different temperature values. Each temperature creates a separate score entry keyed as 'scorerId@temperature'. Takes precedence over modelSettings.temperature when both are specified.",
       isOptional: true,
     },
   ]}

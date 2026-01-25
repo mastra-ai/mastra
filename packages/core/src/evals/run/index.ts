@@ -266,7 +266,7 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
 function isMastraScorerEntry(
   item: MastraScorer<any, any, any, any> | MastraScorerEntry,
 ): item is MastraScorerEntry {
-  return typeof item === 'object' && 'scorer' in item;
+  return item !== null && typeof item === 'object' && 'scorer' in item;
 }
 
 async function runScorers(
@@ -308,7 +308,8 @@ async function runScorers(
 
           // Key by scorer ID + temperature (if temperature was specified)
           const resultKey = temperature !== undefined ? `${scorer.id}@${temperature}` : scorer.id;
-          scorerResults[resultKey] = { ...score, temperature };
+          // Store base scorer ID for lookups (needed when resultKey has temperature suffix)
+          scorerResults[resultKey] = { ...score, temperature, baseScorerIdId: scorer.id };
         } catch (error) {
           throw new MastraError(
             {
@@ -491,15 +492,16 @@ async function saveSingleScore({
   item: RunEvalsDataItem<any>;
 }): Promise<void> {
   try {
-    // Get scorer information
-    let scorer = mastra?.getScorerById?.(scorerId);
+    // Get scorer information using base scorer ID if available (handles temperature-suffixed keys)
+    const lookupId = scoreResult.baseScorerIdId || scorerId;
+    let scorer = mastra?.getScorerById?.(lookupId);
 
     if (!scorer) {
       // Try to get from target's scorers
       const targetScorers = await (target as any).listScorers?.();
       if (targetScorers) {
         for (const [_, scorerEntry] of Object.entries(targetScorers)) {
-          if ((scorerEntry as any).scorer?.id === scorerId) {
+          if ((scorerEntry as any).scorer?.id === lookupId) {
             scorer = (scorerEntry as any).scorer;
             break;
           }
