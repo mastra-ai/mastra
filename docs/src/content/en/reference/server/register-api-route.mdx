@@ -36,7 +36,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths cannot start with `/api/` as this prefix is reserved for built-in Mastra routes.
+**Note:** Paths cannot start with `/api/` as this prefix is reserved for Mastra server routes.
 
 ### options
 
@@ -265,7 +265,7 @@ registerApiRoute("/items/:itemId", {
         description: "Item found",
         content: {
           "application/json": {
-            schema: ItemSchema, // Zod schemas are auto-converted
+            schema: ItemSchema, // Zod schemas are converted to JSON Schema during OpenAPI generation
           },
         },
       },

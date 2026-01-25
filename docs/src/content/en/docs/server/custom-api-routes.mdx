@@ -70,7 +70,7 @@ export const mastra = new Mastra({
 
 ## OpenAPI Documentation
 
-Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside built-in Mastra routes. Pass an `openapi` option with standard OpenAPI operation fields.
+Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside Mastra server routes. Pass an `openapi` option with standard OpenAPI operation fields.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -127,7 +127,7 @@ export const mastra = new Mastra({
 
 ### Using Zod Schemas
 
-You can use Zod schemas in the `openapi` configuration and they will be automatically converted to JSON Schema:
+Zod schemas in the `openapi` configuration are converted to JSON Schema when the OpenAPI document is generated:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
