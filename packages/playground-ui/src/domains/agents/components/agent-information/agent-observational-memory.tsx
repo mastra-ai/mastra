@@ -201,9 +201,11 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
   const observationTokenCount = streamProgress?.observationTokens ?? record?.observationTokenCount ?? 0;
 
-  // Only show history if there are reflected records (exclude current active record)
-  const reflectedHistory = useMemo(() => {
-    return history.filter(h => h.originType === 'reflection' && h.id !== record?.id);
+  // Show all previous observation records (exclude current active record), oldest first
+  const previousObservations = useMemo(() => {
+    return history
+      .filter(h => h.id !== record?.id)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [history, record?.id]);
 
   // Format the observations for display
@@ -350,8 +352,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             )}
           </div>
 
-          {/* History Toggle - only show if there are reflected records */}
-          {reflectedHistory.length > 0 && (
+          {/* History Toggle - only show if there are previous observation records */}
+          {previousObservations.length > 0 && (
             <div className="border-t border-border1 pt-3">
               <button
                 onClick={() => setShowHistory(!showHistory)}
@@ -362,11 +364,11 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
-                <span>Previous reflections ({reflectedHistory.length})</span>
+                <span>Previous observations ({previousObservations.length})</span>
               </button>
               {showHistory && (
                 <div className="mt-2 space-y-2">
-                  {reflectedHistory.map((historyRecord) => {
+                  {previousObservations.map((historyRecord) => {
                     const isRecordExpanded = expandedReflections.has(historyRecord.id);
                     return (
                       <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
@@ -380,7 +382,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                             ) : (
                               <ChevronRight className="w-3 h-3 text-neutral3" />
                             )}
-                            <span className="text-xs font-medium text-neutral4">Reflection</span>
+                            <span className="text-xs font-medium text-neutral4">
+                              {historyRecord.originType === 'reflection' ? 'Reflection' : 'Observation'}
+                            </span>
                             {historyRecord.observationTokenCount !== undefined && (
                               <span className="text-xs text-neutral3">
                                 {formatTokens(historyRecord.observationTokenCount)} tokens
@@ -390,7 +394,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                           <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
                         </button>
                         {isRecordExpanded && (
-                          <div className="p-3 max-h-48 overflow-y-auto border-t border-border1">
+                          <div className="px-3 pb-3 max-h-48 overflow-y-auto border-t border-border1">
                             {historyRecord.activeObservations ? (
                               <ObservationRenderer 
                                 observations={historyRecord.activeObservations} 
