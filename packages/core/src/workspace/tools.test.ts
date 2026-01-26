@@ -363,7 +363,10 @@ describe('createWorkspaceTools', () => {
       expect(result.path).toBe('/test.txt');
 
       // Verify file was deleted
-      const exists = await fs.access(path.join(tempDir, 'test.txt')).then(() => true).catch(() => false);
+      const exists = await fs
+        .access(path.join(tempDir, 'test.txt'))
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(false);
     });
 

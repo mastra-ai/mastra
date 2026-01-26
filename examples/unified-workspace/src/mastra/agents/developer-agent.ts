@@ -24,7 +24,7 @@ export const developerAgent = new Agent({
   memory: new Memory({
     vector: new LibSQLVector({
       id: 'developer-agent-vector',
-      url: "file:./mastra.db",
+      url: 'file:./mastra.db',
     }),
     embedder: fastembed,
     options: {
@@ -32,7 +32,7 @@ export const developerAgent = new Agent({
       semanticRecall: {
         topK: 5,
         messageRange: 2,
-        scope: 'thread' // Search within the current thread only
+        scope: 'thread', // Search within the current thread only
       },
     },
   }),

@@ -177,7 +177,6 @@ export interface WorkspaceConfig {
 
   /** Timeout for individual operations in milliseconds */
   operationTimeout?: number;
-
 }
 
 // Re-export WorkspaceStatus from types
@@ -382,8 +381,8 @@ export class Workspace {
 
     // Validate at least one provider is given
     // Note: skillsPaths alone is also valid - uses LocalSkillSource for read-only skills
-    const hasSkillsPaths = config.skillsPaths !== undefined &&
-      (typeof config.skillsPaths === 'function' || config.skillsPaths.length > 0);
+    const hasSkillsPaths =
+      config.skillsPaths !== undefined && (typeof config.skillsPaths === 'function' || config.skillsPaths.length > 0);
     if (!this._fs && !this._sandbox && !hasSkillsPaths) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skillsPaths', 'NO_PROVIDERS');
     }
@@ -498,7 +497,8 @@ export class Workspace {
    */
   get skills(): WorkspaceSkills | undefined {
     // Skills require skillsPaths
-    const hasSkillsPaths = this._config.skillsPaths !== undefined &&
+    const hasSkillsPaths =
+      this._config.skillsPaths !== undefined &&
       (typeof this._config.skillsPaths === 'function' || this._config.skillsPaths.length > 0);
     if (!hasSkillsPaths) {
       return undefined;

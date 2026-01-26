@@ -231,10 +231,7 @@ export async function getSerializedSkillsFromAgent(
  * Get the list of available workspace tools for an agent.
  * Returns tool names based on workspace configuration (filesystem, sandbox, search).
  */
-export async function getWorkspaceToolsFromAgent(
-  agent: Agent,
-  requestContext?: RequestContext,
-): Promise<string[]> {
+export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
   try {
     const workspace = await agent.getWorkspace({ requestContext });
     if (!workspace) {

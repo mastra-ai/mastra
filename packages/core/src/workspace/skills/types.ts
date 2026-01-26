@@ -5,8 +5,8 @@
  * @see https://github.com/anthropics/skills
  */
 
-import type { RequestContext } from '../../request-context';
 import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../../artifacts';
+import type { RequestContext } from '../../request-context';
 
 // =============================================================================
 // Skills Paths Types

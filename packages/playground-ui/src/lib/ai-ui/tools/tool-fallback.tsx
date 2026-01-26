@@ -26,8 +26,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   // Detect skill activation tool calls
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.skillName) {
-      activateSkill(args.skillName);
+    if (toolName === 'skill-activate' && result?.success && args?.name) {
+      activateSkill(args.name);
     }
   }, [toolName, result, args, activateSkill]);
 

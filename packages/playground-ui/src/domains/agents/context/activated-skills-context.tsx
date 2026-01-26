@@ -38,10 +38,7 @@ export function ActivatedSkillsProvider({ children }: ActivatedSkillsProviderPro
     });
   }, []);
 
-  const isSkillActivated = useCallback(
-    (skillName: string) => activatedSkills.has(skillName),
-    [activatedSkills]
-  );
+  const isSkillActivated = useCallback((skillName: string) => activatedSkills.has(skillName), [activatedSkills]);
 
   const clearActivatedSkills = useCallback(() => {
     setActivatedSkills(new Set());

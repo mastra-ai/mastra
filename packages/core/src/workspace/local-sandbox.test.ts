@@ -345,5 +345,4 @@ describe('LocalSandbox', () => {
       expect(fs).toBeUndefined();
     });
   });
-
 });

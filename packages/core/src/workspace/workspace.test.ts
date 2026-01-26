@@ -1,15 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import type { WorkspaceFilesystem, FileEntry } from './filesystem';
-import type { WorkspaceSandbox, CommandResult } from './sandbox';
-import { Workspace } from './workspace';
-
 import {
   WorkspaceError,
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
   SearchNotAvailableError,
 } from './errors';
+import type { WorkspaceFilesystem, FileEntry } from './filesystem';
+import type { WorkspaceSandbox, CommandResult } from './sandbox';
+import { Workspace } from './workspace';
 
 // =============================================================================
 // Mock Implementations

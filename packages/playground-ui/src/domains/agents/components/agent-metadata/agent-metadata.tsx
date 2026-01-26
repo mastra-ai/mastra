@@ -359,17 +359,12 @@ export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillLi
                   {skill.name}
                 </Badge>
               </Link>
-              {isActivated && (
-                <span className="text-[10px] text-green-400 font-medium">Active</span>
-              )}
+              {isActivated && <span className="text-[10px] text-green-400 font-medium">Active</span>}
             </div>
             {skill.allowedTools && skill.allowedTools.length > 0 && (
               <div className="flex flex-wrap gap-1 pl-1">
                 {skill.allowedTools.map(tool => (
-                  <span
-                    key={tool}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4"
-                  >
+                  <span key={tool} className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">
                     {tool}
                   </span>
                 ))}

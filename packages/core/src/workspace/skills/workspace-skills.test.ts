@@ -1322,7 +1322,7 @@ Premium instructions.
       expect(capturedContext?.requestContext).toBeUndefined(); // No context provided on initial call
 
       // maybeRefresh() can be called with explicit context
-      const mockRequestContext = { get: (key: string) => 'test-value' };
+      const mockRequestContext = { get: (_key: string) => 'test-value' };
       await skills.maybeRefresh({ requestContext: mockRequestContext as unknown as undefined });
 
       // Now context should have requestContext

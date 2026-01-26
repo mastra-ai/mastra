@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { Wand2, FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown, Eye, FileCode2 } from 'lucide-react';
+import {
+  Wand2,
+  FileText,
+  Code,
+  Image,
+  Package,
+  Home,
+  Server,
+  ChevronRight,
+  ChevronDown,
+  Eye,
+  FileCode2,
+} from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
