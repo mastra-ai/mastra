@@ -537,9 +537,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     }
 
     const source = existingDoc._source as any;
-    const updatedDoc: Record<string, any> = {
-      id: existingDoc._id || id,
-    };
+    const updatedDoc: Record<string, any> = {};
 
     try {
       // Update vector if provided
