@@ -20,6 +20,7 @@ import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 import { ChatModelSelector } from './chat-model-selector';
+import { ProviderWarningFooter } from './provider-warning-footer';
 
 export interface ThreadProps {
   agentName?: string;
@@ -125,6 +126,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           </div>
         </div>
       </ComposerPrimitive.Root>
+      <ProviderWarningFooter agentId={agentId} />
     </div>
   );
 };

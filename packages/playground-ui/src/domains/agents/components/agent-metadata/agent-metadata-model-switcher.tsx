@@ -9,7 +9,6 @@ import { Info } from 'lucide-react';
 import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
-import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
 import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
 import { Provider } from '@mastra/client-js';
@@ -664,31 +663,6 @@ export const AgentMetadataModelSwitcher = ({
         </Button>
       </div>
 
-      {/* Show warning if selected provider is not connected */}
-      {(() => {
-        const currentProvider = providers.find(p => p.id === currentModelProvider);
-        if (currentProvider && !currentProvider.connected) {
-          return (
-            <div className="pt-2 p-2">
-              <Alert variant="warning">
-                <AlertTitle as="h5">Provider not connected</AlertTitle>
-                <AlertDescription as="p">
-                  Set the{' '}
-                  <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                    {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
-                  </code>{' '}
-                  environment{' '}
-                  {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1
-                    ? 'variables'
-                    : 'variable'}{' '}
-                  to use this provider.
-                </AlertDescription>
-              </Alert>
-            </div>
-          );
-        }
-        return null;
-      })()}
 
       {infoMsg && (
         <div

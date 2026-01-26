@@ -40,7 +40,8 @@
       "Assert that the large 'Alert' box is no longer visible",
       "Verify a small warning footer appears below the chat input",
       "Ensure the warning does not block the 'Send' button or input visibility"
-    ]
+    ],
+    "passes": true
   },
   {
     "category": "ui-ux",

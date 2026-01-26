@@ -88,3 +88,50 @@
 - State updates propagate correctly through useUpdateAgentModel hook
 - Query invalidation ensures UI stays in sync with backend state
 
+
+## Task 4: UI-UX - Refactor Environment Key warnings to a non-intrusive footer (COMPLETED)
+
+### Changes Made:
+- Created new `ProviderWarningFooter` component (packages/playground-ui/src/lib/ai-ui/provider-warning-footer.tsx)
+  - Compact warning that appears below the chat input when provider is not connected
+  - Shows the required environment variable(s) in a subtle inline format
+  - Uses yellow/amber color scheme consistent with warning indicators
+  - Non-intrusive design that doesn't block send button or input visibility
+- Integrated `ProviderWarningFooter` into the `Composer` component in thread.tsx
+  - Footer appears below the chat input container
+  - Only visible when the current agent's provider lacks API key configuration
+- Removed large Alert box from `AgentMetadataModelSwitcher` component
+  - The "Provider not connected" Alert with detailed message is no longer shown
+  - Connection status is still indicated via the red/green dot indicators on model selector
+- Removed `ProviderNotConnectedAlert` usage from create-agent `ModelPicker` component
+  - Warnings now consolidated to the chat footer for consistency
+
+### Files Created:
+- packages/playground-ui/src/lib/ai-ui/provider-warning-footer.tsx
+
+### Files Modified:
+- packages/playground-ui/src/lib/ai-ui/thread.tsx
+  - Added import for ProviderWarningFooter
+  - Added ProviderWarningFooter below ComposerPrimitive.Root in Composer component
+- packages/playground-ui/src/domains/agents/components/agent-metadata/agent-metadata-model-switcher.tsx
+  - Removed the large Alert warning block for disconnected providers (lines 667-691)
+  - Removed unused Alert, AlertDescription, AlertTitle imports
+- packages/playground-ui/src/domains/agents/components/create-agent/model-picker.tsx
+  - Removed ProviderNotConnectedAlert usage
+  - Cleaned up unused import
+
+### E2E Tests Added:
+- packages/playground/e2e/tests/agents/$agentId/provider-warning-footer.spec.ts
+  - Tests warning footer visibility when provider is disconnected
+  - Tests warning does not block send button visibility
+  - Tests warning does not block chat input visibility
+  - Tests large Alert box is not shown in sidebar
+  - Tests warning shows correct environment variable name
+  - Tests warning is positioned below chat input
+
+### Verification:
+- TypeScript type checks passed for both playground-ui and playground packages
+- Warning is non-intrusive and follows the design spec
+- Send button and input remain fully accessible
+- Environment variable names are displayed in a code block for easy copying
+

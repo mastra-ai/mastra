@@ -3,13 +3,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Alert, AlertDescription } from '@/ds/components/Alert';
 import { cleanProviderId } from '../agent-metadata/utils';
 import { Provider } from '@mastra/client-js';
-import {
-  ProviderSelect,
-  ModelSelect,
-  ModelSelectHandle,
-  ProviderNotConnectedAlert,
-  useModelPickerData,
-} from '../model-picker';
+import { ProviderSelect, ModelSelect, ModelSelectHandle, useModelPickerData } from '../model-picker';
 
 export interface ModelPickerProps {
   value: { provider: string; name: string };
@@ -82,7 +76,6 @@ export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
         />
       </div>
 
-      {currentProvider && <ProviderNotConnectedAlert provider={currentProvider} />}
 
       {error && (
         <div className="pt-2 p-2">
