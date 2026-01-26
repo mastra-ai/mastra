@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Added `apiPrefix` field to studio configuration form for specifying custom API route prefixes.
+Developers can now configure a custom API route prefix in the Studio UI, enabling Studio to work with servers using custom base paths (e.g., `/mastra` instead of the default `/api`). See #12261 for more details.
