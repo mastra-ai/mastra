@@ -229,6 +229,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     reply: FastifyReply,
     result: unknown,
     request?: FastifyRequest,
+    prefix?: string,
   ): Promise<void> {
     if (route.responseType === 'json') {
       await reply.send(result);
@@ -276,7 +277,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -316,8 +317,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${prefix ?? ''}${ssePath}`,
+          messagePath: `${prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -409,7 +410,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, reply, result, request);
+        await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code

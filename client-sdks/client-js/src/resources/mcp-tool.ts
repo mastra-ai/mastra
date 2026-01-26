@@ -36,9 +36,7 @@ export class MCPTool extends BaseResource {
   execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
     const body: any = {};
     if (params.data !== undefined) body.data = params.data;
-    // If none of data, args the body might be empty or just contain requestContext.
-    // The handler will look for these, so an empty args object might be appropriate if that's the intent.
-    // else body.data = {}; // Or let it be empty if no specific input fields are used
+    // If data is not provided, the body might be empty or contain only requestContext.
 
     if (params.requestContext !== undefined) {
       body.requestContext = params.requestContext;

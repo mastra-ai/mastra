@@ -212,7 +212,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return result;
   }
 
-  async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {
+  async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -228,7 +228,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${prefix ?? ''}${httpPath}`,
           req,
           res,
         });
@@ -254,8 +254,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${prefix ?? ''}${ssePath}`,
+          messagePath: `${prefix ?? ''}${messagePath}`,
           context: response,
         });
       } catch {
@@ -359,7 +359,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         try {
           const result = await route.handler(handlerParams);
-          return this.sendResponse(route, c, result);
+          return this.sendResponse(route, c, result, prefix);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code

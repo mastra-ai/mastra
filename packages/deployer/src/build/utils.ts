@@ -152,7 +152,7 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 /**
  * Ensures that server.studioBase is normalized.
  *
- * @deprecated Use `normalizeRoutePath` from `@mastra/core/utils` instead.
+ * @deprecated Use `normalizeRoutePath` from `@mastra/core/route-utils` instead.
  * @param studioBase - The studioBase path to normalize
  * @returns Normalized studioBase path string
  */

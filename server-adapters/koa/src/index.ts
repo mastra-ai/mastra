@@ -229,7 +229,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
   }
 
-  async sendResponse(route: ServerRoute, ctx: Context, result: unknown): Promise<void> {
+  async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     if (route.responseType === 'json') {
       ctx.body = result;
     } else if (route.responseType === 'stream') {
@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -309,8 +309,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${prefix ?? ''}${ssePath}`,
+          messagePath: `${prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -430,7 +430,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, ctx, result);
+        await this.sendResponse(route, ctx, result, prefix);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code

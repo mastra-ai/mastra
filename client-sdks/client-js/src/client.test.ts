@@ -103,6 +103,44 @@ describe('MastraClient', () => {
       // Should normalize and call /mastra/agents
       expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
     });
+
+    it('should handle empty string apiPrefix', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: '', // Empty string should result in no prefix
+      });
+
+      await client.listAgents();
+
+      // Should call /agents directly with no prefix
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/agents', expect.any(Object));
+    });
+
+    it('should handle baseUrl with trailing slash combined with apiPrefix', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000/', // Trailing slash
+        apiPrefix: '/mastra',
+      });
+
+      await client.listAgents();
+
+      // Should not create double slash
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
+    });
+
+    it('should throw error for path traversal in apiPrefix', async () => {
+      expect(
+        () =>
+          new MastraClient({
+            baseUrl: 'http://localhost:3000',
+            apiPrefix: '../mastra', // Path traversal should be disallowed
+          }),
+      ).toThrow(/cannot contain/);
+    });
   });
 
   let client: MastraClient;
