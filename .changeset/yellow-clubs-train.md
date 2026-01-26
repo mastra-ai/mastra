@@ -6,13 +6,23 @@
 '@mastra/server': patch
 ---
 
-Added `--server-prefix` option to `mastra studio` command to support connecting to Mastra servers with custom route prefixes (e.g., `/mastra` instead of the default `/api`). This enables local studio to work with custom server configurations like Hono adapters using non-default prefixes.
+Added configurable route prefix support across the Mastra stack for servers using custom prefixes (e.g., `/mastra` instead of the default `/api`).
 
-**Example usage:**
+**@mastra/client-js** - Added `prefix` option to `MastraClient`:
+
+```typescript
+const client = new MastraClient({
+  baseUrl: 'http://localhost:3000',
+  prefix: '/mastra'  // Calls /mastra/agents, /mastra/workflows, etc.
+});
+```
+
+**mastra (CLI)** - Added `--server-prefix` option to `mastra studio`:
 
 ```bash
-# Server running with prefix '/mastra' on port 3000
 mastra studio --server-port 3000 --server-prefix /mastra
 ```
 
-Also fixed the instance status check to use the prefixed endpoint when verifying server connectivity, ensuring the configuration form only appears when truly needed.
+**@mastra/server** - Added prefix normalization to handle leading/trailing slashes consistently.
+
+**@mastra/playground-ui** - Fixed instance status check to use the prefixed endpoint when verifying server connectivity.
