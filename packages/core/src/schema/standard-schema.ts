@@ -9,12 +9,29 @@ import type { PublicSchema } from './schema';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
 /**
+ * Override function for JSON Schema conversion.
+ * Handles types that Zod v4 cannot natively represent in JSON Schema:
+ * - z.date() -> { type: 'string', format: 'date-time' }
+ */
+function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): undefined {
+  const zodSchema = ctx.zodSchema as { type?: string };
+  // Convert z.date() to JSON Schema string with date-time format
+  if (zodSchema.type === 'date') {
+    ctx.jsonSchema.type = 'string';
+    ctx.jsonSchema.format = 'date-time';
+  }
+  return undefined;
+}
+
+/**
  * Library options for JSON Schema conversion.
  * - unrepresentable: 'any' allows z.custom() and other unrepresentable types to be converted to {}
  *   instead of throwing "Custom types cannot be represented in JSON Schema"
+ * - override: converts z.date() to { type: 'string', format: 'date-time' }
  */
 export const JSON_SCHEMA_LIBRARY_OPTIONS = {
   unrepresentable: 'any' as const,
+  override: jsonSchemaOverride,
 };
 
 export type {
