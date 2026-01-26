@@ -868,7 +868,7 @@ Your users never experience the disruption - the response comes back with the sa
 
 ## Use local models with Mastra
 
-Mastra also supports local models like \`gpt-oss\`, \`Gwen3\`, \`DeepSeek\` and many more that you run on your own hardware. Your application needs to provide an OpenAI compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
+Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. Your application needs to provide an OpenAI compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
 
 In order to connect the OpenAI compatible API with Mastra you need to install \`@ai-sdk/openai-compatible\`:
 
