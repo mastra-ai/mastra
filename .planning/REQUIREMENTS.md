@@ -82,38 +82,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| STATE-01    | TBD   | Pending |
-| STATE-02    | TBD   | Pending |
-| ERR-01      | TBD   | Pending |
-| ERR-02      | TBD   | Pending |
-| ERR-03      | TBD   | Pending |
-| SUSP-01     | TBD   | Pending |
-| SUSP-02     | TBD   | Pending |
-| SUSP-03     | TBD   | Pending |
-| SUSP-04     | TBD   | Pending |
-| SUSP-05     | TBD   | Pending |
-| SUSP-06     | TBD   | Pending |
-| CTRL-01     | TBD   | Pending |
-| CTRL-02     | TBD   | Pending |
-| CTRL-03     | TBD   | Pending |
-| CTRL-04     | TBD   | Pending |
-| CTRL-05     | TBD   | Pending |
-| NEST-01     | TBD   | Pending |
-| NEST-02     | TBD   | Pending |
-| NEST-03     | TBD   | Pending |
-| NEST-04     | TBD   | Pending |
-| NEST-05     | TBD   | Pending |
-| ADV-01      | TBD   | Pending |
-| ADV-02      | TBD   | Pending |
-| ADV-03      | TBD   | Pending |
-| ADV-04      | TBD   | Pending |
-| ADV-05      | TBD   | Pending |
+| STATE-01    | 1     | Pending |
+| STATE-02    | 1     | Pending |
+| ERR-01      | 2     | Pending |
+| ERR-02      | 2     | Pending |
+| ERR-03      | 2     | Pending |
+| CTRL-01     | 3     | Pending |
+| CTRL-02     | 3     | Pending |
+| CTRL-03     | 3     | Pending |
+| CTRL-04     | 4     | Pending |
+| CTRL-05     | 4     | Pending |
+| SUSP-01     | 5     | Pending |
+| SUSP-02     | 5     | Pending |
+| SUSP-03     | 5     | Pending |
+| SUSP-04     | 5     | Pending |
+| SUSP-06     | 5     | Pending |
+| NEST-01     | 6     | Pending |
+| NEST-02     | 6     | Pending |
+| NEST-03     | 6     | Pending |
+| NEST-04     | 6     | Pending |
+| NEST-05     | 6     | Pending |
+| SUSP-05     | 6     | Pending |
+| ADV-01      | 7     | Pending |
+| ADV-02      | 7     | Pending |
+| ADV-03      | 7     | Pending |
+| ADV-04      | 7     | Pending |
+| ADV-05      | 7     | Pending |
 
 **Coverage:**
 
 - v1 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26 ⚠️
+- Mapped to phases: 26 ✓
+- Unmapped: 0
 
 ---
 
