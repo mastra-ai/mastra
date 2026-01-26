@@ -1,20 +1,21 @@
 /**
- * InngestDurableAgent test suite using the shared factory
+ * InngestAgent test suite using the shared factory
  *
  * This runs the same comprehensive test suite that DurableAgent uses,
- * but configured for InngestDurableAgent with Inngest infrastructure.
+ * but configured for InngestAgent with Inngest infrastructure.
  */
 
 import { createDurableAgentTestSuite } from '@internal/durable-agent-test-utils';
 import type { CreateAgentConfig, DurableAgentLike } from '@internal/durable-agent-test-utils';
+import { Agent } from '@mastra/core/agent';
+import { DurableStepIds } from '@mastra/core/agent/durable';
 import { vi } from 'vitest';
 
-import { InngestDurableAgent } from '../durable-agent';
+import { createInngestAgent } from '../durable-agent';
 import { InngestPubSub } from '../pubsub';
-import { DurableStepIds } from '@mastra/core/agent/durable';
 import {
   getSharedInngest,
-  registerTestAgent,
+  getSharedMastra,
   setupSharedTestInfrastructure,
   teardownSharedTestInfrastructure,
   generateTestId,
@@ -24,7 +25,7 @@ import {
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 60_000 });
 
 createDurableAgentTestSuite({
-  name: 'InngestDurableAgent',
+  name: 'InngestAgent',
 
   // Create InngestPubSub for streaming
   createPubSub: () => {
@@ -32,23 +33,28 @@ createDurableAgentTestSuite({
     return new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
   },
 
-  // Create InngestDurableAgent instances
+  // Create InngestAgent instances using createInngestAgent factory
   createAgent: async (config: CreateAgentConfig): Promise<DurableAgentLike> => {
     const inngest = getSharedInngest();
+    const mastra = getSharedMastra();
     const testId = generateTestId();
 
-    // Create the agent with unique ID to avoid conflicts
-    const agent = new InngestDurableAgent({
-      ...config,
+    // Create a regular Mastra Agent
+    const agent = new Agent({
       id: `${config.id}-${testId}`,
       name: config.name || config.id,
-      inngest,
+      instructions: config.instructions,
+      model: config.model,
+      tools: config.tools,
     });
 
-    // Register with Mastra so workflow can look it up
-    await registerTestAgent(agent);
+    // Wrap with Inngest durable execution
+    const inngestAgent = createInngestAgent({ agent, inngest });
 
-    return agent as unknown as DurableAgentLike;
+    // Register with Mastra so workflow can look it up
+    mastra.addAgent(inngestAgent);
+
+    return inngestAgent as unknown as DurableAgentLike;
   },
 
   // Setup shared Inngest infrastructure
@@ -69,11 +75,11 @@ createDurableAgentTestSuite({
   // Longer event propagation delay for Inngest
   eventPropagationDelay: 2000,
 
-  // Skip domains that don't apply to InngestDurableAgent
+  // Skip domains that don't apply to InngestAgent
   skip: {
     // PubSub tests are implementation-specific (EventEmitterPubSub vs InngestPubSub)
     pubsub: true,
-    // DurableAgent-specific tests (runRegistry, lazy init) - not available in InngestDurableAgent
+    // DurableAgent-specific tests (runRegistry, lazy init) - not available in InngestAgent
     advancedDurableOnly: true,
   },
 });

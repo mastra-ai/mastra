@@ -5,7 +5,13 @@
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
 import { DurableAgent } from '@mastra/core/agent/durable';
-import type { DurableAgentTestConfig, DurableAgentTestContext, CreateAgentConfig, DurableAgentLike } from './types';
+import type {
+  DurableAgentTestConfig,
+  DurableAgentTestContext,
+  DurableAgentTestDomain,
+  CreateAgentConfig,
+  DurableAgentLike,
+} from './types';
 import {
   createConstructorTests,
   createPrepareTests,
@@ -38,6 +44,7 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
   const pubsub = context.getPubSub();
   return new DurableAgent({
     ...config,
+    name: config.name || config.id,
     pubsub,
   });
 }
@@ -57,7 +64,8 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
  * ```
  */
 export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
-  const { name, createPubSub, cleanupPubSub, skip = {} } = config;
+  const { name, createPubSub, cleanupPubSub } = config;
+  const skip: Partial<Record<DurableAgentTestDomain, boolean>> = config.skip ?? {};
   const eventPropagationDelay = config.eventPropagationDelay ?? DEFAULT_EVENT_PROPAGATION_DELAY;
   const agentFactory = config.createAgent ?? defaultCreateAgent;
 
@@ -93,8 +101,8 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
       // Cleanup pubsub
       if (cleanupPubSub) {
         await cleanupPubSub(pubsub);
-      } else if (pubsub?.close) {
-        await pubsub.close();
+      } else if (pubsub && 'close' in pubsub && typeof (pubsub as any).close === 'function') {
+        await (pubsub as any).close();
       }
     });
 

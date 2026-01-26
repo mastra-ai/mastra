@@ -3,7 +3,7 @@
  *
  * Provides durable AI agent execution through Inngest's execution engine.
  *
- * @example Recommended: Use createInngestAgent factory
+ * @example
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
  * import { createInngestAgent, serve as inngestServe } from '@mastra/inngest';
@@ -46,7 +46,7 @@
  * ```
  */
 
-// Recommended: Factory function for creating Inngest durable agents
+// Factory function for creating Inngest durable agents
 export {
   createInngestAgent,
   isInngestAgent,
@@ -56,15 +56,7 @@ export {
   type InngestAgentStreamResult,
 } from './create-inngest-agent';
 
-// Legacy: Direct InngestDurableAgent class (for advanced use cases)
-export {
-  InngestDurableAgent,
-  type InngestDurableAgentConfig,
-  type InngestDurableAgentStreamOptions,
-  type InngestDurableAgentStreamResult,
-} from './inngest-durable-agent';
-
-// Workflow factory (for advanced use cases)
+// Workflow factory (internal, used by createInngestAgent)
 export {
   createInngestDurableAgenticWorkflow,
   type InngestDurableAgenticWorkflowOptions,

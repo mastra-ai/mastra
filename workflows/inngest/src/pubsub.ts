@@ -42,7 +42,7 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
  *
  * Supported topic formats:
  * - "workflow.events.v2.{runId}" - workflow events
- * - "agent.stream.{runId}" - agent stream events (for InngestDurableAgent)
+ * - "agent.stream.{runId}" - agent stream events (for InngestAgent)
  *
  * Both map to Inngest channel: "workflow:{workflowId}:{runId}"
  */

@@ -33,7 +33,13 @@
 export { createDurableAgentTestSuite } from './factory';
 
 // Types
-export type { DurableAgentTestConfig, DurableAgentTestContext, DurableAgentTestDomain } from './types';
+export type {
+  DurableAgentTestConfig,
+  DurableAgentTestContext,
+  DurableAgentTestDomain,
+  CreateAgentConfig,
+  DurableAgentLike,
+} from './types';
 
 // Mock model factories
 export {
@@ -50,8 +56,6 @@ export {
 export {
   createConstructorTests,
   createPrepareTests,
-  createRegistryTests,
-  createWorkflowTests,
   createStreamTests,
   createCallbackTests,
   createToolsTests,

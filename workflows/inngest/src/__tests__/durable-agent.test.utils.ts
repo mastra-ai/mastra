@@ -1,22 +1,21 @@
 /**
- * Test utilities for InngestDurableAgent tests
+ * Test utilities for InngestAgent tests
  *
- * With the registry pattern removed, all tests can share the same Inngest
- * infrastructure. The workflow reconstructs tools/model from Mastra at runtime
- * by looking up the agent via agentId, so test isolation is achieved through
- * unique agent IDs and run IDs rather than separate Inngest apps.
+ * All tests share the same Inngest infrastructure. The workflow reconstructs
+ * tools/model from Mastra at runtime by looking up the agent via agentId,
+ * so test isolation is achieved through unique agent IDs and run IDs
+ * rather than separate Inngest apps.
  */
 import crypto from 'node:crypto';
-import { serve, type ServerType } from '@hono/node-server';
+import { serve } from '@hono/node-server';
+import type { ServerType } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
-import type { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 
-import { InngestDurableAgent, serve as inngestServe } from '../index';
-import type { InngestWorkflow } from '../workflow';
+import { serve as inngestServe } from '../index';
 
 export const INNGEST_PORT = 4000;
 export const HANDLER_PORT = 4001;
@@ -29,7 +28,6 @@ export const HANDLER_PORT = 4001;
 let sharedInngest: Inngest | null = null;
 let sharedMastra: Mastra | null = null;
 let sharedServer: ServerType | null = null;
-let workflowRegistered = false;
 
 /**
  * Generate unique test ID to isolate each test.
@@ -105,9 +103,6 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
     },
   });
 
-  // Mark workflow as registered
-  workflowRegistered = true;
-
   // Create and start shared server
   const app = await createHonoServer(sharedMastra);
   sharedServer = serve({
@@ -132,24 +127,6 @@ export async function teardownSharedTestInfrastructure(): Promise<void> {
   }
   sharedMastra = null;
   sharedInngest = null;
-  workflowRegistered = false;
-}
-
-/**
- * Register an InngestDurableAgent with the shared Mastra.
- * This initializes the agent and registers the underlying Agent.
- *
- * @param agent - The InngestDurableAgent to register
- */
-export async function registerTestAgent(agent: InngestDurableAgent): Promise<void> {
-  const mastra = getSharedMastra();
-
-  // Initialize the agent to create the underlying Agent instance
-  await agent.prepare([{ role: 'user', content: 'init' }]);
-  const underlyingAgent = agent.agent;
-
-  // Register the underlying agent with Mastra
-  mastra.addAgent(underlyingAgent as Agent<any, any, any>);
 }
 
 // =============================================================================
@@ -162,33 +139,4 @@ export async function registerTestAgent(agent: InngestDurableAgent): Promise<voi
 export interface TestSetup {
   mastra: Mastra;
   cleanup: () => Promise<void>;
-}
-
-/**
- * Setup a test environment for an InngestDurableAgent test.
- * With shared infrastructure, this just registers the agent.
- *
- * @param options - Test setup options
- * @param options.testId - Unique test identifier (unused with shared infra)
- * @param options.agent - The InngestDurableAgent to test
- * @returns TestSetup with mastra and cleanup function
- */
-export async function setupDurableAgentTest(options: {
-  testId: string;
-  agent: InngestDurableAgent;
-}): Promise<TestSetup> {
-  const { agent } = options;
-
-  // Register the agent with shared infrastructure
-  await registerTestAgent(agent);
-
-  // Small delay to ensure agent registration is visible to Inngest workflow
-  await waitForInngestSync(200);
-
-  return {
-    mastra: getSharedMastra(),
-    cleanup: async () => {
-      // No per-test cleanup needed with shared infrastructure
-    },
-  };
 }
