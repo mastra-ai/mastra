@@ -268,8 +268,6 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 
 ${getGeneratedComment()}
 
-${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
-
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
 ${introText}
@@ -361,7 +359,7 @@ ${
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
-\`\`\`bash npm2yarn copy
+\`\`\`bash npm2yarn
 npm install ${provider.packageName}
 \`\`\`
 ${
@@ -1034,7 +1032,7 @@ To use this provider with Mastra agents, see the [Agent Overview documentation](
 
 ## Installation
 
-\`\`\`bash npm2yarn copy
+\`\`\`bash npm2yarn
 npm install ${packageName}
 \`\`\`
 `;

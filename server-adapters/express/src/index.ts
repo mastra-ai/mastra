@@ -250,7 +250,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: request,
           res: response,
         });
@@ -276,8 +276,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: request,
           res: response,
         });
@@ -379,6 +379,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
+          routePrefix: this.prefix,
         };
 
         try {

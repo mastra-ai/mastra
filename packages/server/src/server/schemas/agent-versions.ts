@@ -34,14 +34,14 @@ const versionOrderBySchema = z.object({
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions - List versions query params
+ * GET /stored/agents/:agentId/versions - List versions query params
  */
 export const listVersionsQuerySchema = createPagePaginationSchema(20).extend({
   orderBy: versionOrderBySchema.optional(),
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions/compare - Compare versions query params
+ * GET /stored/agents/:agentId/versions/compare - Compare versions query params
  */
 export const compareVersionsQuerySchema = z.object({
   from: z.string().describe('Version ID (UUID) to compare from'),
@@ -53,7 +53,7 @@ export const compareVersionsQuerySchema = z.object({
 // ============================================================================
 
 /**
- * POST /api/stored/agents/:agentId/versions - Create version body
+ * POST /stored/agents/:agentId/versions - Create version body
  */
 export const createVersionBodySchema = z.object({
   name: z.string().max(100).optional().describe('Optional vanity name for this version'),
@@ -79,24 +79,24 @@ export const agentVersionSchema = z.object({
 });
 
 /**
- * Response for GET /api/stored/agents/:agentId/versions
+ * Response for GET /stored/agents/:agentId/versions
  */
 export const listVersionsResponseSchema = paginationInfoSchema.extend({
   versions: z.array(agentVersionSchema),
 });
 
 /**
- * Response for GET /api/stored/agents/:agentId/versions/:versionId
+ * Response for GET /stored/agents/:agentId/versions/:versionId
  */
 export const getVersionResponseSchema = agentVersionSchema;
 
 /**
- * Response for POST /api/stored/agents/:agentId/versions
+ * Response for POST /stored/agents/:agentId/versions
  */
 export const createVersionResponseSchema = agentVersionSchema;
 
 /**
- * Response for POST /api/stored/agents/:agentId/versions/:versionId/activate
+ * Response for POST /stored/agents/:agentId/versions/:versionId/activate
  */
 export const activateVersionResponseSchema = z.object({
   success: z.boolean(),
@@ -105,14 +105,14 @@ export const activateVersionResponseSchema = z.object({
 });
 
 /**
- * Response for POST /api/stored/agents/:agentId/versions/:versionId/restore
+ * Response for POST /stored/agents/:agentId/versions/:versionId/restore
  */
 export const restoreVersionResponseSchema = agentVersionSchema.describe(
   'The newly created version from the restored snapshot',
 );
 
 /**
- * Response for DELETE /api/stored/agents/:agentId/versions/:versionId
+ * Response for DELETE /stored/agents/:agentId/versions/:versionId
  */
 export const deleteVersionResponseSchema = z.object({
   success: z.boolean(),
@@ -129,7 +129,7 @@ export const versionDiffEntrySchema = z.object({
 });
 
 /**
- * Response for GET /api/stored/agents/:agentId/versions/compare
+ * Response for GET /stored/agents/:agentId/versions/compare
  */
 export const compareVersionsResponseSchema = z.object({
   diffs: z.array(versionDiffEntrySchema).describe('List of differences between versions'),

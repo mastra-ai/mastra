@@ -30,12 +30,12 @@
     "@mastra/observability": "latest"
   },
   "devDependencies": {
-    "@types/node": "^24.0.10",
+    "@types/node": "^24.10.9",
     "mastra": "latest",
-    "tsx": "^4.20.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "dotenv": "^17.0.1",
-    "vitest": "^4.0.8",
+    "dotenv": "^17.2.3",
+    "vitest": "^4.0.17",
     "zod": "^3.25.76"
   }
 }
