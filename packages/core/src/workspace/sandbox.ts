@@ -24,8 +24,6 @@
  * ```
  */
 
-import type { WorkspaceFilesystem } from './filesystem';
-
 // =============================================================================
 // Core Types
 // =============================================================================
@@ -96,17 +94,6 @@ export interface SandboxSafetyOptions {
   requireApproval?: 'all' | 'none';
 }
 
-export interface SandboxSyncResult {
-  /** Paths that were successfully synced */
-  synced: string[];
-  /** Paths that failed to sync with error messages */
-  failed: Array<{ path: string; error: string }>;
-  /** Total bytes transferred */
-  bytesTransferred: number;
-  /** Duration in milliseconds */
-  duration: number;
-}
-
 // =============================================================================
 // Sandbox Interface
 // =============================================================================
@@ -150,30 +137,6 @@ export interface WorkspaceSandbox {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  // ---------------------------------------------------------------------------
-  // Sync Operations
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Sync files from a workspace filesystem into this sandbox.
-   * The sandbox implements its preferred transfer mechanism (file copy, HTTP upload, etc.).
-   *
-   * @param filesystem - The workspace filesystem to sync from
-   * @param paths - Specific paths to sync (default: all files)
-   * @returns Sync result with success/failure details
-   */
-  syncFromFilesystem?(filesystem: WorkspaceFilesystem, paths?: string[]): Promise<SandboxSyncResult>;
-
-  /**
-   * Sync files from this sandbox back to a workspace filesystem.
-   * The sandbox implements its preferred transfer mechanism.
-   *
-   * @param filesystem - The workspace filesystem to sync to
-   * @param paths - Specific paths to sync (default: all files)
-   * @returns Sync result with success/failure details
-   */
-  syncToFilesystem?(filesystem: WorkspaceFilesystem, paths?: string[]): Promise<SandboxSyncResult>;
 
   // ---------------------------------------------------------------------------
   // Lifecycle

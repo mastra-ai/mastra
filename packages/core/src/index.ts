@@ -21,8 +21,6 @@ export {
   SandboxTimeoutError,
   SandboxNotReadyError,
   type WorkspaceConfig,
-  type WorkspaceScope,
-  type WorkspaceOwner,
   type WorkspaceStatus,
   type WorkspaceInfo,
   type WorkspaceFilesystem,

@@ -40,8 +40,6 @@
 export {
   Workspace,
   type WorkspaceConfig,
-  type WorkspaceScope,
-  type WorkspaceOwner,
   type WorkspaceStatus,
   type WorkspaceInfo,
   type PathContext,
@@ -99,7 +97,6 @@ export type {
   ExecuteCommandOptions,
   SandboxStatus,
   SandboxInfo,
-  SandboxSyncResult,
 } from './sandbox';
 
 export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';

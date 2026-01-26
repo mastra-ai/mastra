@@ -62,30 +62,6 @@ import { FilesystemState } from './state';
 import type { WorkspaceStatus } from './types';
 
 // =============================================================================
-// Workspace Scope
-// =============================================================================
-
-/**
- * Determines how the workspace is scoped and shared.
- */
-export type WorkspaceScope =
-  | 'global' // Shared across all agents
-  | 'agent' // Shared across all threads for a single agent
-  | 'thread'; // Isolated per conversation thread
-
-/**
- * Identifies the owner of a workspace.
- */
-export interface WorkspaceOwner {
-  /** Scope of the workspace */
-  scope: WorkspaceScope;
-  /** Agent ID (for agent and thread scopes) */
-  agentId?: string;
-  /** Thread ID (for thread scope only) */
-  threadId?: string;
-}
-
-// =============================================================================
 // Workspace Configuration
 // =============================================================================
 

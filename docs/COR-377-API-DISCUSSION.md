@@ -113,9 +113,20 @@ This document tracks workspace API surface items that need discussion before dec
 
 The following were removed as "easy removals":
 
+### Workspace Class
 - `snapshot()` / `restore()` / `SnapshotOptions` / `WorkspaceSnapshot` / `RestoreOptions`
 - `syncToSandbox()` / `syncFromSandbox()` / `SyncResult`
+
+### Sandbox Interface
 - `installPackage()` / `installPackages()` / `InstallPackageOptions` / `InstallPackageResult`
-- Sandbox internal FS methods: `writeFile()` / `readFile()` / `listFiles()` / `getFilesystem()`
+- `syncFromFilesystem()` / `syncToFilesystem()` / `SandboxSyncResult`
+- Internal FS methods: `writeFile()` / `readFile()` / `listFiles()` / `getFilesystem()`
+
+### Filesystem Interface
 - `WorkspaceFilesystemAudit` / `FilesystemAuditEntry` / `FilesystemAuditOptions`
+
+### Tools
 - `workspace_install_package` tool
+
+### Types
+- `WorkspaceScope` / `WorkspaceOwner` (unused scoping types)
