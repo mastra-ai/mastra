@@ -1,4 +1,4 @@
-import { BrowserManager } from 'agent-browser';
+import { BrowserManager } from 'agent-browser/dist/browser.js';
 import type { ToolAction } from '@mastra/core/tools';
 
 import { createNavigateTool } from './tools/navigate.js';

@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { BrowserManager } from 'agent-browser';
+import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
 import { navigateInputSchema, navigateOutputSchema, type NavigateOutput, type BrowserError } from '../types.js';
 
