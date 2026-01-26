@@ -6,6 +6,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import { resolveModule } from 'local-pkg';
 import { readJSON } from 'fs-extra/esm';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+import * as resolve from 'resolve.exports';
 import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
@@ -54,6 +58,92 @@ function getInputPlugins(
           if (id.startsWith('@mastra/server')) {
             return fileURLToPath(import.meta.resolve(id));
           }
+        },
+      } satisfies Plugin,
+      // Resolve @mastra/* packages from workspace directories to ensure consistent versions
+      {
+        name: 'mastra-package-resolver',
+        async resolveId(id: string) {
+          // Only handle @mastra/* imports that aren't already resolved
+          if (!id.startsWith('@mastra/') || id.startsWith('/') || id.startsWith('.')) {
+            return null;
+          }
+
+          try {
+            // Get the base package name (e.g., @mastra/core from @mastra/core/evals)
+            const parts = id.split('/');
+            const pkgName = parts[0]!.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]!;
+            const subpath = parts.slice(pkgName.split('/').length).join('/');
+
+            // Try to resolve from bundler's context first
+            let pkgRoot = await getPackageRootPath(pkgName, import.meta.dirname);
+
+            // If not found, check workspace directories
+            // The bundler runs from packages/deployer/dist, so go up 3 levels to reach monorepo root
+            if (!pkgRoot) {
+              const monorepoRoot = path.resolve(import.meta.dirname, '../../..');
+              const shortName = pkgName.replace('@mastra/', '');
+
+              const possibleLocations = [
+                path.join(monorepoRoot, 'packages', shortName),
+                path.join(monorepoRoot, 'stores', shortName),
+                path.join(monorepoRoot, 'observability', shortName),
+                path.join(monorepoRoot, 'deployers', shortName),
+                path.join(monorepoRoot, 'voice', shortName),
+                path.join(monorepoRoot, 'client-sdks', shortName),
+                path.join(monorepoRoot, 'sources', shortName),
+                path.join(monorepoRoot, 'routers', shortName),
+                path.join(monorepoRoot, 'runners', shortName),
+                path.join(monorepoRoot, 'observability', 'mastra'),
+              ];
+
+              for (const loc of possibleLocations) {
+                const pkgJsonPath = path.join(loc, 'package.json');
+                if (existsSync(pkgJsonPath)) {
+                  try {
+                    const pkgJsonContent = await readFile(pkgJsonPath, 'utf-8');
+                    const pkg = JSON.parse(pkgJsonContent);
+                    if (pkg.name === pkgName) {
+                      pkgRoot = loc;
+                      break;
+                    }
+                  } catch {
+                    // Ignore read errors
+                  }
+                }
+              }
+            }
+
+            if (!pkgRoot) {
+              return null;
+            }
+
+            // Read package.json to resolve exports
+            const pkgJsonBuffer = await readFile(path.join(pkgRoot, 'package.json'), 'utf-8');
+            const pkgJson = JSON.parse(pkgJsonBuffer);
+
+            // Resolve the subpath export
+            const exportPath = subpath ? `./${subpath}` : '.';
+            let resolvedPath: string | undefined;
+
+            if (exportPath === '.') {
+              resolvedPath = resolve.exports(pkgJson, '.')?.[0] || pkgJson.main || 'index.js';
+            } else {
+              resolvedPath = resolve.exports(pkgJson, exportPath)?.[0];
+              if (!resolvedPath) {
+                resolvedPath = `dist/${subpath}/index.js`;
+              }
+            }
+
+            if (resolvedPath) {
+              const fullPath = path.join(pkgRoot, resolvedPath);
+              return { id: fullPath, external: false };
+            }
+          } catch {
+            // Resolution failed, let other resolvers try
+          }
+
+          return null;
         },
       } satisfies Plugin,
       json(),
