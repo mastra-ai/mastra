@@ -146,6 +146,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Koa's ctx.query is ParsedUrlQuery which is Record<string, string | string[]>
     const queryParams = normalizeQueryParams((ctx.query || {}) as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = ctx.headers['content-type'] || '';
@@ -160,13 +161,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = ctx.request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -372,6 +376,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
 
       const params = await this.getParams(route, ctx);
+
+      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+      if (params.bodyParseError) {
+        ctx.status = 400;
+        ctx.body = {
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        };
+        return;
+      }
 
       if (params.queryParams) {
         try {

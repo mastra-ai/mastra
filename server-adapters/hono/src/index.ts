@@ -162,6 +162,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
     const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
+
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.header('content-type') || '';
 
@@ -175,16 +177,32 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
-      } else {
-        try {
-          body = await request.json();
-        } catch (error) {
-          console.error('Failed to parse JSON body:', error);
+      } else if (contentType.includes('application/json')) {
+        // Clone the request to read the body text first
+        // This allows us to check if there's actual content before parsing
+        const clonedReq = request.raw.clone();
+        const bodyText = await clonedReq.text();
+
+        if (bodyText && bodyText.trim().length > 0) {
+          // There's actual content - try to parse it as JSON
+          try {
+            body = JSON.parse(bodyText);
+          } catch (error) {
+            console.error('Failed to parse JSON body:', error);
+            // Track JSON parse error to return 400 Bad Request
+            bodyParseError = {
+              message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+            };
+          }
         }
+        // Empty body is ok - body remains undefined
       }
     }
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -303,6 +321,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
 
         const params = await this.getParams(route, c.req);
+
+        // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
+        if (params.bodyParseError) {
+          return c.json(
+            {
+              error: 'Invalid request body',
+              issues: [{ field: 'body', message: params.bodyParseError.message }],
+            },
+            400,
+          );
+        }
 
         if (params.queryParams) {
           try {
