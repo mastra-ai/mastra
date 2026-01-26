@@ -200,6 +200,7 @@ export const comparisonResponseSchema = z.object({
 });
 
 // Run summary schema (returned by trigger run)
+// Note: completedAt is nullable for pending/running runs (async trigger)
 export const runSummaryResponseSchema = z.object({
   runId: z.string(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
@@ -207,7 +208,7 @@ export const runSummaryResponseSchema = z.object({
   succeededCount: z.number(),
   failedCount: z.number(),
   startedAt: z.coerce.date(),
-  completedAt: z.coerce.date(),
+  completedAt: z.coerce.date().nullable(),
   results: z.array(
     z.object({
       itemId: z.string(),

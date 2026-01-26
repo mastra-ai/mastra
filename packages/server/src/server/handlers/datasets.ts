@@ -435,7 +435,7 @@ export const TRIGGER_RUN_ROUTE = createRoute({
   bodySchema: triggerRunBodySchema,
   responseSchema: runSummaryResponseSchema,
   summary: 'Trigger a new run',
-  description: 'Triggers a new run of the dataset against the specified target',
+  description: 'Triggers a new run of the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
@@ -449,27 +449,85 @@ export const TRIGGER_RUN_ROUTE = createRoute({
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      const runsStore = await mastra.getStorage()?.getStore('runs');
       if (!datasetsStore) {
         throw new HTTPException(500, { message: 'Datasets storage not configured' });
       }
+      if (!runsStore) {
+        throw new HTTPException(500, { message: 'Runs storage not configured' });
+      }
 
-      // Check if dataset exists
+      // Check if dataset exists and get item count
       const dataset = await datasetsStore.getDatasetById({ id: datasetId });
       if (!dataset) {
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Run the dataset
-      const summary = await runDataset(mastra, {
+      // Resolve dataset version
+      const datasetVersion = version instanceof Date ? version : dataset.version;
+
+      // Get items to count total
+      const items = await datasetsStore.getItemsByVersion({
         datasetId,
-        targetType,
-        targetId,
-        scorers: scorerIds,
-        version: version instanceof Date ? version : undefined,
-        maxConcurrency,
+        version: datasetVersion,
       });
 
-      return summary;
+      if (items.length === 0) {
+        throw new HTTPException(400, { message: `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}` });
+      }
+
+      // Create run record with 'pending' status BEFORE spawning execution
+      const runId = crypto.randomUUID();
+      const createdAt = new Date();
+
+      await runsStore.createRun({
+        id: runId,
+        datasetId,
+        datasetVersion,
+        targetType,
+        targetId,
+        totalItems: items.length,
+      });
+
+      // Spawn runDataset() without await - fire and forget
+      // The runDataset function will update run status to 'running' then 'completed'/'failed'
+      void (async () => {
+        try {
+          await runDataset(mastra, {
+            datasetId,
+            targetType,
+            targetId,
+            scorers: scorerIds,
+            version: datasetVersion,
+            maxConcurrency,
+            runId, // Pass pre-created runId to avoid duplicate creation
+          });
+        } catch (err) {
+          // Log error and update run status to failed
+          console.error(`[runDataset] Background execution failed for run ${runId}:`, err);
+          try {
+            await runsStore.updateRun({
+              id: runId,
+              status: 'failed',
+              completedAt: new Date(),
+            });
+          } catch (updateErr) {
+            console.error(`[runDataset] Failed to update run status to failed:`, updateErr);
+          }
+        }
+      })();
+
+      // Return immediately with pending status
+      return {
+        runId,
+        status: 'pending' as const,
+        totalItems: items.length,
+        succeededCount: 0,
+        failedCount: 0,
+        startedAt: createdAt,
+        completedAt: null,
+        results: [],
+      };
     } catch (error) {
       return handleError(error, 'Error triggering run');
     }

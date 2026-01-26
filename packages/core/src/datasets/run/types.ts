@@ -19,6 +19,8 @@ export interface RunConfig {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Pre-created run ID (for async trigger - skips run creation) */
+  runId?: string;
 }
 
 /**
