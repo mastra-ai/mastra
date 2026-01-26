@@ -515,7 +515,7 @@ export function transformWorkflow<OUTPUT>(
       const output = payload.payload.output;
 
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
-        // @ts-expect-error
+        // @ts-expect-error - generic type mismatch in conversion
         const part = convertMastraChunkToAISDKv5<OUTPUT>({ chunk: output, mode: 'stream' });
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({

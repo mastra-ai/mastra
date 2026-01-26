@@ -161,9 +161,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
       });
 
@@ -701,9 +701,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
 
         afterEach(async () => {
-          //@ts-expect-error
+          // @ts-expect-error - accessing client for cleanup
           await storage.client.close();
-          //@ts-expect-error
+          // @ts-expect-error - accessing client for cleanup
           await vector.turso.close();
         });
 
@@ -891,9 +891,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
       });
 
@@ -1107,9 +1107,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
       });
 
@@ -1461,9 +1461,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
       });
 
@@ -1579,9 +1579,9 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       afterEach(async () => {
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
-        //@ts-expect-error
+        // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
       });
 

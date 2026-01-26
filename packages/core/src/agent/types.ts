@@ -52,7 +52,6 @@ export type ToolsInput = Record<
 >;
 
 export type AgentInstructions = SystemMessage;
-export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
