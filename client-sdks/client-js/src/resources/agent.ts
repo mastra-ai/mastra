@@ -1214,7 +1214,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-expect-error
+                  // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
                 }
 
@@ -1728,7 +1728,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-expect-error
+                  // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
                 }
 
