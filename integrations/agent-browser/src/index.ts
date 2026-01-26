@@ -1,8 +1,8 @@
-export {
-  type BrowserToolsetConfig,
-  type NavigateInput,
-  type NavigateOutput,
-  type BrowserError,
-  navigateInputSchema,
-  navigateOutputSchema,
-} from './types.js';
+// Main exports
+export { BrowserToolset } from './toolset.js';
+
+// Type exports
+export type { BrowserToolsetConfig, NavigateInput, NavigateOutput, BrowserError } from './types.js';
+
+// Schema exports (for advanced usage)
+export { navigateInputSchema, navigateOutputSchema } from './types.js';
