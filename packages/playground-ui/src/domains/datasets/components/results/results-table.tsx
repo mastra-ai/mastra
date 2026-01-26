@@ -29,6 +29,8 @@ export interface RunResultData {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /** Trace ID from agent/workflow execution */
+  traceId?: string | null;
   createdAt: Date;
 }
 

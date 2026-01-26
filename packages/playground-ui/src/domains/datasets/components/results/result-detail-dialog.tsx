@@ -15,6 +15,7 @@ import {
   ClockIcon,
   AlertCircleIcon,
   GaugeIcon,
+  RouteIcon,
 } from 'lucide-react';
 import { format } from 'date-fns/format';
 import type { ScoreData, RunResultData } from './results-table';
@@ -86,6 +87,20 @@ export function ResultDetailDialog({
                 value: `${result.latency}ms`,
                 key: 'latency',
               },
+              ...(result.traceId
+                ? [
+                    {
+                      label: 'Trace',
+                      value: (
+                        <Link href={`/traces/${result.traceId}`} className="text-accent1 hover:underline inline-flex items-center gap-1">
+                          <RouteIcon className="w-3 h-3" />
+                          View Trace
+                        </Link>
+                      ),
+                      key: 'trace',
+                    },
+                  ]
+                : []),
               {
                 label: 'Started',
                 value: format(new Date(result.startedAt), 'MMM d, h:mm:ss aaa'),
