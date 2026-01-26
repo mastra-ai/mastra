@@ -108,7 +108,7 @@ async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
 
 export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces',
+  path: '/observability/traces',
   responseType: 'json',
   queryParamSchema: wrapSchemaForQueryParams(
     tracesFilterSchema
@@ -121,6 +121,7 @@ export const LIST_TRACES_ROUTE = createRoute({
   summary: 'List traces',
   description: 'Returns a paginated list of traces with optional filtering and sorting',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       // Transform legacy params to new format before processing
@@ -140,13 +141,14 @@ export const LIST_TRACES_ROUTE = createRoute({
 
 export const GET_TRACE_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId',
+  path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
   responseSchema: getTraceResponseSchema,
   summary: 'Get AI trace by ID',
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -165,13 +167,14 @@ export const GET_TRACE_ROUTE = createRoute({
 
 export const SCORE_TRACES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/observability/traces/score',
+  path: '/observability/traces/score',
   responseType: 'json',
   bodySchema: scoreTracesRequestSchema,
   responseSchema: scoreTracesResponseSchema,
   summary: 'Score traces',
   description: 'Scores one or more traces using a specified scorer (fire-and-forget)',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       // Validate storage exists before starting background task
@@ -206,7 +209,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId/:spanId/scores',
+  path: '/observability/traces/:traceId/:spanId/scores',
   responseType: 'json',
   pathParamSchema: spanIdsSchema,
   queryParamSchema: paginationArgsSchema,
@@ -214,6 +217,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   summary: 'List scores by span',
   description: 'Returns all scores for a specific span within a trace',
   tags: ['Observability'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       const pagination = pickParams(paginationArgsSchema, params);

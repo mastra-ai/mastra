@@ -3,8 +3,6 @@ title: "Quickstart"
 description: Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import { VideoPlayer } from "@site/src/components/video-player";
@@ -25,47 +23,9 @@ You can run `create mastra` anywhere on your machine.
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm create mastra@latest
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn create mastra@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest
-```
-
-:::warning
-
-Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
-
-- `bun add @mastra/server@latest`
-- Delete your `node_modules` folder
-- Delete your `bun.lock` file
-- Run `bun install` to reinstall your packages
-
-:::
-
-</TabItem>
-</Tabs>
 
 This creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
 

@@ -3,7 +3,7 @@ import { dirname, join, relative } from 'node:path';
 import { globby } from 'globby';
 
 async function cleanupDtsFiles() {
-  const rootPath = new URL('../', import.meta.url).pathname;
+  const rootPath = process.cwd();
   const files = await globby('./*.d.ts', { cwd: rootPath });
 
   for (const file of files) {
@@ -12,11 +12,10 @@ async function cleanupDtsFiles() {
 }
 
 async function writeDtsFiles() {
-  const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
+  const rootPath = process.cwd();
+  const packageJson = JSON.parse(await readFile(join(rootPath, 'package.json')));
 
   const exports = packageJson.exports;
-
-  const rootPath = new URL('../', import.meta.url).pathname;
 
   // Handle specific path exports
   for (const [key, value] of Object.entries(exports)) {

@@ -158,7 +158,7 @@ describe('MCP Registry Handlers', () => {
         page: 0,
       });
 
-      expect(result.next).toBe('/api/mcp/v0/servers?perPage=1&page=1');
+      expect(result.next).toBe('/mcp/v0/servers?perPage=1&page=1');
     });
 
     it('should return null for next when no more results', async () => {

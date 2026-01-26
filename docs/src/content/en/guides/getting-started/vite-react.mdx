@@ -25,61 +25,25 @@ If you already have a React + Vite app using Tailwind, skip to the next step.
 
 Run the following command to [create a new React + Vite app](https://vite.dev/guide/#scaffolding-your-first-vite-project):
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-```bash
+```bash npm2yarn
 npm create vite@latest mastra-react -- --template react-ts
-cd mastra-react
 ```
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-```bash
-pnpm create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-<TabItem value="yarn" label="yarn">
-```bash
-yarn create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-<TabItem value="bun" label="bun">
-```bash
-bun create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-</Tabs>
 
 This creates a project called `mastra-react`, but you can replace it with any name you want.
 
+Navigate to your project directory:
+
+```bash
+cd mastra-react
+```
+
 ### Tailwind
 
-Next, install Tailwind: 
+Next, install Tailwind:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-```bash
+```bash npm2yarn
 npm install tailwindcss @tailwindcss/vite
 ```
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-```bash
-pnpm add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-<TabItem value="yarn" label="yarn">
-```bash
-yarn add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-<TabItem value="bun" label="bun">
-```bash
-bun add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-</Tabs>
 
 Configure the Vite plugins:
 
@@ -140,40 +104,9 @@ Edit `tsconfig.app.json` to resolve paths:
 
 Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
-cd mastra-react
+```bash npm2yarn
 npx mastra@latest init
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-cd mastra-react
-pnpm dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-cd mastra-react
-yarn dlx mastra@latest init
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-cd mastra-react
-bunx mastra@latest init
-```
-
-</TabItem>
-</Tabs>
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
@@ -187,69 +120,15 @@ You'll call `weather-agent.ts` from your chat UI in the next steps.
 
 Install AI SDK UI along with the Mastra adapter:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun add @mastra/ai-sdk@latest @ai-sdk/react ai
-```
-
-</TabItem>
-</Tabs>
-
 Next, initialize AI Elements. When prompted, choose the default options:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx ai-elements@latest
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bunx ai-elements@latest
-```
-
-</TabItem>
-</Tabs>
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
@@ -398,12 +277,12 @@ In order to test your agent with the chat interface, you need to run both the Ma
 
 1. Start the Mastra development server:
 
-    ```bash copy
+    ```bash
     npx mastra dev
     ```
 1. In a separate terminal window, start the Vite development server:
 
-    ```bash copy
+    ```bash
     npm run dev
     ```
 1. Open your application at http://localhost:5173

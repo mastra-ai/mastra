@@ -439,7 +439,7 @@ export class QdrantVector extends MastraVector {
       return {
         dimension: config.params.vectors?.size as number,
         count: points_count || 0,
-        // @ts-expect-error
+        // @ts-expect-error - Object.keys returns string[] but DISTANCE_MAPPING keys are typed
         metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
       };
     } catch (error) {
