@@ -34,6 +34,8 @@ const SIDEBAR_LOCATIONS = [
   {
     id: "Models",
     path: path.join(DOCS_DIR, "models", "sidebars.js"),
+    // Condense these categories to just their overview link
+    condensedCategories: ["Gateways", "Providers"],
   },
   {
     id: "Guides",
@@ -112,12 +114,29 @@ function getDocId(item: SidebarItem): string | null {
 }
 
 /**
+ * Find the overview/index doc in a category's items
+ */
+function findCategoryOverviewUrl(
+  items: SidebarItem[],
+  baseUrl: string,
+): string | null {
+  for (const item of items) {
+    const docId = getDocId(item);
+    if (docId && (docId.endsWith("/index") || docId === "index")) {
+      return `${baseUrl}/${docId}`;
+    }
+  }
+  return null;
+}
+
+/**
  * Generate markdown list for sidebar items recursively
  */
 function generateMarkdownList(
   items: SidebarItem[],
   baseUrl: string,
   depth: number = 0,
+  condensedCategories: string[] = [],
 ): string {
   const indent = "  ".repeat(depth);
   let output = "";
@@ -131,9 +150,25 @@ function generateMarkdownList(
       const url = docId === "index" ? baseUrl : `${baseUrl}/${docId}`;
       output += `${indent}- [${label}](${url})\n`;
     } else if (item.type === "category") {
-      // It's a category - create a label and recurse
-      output += `${indent}- ${label}\n`;
-      output += generateMarkdownList(item.items, baseUrl, depth + 1);
+      // Check if this category should be condensed to just its overview link
+      if (condensedCategories.includes(label)) {
+        const overviewUrl = findCategoryOverviewUrl(item.items, baseUrl);
+        if (overviewUrl) {
+          output += `${indent}- [${label}](${overviewUrl})\n`;
+        } else {
+          // Fallback: just show category name without link
+          output += `${indent}- ${label}\n`;
+        }
+      } else {
+        // It's a category - create a label and recurse
+        output += `${indent}- ${label}\n`;
+        output += generateMarkdownList(
+          item.items,
+          baseUrl,
+          depth + 1,
+          condensedCategories,
+        );
+      }
     }
   }
 
@@ -160,9 +195,10 @@ async function buildLlmsTxt(): Promise<void> {
     try {
       const items = await parseSidebarFile(sidebar.path);
       const baseUrl = getBaseUrl(sidebar.id);
+      const condensedCategories = sidebar.condensedCategories || [];
 
       output += `## ${sidebar.id}\n\n`;
-      output += generateMarkdownList(items, baseUrl);
+      output += generateMarkdownList(items, baseUrl, 0, condensedCategories);
       output += "\n";
     } catch (error) {
       console.error(`Error processing ${sidebar.id}:`, error);
