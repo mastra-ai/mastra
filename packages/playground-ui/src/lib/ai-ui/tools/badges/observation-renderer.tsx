@@ -5,27 +5,27 @@ import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 // Priority emoji to color mapping
-// P1 (🔴) = highest priority = pink/magenta theme with dark bg
-// P2 (🟡) = medium priority = amber/orange theme with dark bg  
-// P3 (🟢) = lower priority = subtle, no bg
+// P1 (🔴) = highest priority = purple theme
+// P2 (🟡) = medium priority = blue theme  
+// P3 (🟢) = lower priority = green theme
 const PRIORITY_COLORS = {
   '🔴': 'text-foreground',
   '🟡': 'text-foreground',
-  '🟢': 'text-muted-foreground',
+  '🟢': 'text-foreground',
 } as const;
 
-// Dark backgrounds for P1/P2, none for P3
+// Dark backgrounds for all priorities
 const PRIORITY_BG = {
-  '🔴': 'bg-pink-500/15',
-  '🟡': 'bg-amber-500/15',
-  '🟢': 'bg-transparent',
+  '🔴': 'bg-purple-500/15',
+  '🟡': 'bg-blue-500/15',
+  '🟢': 'bg-green-500/15',
 } as const;
 
 // Full color left border accent
 const PRIORITY_BORDER = {
-  '🔴': 'border-l-pink-500',
-  '🟡': 'border-l-amber-500',
-  '🟢': 'border-l-neutral-500/30',
+  '🔴': 'border-l-purple-500',
+  '🟡': 'border-l-blue-500',
+  '🟢': 'border-l-green-500',
 } as const;
 
 type Priority = keyof typeof PRIORITY_COLORS;
