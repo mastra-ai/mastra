@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 
 ## Current Position
 
-Phase: 6 of 8 (Playground Integration) — COMPLETE
-Plan: 10 of 10 in phase 6
-Status: Phase 6 verified (5/5 must-haves)
-Last activity: 2026-01-26 — Phase 6 execution complete, verified
+Phase: 6 of 8 (Playground Integration) — Gap closure complete
+Plan: 12 of 12 in phase 6 (gap closure plans 11, 12)
+Status: Phase 6 gap closure complete
+Last activity: 2026-01-26 — Completed 06-12-PLAN.md (scores in results, trace link)
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 21
+- Total plans completed: 23
 - Average duration: 4 min
-- Total execution time: 1.4 hours
+- Total execution time: 1.5 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████████░░] 75%
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 10 | 40 min | 4 min |
+| 06-playground-integration | 12 | 48 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-05 (6 min), 06-09 (2 min), 06-08 (3 min), 06-10 (4 min), 06-07 (4 min)
+- Last 5 plans: 06-09 (2 min), 06-08 (3 min), 06-10 (4 min), 06-11 (4 min), 06-12 (8 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -75,7 +75,8 @@ Recent decisions affecting current work:
 - Routes use lazy loading pattern for code splitting
 - Two-step target selection: type first (agent/workflow/scorer), then specific target
 - Scorer selection optional, only for agent/workflow targets
-- useScoresByRunId groups scores by entityId (itemId) for ResultsTable
+- Scores embedded in RunResult (not separate query) for simpler data model
+- Trace link uses /observability?traceId=xxx pattern for pre-selected trace
 - traceId captured from agent/workflow result and stored with run results
 - Item delete uses inline AlertDialog in ItemsList (matches chat-threads pattern)
 - Edit dialogs use useEffect to sync form state when props change
@@ -90,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 22:30
-Stopped at: Phase 6 complete — all 10 plans executed, verified
+Last session: 2026-01-26
+Stopped at: Completed 06-12-PLAN.md - scores in results, trace link fixed
 Resume file: None
