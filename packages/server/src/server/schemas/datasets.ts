@@ -137,6 +137,15 @@ export const runResponseSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 
+// Scorer result schema
+export const scorerResultSchema = z.object({
+  scorerId: z.string(),
+  scorerName: z.string(),
+  score: z.number().nullable(),
+  reason: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
 // Run result entity schema
 export const runResultResponseSchema = z.object({
   id: z.string(),
@@ -152,6 +161,7 @@ export const runResultResponseSchema = z.object({
   completedAt: z.coerce.date(),
   retryCount: z.number(),
   traceId: z.string().nullable(),
+  scores: z.array(scorerResultSchema),
   createdAt: z.coerce.date(),
 });
 
