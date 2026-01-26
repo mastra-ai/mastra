@@ -115,10 +115,15 @@ Plans:
   3. User can trigger run by selecting target and scorers
   4. Results view displays per-item outputs and scores
   5. Comparison view shows score deltas between two runs
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Server API routes for datasets, runs, and comparison
+- [ ] 06-02-PLAN.md — Client-js methods for dataset operations
+- [ ] 06-03-PLAN.md — Playground-ui hooks for data fetching and mutations
+- [ ] 06-04-PLAN.md — Datasets list page with table and create dialog
+- [ ] 06-05-PLAN.md — Dataset detail page with items, runs, and trigger dialog
+- [ ] 06-06-PLAN.md — Results view and comparison UI
 
 ### Phase 7: CSV Import
 **Goal**: Bulk item creation from CSV with validation and explicit column mapping
