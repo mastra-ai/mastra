@@ -28,6 +28,8 @@ function Agents() {
     navigate(`${paths.agentLink(agentId)}/chat`);
   };
 
+  console.warn('Agents page rendering');
+
   return (
     <MainContentLayout>
       <Header>
