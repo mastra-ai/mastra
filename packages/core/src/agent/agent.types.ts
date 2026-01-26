@@ -211,7 +211,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** tracing context for span hierarchy and metadata */

@@ -263,9 +263,7 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
 /**
  * Helper to check if a scorer item is a MastraScorerEntry object
  */
-function isMastraScorerEntry(
-  item: MastraScorer<any, any, any, any> | MastraScorerEntry,
-): item is MastraScorerEntry {
+function isMastraScorerEntry(item: MastraScorer<any, any, any, any> | MastraScorerEntry): item is MastraScorerEntry {
   return item !== null && typeof item === 'object' && 'scorer' in item;
 }
 
@@ -279,9 +277,7 @@ async function runScorers(
   if (Array.isArray(scorers)) {
     for (const scorerItem of scorers) {
       // Normalize to MastraScorerEntry format
-      const scorerConfig: MastraScorerEntry = isMastraScorerEntry(scorerItem)
-        ? scorerItem
-        : { scorer: scorerItem };
+      const scorerConfig: MastraScorerEntry = isMastraScorerEntry(scorerItem) ? scorerItem : { scorer: scorerItem };
 
       const { scorer, modelSettings, temperatures } = scorerConfig;
 

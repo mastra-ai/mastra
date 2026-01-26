@@ -3,7 +3,14 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
-import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent, evalAgentWithTemperatures } from './agents/index';
+import {
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+  evalAgentWithTemperatures,
+} from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {

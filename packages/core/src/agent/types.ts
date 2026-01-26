@@ -287,7 +287,9 @@ export type AgentGenerateOptions<
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
   returnScorerData?: boolean;
   /**
@@ -387,7 +389,9 @@ export type AgentStreamOptions<
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & (
@@ -430,7 +434,9 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
+  overrideScorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig } & Partial<MastraScorerEntry>>;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
