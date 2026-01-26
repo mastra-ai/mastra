@@ -1,26 +1,6 @@
-import type { RequestOptions, ClientOptions } from '../types';
+import { normalizeRoutePath } from '@mastra/core/utils';
 
-/**
- * Normalizes a route prefix to ensure it has a leading slash and no trailing slash.
- * @param prefix - The prefix to normalize
- * @returns Normalized prefix (e.g., '/api', '/mastra')
- */
-function normalizePrefix(prefix: string): string {
-  let normalized = prefix.trim();
-  // Empty or just '/' means no prefix
-  if (normalized === '' || normalized === '/') {
-    return '';
-  }
-  // Add leading slash if missing
-  if (!normalized.startsWith('/')) {
-    normalized = '/' + normalized;
-  }
-  // Remove trailing slash if present
-  if (normalized.endsWith('/') && normalized.length > 1) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
-}
+import type { RequestOptions, ClientOptions } from '../types';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -28,7 +8,7 @@ export class BaseResource {
 
   constructor(options: ClientOptions) {
     this.options = options;
-    this.prefix = normalizePrefix(options.prefix ?? '/api');
+    this.prefix = normalizeRoutePath(options.prefix ?? '/api');
   }
 
   /**
