@@ -251,7 +251,7 @@ export const agentExecutionBodySchema = z
 
 /**
  * Legacy body schema for deprecated endpoints that still use threadId/resourceId
- * Used by /api/agents/:agentId/generate-legacy and /api/agents/:agentId/stream-legacy
+ * Used by /agents/:agentId/generate-legacy and /agents/:agentId/stream-legacy
  */
 export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   resourceId: z.string().optional(),

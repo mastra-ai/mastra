@@ -11,7 +11,8 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_HIDE_CLOUD_CTA%%/g, 'true')
       .replace(/%%MASTRA_STUDIO_BASE_PATH%%/g, '')
       .replace(/%%MASTRA_SERVER_PROTOCOL%%/g, 'http')
-      .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '');
+      .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '')
+      .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false');
   },
 });
 

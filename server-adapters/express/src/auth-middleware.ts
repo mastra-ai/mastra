@@ -130,7 +130,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
         get: (key: string) => {
           if (key === 'mastra') return res.locals.mastra;
           if (key === 'requestContext') return res.locals.requestContext;
-          if (key === 'tools') return res.locals.tools;
+          if (key === 'registeredTools') return res.locals.registeredTools;
           if (key === 'taskStore') return res.locals.taskStore;
           if (key === 'customRouteAuthConfig') return res.locals.customRouteAuthConfig;
           return undefined;

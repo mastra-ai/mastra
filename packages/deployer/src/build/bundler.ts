@@ -49,7 +49,7 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);

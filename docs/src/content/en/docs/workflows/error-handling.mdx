@@ -101,7 +101,7 @@ The `onFinish` callback receives:
 - `runId` - The unique identifier for this workflow run
 - `workflowId` - The workflow's identifier
 - `resourceId` - Optional resource identifier (if provided when creating the run)
-- `getInitData()` - Function that returns the initial input data
+- `getInitData<any>()` - Function that returns the initial input data
 - `mastra` - The Mastra instance (if workflow is registered with Mastra)
 - `requestContext` - Request-scoped context data
 - `logger` - The workflow's logger instance
@@ -140,7 +140,7 @@ The `onError` callback receives:
 - `runId` - The unique identifier for this workflow run
 - `workflowId` - The workflow's identifier
 - `resourceId` - Optional resource identifier (if provided when creating the run)
-- `getInitData()` - Function that returns the initial input data
+- `getInitData<any>()` - Function that returns the initial input data
 - `mastra` - The Mastra instance (if workflow is registered with Mastra)
 - `requestContext` - Request-scoped context data
 - `logger` - The workflow's logger instance
