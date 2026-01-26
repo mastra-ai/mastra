@@ -162,7 +162,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           targetId,
         );
 
-        // Persist result (if storage available)
+        // Persist result with scores (if storage available)
         if (runsStore) {
           await runsStore.addResult({
             runId,
@@ -177,6 +177,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
             completedAt: itemCompletedAt,
             retryCount: 0,
             traceId: execResult.traceId,
+            scores: itemScores,
           });
         }
 
