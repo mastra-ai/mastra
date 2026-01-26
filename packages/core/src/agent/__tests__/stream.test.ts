@@ -46,9 +46,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       let saveCallCount = 0;
       let savedMessages: any[] = [];
 
-      // // @ts-expect-error
+      // // @ts-expect-error - accessing private storage for testing
       // const original = mockMemory._storage.stores.memory.saveMessages;
-      // // @ts-expect-error
+      // // @ts-expect-error - accessing private storage for testing
       // mockMemory._storage.stores.memory.saveMessages = async function (...args) {
       //   saveCallCount++;
       //   return original.apply(this, args);
@@ -430,9 +430,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);
@@ -476,9 +476,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);

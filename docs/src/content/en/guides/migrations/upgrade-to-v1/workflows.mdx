@@ -103,6 +103,32 @@ npx @mastra/codemod@latest v1/workflow-run-count .
 
 :::
 
+### `getInitData` returns unknown
+
+The `getInitData` function in the execute function now returns unknown instead of any. You'll need to type it yourself.
+To simply migrate, change `getInitData()` into `getInitData<any>()`
+
+```diff
+  createStep({
+    execute: async ({ getInitData }) => {
+-     const initData = getInitData();
+-     if (initData.key === 'value') {}
++     const initData = getInitData<any>();
++     if (initData.key === 'value') {}
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```bash
+npx @mastra/codemod@latest v1/workflow-get-init-data .
+```
+
+:::
+
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
