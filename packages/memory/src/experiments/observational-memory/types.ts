@@ -219,11 +219,17 @@ export interface ObservationMarkerConfig {
  * If this marker exists without a corresponding `end` or `failed` marker,
  * observation is in progress.
  */
+/** Type of OM operation - observation or reflection */
+export type OmOperationType = 'observation' | 'reflection';
+
 export interface DataOmObservationStartPart {
   type: 'data-om-observation-start';
   data: {
     /** Unique ID for this observation cycle - shared between start/end/failed markers */
     cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
 
     /** When observation started */
     startedAt: string;
@@ -254,6 +260,9 @@ export interface DataOmObservationEndPart {
   data: {
     /** Unique ID for this observation cycle - shared between start/end/failed markers */
     cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
 
     /** When observation completed */
     completedAt: string;
@@ -293,6 +302,9 @@ export interface DataOmObservationFailedPart {
   data: {
     /** Unique ID for this observation cycle - shared between start/end/failed markers */
     cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
 
     /** When observation failed */
     failedAt: string;

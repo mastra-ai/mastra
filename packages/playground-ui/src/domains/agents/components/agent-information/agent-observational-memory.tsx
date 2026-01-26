@@ -116,7 +116,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const [showHistory, setShowHistory] = useState(false);
 
   // Get real-time observation status and progress from streaming context
-  const { isObservingFromStream, streamProgress, clearProgress } = useObservationalMemoryContext();
+  const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } = useObservationalMemoryContext();
 
   // Clear progress when thread changes
   useEffect(() => {
@@ -135,8 +135,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
 
   // Check if OM is actively observing/reflecting (from server status OR streaming)
   const isObservingFromServer = statusData?.observationalMemory?.isObserving || false;
-  const isReflecting = statusData?.observationalMemory?.isReflecting || false;
-  const isOMActive = isObservingFromStream || isObservingFromServer || isReflecting;
+  const isReflectingFromServer = statusData?.observationalMemory?.isReflecting || false;
+  const isObserving = isObservingFromStream || isObservingFromServer;
+  const isReflecting = isReflectingFromStream || isReflectingFromServer;
+  const isOMActive = isObserving || isReflecting;
 
   // Get OM record and history (polls when active)
   const {
@@ -245,9 +247,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       </div>
     );
   }
-
-  // Determine the status label to show in header
-  const isObserving = isObservingFromStream || isObservingFromServer;
 
   return (
     <div className="p-4">

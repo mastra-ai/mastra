@@ -1059,6 +1059,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private createObservationStartMarker(params: {
     cycleId: string;
+    operationType: 'observation' | 'reflection';
     tokensToObserve: number;
     recordId: string;
     threadId: string;
@@ -1068,6 +1069,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       type: 'data-om-observation-start',
       data: {
         cycleId: params.cycleId,
+        operationType: params.operationType,
         startedAt: new Date().toISOString(),
         tokensToObserve: params.tokensToObserve,
         recordId: params.recordId,
@@ -1083,6 +1085,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private createObservationEndMarker(params: {
     cycleId: string;
+    operationType: 'observation' | 'reflection';
     startedAt: string;
     tokensObserved: number;
     observationTokens: number;
@@ -1099,6 +1102,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       type: 'data-om-observation-end',
       data: {
         cycleId: params.cycleId,
+        operationType: params.operationType,
         completedAt,
         durationMs,
         tokensObserved: params.tokensObserved,
@@ -1117,6 +1121,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private createObservationFailedMarker(params: {
     cycleId: string;
+    operationType: 'observation' | 'reflection';
     startedAt: string;
     tokensAttempted: number;
     error: string;
@@ -1130,6 +1135,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       type: 'data-om-observation-failed',
       data: {
         cycleId: params.cycleId,
+        operationType: params.operationType,
         failedAt,
         durationMs,
         tokensAttempted: params.tokensAttempted,
@@ -2503,6 +2509,7 @@ ${formattedMessages}
     if (lastMessage?.id) {
       const startMarker = this.createObservationStartMarker({
         cycleId,
+        operationType: 'observation',
         tokensToObserve,
         recordId: record.id,
         threadId,
@@ -2612,6 +2619,7 @@ ${formattedMessages}
       if (lastMessage?.id) {
         const endMarker = this.createObservationEndMarker({
           cycleId,
+          operationType: 'observation',
           startedAt,
           tokensObserved: tokensToObserve,
           observationTokens: cycleObservationTokens,
@@ -2649,12 +2657,13 @@ ${formattedMessages}
       });
 
       // Check for reflection (pass threadId so patterns can be cleared)
-      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId);
+      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId, writer);
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
         const failedMarker = this.createObservationFailedMarker({
           cycleId,
+          operationType: 'observation',
           startedAt,
           tokensAttempted: tokensToObserve,
           error: error instanceof Error ? error.message : String(error),
@@ -2946,6 +2955,7 @@ ${formattedMessages}
         if (lastMessage?.id) {
           const startMarker = this.createObservationStartMarker({
             cycleId,
+            operationType: 'observation',
             tokensToObserve,
             recordId: record.id,
             threadId,
@@ -3256,6 +3266,7 @@ ${formattedMessages}
           const tokensObserved = threadTokensToObserve.get(threadId) ?? this.tokenCounter.countMessages(threadMessages);
           const endMarker = this.createObservationEndMarker({
             cycleId,
+            operationType: 'observation',
             startedAt: observationStartedAt,
             tokensObserved,
             observationTokens: cycleObservationTokens,
@@ -3290,7 +3301,7 @@ ${formattedMessages}
       });
 
       // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
-      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId);
+      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId, writer);
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
       for (const [threadId, msgs] of threadsWithMessages) {
@@ -3299,6 +3310,7 @@ ${formattedMessages}
           const tokensAttempted = threadTokensToObserve.get(threadId) ?? 0;
           const failedMarker = this.createObservationFailedMarker({
             cycleId,
+            operationType: 'observation',
             startedAt: observationStartedAt,
             tokensAttempted,
             error: error instanceof Error ? error.message : String(error),
@@ -3330,6 +3342,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     observationTokens: number,
     _threadId?: string,
+    writer?: ProcessorStreamWriter,
   ): Promise<void> {
     writeDebugEntry('maybeReflect:start', {
       recordId: record.id,
@@ -3366,11 +3379,29 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     await this.storage.setReflectingFlag(record.id, true);
 
+    // Generate unique cycle ID for this reflection
+    const cycleId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
+    const threadId = _threadId ?? 'unknown';
+
+    // Stream START marker for reflection
+    if (writer) {
+      const startMarker = this.createObservationStartMarker({
+        cycleId,
+        operationType: 'reflection',
+        tokensToObserve: observationTokens,
+        recordId: record.id,
+        threadId,
+        threadIds: [threadId],
+      });
+      await writer.custom(startMarker).catch(() => {});
+    }
+
     // Emit reflection_triggered debug event
     this.emitDebugEvent({
       type: 'reflection_triggered',
       timestamp: new Date(),
-      threadId: _threadId ?? 'unknown',
+      threadId,
       resourceId: record.resourceId ?? '',
       inputTokens: observationTokens,
       activeObservationsLength: record.activeObservations?.length ?? 0,
@@ -3402,11 +3433,26 @@ ${formattedMessages}
         reflectionTokenCount,
       });
 
+      // Stream END marker for reflection
+      if (writer) {
+        const endMarker = this.createObservationEndMarker({
+          cycleId,
+          operationType: 'reflection',
+          startedAt,
+          tokensObserved: observationTokens,
+          observationTokens: reflectionTokenCount,
+          observations: reflectResult.observations,
+          recordId: record.id,
+          threadId,
+        });
+        await writer.custom(endMarker).catch(() => {});
+      }
+
       // Emit reflection_complete debug event with usage
       this.emitDebugEvent({
         type: 'reflection_complete',
         timestamp: new Date(),
-        threadId: _threadId ?? 'unknown',
+        threadId,
         resourceId: record.resourceId ?? '',
         inputTokens: observationTokens,
         outputTokens: reflectionTokenCount,
@@ -3416,6 +3462,21 @@ ${formattedMessages}
 
       // Note: Patterns from the Reflector are preserved in the new OM record.
       // The Reflector consolidates patterns from observations into its output.
+    } catch (error) {
+      // Stream FAILED marker for reflection
+      if (writer) {
+        const failedMarker = this.createObservationFailedMarker({
+          cycleId,
+          operationType: 'reflection',
+          startedAt,
+          tokensAttempted: observationTokens,
+          error: error instanceof Error ? error.message : String(error),
+          recordId: record.id,
+          threadId,
+        });
+        await writer.custom(failedMarker).catch(() => {});
+      }
+      throw error;
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }

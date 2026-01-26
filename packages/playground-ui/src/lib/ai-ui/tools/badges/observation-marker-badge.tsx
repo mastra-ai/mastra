@@ -20,6 +20,7 @@ export interface OmMarkerData {
   cycleId?: string;
   threadId?: string;
   threadIds?: string[];
+  operationType?: 'observation' | 'reflection';
   _state?: 'loading' | 'complete' | 'failed';
   config?: {
     scope?: string;
@@ -69,15 +70,30 @@ export const ObservationMarkerBadge = ({
   const isStart = state === 'loading';
   const isEnd = state === 'complete';
   const isFailed = state === 'failed';
+  const isReflection = omData.operationType === 'reflection';
+  
+  // Colors - same scheme for both observation and reflection
+  const bgColor = 'bg-blue-500/10';
+  const textColor = 'text-blue-600';
+  const completeBgColor = 'bg-green-500/10';
+  const completeTextColor = 'text-green-600';
+  const completeHoverBgColor = 'hover:bg-green-500/20';
+  // Same colors for expanded state - no purple
+  const expandedBgColor = 'bg-green-500/5';
+  const expandedTextColor = 'text-green-700';
+  const expandedBorderColor = 'border-green-500/10';
+  const labelColor = 'text-green-600';
+  const actionLabel = isReflection ? 'Reflecting' : 'Observing';
+  const completedLabel = isReflection ? 'Reflected' : 'Observed';
 
   // Render based on marker type
   if (isStart) {
     const tokensToObserve = omData.tokensToObserve;
     return (
-      <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-medium my-1">
+      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${bgColor} ${textColor} text-xs font-medium my-1`}>
         <Loader2 className="w-3 h-3 animate-spin" />
         <Brain className="w-3 h-3" />
-        <span>Observing{tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}</span>
+        <span>{actionLabel}{tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}</span>
       </div>
     );
   }
@@ -108,57 +124,57 @@ export const ObservationMarkerBadge = ({
       <div className="my-1">
         <button
           onClick={handleToggle}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs font-medium hover:bg-green-500/20 transition-colors cursor-pointer"
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer`}
         >
           {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           <Brain className="w-3 h-3" />
           <span>
-            Observed {tokensObserved ? formatTokens(tokensObserved) : '?'}→{observationTokens ? formatTokens(observationTokens) : '?'} tokens
+            {completedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→{observationTokens ? formatTokens(observationTokens) : '?'} tokens
             {compressionRatio ? ` (-${compressionRatio}x)` : ''}
           </span>
         </button>
         {isExpanded && (
-          <div className="mt-1 ml-6 p-2 rounded-md bg-green-500/5 text-green-700 text-xs space-y-1.5 border border-green-500/10 max-w-md">
+          <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} ${expandedTextColor} text-xs space-y-1.5 border ${expandedBorderColor} max-w-md`}>
             <div className="flex gap-4 text-[11px]">
               {tokensObserved && (
-                <span><span className="text-green-600">Input:</span> {formatTokens(tokensObserved)}</span>
+                <span><span className={labelColor}>Input:</span> {formatTokens(tokensObserved)}</span>
               )}
               {observationTokens && (
-                <span><span className="text-green-600">Output:</span> {formatTokens(observationTokens)}</span>
+                <span><span className={labelColor}>Output:</span> {formatTokens(observationTokens)}</span>
               )}
               {compressionRatio && compressionRatio > 1 && (
-                <span><span className="text-green-600">Compression:</span> {compressionRatio}x</span>
+                <span><span className={labelColor}>Compression:</span> {compressionRatio}x</span>
               )}
               {durationMs && (
-                <span><span className="text-green-600">Duration:</span> {(durationMs / 1000).toFixed(2)}s</span>
+                <span><span className={labelColor}>Duration:</span> {(durationMs / 1000).toFixed(2)}s</span>
               )}
             </div>
             {observations && (
-              <div className="mt-1 pt-1 border-t border-green-500/10">
+              <div className={`mt-1 pt-1 border-t ${expandedBorderColor}`}>
                 <ObservationRenderer 
                   observations={observations} 
                   maxHeight="500px"
-                  className="text-green-800 max-w-2xl"
+                  className={`${expandedTextColor} max-w-2xl`}
                   useInheritedTextColor
                 />
               </div>
             )}
             {currentTask && (
-              <div className="mt-2 pt-2 border-t border-green-500/10">
-                <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
+              <div className={`mt-2 pt-2 border-t ${expandedBorderColor}`}>
+                <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
                   Current Task
                 </div>
-                <div className="text-[11px] text-green-800 [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                <div className={`text-[11px] ${expandedTextColor} [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]`}>
                   <MarkdownRenderer>{currentTask}</MarkdownRenderer>
                 </div>
               </div>
             )}
             {suggestedResponse && (
-              <div className="mt-2 pt-2 border-t border-green-500/10">
-                <div className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1">
+              <div className={`mt-2 pt-2 border-t ${expandedBorderColor}`}>
+                <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
                   Suggested Response
                 </div>
-                <div className="text-[11px] text-green-800/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                <div className={`text-[11px] ${expandedTextColor}/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]`}>
                   <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
                 </div>
               </div>
@@ -171,6 +187,7 @@ export const ObservationMarkerBadge = ({
 
   if (isFailed) {
     const error = omData.error;
+    const failedLabel = isReflection ? 'Reflection failed' : 'Observation failed';
     return (
       <div className="my-1">
         <button
@@ -179,7 +196,7 @@ export const ObservationMarkerBadge = ({
         >
           {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           <XCircle className="w-3 h-3" />
-          <span>Observation failed</span>
+          <span>{failedLabel}</span>
         </button>
         
         {isExpanded && error && (

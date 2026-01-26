@@ -317,11 +317,15 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
-  const { setIsObservingFromStream, signalObservationsUpdated, setStreamProgress } = useObservationalMemoryContext();
+  const { setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, setStreamProgress } = useObservationalMemoryContext();
 
-  // Helper to signal observation started (from streaming)
-  const handleObservationStart = () => {
-    setIsObservingFromStream(true);
+  // Helper to signal observation/reflection started (from streaming)
+  const handleObservationStart = (operationType?: string) => {
+    if (operationType === 'reflection') {
+      setIsReflectingFromStream(true);
+    } else {
+      setIsObservingFromStream(true);
+    }
   };
 
   // Helper to update progress from streamed data-om-progress parts
@@ -344,9 +348,13 @@ export function MastraRuntimeProvider({
     });
   };
 
-  // Helper to refresh OM sidebar when observation completes
-  const refreshObservationalMemory = () => {
-    setIsObservingFromStream(false);
+  // Helper to refresh OM sidebar when observation/reflection completes
+  const refreshObservationalMemory = (operationType?: string) => {
+    if (operationType === 'reflection') {
+      setIsReflectingFromStream(false);
+    } else {
+      setIsObservingFromStream(false);
+    }
     setStreamProgress(null); // Clear progress when observation completes
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
@@ -445,9 +453,9 @@ export function MastraRuntimeProvider({
                 refreshThreadList?.();
               }
 
-              // Signal observation started (for sidebar status)
+              // Signal observation/reflection started (for sidebar status)
               if ((chunk as any).type === 'data-om-observation-start') {
-                handleObservationStart();
+                handleObservationStart((chunk as any).data?.operationType);
               }
 
               // Update progress from streamed data-om-progress parts
@@ -455,9 +463,9 @@ export function MastraRuntimeProvider({
                 handleProgressUpdate((chunk as any).data);
               }
 
-              // Refresh OM sidebar when observation completes (if OM chunks are passed through network mode)
+              // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
               if ((chunk as any).type === 'data-om-observation-end' || (chunk as any).type === 'data-om-observation-failed') {
-                refreshObservationalMemory();
+                refreshObservationalMemory((chunk as any).data?.operationType);
               }
             },
           });
@@ -503,7 +511,7 @@ export function MastraRuntimeProvider({
 
                 // Signal observation started (for sidebar status)
                 if (chunk.type === 'data-om-observation-start') {
-                  handleObservationStart();
+                  handleObservationStart((chunk as any).data?.operationType);
                 }
 
                 // Update progress from streamed data-om-progress parts
@@ -513,7 +521,7 @@ export function MastraRuntimeProvider({
 
                 // Refresh OM sidebar when observation completes
                 if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
-                  refreshObservationalMemory();
+                  refreshObservationalMemory((chunk as any).data?.operationType);
                 }
               },
               signal: controller.signal,

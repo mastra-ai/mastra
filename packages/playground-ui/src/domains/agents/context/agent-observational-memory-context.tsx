@@ -21,6 +21,10 @@ interface ObservationalMemoryContextValue {
   isObservingFromStream: boolean;
   /** Set observation in progress state */
   setIsObservingFromStream: (value: boolean) => void;
+  /** Whether a reflection is currently in progress (from streaming) */
+  isReflectingFromStream: boolean;
+  /** Set reflection in progress state */
+  setIsReflectingFromStream: (value: boolean) => void;
   /** Trigger to indicate new observations were received */
   observationsUpdatedAt: number;
   /** Signal that observations were updated (triggers scroll) */
@@ -37,6 +41,7 @@ const ObservationalMemoryContext = createContext<ObservationalMemoryContextValue
 
 export function ObservationalMemoryProvider({ children }: { children: ReactNode }) {
   const [isObservingFromStream, setIsObservingFromStream] = useState(false);
+  const [isReflectingFromStream, setIsReflectingFromStream] = useState(false);
   const [observationsUpdatedAt, setObservationsUpdatedAt] = useState(0);
   const [streamProgress, setStreamProgress] = useState<OmProgressData | null>(null);
 
@@ -47,6 +52,7 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
   const clearProgress = useCallback(() => {
     setStreamProgress(null);
     setIsObservingFromStream(false);
+    setIsReflectingFromStream(false);
   }, []);
 
   return (
@@ -54,6 +60,8 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
       value={{
         isObservingFromStream,
         setIsObservingFromStream,
+        isReflectingFromStream,
+        setIsReflectingFromStream,
         observationsUpdatedAt,
         signalObservationsUpdated,
         streamProgress,
@@ -73,6 +81,8 @@ export function useObservationalMemoryContext() {
     return {
       isObservingFromStream: false,
       setIsObservingFromStream: () => {},
+      isReflectingFromStream: false,
+      setIsReflectingFromStream: () => {},
       observationsUpdatedAt: 0,
       signalObservationsUpdated: () => {},
       streamProgress: null,
