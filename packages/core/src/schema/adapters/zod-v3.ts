@@ -1,6 +1,6 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 import type { ZodType, ZodTypeDef } from 'zod/v3';
+import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 import type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,
@@ -38,7 +38,6 @@ function convertToJsonSchema<T extends ZodType<any, ZodTypeDef, any>>(
     );
   }
 
-  // @ts-expect-error - typescript does not resolve correct zod version
   const jsonSchema = zodToJsonSchemaOriginal(zodSchema, {
     $refStrategy: 'none',
     target,
