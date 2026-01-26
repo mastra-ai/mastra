@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 06-playground-integration
 source: [06-04-SUMMARY.md, 06-05-SUMMARY.md, 06-06-SUMMARY.md]
 started: 2026-01-26T19:30:00Z
@@ -67,21 +67,25 @@ skipped: 0
 ## Gaps
 
 - truth: "Create Item button works and 500 error on runs endpoint is resolved"
-  status: failed
+  status: fixed
   reason: "User reported: Create Item button does nothing (no request, no modal). 500 error on GET /api/datasets/:id/runs"
   severity: major
   test: 4
-  root_cause: ""
+  root_cause: "Fixed by user"
   artifacts: []
   missing: []
   debug_session: ""
 
 - truth: "Run row click navigates to /datasets/:id/runs/:runId with results view"
-  status: failed
+  status: fixed
   reason: "User reported: I can't view the run, I will only toggle the checkbox"
   severity: major
   test: 8
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Row onClick handler only calls toggleRunSelection(run.id) - no navigation logic exists"
+  artifacts:
+    - path: "packages/playground-ui/src/domains/datasets/components/dataset-detail/run-history.tsx"
+      issue: "Line 125 onClick only toggles checkbox, no navigation to run details"
+  missing:
+    - "Add navigation to /datasets/:id/runs/:runId on row click (not checkbox)"
+  fix: "Changed row onClick to navigate(), checkbox stopPropagation already handles selection"
   debug_session: ""

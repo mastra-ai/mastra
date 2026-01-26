@@ -122,7 +122,7 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
                 <Row
                   key={run.id}
                   selected={isSelected}
-                  onClick={() => toggleRunSelection(run.id)}
+                  onClick={() => navigate(`/datasets/${datasetId}/runs/${run.id}`)}
                 >
                   <Cell>
                     <Checkbox
