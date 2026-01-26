@@ -266,7 +266,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
  */
 
 const executeToolDataBodySchema = z.object({
-  data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
+  data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({

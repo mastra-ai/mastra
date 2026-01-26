@@ -235,7 +235,9 @@ export type MessagePart = z.infer<typeof MessagePartSchema>;
  * MessageList instance for managing message sources.
  * Required for processors that need to mutate the message list.
  */
-const messageListSchema = z.custom<MessageList>();
+const messageListSchema = z
+  .custom<MessageList>()
+  .describe('MessageList instance for managing message sources');
 
 /**
  * The messages to be processed.
@@ -460,14 +462,17 @@ export const ProcessorStepOutputSchema = z.object({
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<MastraLanguageModel>().optional(),
-  tools: z.custom<ProcessorStepToolsConfig>().optional(),
-  toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
-  activeTools: z.array(z.string()).optional(),
-  providerOptions: z.custom<SharedProviderOptions>().optional(),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
-  structuredOutput: z.custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>().optional(),
-  steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
+  model: z.custom<MastraLanguageModel>().optional().describe('Language model instance'),
+  tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Tools configuration'),
+  toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Tool choice setting'),
+  activeTools: z.array(z.string()).optional().describe('Active tool names'),
+  providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
+  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional().describe('Model settings (temperature, etc.)'),
+  structuredOutput: z
+    .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
+    .optional()
+    .describe('Structured output configuration'),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
 });
 
 /**
