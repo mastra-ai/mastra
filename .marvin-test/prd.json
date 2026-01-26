@@ -30,7 +30,7 @@
       "Locate the Model selection dropdown adjacent to multi-modal/attachment icons",
       "Select a new model and verify the state updates the next sent message"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "ui-ux",

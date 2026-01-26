@@ -41,3 +41,50 @@
 - Design follows minimalist list-based pattern (no borders, subtle hover states, rounded items)
 - Smooth scrolling enabled through proper overflow handling
 
+
+## Task 3: Functional - Consolidate LLM and Model selection into the Chat Input area (COMPLETED)
+
+### Changes Made:
+- Created new `ChatModelSelector` component (packages/playground-ui/src/lib/ai-ui/chat-model-selector.tsx)
+  - Compact dropdown showing current provider logo and model name
+  - Lists all available models grouped by provider with connection status indicators
+  - Connected providers shown first, then sorted by popularity
+  - Keyboard navigation support (Arrow keys, Enter, Escape)
+  - Automatically focuses chat input after model selection
+- Integrated `ChatModelSelector` into the `Composer` component in thread.tsx
+  - Model selector placed in the toolbar area adjacent to attachment/microphone icons
+  - Layout uses `justify-between` to position model selector on left, action buttons on right
+- Removed single-model selector from sidebar `AgentMetadata` component
+  - The `AgentMetadataModelSwitcher` is no longer rendered for single-model agents
+  - Multi-model agents (with `modelList`) still show the `AgentMetadataModelList` in the sidebar
+- Cleaned up unused imports in agent-metadata.tsx
+
+### Files Created:
+- packages/playground-ui/src/lib/ai-ui/chat-model-selector.tsx
+
+### Files Modified:
+- packages/playground-ui/src/lib/ai-ui/thread.tsx
+  - Added import for ChatModelSelector
+  - Updated Composer component to include model selector in toolbar
+- packages/playground-ui/src/domains/agents/components/agent-metadata/agent-metadata.tsx
+  - Removed single-model AgentMetadataModelSwitcher section
+  - Kept AgentMetadataModelList for multi-model agents
+  - Removed unused imports (AlertTriangleIcon, AgentMetadataModelSwitcher, useResetAgentModel, useUpdateAgentModel)
+
+### E2E Tests Added:
+- packages/playground/e2e/tests/agents/$agentId/chat-model-selector.spec.ts
+  - Tests model selector visibility in chat input area
+  - Tests model selector is hidden for multi-model agents
+  - Tests dropdown opens on click
+  - Tests model selection updates displayed model
+  - Tests model selection persists after navigation
+  - Tests keyboard navigation (ArrowDown, ArrowUp, Escape)
+  - Tests provider connection status indicators
+  - Tests model selector is not in sidebar Overview tab
+
+### Verification:
+- TypeScript type checks passed for both playground-ui and playground packages
+- Model selection is now accessible directly from the chat input area
+- State updates propagate correctly through useUpdateAgentModel hook
+- Query invalidation ensures UI stays in sync with backend state
+
