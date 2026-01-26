@@ -71,10 +71,7 @@ export interface UseAgentInformationTabArgs {
   isMemoryLoading: boolean;
   hasMemory: boolean;
 }
-export const useAgentInformationTab = ({
-  isMemoryLoading,
-  hasMemory,
-}: UseAgentInformationTabArgs) => {
+export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
     return sessionStorage.getItem(STORAGE_KEY) || 'overview';
   });
