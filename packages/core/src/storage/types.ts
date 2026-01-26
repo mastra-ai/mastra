@@ -655,6 +655,15 @@ export interface Run {
   updatedAt: Date;
 }
 
+/** Score result from a single scorer */
+export interface ScorerResult {
+  scorerId: string;
+  scorerName: string;
+  score: number | null;
+  reason: string | null;
+  error: string | null;
+}
+
 /** Per-item result record */
 export interface RunResult {
   id: string;
@@ -672,6 +681,8 @@ export interface RunResult {
   retryCount: number;
   /** Trace ID from agent/workflow execution */
   traceId: string | null;
+  /** Scores from scorers applied during run */
+  scores: ScorerResult[];
   createdAt: Date;
 }
 
@@ -717,6 +728,8 @@ export interface AddRunResultInput {
   retryCount: number;
   /** Trace ID from agent/workflow execution */
   traceId?: string | null;
+  /** Scores from scorers applied during run */
+  scores?: ScorerResult[];
 }
 
 /** Input for listing runs */

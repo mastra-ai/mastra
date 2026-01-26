@@ -124,6 +124,7 @@ export class RunsInMemory extends RunsStorage {
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       traceId: input.traceId ?? null,
+      scores: input.scores ?? [],
       createdAt: now,
     };
     this.db.runResults.set(result.id, result);
