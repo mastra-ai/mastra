@@ -84,7 +84,6 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE);
     });
 
     it('should not create sandbox tools when no sandbox', () => {
@@ -118,7 +117,6 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INDEX);
       // Sandbox tools
       expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE);
     });
   });
 
@@ -559,18 +557,6 @@ describe('createWorkspaceTools', () => {
     });
   });
 
-  describe('workspace_install_package', () => {
-    it('should have install_package tool', async () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-
-      // Just verify the tool exists - actually installing packages is slow
-      expect(tools.workspace_install_package).toBeDefined();
-    });
-  });
-
   // ===========================================================================
   // WORKSPACE_TOOL_NAMES
   // ===========================================================================
@@ -585,7 +571,6 @@ describe('createWorkspaceTools', () => {
       expect(WORKSPACE_TOOL_NAMES.SEARCH).toBe('workspace_search');
       expect(WORKSPACE_TOOL_NAMES.INDEX).toBe('workspace_index');
       expect(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND).toBe('workspace_execute_command');
-      expect(WORKSPACE_TOOL_NAMES.INSTALL_PACKAGE).toBe('workspace_install_package');
     });
   });
 });

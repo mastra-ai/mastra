@@ -393,7 +393,6 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools.workspace_execute_command.requireApproval).toBe(true);
-      expect(tools.workspace_install_package.requireApproval).toBe(true);
 
       await workspace.destroy();
     });
@@ -411,7 +410,6 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools.workspace_execute_command.requireApproval).toBe(false);
-      expect(tools.workspace_install_package.requireApproval).toBe(false);
 
       await workspace.destroy();
     });
@@ -427,7 +425,6 @@ describe('Workspace Safety Features', () => {
 
       // Default is 'all' - all sandbox tools require approval
       expect(tools.workspace_execute_command.requireApproval).toBe(true);
-      expect(tools.workspace_install_package.requireApproval).toBe(true);
 
       await workspace.destroy();
     });

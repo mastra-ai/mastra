@@ -17,8 +17,6 @@ import type {
   SandboxInfo,
   ExecuteCommandOptions,
   CommandResult,
-  InstallPackageOptions,
-  InstallPackageResult,
   SandboxSyncResult,
   SandboxSafetyOptions,
 } from './sandbox';
@@ -297,73 +295,6 @@ export class LocalSandbox implements WorkspaceSandbox {
         executionTimeMs: Date.now() - startTime,
       };
     }
-  }
-
-  async installPackage(packageName: string, options: InstallPackageOptions = {}): Promise<InstallPackageResult> {
-    const manager = options.packageManager ?? 'npm';
-    const startTime = Date.now();
-
-    let command: string;
-    let args: string[];
-
-    switch (manager) {
-      case 'npm':
-        command = 'npm';
-        args = ['install', packageName];
-        if (options.version) args[1] = `${packageName}@${options.version}`;
-        if (options.global) args.push('-g');
-        break;
-      case 'yarn':
-        command = 'yarn';
-        args = options.global ? ['global', 'add', packageName] : ['add', packageName];
-        if (options.version) args[args.length - 1] = `${packageName}@${options.version}`;
-        break;
-      case 'pnpm':
-        command = 'pnpm';
-        args = ['add', packageName];
-        if (options.version) args[1] = `${packageName}@${options.version}`;
-        if (options.global) args.push('-g');
-        break;
-      case 'pip':
-        command = 'pip3';
-        args = ['install', packageName];
-        if (options.version) args[1] = `${packageName}==${options.version}`;
-        break;
-      default:
-        return {
-          success: false,
-          packageName,
-          error: `Unsupported package manager: ${manager}`,
-          executionTimeMs: Date.now() - startTime,
-        };
-    }
-
-    try {
-      await execFile(command, args, {
-        cwd: this.workingDirectory,
-        timeout: options.timeout ?? 120000,
-        env: this.buildEnv(),
-      });
-
-      return {
-        success: true,
-        packageName,
-        version: options.version,
-        executionTimeMs: Date.now() - startTime,
-      };
-    } catch (error: unknown) {
-      return {
-        success: false,
-        packageName,
-        error: error instanceof Error ? error.message : String(error),
-        executionTimeMs: Date.now() - startTime,
-      };
-    }
-  }
-
-  async getFilesystem(): Promise<WorkspaceFilesystem | undefined> {
-    // Local sandbox doesn't provide its own filesystem
-    return undefined;
   }
 
   /**

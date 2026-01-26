@@ -261,55 +261,6 @@ export interface WorkspaceInfo {
 }
 
 // =============================================================================
-// Sync Types
-// =============================================================================
-
-export interface SyncResult {
-  /** Files that were synced */
-  synced: string[];
-  /** Files that failed to sync */
-  failed: Array<{ path: string; error: string }>;
-  /** Total bytes transferred */
-  bytesTransferred: number;
-  /** Duration in milliseconds */
-  duration: number;
-}
-
-// =============================================================================
-// Snapshot Types
-// =============================================================================
-
-export interface SnapshotOptions {
-  /** Include sandbox state (if supported) */
-  includeSandbox?: boolean;
-  /** Only snapshot specific paths */
-  paths?: string[];
-  /** Snapshot name/description */
-  name?: string;
-  /** Additional metadata */
-  metadata?: Record<string, unknown>;
-}
-
-export interface WorkspaceSnapshot {
-  id: string;
-  workspaceId: string;
-  name?: string;
-  createdAt: Date;
-  /** Size in bytes */
-  size: number;
-  /** Provider-specific snapshot data */
-  data: unknown;
-  metadata?: Record<string, unknown>;
-}
-
-export interface RestoreOptions {
-  /** Merge with existing state instead of replacing */
-  merge?: boolean;
-  /** Only restore specific paths */
-  paths?: string[];
-}
-
-// =============================================================================
 // Workspace Class
 // =============================================================================
 
@@ -804,58 +755,6 @@ export class Workspace {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Sync Operations
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Sync files from the workspace filesystem to the sandbox.
-   * Useful for making persisted files available for execution.
-   *
-   * Delegates to the sandbox's `syncFromFilesystem` method, allowing each
-   * sandbox provider to implement its preferred transfer mechanism.
-   *
-   * @param paths - Paths to sync (default: all files)
-   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
-   */
-  async syncToSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.syncFromFilesystem) {
-      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
-    }
-
-    return this._sandbox.syncFromFilesystem(this._fs, paths);
-  }
-
-  /**
-   * Sync files from the sandbox back to the workspace filesystem.
-   * Useful for persisting execution outputs.
-   *
-   * Delegates to the sandbox's `syncToFilesystem` method, allowing each
-   * sandbox provider to implement its preferred transfer mechanism.
-   *
-   * @param paths - Paths to sync (default: all files in sandbox)
-   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
-   */
-  async syncFromSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.syncToFilesystem) {
-      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
-    }
-
-    return this._sandbox.syncToFilesystem(this._fs, paths);
-  }
-
   private async getAllFiles(dir: string): Promise<string[]> {
     if (!this._fs) return [];
 
@@ -872,75 +771,6 @@ export class Workspace {
     }
 
     return files;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Snapshots
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Create a snapshot of the current workspace state.
-   * Captures filesystem contents (and optionally sandbox state).
-   */
-  async snapshot(options?: SnapshotOptions): Promise<WorkspaceSnapshot> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const files: Record<string, string | Buffer> = {};
-    const pathsToSnapshot = options?.paths ?? (await this.getAllFiles('/'));
-
-    for (const filePath of pathsToSnapshot) {
-      try {
-        files[filePath] = await this._fs.readFile(filePath);
-      } catch {
-        // Skip files that can't be read
-      }
-    }
-
-    let size = 0;
-    for (const content of Object.values(files)) {
-      size += typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-    }
-
-    return {
-      id: this.generateId(),
-      workspaceId: this.id,
-      name: options?.name,
-      createdAt: new Date(),
-      size,
-      data: files,
-      metadata: options?.metadata,
-    };
-  }
-
-  /**
-   * Restore workspace from a snapshot.
-   */
-  async restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const files = snapshot.data as Record<string, string | Buffer>;
-    const pathsToRestore = options?.paths ?? Object.keys(files);
-
-    // Clear existing files if not merging
-    if (!options?.merge) {
-      const existingFiles = await this.getAllFiles('/');
-      for (const file of existingFiles) {
-        if (!options?.paths || options.paths.includes(file)) {
-          await this._fs.deleteFile(file, { force: true });
-        }
-      }
-    }
-
-    // Restore files
-    for (const filePath of pathsToRestore) {
-      if (files[filePath]) {
-        await this._fs.writeFile(filePath, files[filePath], { recursive: true });
-      }
-    }
   }
 
   // ---------------------------------------------------------------------------

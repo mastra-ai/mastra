@@ -16,7 +16,7 @@
  *
  * await workspace.init();
  * await workspace.writeFile('/hello.txt', 'Hello World!');
- * const result = await workspace.executeCode('console.log("Hi")', { runtime: 'node' });
+ * const result = await workspace.executeCommand('cat', ['/hello.txt']);
  * ```
  *
  * For cloud/remote providers, import them from their respective packages:
@@ -44,10 +44,6 @@ export {
   type WorkspaceOwner,
   type WorkspaceStatus,
   type WorkspaceInfo,
-  type SyncResult,
-  type SnapshotOptions,
-  type WorkspaceSnapshot,
-  type RestoreOptions,
   type PathContext,
   type PathContextType,
 } from './workspace';
@@ -59,7 +55,6 @@ export {
 export type {
   WorkspaceFilesystem,
   WorkspaceState,
-  WorkspaceFilesystemAudit,
   FileContent,
   FileStat,
   FileEntry,
@@ -72,8 +67,6 @@ export type {
   WatchCallback,
   WatchOptions,
   WatchHandle,
-  FilesystemAuditEntry,
-  FilesystemAuditOptions,
 } from './filesystem';
 
 export {
@@ -104,15 +97,12 @@ export type {
   ExecutionResult,
   CommandResult,
   ExecuteCommandOptions,
-  InstallPackageOptions,
   SandboxStatus,
   SandboxInfo,
   SandboxSyncResult,
 } from './sandbox';
 
 export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
-
-export type { InstallPackageResult } from './sandbox';
 
 // =============================================================================
 // Built-in Providers

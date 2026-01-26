@@ -505,42 +505,6 @@ export function createWorkspaceTools(workspace: Workspace) {
         },
       });
     }
-
-    // Only add install_package tool if sandbox implements it
-    if (workspace.sandbox.installPackage) {
-      tools.workspace_install_package = createTool({
-        id: 'workspace_install_package',
-        description: 'Install a package in the workspace sandbox environment',
-        // Require approval when sandboxApproval is 'all' or 'commands'
-        requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
-        inputSchema: z.object({
-          packageName: z.string().describe('The name of the package to install'),
-          packageManager: z
-            .enum(['npm', 'pip', 'yarn', 'pnpm'])
-            .optional()
-            .default('npm')
-            .describe('The package manager to use'),
-          version: z.string().optional().describe('Specific version to install'),
-        }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          packageName: z.string(),
-          version: z.string().optional(),
-          errorMessage: z.string().optional(),
-          executionTimeMs: z.number(),
-        }),
-        execute: async ({ packageName, packageManager, version }) => {
-          const result = await workspace.sandbox!.installPackage!(packageName, { packageManager, version });
-          return {
-            success: result.success,
-            packageName: result.packageName,
-            version: result.version,
-            errorMessage: result.error,
-            executionTimeMs: result.executionTimeMs,
-          };
-        },
-      });
-    }
   }
 
   return tools;
@@ -563,5 +527,4 @@ export const WORKSPACE_TOOL_NAMES = {
   INDEX: 'workspace_index',
   // Sandbox tools
   EXECUTE_COMMAND: 'workspace_execute_command',
-  INSTALL_PACKAGE: 'workspace_install_package',
 } as const;

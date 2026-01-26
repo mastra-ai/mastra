@@ -75,32 +75,6 @@ export interface ExecuteCommandOptions {
   onStderr?: (data: string) => void;
 }
 
-export interface InstallPackageOptions {
-  /** Package manager to use */
-  packageManager?: 'npm' | 'pip' | 'cargo' | 'go' | 'yarn' | 'pnpm' | 'auto';
-  /** Install as dev dependency */
-  dev?: boolean;
-  /** Specific version */
-  version?: string;
-  /** Install globally */
-  global?: boolean;
-  /** Timeout in milliseconds */
-  timeout?: number;
-}
-
-export interface InstallPackageResult {
-  /** Whether installation succeeded */
-  success: boolean;
-  /** Package name */
-  packageName: string;
-  /** Installed version (if available) */
-  version?: string;
-  /** Error message if failed */
-  error?: string;
-  /** Execution time in milliseconds */
-  executionTimeMs: number;
-}
-
 // =============================================================================
 // Sandbox Safety Options
 // =============================================================================
@@ -176,40 +150,6 @@ export interface WorkspaceSandbox {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  // ---------------------------------------------------------------------------
-  // Package Management
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Install a package in the sandbox environment.
-   */
-  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<InstallPackageResult>;
-
-  /**
-   * Install multiple packages.
-   */
-  installPackages?(packages: string[], options?: InstallPackageOptions): Promise<InstallPackageResult[]>;
-
-  // ---------------------------------------------------------------------------
-  // Filesystem Access (Sandbox's internal FS)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Write a file to the sandbox's filesystem.
-   * This is the sandbox's internal FS, not the workspace FS.
-   */
-  writeFile?(path: string, content: string | Buffer): Promise<void>;
-
-  /**
-   * Read a file from the sandbox's filesystem.
-   */
-  readFile?(path: string): Promise<string>;
-
-  /**
-   * List files in the sandbox's filesystem.
-   */
-  listFiles?(path: string): Promise<string[]>;
 
   // ---------------------------------------------------------------------------
   // Sync Operations
