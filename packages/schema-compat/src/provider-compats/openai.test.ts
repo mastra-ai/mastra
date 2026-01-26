@@ -947,3 +947,107 @@ describe('OpenAISchemaCompatLayer - Passthrough/LooseObject Schemas', () => {
     }
   });
 });
+
+describe('OpenAISchemaCompatLayer - JSON Schema Output (GitHub #11766)', () => {
+  // This test suite verifies the bug fix for GitHub issue #11766
+  // "structuredOutput does not work with optional and default"
+  // The error was: "Invalid schema for response_format 'response':
+  // In context=('properties', 'phone'), schema must have a 'type' key."
+
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o-mini',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should produce JSON Schema with type key for optional fields', () => {
+    // This is the exact schema from the bug report
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().default(0),
+      city: z.string(),
+      phone: z.string().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // All properties must have a 'type' key for OpenAI
+    expect(jsonSchema.properties).toBeDefined();
+    const props = jsonSchema.properties!;
+
+    // Check each property has a type key
+    expect(props.name).toHaveProperty('type');
+    expect(props.city).toHaveProperty('type');
+
+    // These are the problematic fields from the bug report
+    // They should have a type key even after being transformed
+    expect(props.phone, 'phone property should have a type key').toHaveProperty('type');
+    expect(props.age, 'age property should have a type key').toHaveProperty('type');
+  });
+
+  it('should produce JSON Schema with type key for deeply nested optional fields', () => {
+    const schema = z.object({
+      user: z.object({
+        profile: z.object({
+          bio: z.string().optional(),
+          settings: z.object({
+            theme: z.string().default('light'),
+            notifications: z.boolean(),
+          }),
+        }),
+      }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    // Navigate to the nested properties
+    const userProps = (jsonSchema.properties!.user as any).properties;
+    const profileProps = userProps.profile.properties;
+    const settingsProps = profileProps.settings.properties;
+
+    // Check nested optional field
+    expect(profileProps.bio, 'bio should have type key').toHaveProperty('type');
+    // Check nested default field
+    expect(settingsProps.theme, 'theme should have type key').toHaveProperty('type');
+  });
+
+  it('should produce JSON Schema with type key for all field types with default', () => {
+    const schema = z.object({
+      stringDefault: z.string().default('hello'),
+      numberDefault: z.number().default(42),
+      booleanDefault: z.boolean().default(true),
+      arrayDefault: z.array(z.string()).default([]),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    const props = jsonSchema.properties!;
+
+    expect(props.stringDefault, 'stringDefault should have type key').toHaveProperty('type');
+    expect(props.numberDefault, 'numberDefault should have type key').toHaveProperty('type');
+    expect(props.booleanDefault, 'booleanDefault should have type key').toHaveProperty('type');
+    expect(props.arrayDefault, 'arrayDefault should have type key').toHaveProperty('type');
+  });
+
+  it('should produce JSON Schema with type key for all field types with optional', () => {
+    const schema = z.object({
+      stringOptional: z.string().optional(),
+      numberOptional: z.number().optional(),
+      booleanOptional: z.boolean().optional(),
+      arrayOptional: z.array(z.string()).optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const jsonSchema = layer.processToJSONSchema(schema);
+
+    const props = jsonSchema.properties!;
+
+    expect(props.stringOptional, 'stringOptional should have type key').toHaveProperty('type');
+    expect(props.numberOptional, 'numberOptional should have type key').toHaveProperty('type');
+    expect(props.booleanOptional, 'booleanOptional should have type key').toHaveProperty('type');
+    expect(props.arrayOptional, 'arrayOptional should have type key').toHaveProperty('type');
+  });
+});

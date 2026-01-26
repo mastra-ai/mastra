@@ -192,9 +192,14 @@ export function zodToJsonSchema(
     return fixAnyOfNullable(jsonSchema);
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
+    // The zod-to-json-schema library produces anyOf patterns for complex nullable types
+    // (like arrays and objects), which OpenAI doesn't accept
+    return fixAnyOfNullable(jsonSchema);
   }
 }
