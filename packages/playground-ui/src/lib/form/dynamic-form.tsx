@@ -67,7 +67,11 @@ export function DynamicForm<T extends z.ZodSchema>({
       // Set up value watching for onValuesChange callback
       if (onValuesChangeRef.current) {
         subscriptionRef.current = form.watch(values => {
-          const normalizedValues = isNotZodObject ? values['\u200B'] || {} : values;
+          const normalizedValues = isNotZodObject
+            ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
+              ? values['\u200B']
+              : {}
+            : values;
           onValuesChangeRef.current?.(normalizedValues);
         });
       }
@@ -136,14 +140,24 @@ export function DynamicForm<T extends z.ZodSchema>({
 
   // Memoize normalized default values
   const normalizedDefaultValues = useMemo(
-    () => (isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any)),
+    () =>
+      isNotZodObject
+        ? defaultValues === undefined
+          ? undefined
+          : { '\u200B': defaultValues }
+        : (defaultValues as any),
     [isNotZodObject, defaultValues],
   );
 
   // Memoize the submit handler
   const handleSubmit = useCallback(
     async (values: any) => {
-      await onSubmit?.(isNotZodObject ? values['\u200B'] || {} : values);
+      const normalizedValues = isNotZodObject
+        ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
+          ? values['\u200B']
+          : {}
+        : values;
+      await onSubmit?.(normalizedValues);
     },
     [onSubmit, isNotZodObject],
   );

@@ -23,8 +23,8 @@ const myTool = createTool({
     userId: z.string(),
     apiKey: z.string(),
   }),
-  execute: async ({ context }) => {
-    // context.requestContext is typed as { userId: string, apiKey: string }
+  execute: async (input, context) => {
+    // context.requestContext is typed as RequestContext<{ userId: string, apiKey: string }>
     const userId = context.requestContext?.get('userId');
     return { result: 'success' };
   },
@@ -39,18 +39,17 @@ import { z } from 'zod';
 
 const agent = new Agent({
   name: 'my-agent',
-  instructions: 'You are a helpful assistant',
   model: openai('gpt-4o'),
   requestContextSchema: z.object({
     userId: z.string(),
     featureFlags: z.object({
-      debugMode: z.boolean().optional()
-      enableSearch: z.boolean().optional()
-    }).optional()
+      debugMode: z.boolean().optional(),
+      enableSearch: z.boolean().optional(),
+    }).optional(),
   }),
   instructions: ({ requestContext }) => {
     // Access validated context values with type safety
-    const { userId } = requestContext.all;
+    const { userId, featureFlags } = requestContext.all;
 
     const baseInstructions = `You are a helpful assistant. The current user ID is: ${userId}.`;
 
@@ -61,7 +60,7 @@ const agent = new Agent({
     return baseInstructions;
   },
   tools: ({ requestContext }) => {
-    const tools = {
+    const tools: Record<string, any> = {
       weatherInfo,
     };
 

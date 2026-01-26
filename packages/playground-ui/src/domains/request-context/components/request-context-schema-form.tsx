@@ -64,9 +64,13 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
     }, [zodSchema, requestContext]);
 
     // Expose getValues method to parent components via ref
-    useImperativeHandle(ref, () => ({
-      getValues: () => localFormValues,
-    }));
+    useImperativeHandle(
+      ref,
+      () => ({
+        getValues: () => localFormValues,
+      }),
+      [localFormValues],
+    );
 
     // Update local state and schema context on every form change
     // This ensures empty strings properly override global values
@@ -95,7 +99,7 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
             <div className="flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button onClick={handleCopy} className={buttonClass}>
+                  <button type="button" onClick={handleCopy} className={buttonClass}>
                     <Icon>
                       <CopyIcon />
                     </Icon>

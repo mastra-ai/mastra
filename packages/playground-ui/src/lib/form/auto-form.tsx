@@ -48,24 +48,27 @@ export function AutoForm<T extends Record<string, any>>({
   const mergedUiComponents = useMemo(() => ({ ...ShadcnUIComponents, ...uiComponents }), [uiComponents]);
 
   // Memoize form components with readOnly prop to prevent focus loss on re-renders
-  const mergedFormComponents = useMemo(
-    () => ({
-      string: (fieldProps: any) => <StringField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
-      number: (fieldProps: any) => <NumberField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+  // Only merge readOnly when explicitly set (not undefined) to preserve field-level settings
+  const mergedFormComponents = useMemo(() => {
+    const mergeInputProps = (inputProps?: Record<string, unknown>) =>
+      readOnly === undefined ? inputProps : { ...inputProps, readOnly };
+
+    return {
+      string: (fieldProps: any) => <StringField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
+      number: (fieldProps: any) => <NumberField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
       boolean: (fieldProps: any) => (
-        <BooleanField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
+        <BooleanField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />
       ),
-      date: (fieldProps: any) => <DateField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
-      select: (fieldProps: any) => <SelectField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
-      record: (fieldProps: any) => <RecordField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
-      union: (fieldProps: any) => <UnionField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />,
+      date: (fieldProps: any) => <DateField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
+      select: (fieldProps: any) => <SelectField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
+      record: (fieldProps: any) => <RecordField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
+      union: (fieldProps: any) => <UnionField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />,
       'discriminated-union': (fieldProps: any) => (
-        <DiscriminatedUnionField {...fieldProps} inputProps={{ ...fieldProps.inputProps, readOnly }} />
+        <DiscriminatedUnionField {...fieldProps} inputProps={mergeInputProps(fieldProps.inputProps)} />
       ),
       ...formComponents,
-    }),
-    [readOnly, formComponents],
-  );
+    };
+  }, [readOnly, formComponents]);
 
   return <CustomAutoForm {...props} uiComponents={mergedUiComponents} formComponents={mergedFormComponents} />;
 }

@@ -13,7 +13,7 @@ import {
   useSchemaRequestContext,
 } from '@/domains/request-context';
 import { Tabs, Tab, TabList } from '@/ds/components/Tabs';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ToolExecutorProps {
@@ -44,6 +44,13 @@ const ToolExecutorContent = ({
   const code = JSON.stringify(result ?? {}, null, 2);
   const [selectedTab, setSelectedTab] = useState('input-data');
   const { schemaValues } = useSchemaRequestContext();
+
+  // Reset to input-data tab if request context schema becomes unavailable
+  useEffect(() => {
+    if (!requestContextSchema && selectedTab === 'request-context') {
+      setSelectedTab('input-data');
+    }
+  }, [requestContextSchema, selectedTab]);
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">

@@ -72,7 +72,6 @@ import type {
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
-  DynamicAgentInstructions,
   AgentMethodType,
   StructuredOutputOptions,
 } from './types';
@@ -693,6 +692,14 @@ export class Agent<
     }
 
     return this.#voice;
+  }
+
+  /**
+   * Gets the request context schema for this agent.
+   * Returns the Zod schema used to validate request context values, or undefined if not set.
+   */
+  get requestContextSchema() {
+    return this.#requestContextSchema;
   }
 
   /**

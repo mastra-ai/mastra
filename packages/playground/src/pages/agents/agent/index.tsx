@@ -38,7 +38,7 @@ function Agent() {
       // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
       navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
     }
-  }, [memory?.result, threadId]);
+  }, [memory?.result, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -88,7 +88,7 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <SchemaRequestContextProvider>
+          <SchemaRequestContextProvider key={agentId}>
             <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
               <ThreadInputProvider>
                 <AgentLayout

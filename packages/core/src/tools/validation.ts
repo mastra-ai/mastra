@@ -1,7 +1,40 @@
 import type { z } from 'zod';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
+
+/**
+ * Keys that should be redacted from error messages to prevent sensitive data leakage.
+ */
+const SENSITIVE_KEYS = new Set([
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  'apiKey',
+  'api_key',
+  'token',
+  'secret',
+  'password',
+  'credential',
+  'authorization',
+]);
+
+/**
+ * Redacts sensitive keys from an object before logging.
+ * @param data The data to redact
+ * @returns A new object with sensitive values replaced with '[REDACTED]'
+ */
+function redactSensitiveKeys(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (SENSITIVE_KEYS.has(key) || key.toLowerCase().includes('secret') || key.toLowerCase().includes('password')) {
+      result[key] = '[REDACTED]';
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
 
 export interface ValidationError<T = any> {
   error: true;
@@ -264,9 +297,12 @@ export function validateRequestContext<T = any>(
   // Validation failed, return error
   const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
+  // Redact sensitive keys before including in error message
+  const redactedContextValues = redactSensitiveKeys(contextValues);
+
   const error: ValidationError<T> = {
     error: true,
-    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided context: ${truncateForLogging(contextValues)}`,
+    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided context: ${truncateForLogging(redactedContextValues)}`,
     validationErrors: validation.error.format() as z.ZodFormattedError<T>,
   };
 

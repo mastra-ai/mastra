@@ -653,9 +653,13 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
-          serverRequestContext.set(key, value);
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
         }
       }
 
@@ -847,9 +851,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
-          serverRequestContext.set(key, value);
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
         }
       }
 

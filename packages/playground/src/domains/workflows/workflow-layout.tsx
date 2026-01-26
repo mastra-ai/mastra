@@ -62,7 +62,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
           context: {
             input: runExecutionResult?.payload,
             ...runExecutionResult?.steps,
-          } as any,
+          },
           status: runExecutionResult?.status,
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
@@ -73,7 +73,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider>
+      <SchemaRequestContextProvider key={workflowId}>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
           <MainContentLayout>
             <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
