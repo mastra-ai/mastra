@@ -7,6 +7,23 @@ import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { ResultDetailDialog } from './result-detail-dialog';
 import { getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList/helpers';
 
+/**
+ * Parse scores defensively - handles array, JSON string, or invalid values.
+ * API may return scores as JSON string if storage layer doesn't parse it.
+ */
+function parseScores(scores: unknown): ScoreData[] {
+  if (Array.isArray(scores)) return scores;
+  if (typeof scores === 'string') {
+    try {
+      const parsed = JSON.parse(scores);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 // Score data type embedded in result
 export interface ScoreData {
   id?: string;
@@ -98,8 +115,8 @@ export function ResultsTable({ results, isLoading }: ResultsTableProps) {
           </Thead>
           <Tbody>
             {results.map(result => {
-              // Defensive: ensure scores is always an array (old results may have null/undefined/object)
-              const itemScores = Array.isArray(result.scores) ? result.scores : [];
+              // Defensive: parse scores (may be array, JSON string, or invalid)
+              const itemScores = parseScores(result.scores);
               const hasError = result.error !== null;
               const scoresDisplay = itemScores
                 .filter(s => s.score !== null)
@@ -138,7 +155,7 @@ export function ResultsTable({ results, isLoading }: ResultsTableProps) {
       {selectedResult && (
         <ResultDetailDialog
           result={selectedResult}
-          scores={Array.isArray(selectedResult.scores) ? selectedResult.scores : []}
+          scores={parseScores(selectedResult.scores)}
           isOpen={Boolean(selectedResultId)}
           onClose={handleCloseDialog}
           onNext={toNextResult}
