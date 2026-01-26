@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
 - [x] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment ✓
 - [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
-- [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results (UAT retest fixes pending)
+- [x] **Phase 6: Playground Integration** - Datasets UI with run triggering and results ✓
 - [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files
 - [ ] **Phase 8: Item Selection** - Run subsets via itemIds parameter
 
@@ -128,7 +128,7 @@ Plans:
 - [x] 06-08-PLAN.md — Async run trigger (UAT 14)
 - [x] 06-09-PLAN.md — Scores display in results (UAT 15)
 - [x] 06-10-PLAN.md — Trace links in results (UAT 16)
-- [ ] 06-11-PLAN.md — Gap closure: traceId schema + results auto-refresh
+- [x] 06-11-PLAN.md — Gap closure: traceId schema + results auto-refresh
 
 ### Phase 7: CSV Import
 **Goal**: Bulk item creation from CSV with validation and explicit column mapping
@@ -174,6 +174,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
-| 6. Playground Integration | 10/11 | UAT fixes | - |
+| 6. Playground Integration | 11/11 | ✓ Complete | 2026-01-26 |
 | 7. CSV Import | 0/TBD | Not started | - |
 | 8. Item Selection | 0/TBD | Not started | - |
