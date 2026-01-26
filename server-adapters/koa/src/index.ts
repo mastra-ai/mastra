@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath: `${this.apiPrefix ?? ''}${httpPath}`,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -309,8 +309,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath: `${this.apiPrefix ?? ''}${ssePath}`,
-          messagePath: `${this.apiPrefix ?? ''}${messagePath}`,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -326,8 +326,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
   }
 
-  async registerRoute(app: Koa, route: ServerRoute, { apiPrefix }: { apiPrefix?: string }): Promise<void> {
-    const fullPath = `${apiPrefix}${route.path}`;
+  async registerRoute(app: Koa, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+    const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Koa-style :param (they're the same)
     const koaPath = fullPath;
@@ -422,7 +422,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
-        routePrefix: this.apiPrefix,
+        routePrefix: this.prefix,
       };
 
       try {

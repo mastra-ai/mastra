@@ -26,7 +26,7 @@ export interface MultipartTestSuiteConfig {
   /**
    * Register a route with the adapter
    */
-  registerRoute: (adapter: any, app: any, route: ServerRoute, options?: { apiPrefix?: string }) => Promise<void>;
+  registerRoute: (adapter: any, app: any, route: ServerRoute, options?: { prefix?: string }) => Promise<void>;
 
   /**
    * Get the context middleware to use
@@ -90,7 +90,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -132,7 +132,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -172,7 +172,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -212,7 +212,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -261,7 +261,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -299,7 +299,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 
@@ -341,7 +341,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       };
 
       applyMiddleware(app, getContextMiddleware(adapter));
-      await registerRoute(adapter, app, testRoute, { apiPrefix: '' });
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
 
       serverInfo = await startServer(app);
 

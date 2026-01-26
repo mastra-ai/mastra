@@ -34,7 +34,7 @@ describe('Koa Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        apiPrefix: options?.apiPrefix,
+        prefix: options?.prefix,
       });
 
       await adapter.init();
@@ -185,7 +185,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       // Start server
       server = await new Promise(resolve => {
@@ -249,7 +249,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       // Start server
       server = await new Promise(resolve => {
@@ -302,7 +302,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       // Start server
       server = await new Promise(resolve => {
@@ -355,7 +355,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       // Start server
       server = await new Promise(resolve => {
@@ -424,7 +424,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       // Start server
       server = await new Promise(resolve => {
@@ -470,7 +470,7 @@ describe('Koa Server Adapter', () => {
       };
 
       app.use(adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
       server = await new Promise(resolve => {
         const s = app.listen(0, () => resolve(s));
@@ -536,7 +536,7 @@ describe('Koa Server Adapter', () => {
     },
 
     registerRoute: async (adapter, app, route, options) => {
-      await adapter.registerRoute(app, route, options || { apiPrefix: '' });
+      await adapter.registerRoute(app, route, options || { prefix: '' });
     },
 
     getContextMiddleware: adapter => adapter.createContextMiddleware(),
