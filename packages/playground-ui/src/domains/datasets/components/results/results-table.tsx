@@ -7,12 +7,14 @@ import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { ResultDetailDialog } from './result-detail-dialog';
 import { getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList/helpers';
 
-// Score data type from backend
+// Score data type embedded in result
 export interface ScoreData {
-  id: string;
+  id?: string;
   scorerId: string;
+  scorerName?: string;
   score: number | null;
-  reason?: string;
+  reason?: string | null;
+  error?: string | null;
 }
 
 // Run result type (simplified for UI, matching core/storage)
@@ -31,13 +33,13 @@ export interface RunResultData {
   retryCount: number;
   /** Trace ID from agent/workflow execution */
   traceId?: string | null;
+  /** Scores from scorers applied during run */
+  scores: ScoreData[];
   createdAt: Date;
 }
 
 export interface ResultsTableProps {
   results: RunResultData[];
-  /** Scores keyed by itemId, each itemId maps to array of scorer scores */
-  scores: Record<string, ScoreData[]>;
   isLoading: boolean;
 }
 
@@ -45,7 +47,7 @@ export interface ResultsTableProps {
  * Table displaying per-item results from a dataset run.
  * Clicking a row opens a detail dialog with full input/output/scores.
  */
-export function ResultsTable({ results, scores, isLoading }: ResultsTableProps) {
+export function ResultsTable({ results, isLoading }: ResultsTableProps) {
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
 
   const selectedResult = results.find(r => r.id === selectedResultId);
@@ -96,7 +98,7 @@ export function ResultsTable({ results, scores, isLoading }: ResultsTableProps) 
           </Thead>
           <Tbody>
             {results.map(result => {
-              const itemScores = scores[result.itemId] ?? [];
+              const itemScores = result.scores ?? [];
               const hasError = result.error !== null;
               const scoresDisplay = itemScores
                 .filter(s => s.score !== null)
@@ -135,7 +137,7 @@ export function ResultsTable({ results, scores, isLoading }: ResultsTableProps) 
       {selectedResult && (
         <ResultDetailDialog
           result={selectedResult}
-          scores={scores[selectedResult.itemId] ?? []}
+          scores={selectedResult.scores ?? []}
           isOpen={Boolean(selectedResultId)}
           onClose={handleCloseDialog}
           onNext={toNextResult}

@@ -17,7 +17,6 @@ import {
   useLinkComponent,
   useDatasetRun,
   useDatasetRunResults,
-  useScoresByRunId,
   ResultsTable,
 } from '@mastra/playground-ui';
 
@@ -31,7 +30,6 @@ function DatasetRun() {
     runId: runId!,
     runStatus: run?.status,
   });
-  const { data: scores = {} } = useScoresByRunId(runId!);
 
   if (runLoading) {
     return (
@@ -131,7 +129,6 @@ function DatasetRun() {
             <h3 className="text-sm font-medium text-neutral5 mb-4">Results</h3>
             <ResultsTable
               results={results}
-              scores={scores}
               isLoading={resultsLoading}
             />
           </section>
