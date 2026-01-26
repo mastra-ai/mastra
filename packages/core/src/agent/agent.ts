@@ -2300,10 +2300,12 @@ export class Agent<
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
+                // Normalize resumeSchema to StandardSchemaWithJSON before extracting JSON Schema
+                const normalizedResumeSchema = resumeSchema ? toStandardSchema(resumeSchema) : undefined;
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
-                  resumeSchema: resumeSchema
-                    ? JSON.stringify(resumeSchema['~standard'].jsonSchema.output({ target: 'draft-07' }))
+                  resumeSchema: normalizedResumeSchema
+                    ? JSON.stringify(normalizedResumeSchema['~standard'].jsonSchema.output({ target: 'draft-07' }))
                     : undefined,
                 });
               } else {
