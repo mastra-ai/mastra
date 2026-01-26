@@ -17,7 +17,14 @@ The documentation is organized into key sections:
 - [**Guides**](https://mastra.ai/guides): Step-by-step tutorials for building specific applications
 - [**Reference**](https://mastra.ai/reference): API reference documentation
 
-Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.`;
+Each section contains detailed docs that provide comprehensive information about Mastra's features and how to use them effectively.
+
+These are the most popular starting points:
+
+- [Getting Started](https://mastra.ai/docs/getting-started/start): Create a new project with the \`create mastra\` CLI or use one of the framework quickstart guides
+- [Agent Overview](https://mastra.ai/docs/agents/overview): Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met.
+- [Workflows Overview](https://mastra.ai/docs/workflows/overview): Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent.
+- [Memory Overview](https://mastra.ai/docs/memory/overview): Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.`;
 
 const SIDEBAR_LOCATIONS = [
   {
@@ -156,6 +163,7 @@ async function buildLlmsTxt(): Promise<void> {
 
       output += `## ${sidebar.id}\n\n`;
       output += generateMarkdownList(items, baseUrl);
+      output += "\n";
     } catch (error) {
       console.error(`Error processing ${sidebar.id}:`, error);
     }
