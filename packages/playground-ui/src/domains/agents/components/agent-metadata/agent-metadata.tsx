@@ -15,6 +15,7 @@ import { AlertTriangleIcon, GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
+import { WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace/constants';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 import {
@@ -373,10 +374,14 @@ export interface AgentMetadataWorkspaceToolsListProps {
 
 /**
  * Format a workspace tool name for display.
- * Converts "workspace_read_file" to "read_file"
+ * Converts "mastra_workspace_read_file" to "read_file"
  */
 function formatWorkspaceToolName(toolName: string): string {
-  return toolName.replace(/^workspace_/, '');
+  const prefix = `${WORKSPACE_TOOLS_PREFIX}_`;
+  if (toolName.startsWith(prefix)) {
+    return toolName.slice(prefix.length);
+  }
+  return toolName;
 }
 
 export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspaceToolsListProps) => {

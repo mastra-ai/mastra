@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { createTool } from '../tools';
+import { WORKSPACE_TOOLS } from './constants';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -14,6 +15,7 @@ import {
   StringNotFoundError,
   StringNotUniqueError,
 } from './line-utils';
+import { formatAsTree } from './tree-formatter';
 import type { Workspace } from './workspace';
 
 /**
@@ -32,8 +34,8 @@ export function createWorkspaceTools(workspace: Workspace) {
   // Only add filesystem tools if filesystem is available
   if (workspace.filesystem) {
     // Read tools are always available
-    tools.workspace_read_file = createTool({
-      id: 'workspace_read_file',
+    tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE] = createTool({
+      id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
       description:
         'Read the contents of a file from the workspace filesystem. Supports reading specific line ranges using offset/limit parameters.',
       // Require approval when fsApproval is 'all'
@@ -110,8 +112,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // Write tools are only available if not in readonly mode
     if (!isReadOnly) {
-      tools.workspace_write_file = createTool({
-        id: 'workspace_write_file',
+      tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
         description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
         // Require approval when fsApproval is 'all' or 'write'
         requireApproval: fsApproval === 'all' || fsApproval === 'write',
@@ -139,8 +141,8 @@ export function createWorkspaceTools(workspace: Workspace) {
         },
       });
 
-      tools.workspace_edit_file = createTool({
-        id: 'workspace_edit_file',
+      tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
         description:
           'Edit a file by replacing specific text. The old_string must match exactly and be unique in the file (unless using replace_all). You should read the file first to ensure you have the exact text to replace.',
         // Require approval when fsApproval is 'all' or 'write'
@@ -209,54 +211,99 @@ export function createWorkspaceTools(workspace: Workspace) {
       });
     }
 
-    tools.workspace_list_files = createTool({
-      id: 'workspace_list_files',
-      description: 'List files and directories in the workspace filesystem',
+    tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES] = createTool({
+      id: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
+      description: `List files and directories in the workspace filesystem.
+Returns a tree-style view (like the Unix "tree" command) for easy visualization.
+The output is displayed to the user as a tree-like structure in the tool result.
+Options mirror common tree command flags for familiarity.
+
+Examples:
+- List root: { path: "/" }
+- Deep listing: { path: "/src", maxDepth: 5 }
+- Directories only: { path: "/", dirsOnly: true }
+- Exclude node_modules: { path: "/", exclude: "node_modules" }`,
       // Require approval when fsApproval is 'all'
       requireApproval: fsApproval === 'all',
       inputSchema: z.object({
-        path: z.string().default('/').describe('The directory path to list (e.g., "/" or "/data")'),
-        recursive: z.boolean().optional().default(false).describe('Whether to list files recursively'),
-        extension: z.string().optional().describe('Filter by file extension (e.g., ".json", ".txt")'),
+        path: z.string().default('/').describe('Directory path to list'),
+        maxDepth: z
+          .number()
+          .optional()
+          .default(3)
+          .describe('Maximum depth to descend (default: 3). Similar to tree -L flag.'),
+        showHidden: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Show hidden files starting with "." (default: false). Similar to tree -a flag.'),
+        dirsOnly: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('List directories only, no files (default: false). Similar to tree -d flag.'),
+        exclude: z
+          .string()
+          .optional()
+          .describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
+        extension: z
+          .string()
+          .optional()
+          .describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
       }),
       outputSchema: z.object({
-        entries: z.array(
-          z.object({
-            path: z.string().describe('Full path to the file or directory'),
-            name: z.string().describe('File or directory name'),
-            type: z.enum(['file', 'directory']).describe('Whether this is a file or directory'),
-            size: z.number().optional().describe('File size in bytes (only for files)'),
-          }),
-        ),
-        path: z.string().describe('The directory that was listed'),
-        count: z.number().describe('Total number of entries'),
+        tree: z.string().describe('Tree-style directory listing'),
+        summary: z.string().describe('Summary of directories and files (e.g., "3 directories, 12 files")'),
+        metadata: z
+          .object({
+            workspace: z.object({
+              id: z.string().optional(),
+              name: z.string().optional(),
+            }).optional(),
+            filesystem: z.object({
+              id: z.string().optional(),
+              name: z.string().optional(),
+              provider: z.string().optional(),
+            }).optional(),
+          })
+          .optional()
+          .describe('Metadata about the workspace and filesystem'),
       }),
-      execute: async ({ path = '/', recursive, extension }) => {
-        const entries = await workspace.readdir(path, {
-          recursive,
-          extension: extension ? [extension] : undefined,
+      execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension }) => {
+        const result = await formatAsTree(workspace.filesystem!, path, {
+          maxDepth,
+          showHidden,
+          dirsOnly,
+          exclude: exclude || undefined,
+          extension: extension || undefined,
         });
 
-        // Build full paths for each entry
-        const basePath = path.endsWith('/') ? path.slice(0, -1) : path;
+        // Include workspace/filesystem metadata for UI display
+        const fs = workspace.filesystem!;
+        const metadata = {
+          workspace: {
+            id: workspace.id,
+            name: workspace.name,
+          },
+          filesystem: {
+            id: fs.id,
+            name: fs.name,
+            provider: fs.provider,
+          },
+        };
 
         return {
-          entries: entries.map(e => ({
-            path: basePath ? `${basePath}/${e.name}` : `/${e.name}`,
-            name: e.name,
-            type: e.type,
-            size: e.size,
-          })),
-          path,
-          count: entries.length,
+          tree: result.tree,
+          summary: result.summary,
+          metadata,
         };
       },
     });
 
     // Delete file is a write operation
     if (!isReadOnly) {
-      tools.workspace_delete_file = createTool({
-        id: 'workspace_delete_file',
+      tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE,
         description: 'Delete a file from the workspace filesystem',
         // Require approval when fsApproval is 'all' or 'write'
         requireApproval: fsApproval === 'all' || fsApproval === 'write',
@@ -275,8 +322,8 @@ export function createWorkspaceTools(workspace: Workspace) {
       });
     }
 
-    tools.workspace_file_exists = createTool({
-      id: 'workspace_file_exists',
+    tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS] = createTool({
+      id: WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS,
       description: 'Check if a file or directory exists in the workspace',
       // Require approval when fsApproval is 'all'
       requireApproval: fsApproval === 'all',
@@ -302,8 +349,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // mkdir is a write operation
     if (!isReadOnly) {
-      tools.workspace_mkdir = createTool({
-        id: 'workspace_mkdir',
+      tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
         description: 'Create a directory in the workspace filesystem',
         // Require approval when fsApproval is 'all' or 'write'
         requireApproval: fsApproval === 'all' || fsApproval === 'write',
@@ -329,8 +376,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
   // Only add search tools if search is available
   if (workspace.canBM25 || workspace.canVector) {
-    tools.workspace_search = createTool({
-      id: 'workspace_search',
+    tools[WORKSPACE_TOOLS.SEARCH.SEARCH] = createTool({
+      id: WORKSPACE_TOOLS.SEARCH.SEARCH,
       description:
         'Search indexed content in the workspace. Supports keyword (BM25), semantic (vector), and hybrid search modes.',
       // Require approval when fsApproval is 'all'
@@ -383,8 +430,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // Index is a write operation (to the search index)
     if (!isReadOnly) {
-      tools.workspace_index = createTool({
-        id: 'workspace_index',
+      tools[WORKSPACE_TOOLS.SEARCH.INDEX] = createTool({
+        id: WORKSPACE_TOOLS.SEARCH.INDEX,
         description: 'Index content for search. The path becomes the document ID in search results.',
         // Require approval when fsApproval is 'all' or 'write'
         requireApproval: fsApproval === 'all' || fsApproval === 'write',
@@ -428,8 +475,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // Only add execute_command tool if sandbox implements it
     if (workspace.sandbox.executeCommand) {
-      tools.workspace_execute_command = createTool({
-        id: 'workspace_execute_command',
+      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = createTool({
+        id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
         description: `Execute a shell command in the workspace sandbox. The output (stdout/stderr) is displayed to the user automatically in the tool result. ${pathInfo}`,
         // Require approval when sandboxApproval is 'all' or 'commands'
         requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
@@ -508,8 +555,8 @@ export function createWorkspaceTools(workspace: Workspace) {
 
     // Only add install_package tool if sandbox implements it
     if (workspace.sandbox.installPackage) {
-      tools.workspace_install_package = createTool({
-        id: 'workspace_install_package',
+      tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE] = createTool({
+        id: WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE,
         description: 'Install a package in the workspace sandbox environment',
         // Require approval when sandboxApproval is 'all' or 'commands'
         requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
@@ -546,22 +593,3 @@ export function createWorkspaceTools(workspace: Workspace) {
   return tools;
 }
 
-/**
- * Tool names for workspace tools.
- */
-export const WORKSPACE_TOOL_NAMES = {
-  // Filesystem tools
-  READ_FILE: 'workspace_read_file',
-  WRITE_FILE: 'workspace_write_file',
-  EDIT_FILE: 'workspace_edit_file',
-  LIST_FILES: 'workspace_list_files',
-  DELETE_FILE: 'workspace_delete_file',
-  FILE_EXISTS: 'workspace_file_exists',
-  MKDIR: 'workspace_mkdir',
-  // Search tools
-  SEARCH: 'workspace_search',
-  INDEX: 'workspace_index',
-  // Sandbox tools
-  EXECUTE_COMMAND: 'workspace_execute_command',
-  INSTALL_PACKAGE: 'workspace_install_package',
-} as const;
