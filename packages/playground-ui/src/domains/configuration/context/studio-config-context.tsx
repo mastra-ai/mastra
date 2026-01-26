@@ -30,9 +30,9 @@ const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
-  defaultPrefix,
+  defaultPrefix = '/api',
 }: StudioConfigProviderProps) => {
-  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
+  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, defaultPrefix);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
