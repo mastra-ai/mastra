@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 6 of 8 (Playground Integration)
-Plan: 10 of 10 in current phase (gap closure)
-Status: Plan 06-08 complete — async run trigger
-Last activity: 2026-01-26 — Completed 06-08-PLAN.md (async run trigger)
+Plan: 10 of 10 in current phase (gap closure complete)
+Status: Plan 06-10 complete — trace link support
+Last activity: 2026-01-26 — Completed 06-10-PLAN.md (trace link support)
 
-Progress: [████████░░] 83%
+Progress: [████████░░] 85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: 4 min
-- Total execution time: 1.2 hours
+- Total execution time: 1.3 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████████░░] 83%
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 8 | 32 min | 4 min |
+| 06-playground-integration | 9 | 36 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-04 (5 min), 06-06 (5 min), 06-05 (6 min), 06-09 (2 min), 06-08 (3 min)
+- Last 5 plans: 06-06 (5 min), 06-05 (6 min), 06-09 (2 min), 06-08 (3 min), 06-10 (4 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -76,8 +76,7 @@ Recent decisions affecting current work:
 - Two-step target selection: type first (agent/workflow/scorer), then specific target
 - Scorer selection optional, only for agent/workflow targets
 - useScoresByRunId groups scores by entityId (itemId) for ResultsTable
-- Pre-create run record before spawn to guarantee runId availability
-- Pass runId to runDataset to skip duplicate creation
+- traceId captured from agent/workflow result and stored with run results
 
 ### Pending Todos
 
@@ -90,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-26 22:23
-Stopped at: Completed 06-08-PLAN.md — Async Run Trigger
+Stopped at: Completed 06-10-PLAN.md — Trace Link Support
 Resume file: None
