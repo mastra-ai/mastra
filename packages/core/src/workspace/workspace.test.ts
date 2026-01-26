@@ -102,22 +102,22 @@ describe('Workspace', () => {
       // Create a test file
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
 
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const content = await workspace.readFile('/test.txt');
       expect(content.toString()).toBe('Hello World');
     });
 
     it('should write file to filesystem', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       await workspace.writeFile('/test.txt', 'Hello World');
 
@@ -130,11 +130,11 @@ describe('Workspace', () => {
       await fs.mkdir(path.join(tempDir, 'dir'), { recursive: true });
       await fs.writeFile(path.join(tempDir, 'dir', 'file.txt'), 'content');
 
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const entries = await workspace.readdir('/dir');
       expect(entries).toHaveLength(1);
@@ -144,22 +144,22 @@ describe('Workspace', () => {
     it('should check if path exists', async () => {
       await fs.writeFile(path.join(tempDir, 'exists.txt'), 'content');
 
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       expect(await workspace.exists('/exists.txt')).toBe(true);
       expect(await workspace.exists('/notexists.txt')).toBe(false);
     });
 
     it('should update lastAccessedAt on file operations', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const initialAccess = workspace.lastAccessedAt;
       await new Promise(resolve => setTimeout(resolve, 5));
@@ -463,11 +463,11 @@ Line 3 conclusion`;
   // ===========================================================================
   describe('state storage', () => {
     it('should have state when filesystem is available', () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
       expect(workspace.state).toBeDefined();
     });
 
@@ -478,11 +478,11 @@ Line 3 conclusion`;
     });
 
     it('should set and get state values', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       await workspace.state!.set('myKey', { value: 42 });
       const result = await workspace.state!.get<{ value: number }>('myKey');
@@ -491,22 +491,22 @@ Line 3 conclusion`;
     });
 
     it('should return null for non-existent keys', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const result = await workspace.state!.get('nonExistent');
       expect(result).toBeNull();
     });
 
     it('should check if key exists', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       await workspace.state!.set('myKey', { value: 1 });
 
@@ -515,11 +515,11 @@ Line 3 conclusion`;
     });
 
     it('should delete state value', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       await workspace.state!.set('myKey', { value: 1 });
       const deleted = await workspace.state!.delete('myKey');
@@ -530,11 +530,11 @@ Line 3 conclusion`;
     });
 
     it('should list state keys', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       await workspace.state!.set('key1', {});
       await workspace.state!.set('key2', {});
@@ -564,11 +564,11 @@ Line 3 conclusion`;
     });
 
     it('should return info without sandbox when not configured', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const info = await workspace.getInfo();
 
@@ -596,11 +596,11 @@ Line 3 conclusion`;
     });
 
     it('should return filesystem-only when no sandbox configured', () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
         safety: { requireReadBeforeWrite: false },
       });
+      const workspace = new Workspace({ filesystem });
 
       const context = workspace.getPathContext();
 
