@@ -3,6 +3,7 @@ import { Search, X, ExternalLink } from 'lucide-react';
 import { Input } from '@/ds/components/Input';
 import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
 import { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
 
@@ -224,7 +225,7 @@ export const MemorySearch = ({
   };
 
   return (
-    <div className={cn('flex flex-col h-full', className)} ref={dropdownRef}>
+    <div className={cn('flex flex-col h-full', className)} ref={dropdownRef} data-testid="memory-search">
       <div className="relative shrink-0">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral3" />
         <Input
@@ -234,9 +235,14 @@ export const MemorySearch = ({
           onKeyDown={handleKeyDown}
           placeholder="Search memory..."
           className="pl-10 pr-10 bg-surface3 border-border1"
+          data-testid="memory-search-input"
         />
         {query && (
-          <Button onClick={clearSearch} className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0">
+          <Button
+            onClick={clearSearch}
+            className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+            data-testid="memory-search-clear"
+          >
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -244,7 +250,10 @@ export const MemorySearch = ({
 
       {/* Search results dropdown */}
       {(isOpen || (query && (isSearching || results.length === 0))) && (
-        <div className="mt-2 flex-1 bg-surface3 border border-border1 rounded-lg shadow-lg overflow-y-auto">
+        <div
+          className="mt-2 flex-1 bg-surface3 border border-border1 rounded-lg shadow-lg overflow-y-auto"
+          data-testid="memory-search-results"
+        >
           {error ? (
             <div className="p-4 text-center">
               <Txt variant="ui-sm" className="text-red-500">
@@ -273,6 +282,7 @@ export const MemorySearch = ({
                     'w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0',
                     result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
                   )}
+                  data-testid="memory-search-result"
                 >
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
@@ -280,8 +290,12 @@ export const MemorySearch = ({
                       <div className="opacity-50 text-xs space-y-1">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
-                            <span className="font-medium">{msg.role}:</span>
-                            <span className="text-neutral3">{truncateContent(msg.content, 50)}</span>
+                            <Txt variant="ui-xs" className="font-medium">
+                              {msg.role}:
+                            </Txt>
+                            <Txt variant="ui-xs" className="text-neutral3">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
                           </div>
                         ))}
                       </div>
@@ -291,16 +305,7 @@ export const MemorySearch = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className={cn(
-                              'text-xs font-medium px-2 py-0.5 rounded',
-                              result.role === 'user'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-green-500/20 text-green-400',
-                            )}
-                          >
-                            {result.role}
-                          </span>
+                          <Badge variant={result.role === 'user' ? 'info' : 'success'}>{result.role}</Badge>
                           <Txt variant="ui-xs" className="text-neutral3">
                             {formatRelativeTime(new Date(result.createdAt))}
                           </Txt>
@@ -333,8 +338,12 @@ export const MemorySearch = ({
                       <div className="opacity-50 text-xs space-y-1">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
-                            <span className="font-medium">{msg.role}:</span>
-                            <span className="text-neutral3">{truncateContent(msg.content, 50)}</span>
+                            <Txt variant="ui-xs" className="font-medium">
+                              {msg.role}:
+                            </Txt>
+                            <Txt variant="ui-xs" className="text-neutral3">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
                           </div>
                         ))}
                       </div>

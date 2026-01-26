@@ -199,3 +199,67 @@
 - Settings persist correctly after page reload
 - Reset button clears all custom settings to defaults
 
+
+## Task 6: Technical Refactor - Standardize Memory Tab components using playground-ui library (COMPLETED)
+
+### Changes Made:
+- Refactored `AgentMemoryConfig` component (packages/playground-ui/src/domains/agents/components/agent-information/agent-memory-config.tsx)
+  - Replaced custom badge styling with `Badge` component from playground-ui
+  - Replaced custom text styling with `Txt` component for consistent typography
+  - Replaced custom collapsible implementation with `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent` from playground-ui
+  - Removed unused `cn` utility and `useState` imports
+  - Added data-testid attributes for E2E testing
+
+- Refactored `AgentWorkingMemory` component (packages/playground-ui/src/domains/agents/components/agent-information/agent-working-memory.tsx)
+  - Replaced custom badge styling with `Badge` component for source indicators
+  - Replaced custom text elements with `Txt` component
+  - Removed unused `cn` utility import
+  - Added data-testid attributes for E2E testing
+
+- Refactored `AgentMemory` component (packages/playground-ui/src/domains/agents/components/agent-information/agent-memory.tsx)
+  - Replaced custom badge styling with `Badge` component for scope indicators
+  - Replaced custom text elements with `Txt` component
+  - Removed unused `cn` utility import
+  - Added data-testid attributes for E2E testing
+
+- Refactored `MemorySearch` component (packages/playground-ui/src/lib/ai-ui/memory-search.tsx)
+  - Replaced custom badge styling with `Badge` component for role indicators
+  - Added `Badge` import
+  - Added data-testid attributes for E2E testing
+
+- Refactored `CodeDisplay` component (packages/playground-ui/src/domains/agents/components/agent-information/code-display.tsx)
+  - Replaced custom badge styling with `Badge` component for status indicators
+  - Replaced custom text elements with `Txt` component
+  - Added data-testid attribute for E2E testing
+
+### Files Modified:
+- packages/playground-ui/src/domains/agents/components/agent-information/agent-memory-config.tsx
+  - Now uses Badge, Txt, and Collapsible components from playground-ui
+- packages/playground-ui/src/domains/agents/components/agent-information/agent-working-memory.tsx
+  - Now uses Badge and Txt components from playground-ui
+- packages/playground-ui/src/domains/agents/components/agent-information/agent-memory.tsx
+  - Now uses Badge and Txt components from playground-ui
+- packages/playground-ui/src/lib/ai-ui/memory-search.tsx
+  - Now uses Badge component for role indicators
+- packages/playground-ui/src/domains/agents/components/agent-information/code-display.tsx
+  - Now uses Badge and Txt components from playground-ui
+
+### E2E Tests Added:
+- packages/playground/e2e/tests/agents/$agentId/memory-tab.spec.ts
+  - Tests Memory tab visibility for agents with memory enabled
+  - Tests Clone Thread section displays with functional button
+  - Tests Semantic Recall section displays correctly
+  - Tests Memory Configuration section with collapsible sections
+  - Tests collapsible sections expand and collapse behavior
+  - Tests Working Memory section displays with source badge
+  - Tests Memory Search input is functional
+  - Tests Edit Working Memory behavior
+  - Tests playground-ui components are properly integrated (Badge, Txt, Collapsible)
+
+### Verification:
+- TypeScript type checks passed for playground-ui package
+- All custom/legacy badge styling replaced with Badge component
+- All custom text elements replaced with Txt component
+- Collapsible sections now use playground-ui Collapsible component with proper animation
+- Memory CRUD operations remain functional through the refactored components
+
