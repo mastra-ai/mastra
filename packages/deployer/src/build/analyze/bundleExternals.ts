@@ -195,56 +195,57 @@ async function getInputPlugins(
             pkgRoot = await getPackageRootPath(pkgName, import.meta.dirname);
           }
 
-          // If still not found, try resolving from rootDir
-          if (!pkgRoot && rootDir) {
-            pkgRoot = await getPackageRootPath(pkgName, rootDir);
-          }
-
-          // If still not found and this is a @mastra/* package, try looking in workspace directories
-          // The bundler runs from packages/deployer/dist, so go up 3 levels to reach monorepo root
+          // For @mastra/* packages, ALWAYS prefer workspace versions over npm versions
+          // This ensures we use consistent versions across the bundle and avoid
+          // version mismatch issues (e.g., LegacyEvalsStorage not existing in workspace @mastra/core)
+          // Try workspace directories BEFORE falling back to rootDir (user's node_modules)
           if (!pkgRoot && id.startsWith('@mastra/')) {
             const monorepoRoot = path.resolve(import.meta.dirname, '../../..');
-            // First try standard node resolution from monorepo root
-            pkgRoot = await getPackageRootPath(pkgName, monorepoRoot);
 
-            // If not found, try common workspace directories directly
-            if (!pkgRoot) {
-              // Get the package short name (e.g., "memory" from "@mastra/memory")
-              const shortName = pkgName.replace('@mastra/', '');
+            // Get the package short name (e.g., "memory" from "@mastra/memory", "libsql" from "@mastra/libsql")
+            const shortName = pkgName.replace('@mastra/', '');
 
-              // Try common workspace directory patterns
-              const { existsSync } = await import('node:fs');
-              const possibleLocations = [
-                path.join(monorepoRoot, 'packages', shortName),
-                path.join(monorepoRoot, 'observability', shortName),
-                path.join(monorepoRoot, 'stores', shortName),
-                path.join(monorepoRoot, 'deployers', shortName),
-                path.join(monorepoRoot, 'voice', shortName),
-                path.join(monorepoRoot, 'client-sdks', shortName),
-                path.join(monorepoRoot, 'sources', shortName),
-                path.join(monorepoRoot, 'routers', shortName),
-                path.join(monorepoRoot, 'runners', shortName),
-                // Also try subdirectory patterns (e.g., observability/mastra)
-                path.join(monorepoRoot, 'observability', 'mastra'), // @mastra/observability is at observability/mastra
-              ];
+            // Try common workspace directory patterns
+            const { existsSync } = await import('node:fs');
+            const possibleLocations = [
+              path.join(monorepoRoot, 'packages', shortName),
+              path.join(monorepoRoot, 'stores', shortName),
+              path.join(monorepoRoot, 'observability', shortName),
+              path.join(monorepoRoot, 'deployers', shortName),
+              path.join(monorepoRoot, 'voice', shortName),
+              path.join(monorepoRoot, 'client-sdks', shortName),
+              path.join(monorepoRoot, 'sources', shortName),
+              path.join(monorepoRoot, 'routers', shortName),
+              path.join(monorepoRoot, 'runners', shortName),
+              // Also try subdirectory patterns (e.g., observability/mastra for @mastra/observability)
+              path.join(monorepoRoot, 'observability', 'mastra'),
+            ];
 
-              for (const loc of possibleLocations) {
-                const pkgJsonPath = path.join(loc, 'package.json');
-                if (existsSync(pkgJsonPath)) {
-                  try {
-                    const pkgJsonContent = await readFile(pkgJsonPath, 'utf-8');
-                    const pkg = JSON.parse(pkgJsonContent);
-                    if (pkg.name === pkgName) {
-                      pkgRoot = loc;
-                      break;
-                    }
-                  } catch {
-                    // Ignore read errors
+            for (const loc of possibleLocations) {
+              const pkgJsonPath = path.join(loc, 'package.json');
+              if (existsSync(pkgJsonPath)) {
+                try {
+                  const pkgJsonContent = await readFile(pkgJsonPath, 'utf-8');
+                  const pkg = JSON.parse(pkgJsonContent);
+                  if (pkg.name === pkgName) {
+                    pkgRoot = loc;
+                    break;
                   }
+                } catch {
+                  // Ignore read errors
                 }
               }
             }
 
+            // If still not found in workspace directories, try node resolution from monorepo root
+            if (!pkgRoot) {
+              pkgRoot = await getPackageRootPath(pkgName, monorepoRoot);
+            }
+          }
+
+          // For non-@mastra packages, try resolving from rootDir (user's node_modules)
+          if (!pkgRoot && rootDir) {
+            pkgRoot = await getPackageRootPath(pkgName, rootDir);
           }
 
           if (process.env.MASTRA_BUNDLER_DEBUG === 'true' && pkgRoot) {
