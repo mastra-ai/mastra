@@ -9,6 +9,8 @@ export * from './hooks/use-dataset-mutations';
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
+export { EditDatasetDialog } from './components/edit-dataset-dialog';
+export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 
 // Dataset detail components

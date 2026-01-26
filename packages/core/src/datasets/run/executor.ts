@@ -18,6 +18,8 @@ export interface ExecutionResult {
   output: unknown;
   /** Error message if execution failed */
   error: string | null;
+  /** Trace ID from agent/workflow execution (null for scorers or errors) */
+  traceId: string | null;
 }
 
 /**
@@ -47,11 +49,13 @@ async function executeScorer(
         reason: typeof result.reason === 'string' ? result.reason : null,
       },
       error: null,
+      traceId: null, // Scorers don't produce traces
     };
   } catch (error) {
     return {
       output: null,
       error: error instanceof Error ? error.message : String(error),
+      traceId: null,
     };
   }
 }
@@ -83,6 +87,7 @@ export async function executeTarget(
     return {
       output: null,
       error: error instanceof Error ? error.message : String(error),
+      traceId: null,
     };
   }
 }
@@ -106,9 +111,13 @@ async function executeAgent(agent: Agent, item: DatasetItem): Promise<ExecutionR
         returnScorerData: true,
       });
 
+  // Capture traceId from agent result
+  const traceId = (result as any)?.traceId ?? null;
+
   return {
     output: result,
     error: null,
+    traceId,
   };
 }
 
@@ -122,28 +131,31 @@ async function executeWorkflow(workflow: Workflow, item: DatasetItem): Promise<E
     inputData: item.input,
   });
 
+  // Capture traceId from workflow result
+  const traceId = (result as any)?.traceId ?? null;
+
   if (result.status === 'success') {
-    return { output: result.result, error: null };
+    return { output: result.result, error: null, traceId };
   }
 
-  // Handle all non-success statuses
+  // Handle all non-success statuses (still include traceId for debugging)
   if (result.status === 'failed') {
-    return { output: null, error: result.error?.message ?? 'Workflow failed' };
+    return { output: null, error: result.error?.message ?? 'Workflow failed', traceId };
   }
 
   if (result.status === 'tripwire') {
-    return { output: null, error: `Workflow tripwire: ${result.tripwire?.reason ?? 'Unknown reason'}` };
+    return { output: null, error: `Workflow tripwire: ${result.tripwire?.reason ?? 'Unknown reason'}`, traceId };
   }
 
   if (result.status === 'suspended') {
-    return { output: null, error: 'Workflow suspended - not yet supported in dataset runs' };
+    return { output: null, error: 'Workflow suspended - not yet supported in dataset runs', traceId };
   }
 
   if (result.status === 'paused') {
-    return { output: null, error: 'Workflow paused - not yet supported in dataset runs' };
+    return { output: null, error: 'Workflow paused - not yet supported in dataset runs', traceId };
   }
 
   // Exhaustive check - should never reach here
   const _exhaustiveCheck: never = result;
-  return { output: null, error: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}` };
+  return { output: null, error: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}`, traceId };
 }
