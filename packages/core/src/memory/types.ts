@@ -362,6 +362,174 @@ export type SemanticRecall = {
 };
 
 /**
+ * Threshold can be a simple number or a dynamic range.
+ *
+ * Simple form: `10_000` (fixed threshold)
+ * Range form: `{ min: 8_000, max: 15_000 }` (dynamic based on observation space)
+ */
+export type ObservationalMemoryThresholdRange = {
+  /** Minimum threshold (used when observations are full) */
+  min: number;
+  /** Maximum threshold (used when observations have room) */
+  max: number;
+};
+
+/**
+ * Model settings for Observer/Reflector agents in Observational Memory.
+ */
+export interface ObservationalMemoryModelSettings {
+  /**
+   * Temperature for generation.
+   * Lower values produce more consistent output.
+   * @default 0.3
+   */
+  temperature?: number;
+
+  /**
+   * Maximum output tokens.
+   * High value to prevent truncation of observations.
+   * @default 100000
+   */
+  maxOutputTokens?: number;
+}
+
+/**
+ * Configuration for the Observer agent in Observational Memory.
+ */
+export interface ObservationalMemoryObserverConfig {
+  /**
+   * Model for the Observer agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: MastraModelConfig;
+
+  /**
+   * Token threshold for message history before triggering observation.
+   * When unobserved messages exceed this, Observer is called.
+   *
+   * Simple form: `10_000` (blocks at threshold)
+   * Range form: `{ min: 8_000, max: 15_000 }` (dynamic based on observation space)
+   *
+   * @default 10000
+   */
+  observationThreshold?: number | ObservationalMemoryThresholdRange;
+
+  /**
+   * Model settings for the Observer agent.
+   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   */
+  modelSettings?: ObservationalMemoryModelSettings;
+
+  /**
+   * Maximum tokens per batch when observing multiple threads.
+   * Threads are chunked into batches of this size and processed in parallel.
+   * Lower values = more parallelism but more API calls.
+   * Higher values = fewer API calls but less parallelism.
+   *
+   * @default 10000
+   */
+  maxTokensPerBatch?: number;
+
+  /**
+   * Process batches sequentially instead of in parallel.
+   * When true, each batch sees the observations from previous batches,
+   * which may improve quality but increases latency.
+   *
+   * @default false
+   */
+  sequentialBatches?: boolean;
+}
+
+/**
+ * Configuration for the Reflector agent in Observational Memory.
+ */
+export interface ObservationalMemoryReflectorConfig {
+  /**
+   * Model for the Reflector agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: MastraModelConfig;
+
+  /**
+   * Token threshold for observations before triggering reflection.
+   * When observations exceed this, Reflector is called to condense them.
+   *
+   * Simple form: `30_000` (blocks at threshold)
+   * Range form: `{ min: 25_000, max: 35_000 }` (dynamic)
+   *
+   * @default 30000
+   */
+  reflectionThreshold?: number | ObservationalMemoryThresholdRange;
+
+  /**
+   * Model settings for the Reflector agent.
+   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   */
+  modelSettings?: ObservationalMemoryModelSettings;
+}
+
+/**
+ * Configuration for Observational Memory.
+ *
+ * Observational Memory is a three-tier memory system that uses an Observer agent
+ * to extract observations from conversations and a Reflector agent to compress them.
+ * This enables efficient long-term memory with minimal context usage.
+ *
+ * @example
+ * ```typescript
+ * observationalMemory: {
+ *   enabled: true,
+ *   scope: 'resource', // Cross-thread memory for the user
+ *   observer: {
+ *     model: 'google/gemini-2.5-flash',
+ *     observationThreshold: 10_000,
+ *   },
+ *   reflector: {
+ *     model: 'google/gemini-2.5-flash',
+ *     reflectionThreshold: 30_000,
+ *   },
+ * }
+ * ```
+ */
+export interface ObservationalMemoryOptions {
+  /**
+   * Enable or disable Observational Memory.
+   * @default false
+   */
+  enabled?: boolean;
+
+  /**
+   * Observer configuration for extracting observations from conversations.
+   */
+  observer?: ObservationalMemoryObserverConfig;
+
+  /**
+   * Reflector configuration for compressing observations.
+   */
+  reflector?: ObservationalMemoryReflectorConfig;
+
+  /**
+   * Memory scope for observations.
+   * - 'resource': Observations span all threads for a resource (cross-thread memory)
+   * - 'thread': Observations are per-thread (default)
+   *
+   * @default 'thread'
+   */
+  scope?: 'resource' | 'thread';
+
+  /**
+   * Only observe messages created after OM is enabled.
+   * When true (default), historical messages are skipped on first observation.
+   * This prevents churning through millions of existing messages.
+   *
+   * @default false
+   */
+  observeFutureOnly?: boolean;
+}
+
+/**
  * Configuration for memory behaviors and retrieval strategies.
  *
  * Controls three types of memory: conversation history (recent messages), semantic recall
@@ -438,6 +606,31 @@ export type MemoryConfig = {
    * ```
    */
   workingMemory?: WorkingMemory;
+
+  /**
+   * Observational Memory configuration for long-term memory with automatic observation and reflection.
+   *
+   * Uses an Observer agent to extract observations from conversations and a Reflector agent
+   * to compress them when they grow too large. This enables efficient long-term memory
+   * that maintains context across many conversations.
+   *
+   * @example
+   * ```typescript
+   * observationalMemory: {
+   *   enabled: true,
+   *   scope: 'resource', // Cross-thread memory for the user
+   *   observer: {
+   *     model: 'google/gemini-2.5-flash',
+   *     observationThreshold: 10_000,
+   *   },
+   *   reflector: {
+   *     model: 'google/gemini-2.5-flash',
+   *     reflectionThreshold: 30_000,
+   *   },
+   * }
+   * ```
+   */
+  observationalMemory?: ObservationalMemoryOptions;
 
   /**
    * Automatically generate descriptive thread titles based on the first user message.

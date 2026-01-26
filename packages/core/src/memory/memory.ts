@@ -588,10 +588,10 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      // Check if ObservationalMemory is present - it handles its own message loading and saving
-      const hasObservationalMemory = configuredProcessors.some(
-        p => !isProcessorWorkflow(p) && p.id === 'observational-memory',
-      );
+      // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
+      const hasObservationalMemory =
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+        effectiveConfig.observationalMemory?.enabled === true;
 
       // Skip MessageHistory input processor if ObservationalMemory handles message loading
       if (!hasMessageHistory && !hasObservationalMemory) {

@@ -35,6 +35,9 @@ import {
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
+import { ObservationalMemory } from './experiments/observational-memory';
+import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
@@ -1477,6 +1480,69 @@ ${
     }
 
     return history;
+  }
+
+  /**
+   * Get input processors for this memory instance.
+   * Extends the base implementation to add ObservationalMemory processor when configured.
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param context - Request context for runtime configuration
+   * @returns Array of input processors configured for this memory instance
+   */
+  async getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor[]> {
+    // Get base processors from parent class
+    const processors = await super.getInputProcessors(configuredProcessors, context);
+
+    // Check if ObservationalMemory is already configured by the user
+    const hasObservationalMemory = configuredProcessors.some(
+      p => !('workflow' in p) && p.id === 'observational-memory',
+    );
+
+    // Get effective config (runtime config merged with instance config)
+    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    // Add ObservationalMemory processor if configured and not already present
+    const omConfig = effectiveConfig.observationalMemory;
+    if (omConfig?.enabled && !hasObservationalMemory) {
+      const memoryStore = await this.storage.getStore('memory');
+      if (!memoryStore) {
+        throw new Error(
+          'Using Mastra Memory observational memory requires a storage adapter but no attached adapter was detected.',
+        );
+      }
+
+      processors.push(
+        new ObservationalMemory({
+          storage: memoryStore,
+          scope: omConfig.scope,
+          observeFutureOnly: omConfig.observeFutureOnly,
+          observer: omConfig.observer
+            ? {
+                model: omConfig.observer.model,
+                observationThreshold: omConfig.observer.observationThreshold,
+                modelSettings: omConfig.observer.modelSettings,
+                maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
+                sequentialBatches: omConfig.observer.sequentialBatches,
+              }
+            : undefined,
+          reflector: omConfig.reflector
+            ? {
+                model: omConfig.reflector.model,
+                reflectionThreshold: omConfig.reflector.reflectionThreshold,
+                modelSettings: omConfig.reflector.modelSettings,
+              }
+            : undefined,
+        }),
+      );
+    }
+
+    return processors;
   }
 }
 
