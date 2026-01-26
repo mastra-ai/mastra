@@ -19,18 +19,19 @@ const workspace = new Workspace({
   name: 'My Workspace',
   filesystem: new LocalFilesystem({
     basePath: './workspace',
+    safety: {
+      requireReadBeforeWrite: true,
+    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
-    scriptDirectory: './.mastra/sandbox',
     inheritEnv: true,
+    safety: {
+      requireApproval: 'all',
+    },
   }),
   bm25: true,
   autoIndexPaths: ['/docs'],
-  safety: {
-    requireReadBeforeWrite: true,
-    requireSandboxApproval: 'commands',
-  },
 });
 
 await workspace.init();
@@ -106,28 +107,19 @@ await workspace.init();
       defaultValue: "false",
     },
     {
-      name: "autoSync",
-      type: "boolean",
-      description: "Auto-sync between filesystem and sandbox",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
       name: "operationTimeout",
       type: "number",
       description: "Timeout for operations in milliseconds",
-      isOptional: true,
-    },
-    {
-      name: "safety",
-      type: "WorkspaceSafetyConfig",
-      description: "Safety configuration for workspace operations",
       isOptional: true,
     },
   ]}
 />
 
 ## Safety configuration
+
+Safety is configured on the provider instances (LocalFilesystem, LocalSandbox), not on the Workspace directly. The Workspace reads these settings from the providers.
+
+### Filesystem safety (LocalFilesystem)
 
 <PropertiesTable
   content={[
@@ -146,18 +138,25 @@ await workspace.init();
       defaultValue: "true",
     },
     {
-      name: "requireSandboxApproval",
-      type: "'all' | 'commands' | 'none'",
-      description: "Require approval for sandbox operations",
-      isOptional: true,
-      defaultValue: "'all'",
-    },
-    {
-      name: "requireFilesystemApproval",
+      name: "requireApproval",
       type: "'all' | 'write' | 'none'",
       description: "Require approval for filesystem operations",
       isOptional: true,
       defaultValue: "'none'",
+    },
+  ]}
+/>
+
+### Sandbox safety (LocalSandbox)
+
+<PropertiesTable
+  content={[
+    {
+      name: "requireApproval",
+      type: "'all' | 'commands' | 'none'",
+      description: "Require approval for sandbox operations",
+      isOptional: true,
+      defaultValue: "'all'",
     },
   ]}
 />
@@ -179,7 +178,7 @@ await workspace.init();
     {
       name: "status",
       type: "WorkspaceStatus",
-      description: "'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed'",
+      description: "'pending' | 'initializing' | 'ready' | 'error' | 'destroying' | 'destroyed'",
     },
     {
       name: "filesystem",
@@ -231,22 +230,6 @@ Initialize the workspace. Starts the sandbox and indexes files from `autoIndexPa
 await workspace.init();
 ```
 
-#### `pause()`
-
-Pause the workspace. Stops the sandbox but keeps state.
-
-```typescript
-await workspace.pause();
-```
-
-#### `resume()`
-
-Resume a paused workspace.
-
-```typescript
-await workspace.resume();
-```
-
 #### `destroy()`
 
 Destroy the workspace and clean up resources.
@@ -294,17 +277,6 @@ const exists = await workspace.exists('/docs/guide.md');
 
 ### Sandbox operations
 
-#### `executeCode(code, options?)`
-
-Execute code in the sandbox.
-
-```typescript
-const result = await workspace.executeCode('console.log(2 + 2)', {
-  runtime: 'javascript',
-});
-console.log(result.stdout); // "4"
-```
-
 #### `executeCommand(command, args?, options?)`
 
 Execute a shell command.
@@ -324,25 +296,6 @@ Index content for search.
 await workspace.index('/docs/guide.md', 'Guide content...');
 ```
 
-#### `indexMany(docs)`
-
-Index multiple documents.
-
-```typescript
-await workspace.indexMany([
-  { path: '/docs/a.md', content: 'Content A' },
-  { path: '/docs/b.md', content: 'Content B' },
-]);
-```
-
-#### `unindex(path)`
-
-Remove a document from the index.
-
-```typescript
-await workspace.unindex('/docs/deprecated.md');
-```
-
 #### `search(query, options?)`
 
 Search indexed content.
@@ -352,67 +305,6 @@ const results = await workspace.search('password reset', {
   topK: 10,
   mode: 'hybrid',
 });
-```
-
-#### `rebuildIndex(paths?)`
-
-Rebuild the search index from filesystem paths.
-
-```typescript
-await workspace.rebuildIndex(['/docs']);
-```
-
-### Sync operations
-
-These methods delegate to the sandbox provider's sync implementation, allowing each provider to use its optimal transfer mechanism.
-
-#### `syncToSandbox(paths?)`
-
-Sync files from the workspace filesystem to the sandbox. Delegates to `sandbox.syncFromFilesystem()`.
-
-```typescript
-const result = await workspace.syncToSandbox(['/src']);
-// { synced: ['/src/index.ts'], failed: [], bytesTransferred: 1024, duration: 50 }
-```
-
-#### `syncFromSandbox(paths?)`
-
-Sync files from the sandbox back to the workspace filesystem. Delegates to `sandbox.syncToFilesystem()`.
-
-```typescript
-const result = await workspace.syncFromSandbox(['/output']);
-```
-
-**Returns:** `Promise<SyncResult>`
-
-```typescript
-interface SyncResult {
-  synced: string[];
-  failed: Array<{ path: string; error: string }>;
-  bytesTransferred: number;
-  duration: number;
-}
-```
-
-### Snapshots
-
-#### `snapshot(options?)`
-
-Create a snapshot of workspace state.
-
-```typescript
-const snapshot = await workspace.snapshot({
-  name: 'before-changes',
-  paths: ['/src'],
-});
-```
-
-#### `restore(snapshot, options?)`
-
-Restore workspace from a snapshot.
-
-```typescript
-await workspace.restore(snapshot);
 ```
 
 ### Utility
@@ -443,17 +335,17 @@ Get the safety configuration.
 const config = workspace.getSafetyConfig();
 ```
 
-## Agent tools and processors
+## Agent tools
 
-A workspace provides tools and processors to agents based on what is configured:
+A workspace provides tools to agents based on what is configured:
 
 **Filesystem** - When a filesystem provider is configured, agents receive tools for file operations: reading, writing, editing, listing, and deleting files.
 
-**Sandbox** - When a sandbox provider is configured, agents receive tools for code execution: running Python/JavaScript/TypeScript code, executing shell commands, and installing packages.
+**Sandbox** - When a sandbox provider is configured, agents receive tools for executing shell commands.
 
 **Search** - When BM25 or vector search is configured, agents receive tools for searching and indexing workspace content.
 
-**Skills** - When `skillsPaths` is configured, agents receive a `SkillsProcessor` that injects available skills into the system message and provides tools for activating skills, searching skill content, and reading skill references.
+**Skills** - When `skillsPaths` is configured, the workspace provides access to SKILL.md files for skill discovery and activation.
 
 ## Related
 

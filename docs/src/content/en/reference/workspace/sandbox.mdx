@@ -7,11 +7,11 @@ packages:
 
 # Sandbox Interface
 
-The `WorkspaceSandbox` interface defines how workspaces execute code and commands. Mastra includes `LocalSandbox` for local execution.
+The `WorkspaceSandbox` interface defines how workspaces execute commands. Mastra includes `LocalSandbox` for local execution.
 
 ## LocalSandbox
 
-Executes code and commands on the local system using installed interpreters.
+Executes commands on the local system.
 
 ### Usage
 
@@ -20,7 +20,6 @@ import { LocalSandbox } from '@mastra/core/workspace';
 
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
-  scriptDirectory: './.mastra/sandbox',
   inheritEnv: false,
   env: {
     NODE_ENV: 'development',
@@ -40,12 +39,6 @@ const sandbox = new LocalSandbox({
       defaultValue: "process.cwd()",
     },
     {
-      name: "scriptDirectory",
-      type: "string",
-      description: "Directory where script files are written before execution. Enables __dirname resolution.",
-      isOptional: true,
-    },
-    {
       name: "inheritEnv",
       type: "boolean",
       description: "Inherit environment variables from process.env",
@@ -56,6 +49,12 @@ const sandbox = new LocalSandbox({
       name: "env",
       type: "Record<string, string>",
       description: "Environment variables to set",
+      isOptional: true,
+    },
+    {
+      name: "safety",
+      type: "SandboxSafetyOptions",
+      description: "Safety configuration for sandbox operations",
       isOptional: true,
     },
   ]}
@@ -69,11 +68,6 @@ const sandbox = new LocalSandbox({
       name: "provider",
       type: "string",
       description: "Provider identifier ('local')",
-    },
-    {
-      name: "supportedRuntimes",
-      type: "SandboxRuntime[]",
-      description: "['javascript', 'typescript', 'python']",
     },
   ]}
 />
@@ -94,7 +88,7 @@ await sandbox.start();
 
 #### `stop()`
 
-Stop the sandbox. Called by `workspace.pause()`.
+Stop the sandbox.
 
 ```typescript
 await sandbox.stop?.();
@@ -106,61 +100,6 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 
 ```typescript
 await sandbox.destroy();
-```
-
-#### `executeCode(code, options?)`
-
-Execute code in a specified runtime.
-
-```typescript
-const result = await sandbox.executeCode('console.log(2 + 2)', {
-  runtime: 'javascript',
-});
-console.log(result.stdout); // "4"
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "code",
-      type: "string",
-      description: "Code to execute",
-    },
-    {
-      name: "options.runtime",
-      type: "SandboxRuntime",
-      description: "'javascript' | 'typescript' | 'python'",
-      isOptional: true,
-      defaultValue: "'javascript'",
-    },
-    {
-      name: "options.timeout",
-      type: "number",
-      description: "Execution timeout in milliseconds",
-      isOptional: true,
-    },
-    {
-      name: "options.env",
-      type: "Record<string, string>",
-      description: "Additional environment variables",
-      isOptional: true,
-    },
-  ]}
-/>
-
-**Returns:** `Promise<CodeResult>`
-
-```typescript
-interface CodeResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  duration: number;
-  error?: string;
-}
 ```
 
 #### `executeCommand(command, args?, options?)`
@@ -220,34 +159,6 @@ interface CommandResult {
 }
 ```
 
-#### `installPackage(packageName, options?)`
-
-Install a package.
-
-```typescript
-await sandbox.installPackage('lodash');
-await sandbox.installPackage('requests', { runtime: 'python' });
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "packageName",
-      type: "string",
-      description: "Package to install",
-    },
-    {
-      name: "options.runtime",
-      type: "SandboxRuntime",
-      description: "Runtime for package manager selection",
-      isOptional: true,
-      defaultValue: "'javascript'",
-    },
-  ]}
-/>
-
 #### `getInfo()`
 
 Get sandbox status and resource information.
@@ -272,118 +183,6 @@ interface SandboxInfo {
   };
 }
 ```
-
-### Optional file operations
-
-Some sandbox providers support file operations within the sandbox environment.
-
-#### `readFile(path)`
-
-```typescript
-const content = await sandbox.readFile?.('/output/result.txt');
-```
-
-#### `writeFile(path, content)`
-
-```typescript
-await sandbox.writeFile?.('/input/data.json', JSON.stringify(data));
-```
-
-#### `listFiles(path)`
-
-```typescript
-const files = await sandbox.listFiles?.('/output');
-```
-
-### Sync operations
-
-Sandbox providers can implement sync operations to transfer files between the workspace filesystem and the sandbox. Each provider implements its preferred transfer mechanism (file copy for local, HTTP upload for cloud, etc.).
-
-#### `syncFromFilesystem(filesystem, paths?)`
-
-Sync files from a workspace filesystem into the sandbox.
-
-```typescript
-const result = await sandbox.syncFromFilesystem?.(workspace.filesystem, ['/src']);
-// { synced: ['/src/index.ts'], failed: [], bytesTransferred: 1024, duration: 50 }
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "filesystem",
-      type: "WorkspaceFilesystem",
-      description: "The workspace filesystem to sync from",
-    },
-    {
-      name: "paths",
-      type: "string[]",
-      description: "Specific paths to sync (default: all files)",
-      isOptional: true,
-    },
-  ]}
-/>
-
-#### `syncToFilesystem(filesystem, paths?)`
-
-Sync files from the sandbox back to a workspace filesystem.
-
-```typescript
-const result = await sandbox.syncToFilesystem?.(workspace.filesystem, ['/output']);
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "filesystem",
-      type: "WorkspaceFilesystem",
-      description: "The workspace filesystem to sync to",
-    },
-    {
-      name: "paths",
-      type: "string[]",
-      description: "Specific paths to sync (default: all files)",
-      isOptional: true,
-    },
-  ]}
-/>
-
-**Returns:** `Promise<SandboxSyncResult>`
-
-```typescript
-interface SandboxSyncResult {
-  synced: string[];
-  failed: Array<{ path: string; error: string }>;
-  bytesTransferred: number;
-  duration: number;
-}
-```
-
-## Runtimes
-
-<PropertiesTable
-  content={[
-    {
-      name: "javascript",
-      type: "SandboxRuntime",
-      description: "Node.js JavaScript execution",
-    },
-    {
-      name: "typescript",
-      type: "SandboxRuntime",
-      description: "TypeScript execution (compiled to JavaScript)",
-    },
-    {
-      name: "python",
-      type: "SandboxRuntime",
-      description: "Python 3 execution",
-    },
-  ]}
-/>
 
 ## Environment isolation
 
