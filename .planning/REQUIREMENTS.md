@@ -246,10 +246,10 @@ All operations must have sensible timeouts.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REQ-01 | Phase 1 | Pending |
-| REQ-02 | Phase 1 | Pending |
-| REQ-09 | Phase 1 | Pending |
-| REQ-10 | Phase 1 | Pending |
+| REQ-01 | Phase 1 | Complete |
+| REQ-02 | Phase 1 | Complete |
+| REQ-09 | Phase 1 | Complete |
+| REQ-10 | Phase 1 | Complete |
 | REQ-03 | Phase 2 | Pending |
 | REQ-04 | Phase 2 | Pending |
 | REQ-05 | Phase 2 | Pending |

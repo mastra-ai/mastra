@@ -12,7 +12,7 @@ This roadmap delivers a browser toolset integration for Mastra agents in three p
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Infrastructure** - BrowserToolset foundation with lifecycle management and navigation
+- [x] **Phase 1: Infrastructure** - BrowserToolset foundation with lifecycle management and navigation ✓
 - [ ] **Phase 2: Core Actions** - Snapshot and interaction tools (click, type, scroll)
 - [ ] **Phase 3: Screenshot** - Visual capture tool for debugging and verification
 
@@ -31,8 +31,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md - Package scaffolding and type definitions
-- [ ] 01-02-PLAN.md - Navigate tool and BrowserToolset class implementation
+- [x] 01-01-PLAN.md - Package scaffolding and type definitions
+- [x] 01-02-PLAN.md - Navigate tool and BrowserToolset class implementation
 
 ### Phase 2: Core Actions
 **Goal**: Agents can perceive page structure and interact with elements using refs
@@ -66,10 +66,10 @@ Plans:
 
 | REQ ID | Description | Phase | Status |
 |--------|-------------|-------|--------|
-| REQ-01 | BrowserToolset Class | Phase 1 | Pending |
-| REQ-02 | Navigate Tool | Phase 1 | Pending |
-| REQ-09 | Resource Cleanup | Phase 1 | Pending |
-| REQ-10 | Timeout Management | Phase 1 | Pending |
+| REQ-01 | BrowserToolset Class | Phase 1 | Complete |
+| REQ-02 | Navigate Tool | Phase 1 | Complete |
+| REQ-09 | Resource Cleanup | Phase 1 | Complete |
+| REQ-10 | Timeout Management | Phase 1 | Complete |
 | REQ-03 | Snapshot Tool | Phase 2 | Pending |
 | REQ-04 | Click Tool | Phase 2 | Pending |
 | REQ-05 | Type Tool | Phase 2 | Pending |
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 0/2 | Planned | - |
+| 1. Infrastructure | 2/2 | ✓ Complete | 2026-01-26 |
 | 2. Core Actions | 0/TBD | Not started | - |
 | 3. Screenshot | 0/TBD | Not started | - |
 
@@ -94,3 +94,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 *Roadmap created: 2026-01-26*
 *Phase 1 planned: 2026-01-26*
+*Phase 1 completed: 2026-01-26*
