@@ -126,7 +126,6 @@ export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
 // =============================================================================
 
 export { createWorkspaceTools } from './tools';
-export { WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
 
 // =============================================================================
 // Tree Formatter (for directory visualization)

@@ -18,11 +18,6 @@ import { formatAsTree } from './tree-formatter';
 import { WORKSPACE_TOOLS } from './constants';
 import type { Workspace } from './workspace';
 
-// Re-export for convenience
-export { WORKSPACE_TOOLS } from './constants';
-export type { WorkspaceToolName } from './constants';
-
-
 /**
  * Creates workspace tools that will be auto-injected into agents.
  *
