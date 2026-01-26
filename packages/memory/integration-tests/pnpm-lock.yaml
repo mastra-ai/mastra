@@ -20,35 +20,35 @@ importers:
   .:
     dependencies:
       '@ai-sdk/anthropic-v5':
-        specifier: npm:@ai-sdk/anthropic@^2.0.0
+        specifier: npm:@ai-sdk/anthropic@^2.0.57
         version: '@ai-sdk/anthropic@2.0.57(zod@3.25.76)'
       '@ai-sdk/anthropic-v6':
         specifier: npm:@ai-sdk/anthropic@latest
         version: '@ai-sdk/anthropic@3.0.11(zod@3.25.76)'
       '@ai-sdk/google':
-        specifier: ^1.2.19
+        specifier: ^1.2.22
         version: 1.2.22(zod@3.25.76)
       '@ai-sdk/google-v5':
-        specifier: npm:@ai-sdk/google@^2.0.0
+        specifier: npm:@ai-sdk/google@^2.0.52
         version: '@ai-sdk/google@2.0.52(zod@3.25.76)'
       '@ai-sdk/google-v6':
         specifier: npm:@ai-sdk/google@latest
         version: '@ai-sdk/google@3.0.6(zod@3.25.76)'
       '@ai-sdk/openai':
-        specifier: ^1.3.0
+        specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
       '@ai-sdk/openai-v5':
-        specifier: npm:@ai-sdk/openai@^2.0.0
+        specifier: npm:@ai-sdk/openai@^2.0.89
         version: '@ai-sdk/openai@2.0.89(zod@3.25.76)'
       '@ai-sdk/openai-v6':
         specifier: npm:@ai-sdk/openai@latest
         version: '@ai-sdk/openai@3.0.8(zod@3.25.76)'
       '@ai-sdk/react':
-        specifier: ^1.2.1
+        specifier: ^1.2.12
         version: 1.2.12(react@19.2.3)(zod@3.25.76)
       '@ai-sdk/react-v5':
-        specifier: npm:@ai-sdk/react@^2.0.0
-        version: '@ai-sdk/react@2.0.121(react@19.2.3)(zod@3.25.76)'
+        specifier: npm:@ai-sdk/react@^2.0.125
+        version: '@ai-sdk/react@2.0.125(react@19.2.3)(zod@3.25.76)'
       '@ai-sdk/react-v6':
         specifier: npm:@ai-sdk/react@latest
         version: '@ai-sdk/react@3.0.31(react@19.2.3)(zod@3.25.76)'
@@ -105,8 +105,8 @@ importers:
         specifier: ^4.2.2
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
       ai-v5:
-        specifier: npm:ai@^5.0.117
-        version: ai@5.0.119(zod@3.25.76)
+        specifier: npm:ai@^5.0.123
+        version: ai@5.0.123(zod@3.25.76)
       ai-v6:
         specifier: npm:ai@latest
         version: ai@6.0.29(zod@3.25.76)
@@ -146,8 +146,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@2.0.25':
-    resolution: {integrity: sha512-Rq+FX55ne7lMiqai7NcvvDZj4HLsr+hg77WayqmySqc6zhw3tIOLxd4Ty6OpwNj0C0bVMi3iCl2zvJIEirh9XA==}
+  '@ai-sdk/gateway@2.0.29':
+    resolution: {integrity: sha512-1b7E9F/B5gex/1uCkhs+sGIbH0KsZOItHnNz3iY5ir+nc4ZUA6WOU5Cu2w1USlc+3UVbhf+H+iNLlxVjLe4VvQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -234,8 +234,8 @@ packages:
       zod:
         optional: true
 
-  '@ai-sdk/react@2.0.121':
-    resolution: {integrity: sha512-VbckviE2ryPaWcecjGXP9zY4CJUqXYoLFfJZJl95XtZL4Gl8X0AuU2p7p6ModCoavHuFw1bfL8k6d0Mu59WROw==}
+  '@ai-sdk/react@2.0.125':
+    resolution: {integrity: sha512-Bew93kJxqw0ylQj8AvFZ15vZjT2abKv5NyGhWY3f0mENHgNJYe5tt8x0dsx5Btq0Yqijz5gN0MCeKru00VQzrQ==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
@@ -834,10 +834,6 @@ packages:
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
-  '@vercel/oidc@3.0.5':
-    resolution: {integrity: sha512-fnYhv671l+eTTp48gB4zEsTW/YtRgRPnkI2nT7x6qw5rkI1Lq2hTmQIpHPgyThI0znLK+vX2n9XxKdXZ7BUbbw==}
-    engines: {node: '>= 20'}
-
   '@vercel/oidc@3.1.0':
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
     engines: {node: '>= 20'}
@@ -885,8 +881,8 @@ packages:
       react:
         optional: true
 
-  ai@5.0.119:
-    resolution: {integrity: sha512-HUOwhc17fl2SZTJGZyA/99aNu706qKfXaUBCy9vgZiXBwrxg2eTzn2BCz7kmYDsfx6Fg2ACBy2icm41bsDXCTw==}
+  ai@5.0.123:
+    resolution: {integrity: sha512-V3Imb0tg0pHCa6a/VsoW/FZpT07mwUw/4Hj6nexJC1Nvf1eyKQJyaYVkl+YTLnA8cKQSUkoarKhXWbFy4CSgjw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1381,11 +1377,11 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.4(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@2.0.25(zod@3.25.76)':
+  '@ai-sdk/gateway@2.0.29(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
-      '@vercel/oidc': 3.0.5
+      '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
   '@ai-sdk/gateway@3.0.11(zod@3.25.76)':
@@ -1474,10 +1470,10 @@ snapshots:
     optionalDependencies:
       zod: 3.25.76
 
-  '@ai-sdk/react@2.0.121(react@19.2.3)(zod@3.25.76)':
+  '@ai-sdk/react@2.0.125(react@19.2.3)(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
-      ai: 5.0.119(zod@3.25.76)
+      ai: 5.0.123(zod@3.25.76)
       react: 19.2.3
       swr: 2.3.8(react@19.2.3)
       throttleit: 2.1.0
@@ -1877,8 +1873,6 @@ snapshots:
 
   '@types/tough-cookie@4.0.5': {}
 
-  '@vercel/oidc@3.0.5': {}
-
   '@vercel/oidc@3.1.0': {}
 
   '@vitest/expect@4.0.17':
@@ -1934,9 +1928,9 @@ snapshots:
     optionalDependencies:
       react: 19.2.3
 
-  ai@5.0.119(zod@3.25.76):
+  ai@5.0.123(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 2.0.25(zod@3.25.76)
+      '@ai-sdk/gateway': 2.0.29(zod@3.25.76)
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
