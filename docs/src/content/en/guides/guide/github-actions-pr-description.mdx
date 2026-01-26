@@ -45,7 +45,7 @@ The workflow needs access to your model provider API key. Add it as a repository
 3. Click **New repository secret**
 4. Add your API key with the name `OPENAI_API_KEY` (or the appropriate key for your provider)
 
-![Screenshot of repository secrets in GitHub UI](/img/guides/github-action-repository-secrets.jpg)
+    ![Screenshot of repository secrets in GitHub UI](/img/guides/github-action-repository-secrets.jpg)
 
 The workflow references this secret as `${{ secrets.OPENAI_API_KEY }}` and makes it available to the Mastra agent at runtime.
 
@@ -111,9 +111,9 @@ Before deploying the workflow, you can test the agent in [Mastra Studio](/docs/g
 
 1. Get a diff from any public GitHub PR by appending `.diff` to the PR URL:
 
-```
-https://github.com/owner/repo/pull/123.diff
-```
+    ```
+    https://github.com/owner/repo/pull/123.diff
+    ```
 
 2. Open the PR Description Agent in Studio and paste the diff content with this prompt:
 
