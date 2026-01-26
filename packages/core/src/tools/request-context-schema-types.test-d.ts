@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
-import { createTool } from './tool';
 import type { RequestContext } from '../request-context';
+import { createTool } from './tool';
 
 /**
  * Type tests to verify requestContextSchema properly types the execute function's context
