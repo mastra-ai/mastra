@@ -49,7 +49,7 @@ jobs:
           HUSKY: 0
         run: |
           cd packages/mcp-docs-server
-          pnpm version prerelease --preid alpha --no-git-tag-version
+          pnpm version prerelease --preid alpha-0.x --no-git-tag-version
           cd ../..
           git add packages/mcp-docs-server/package.json
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
