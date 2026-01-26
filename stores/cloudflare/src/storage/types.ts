@@ -15,10 +15,14 @@ import type {
   TABLE_AGENT_VERSIONS,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
+  TABLE_DATASET_RUNS,
+  TABLE_DATASET_RUN_RESULTS,
   SpanRecord,
   StorageAgentType,
   Dataset,
   DatasetItem,
+  Run,
+  RunResult,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -118,6 +122,8 @@ export type RecordTypes = {
   [TABLE_AGENT_VERSIONS]: AgentVersion;
   [TABLE_DATASETS]: Dataset;
   [TABLE_DATASET_ITEMS]: DatasetItem;
+  [TABLE_DATASET_RUNS]: Run;
+  [TABLE_DATASET_RUN_RESULTS]: RunResult;
 };
 
 export type ListOptions = {
