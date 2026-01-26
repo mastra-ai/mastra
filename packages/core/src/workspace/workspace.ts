@@ -44,21 +44,12 @@ import {
 import { InMemoryFileReadTracker } from './file-read-tracker';
 import type { FileReadTracker } from './file-read-tracker';
 import { FileReadRequiredError } from './filesystem';
-import type {
-  WorkspaceFilesystem,
-  WorkspaceState,
-  FileContent,
-  FileEntry,
-  ReadOptions,
-  WriteOptions,
-  ListOptions,
-} from './filesystem';
+import type { WorkspaceFilesystem, FileContent, FileEntry, ReadOptions, WriteOptions, ListOptions } from './filesystem';
 import type { WorkspaceSandbox, CommandResult, ExecuteCommandOptions } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
-import { FilesystemState } from './state';
 import type { WorkspaceStatus } from './types';
 
 // =============================================================================
@@ -255,7 +246,6 @@ export class Workspace {
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
-  private _state?: WorkspaceState;
   private readonly _config: WorkspaceConfig;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
@@ -280,11 +270,6 @@ export class Workspace {
     this._requireReadBeforeWrite = config.filesystem?.safety?.requireReadBeforeWrite ?? true;
     if (this._requireReadBeforeWrite) {
       this._readTracker = new InMemoryFileReadTracker();
-    }
-
-    // Create state layer if filesystem is available
-    if (this._fs) {
-      this._state = new FilesystemState(this._fs);
     }
 
     // Create search engine if search is configured
@@ -349,13 +334,6 @@ export class Workspace {
    */
   get sandbox(): WorkspaceSandbox | undefined {
     return this._sandbox;
-  }
-
-  /**
-   * Key-value state storage (available when filesystem is present).
-   */
-  get state(): WorkspaceState | undefined {
-    return this._state;
   }
 
   /**

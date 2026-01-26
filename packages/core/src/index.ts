@@ -24,7 +24,6 @@ export {
   type WorkspaceStatus,
   type WorkspaceInfo,
   type WorkspaceFilesystem,
-  type WorkspaceState,
   type FileContent,
   type FileStat,
   type FileEntry,

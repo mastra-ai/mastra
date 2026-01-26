@@ -52,7 +52,6 @@ export {
 
 export type {
   WorkspaceFilesystem,
-  WorkspaceState,
   FileContent,
   FileStat,
   FileEntry,

@@ -267,48 +267,6 @@ export interface WorkspaceFilesystem {
 }
 
 // =============================================================================
-// State Storage Interface (Optional KV layer)
-// =============================================================================
-
-/**
- * Key-value state storage, typically backed by the filesystem.
- * Provides structured data storage for agent state.
- */
-export interface WorkspaceState {
-  /**
-   * Get a value by key.
-   * @returns The value, or null if not found
-   */
-  get<T = unknown>(key: string): Promise<T | null>;
-
-  /**
-   * Set a value for a key.
-   */
-  set<T = unknown>(key: string, value: T): Promise<void>;
-
-  /**
-   * Delete a key.
-   * @returns true if the key existed
-   */
-  delete(key: string): Promise<boolean>;
-
-  /**
-   * Check if a key exists.
-   */
-  has(key: string): Promise<boolean>;
-
-  /**
-   * List all keys, optionally filtered by prefix.
-   */
-  keys(prefix?: string): Promise<string[]>;
-
-  /**
-   * Clear all state.
-   */
-  clear(): Promise<void>;
-}
-
-// =============================================================================
 // Audit Interface (Optional - for providers like AgentFS)
 // =============================================================================
 
