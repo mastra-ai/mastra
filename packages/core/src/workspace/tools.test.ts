@@ -3,9 +3,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { WORKSPACE_TOOLS } from './constants';
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
-import { createWorkspaceTools, WORKSPACE_TOOLS } from './tools';
+import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 describe('createWorkspaceTools', () => {

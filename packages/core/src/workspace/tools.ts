@@ -554,6 +554,3 @@ Examples:
 
   return tools;
 }
-
-// Re-export constants for convenience
-export { WORKSPACE_TOOLS } from './constants';
