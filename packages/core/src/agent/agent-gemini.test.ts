@@ -869,7 +869,6 @@ describe('Gemini Model Compatibility Tests', () => {
           age: z.number(),
         }),
         execute: async (inputData, context) => {
-          // console.log('context', context);
           if (!context?.agent?.resumeData) {
             return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
           }
@@ -1029,7 +1028,6 @@ describe('Gemini Model Compatibility Tests', () => {
         suspendedToolName: '',
       };
       for await (const _chunk of stream.fullStream) {
-        console.dir(_chunk, { depth: null });
         if (_chunk.type === 'tool-call-suspended') {
           suspendData.suspendPayload = _chunk.payload.suspendPayload;
           suspendData.suspendedToolName = _chunk.payload.toolName;

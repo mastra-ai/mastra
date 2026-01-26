@@ -723,7 +723,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
                       If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
 
-                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input pf the tool call from args in the susoended tool, and spread it in the new arguments/input created, do not add duplicate data and any data. 
+                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
                       `;
                 }
 
