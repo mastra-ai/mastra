@@ -862,3 +862,181 @@ export interface ExecuteProcessorResponse {
   tripwire?: ProcessorTripwireResult;
   error?: string;
 }
+
+// ============================================================================
+// Dataset Types
+// ============================================================================
+
+/**
+ * Dataset entity
+ */
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  version: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Dataset item entity
+ */
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  metadata?: Record<string, unknown>;
+  version: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Parameters for creating a dataset
+ */
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a dataset
+ */
+export interface UpdateDatasetParams {
+  datasetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for adding an item to a dataset
+ */
+export interface AddDatasetItemParams {
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a dataset item
+ */
+export interface UpdateDatasetItemParams {
+  datasetId: string;
+  itemId: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for triggering a dataset run
+ */
+export interface TriggerDatasetRunParams {
+  datasetId: string;
+  targetType: 'agent' | 'workflow' | 'scorer';
+  targetId: string;
+  scorerIds?: string[];
+}
+
+/**
+ * Parameters for comparing two dataset runs
+ */
+export interface CompareRunsParams {
+  datasetId: string;
+  runIdA: string;
+  runIdB: string;
+  thresholds?: Record<string, { value: number; direction?: 'higher-is-better' | 'lower-is-better' }>;
+}
+
+/**
+ * Response for listing datasets
+ */
+export interface ListDatasetsResponse {
+  datasets: Dataset[];
+  pagination: { page: number; perPage: number; total: number };
+}
+
+/**
+ * Response for listing dataset items
+ */
+export interface ListDatasetItemsResponse {
+  items: DatasetItem[];
+  pagination: { page: number; perPage: number; total: number };
+}
+
+/**
+ * Dataset run entity
+ */
+export interface DatasetRun {
+  id: string;
+  datasetId: string;
+  datasetVersion: Date;
+  targetType: string;
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+}
+
+/**
+ * Response for listing dataset runs
+ */
+export interface ListDatasetRunsResponse {
+  runs: DatasetRun[];
+  pagination: { page: number; perPage: number; total: number };
+}
+
+/**
+ * Dataset run result entity
+ */
+export interface DatasetRunResult {
+  id: string;
+  runId: string;
+  itemId: string;
+  output: unknown;
+  error?: string;
+  latencyMs: number;
+  createdAt: Date;
+}
+
+/**
+ * Response for listing dataset run results
+ */
+export interface ListDatasetRunResultsResponse {
+  results: DatasetRunResult[];
+  pagination: { page: number; perPage: number; total: number };
+}
+
+/**
+ * Response for comparing two dataset runs
+ */
+export interface CompareRunsResponse {
+  runA: { id: string; datasetVersion: Date };
+  runB: { id: string; datasetVersion: Date };
+  versionMismatch: boolean;
+  hasRegression: boolean;
+  scorers: Record<
+    string,
+    {
+      statsA: { avgScore: number; count: number; passRate: number };
+      statsB: { avgScore: number; count: number; passRate: number };
+      delta: number;
+      regressed: boolean;
+      threshold: number;
+    }
+  >;
+  items: Array<{
+    itemId: string;
+    inBothRuns: boolean;
+    scoresA: Record<string, number | null>;
+    scoresB: Record<string, number | null>;
+  }>;
+  warnings: string[];
+}
