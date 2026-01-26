@@ -182,8 +182,6 @@ export interface PathContext {
     provider: string;
     /** Working directory for command execution */
     workingDirectory?: string;
-    /** Directory where script files are written */
-    scriptDirectory?: string;
   };
 
   /**
@@ -626,7 +624,7 @@ export class Workspace {
     this._searchEngine.clear();
 
     // Index all files from specified paths
-    for (const basePath of pathsToIndex) {
+    for (const basePath of paths) {
       try {
         const files = await this.getAllFiles(basePath);
         for (const filePath of files) {
@@ -782,10 +780,9 @@ export class Workspace {
         sandbox: {
           provider: this._sandbox!.provider,
           workingDirectory: (this._sandbox as any).workingDirectory,
-          scriptDirectory: (this._sandbox as any).scriptDirectory,
         },
         requiresSync: false,
-        instructions: 'No filesystem configured. Code execution is available but files are ephemeral.',
+        instructions: 'No filesystem configured. Command execution is available but files are ephemeral.',
       };
     }
 
@@ -800,14 +797,13 @@ export class Workspace {
     if (isSameContext) {
       const basePath = (this._fs as any).basePath as string | undefined;
       const workingDirectory = (this._sandbox as any).workingDirectory as string | undefined;
-      const scriptDirectory = (this._sandbox as any).scriptDirectory as string | undefined;
 
       let instructions: string;
       if (basePath) {
-        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in sandbox code. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
+        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in executed commands. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
       } else {
         instructions =
-          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents, then pass them to your code.';
+          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents.';
       }
 
       return {
@@ -819,7 +815,6 @@ export class Workspace {
         sandbox: {
           provider: sandboxProvider,
           workingDirectory,
-          scriptDirectory,
         },
         requiresSync: false,
         instructions,
@@ -836,11 +831,10 @@ export class Workspace {
       sandbox: {
         provider: sandboxProvider,
         workingDirectory: (this._sandbox as any).workingDirectory,
-        scriptDirectory: (this._sandbox as any).scriptDirectory,
       },
       requiresSync: true,
       instructions:
-        'Filesystem and sandbox are in different environments. To use workspace files in code: 1) Read file contents using workspace_read_file, 2) Pass contents as variables to your code, or 3) Use workspace_sync_to_sandbox to sync files before execution.',
+        'Filesystem and sandbox are in different environments. To use workspace files in commands: 1) Read file contents using workspace_read_file, 2) Pass contents to commands as needed.',
     };
   }
 }
