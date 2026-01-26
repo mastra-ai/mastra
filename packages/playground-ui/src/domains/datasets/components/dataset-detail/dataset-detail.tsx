@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DatasetItem } from '@mastra/client-js';
 import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { ItemsList } from './items-list';
@@ -15,6 +16,8 @@ export interface DatasetDetailProps {
   onEditClick?: () => void;
   onDeleteClick?: () => void;
   onAddItemClick?: () => void;
+  onEditItem?: (item: DatasetItem) => void;
+  onDeleteItem?: (itemId: string) => void;
   runTriggerSlot?: React.ReactNode;
 }
 
@@ -26,6 +29,8 @@ export function DatasetDetail({
   onEditClick,
   onDeleteClick,
   onAddItemClick,
+  onEditItem,
+  onDeleteItem,
   runTriggerSlot,
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
@@ -115,6 +120,8 @@ export function DatasetDetail({
               items={items}
               isLoading={isItemsLoading}
               onAddClick={onAddItemClick ?? (() => {})}
+              onEditItem={onEditItem}
+              onDeleteItem={onDeleteItem}
             />
           </TabContent>
 

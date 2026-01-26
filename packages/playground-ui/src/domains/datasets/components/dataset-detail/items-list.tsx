@@ -1,16 +1,20 @@
+import { useState } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 export interface ItemsListProps {
   items: DatasetItem[];
   isLoading: boolean;
   onAddClick: () => void;
+  onEditItem?: (item: DatasetItem) => void;
+  onDeleteItem?: (itemId: string) => void;
 }
 
 /**
@@ -34,7 +38,9 @@ function formatDate(date: Date | string): string {
   });
 }
 
-export function ItemsList({ items, isLoading, onAddClick }: ItemsListProps) {
+export function ItemsList({ items, isLoading, onAddClick, onEditItem, onDeleteItem }: ItemsListProps) {
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+
   if (isLoading) {
     return <ItemsListSkeleton />;
   }
@@ -43,31 +49,95 @@ export function ItemsList({ items, isLoading, onAddClick }: ItemsListProps) {
     return <EmptyItemsList onAddClick={onAddClick} />;
   }
 
+  const handleDeleteConfirm = () => {
+    if (deleteItemId && onDeleteItem) {
+      onDeleteItem(deleteItemId);
+      setDeleteItemId(null);
+    }
+  };
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead>
-          <Th>Input</Th>
-          <Th style={{ width: 200 }}>Expected Output</Th>
-          <Th style={{ width: 120 }}>Created</Th>
-        </Thead>
-        <Tbody>
-          {items.map(item => (
-            <Row key={item.id}>
-              <Cell className="font-mono text-ui-sm text-neutral4">
-                {truncateValue(item.input)}
-              </Cell>
-              <Cell className="font-mono text-ui-sm text-neutral3">
-                {item.expectedOutput ? truncateValue(item.expectedOutput) : '-'}
-              </Cell>
-              <Cell className="text-ui-sm text-neutral3">
-                {formatDate(item.createdAt)}
-              </Cell>
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+    <div className="flex flex-col h-full">
+      {/* Add Item button above table */}
+      <div className="flex justify-end px-4 py-2">
+        <Button variant="outline" size="sm" onClick={onAddClick}>
+          <Icon>
+            <Plus />
+          </Icon>
+          Add Item
+        </Button>
+      </div>
+
+      <ScrollableContainer>
+        <Table>
+          <Thead>
+            <Th>Input</Th>
+            <Th style={{ width: 200 }}>Expected Output</Th>
+            <Th style={{ width: 120 }}>Created</Th>
+            <Th style={{ width: 100 }}>Actions</Th>
+          </Thead>
+          <Tbody>
+            {items.map(item => (
+              <Row key={item.id}>
+                <Cell className="font-mono text-ui-sm text-neutral4">
+                  {truncateValue(item.input)}
+                </Cell>
+                <Cell className="font-mono text-ui-sm text-neutral3">
+                  {item.expectedOutput ? truncateValue(item.expectedOutput) : '-'}
+                </Cell>
+                <Cell className="text-ui-sm text-neutral3">
+                  {formatDate(item.createdAt)}
+                </Cell>
+                <Cell>
+                  <div className="flex items-center gap-1">
+                    {onEditItem && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEditItem(item)}
+                        aria-label="Edit item"
+                      >
+                        <Icon>
+                          <Pencil className="w-4 h-4" />
+                        </Icon>
+                      </Button>
+                    )}
+                    {onDeleteItem && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteItemId(item.id)}
+                        aria-label="Delete item"
+                      >
+                        <Icon>
+                          <Trash2 className="w-4 h-4" />
+                        </Icon>
+                      </Button>
+                    )}
+                  </div>
+                </Cell>
+              </Row>
+            ))}
+          </Tbody>
+        </Table>
+      </ScrollableContainer>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteItemId} onOpenChange={() => setDeleteItemId(null)}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete Item</AlertDialog.Title>
+            <AlertDialog.Description>
+              Are you sure you want to delete this item? This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleDeleteConfirm}>Delete</AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -78,6 +148,7 @@ function ItemsListSkeleton() {
         <Th>Input</Th>
         <Th style={{ width: 200 }}>Expected Output</Th>
         <Th style={{ width: 120 }}>Created</Th>
+        <Th style={{ width: 100 }}>Actions</Th>
       </Thead>
       <Tbody>
         {Array.from({ length: 5 }).map((_, index) => (
@@ -90,6 +161,9 @@ function ItemsListSkeleton() {
             </Cell>
             <Cell>
               <Skeleton className="h-4 w-20" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-12" />
             </Cell>
           </Row>
         ))}

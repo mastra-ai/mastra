@@ -18,6 +18,7 @@ export { DatasetDetail } from './components/dataset-detail/dataset-detail';
 export { ItemsList } from './components/dataset-detail/items-list';
 export { RunHistory } from './components/dataset-detail/run-history';
 export { AddItemDialog } from './components/add-item-dialog';
+export { EditItemDialog } from './components/edit-item-dialog';
 
 // Run trigger components
 export { RunTriggerDialog } from './components/run-trigger/run-trigger-dialog';
