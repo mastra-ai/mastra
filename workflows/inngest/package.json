@@ -39,6 +39,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
     "@hono/node-server": "^1.19.6",
+    "@internal/durable-agent-test-utils": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@koa/router": "^13.0.0",

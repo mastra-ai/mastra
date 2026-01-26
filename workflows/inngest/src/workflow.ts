@@ -12,6 +12,7 @@ import type {
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
+import { emitErrorEvent, AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
@@ -315,14 +316,32 @@ export class InngestWorkflow<
               }
             },
           });
-        } catch (error) {
-          // Re-throw - span will be ended in finalize if we reach it
-          throw error;
+        } catch (executionError) {
+          // Execution threw an exception (not just returned failed status)
+          // Create a failed result to pass to finalize
+          result = {
+            status: 'failed',
+            steps: {},
+            state: initialState ?? {},
+            error: executionError instanceof Error ? executionError : new Error(String(executionError)),
+          } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          // For agent workflows (identified by agentId in input), emit error event on failure
+          // This allows the client's stream to receive the error and close properly
+          // Use inputData.runId (the agent's run ID) not the workflow's runId for agent streams
+          if (result.status === 'failed' && inputData?.agentId && inputData?.runId) {
+            const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+            try {
+              await emitErrorEvent(pubsub, inputData.runId, error);
+            } catch (e) {
+              this.logger.debug?.('Failed to emit error event:', e);
+            }
+          }
+
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
             await engine.invokeLifecycleCallbacksInternal({

@@ -59,6 +59,7 @@ export default defineConfig({
     'src/zod-to-json.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
+    'src/agent/durable/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
