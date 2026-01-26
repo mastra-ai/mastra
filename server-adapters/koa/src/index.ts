@@ -326,7 +326,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
   }
 
-  async registerRoute(app: Koa, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: Koa, route: ServerRoute, { prefix: prefixParam }: { prefix?: string }): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Koa-style :param (they're the same)
@@ -422,7 +425,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: prefix,
       };
 
       try {

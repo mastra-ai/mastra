@@ -266,7 +266,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     }
   }
 
-  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: HonoApp, route: ServerRoute, { prefix: prefixParam }: { prefix?: string }): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -351,7 +354,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
-          routePrefix: this.prefix,
+          routePrefix: prefix,
         };
 
         try {

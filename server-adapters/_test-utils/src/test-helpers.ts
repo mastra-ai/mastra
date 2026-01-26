@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
+import { normalizeRoutePath } from '@mastra/core/utils';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
@@ -885,7 +886,7 @@ export interface RouteRequestOverrides {
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  const prefix = overrides.prefix ?? '/api';
+  const prefix = normalizeRoutePath(overrides.prefix ?? '/api');
   let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {

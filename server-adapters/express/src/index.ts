@@ -292,7 +292,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: Application,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string },
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -379,7 +386,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
-          routePrefix: this.prefix,
+          routePrefix: prefix,
         };
 
         try {

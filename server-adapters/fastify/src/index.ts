@@ -333,7 +333,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
-  async registerRoute(app: FastifyInstance, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: FastifyInstance,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string },
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Fastify-style :param (they're the same, but ensure consistency)
@@ -397,7 +404,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: prefix,
       };
 
       try {
