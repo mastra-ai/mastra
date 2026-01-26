@@ -171,6 +171,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-r1-0528',
     'deepseek-ai/deepseek-v3.1',
     'deepseek-ai/deepseek-v3.1-terminus',
+    'deepseek-ai/deepseek-v3.2',
     'google/codegemma-1.1-7b',
     'google/codegemma-7b',
     'google/gemma-2-27b-it',
@@ -232,7 +233,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
-    'z-ai/glm-4.7',
+    'z-ai/glm4.7',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly groq: readonly [
@@ -682,6 +683,8 @@ export type ProviderModelsMap = {
     'Kwaipilot/KAT-Dev',
     'MiniMaxAI/MiniMax-M1-80k',
     'MiniMaxAI/MiniMax-M2',
+    'Pro/MiniMaxAI/MiniMax-M2.1',
+    'Pro/zai-org/GLM-4.7',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -750,7 +753,13 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.6V',
   ];
-  readonly vivgrid: readonly ['gpt-5.1-codex'];
+  readonly vivgrid: readonly [
+    'gemini-3-flash-preview',
+    'gemini-3-pro-preview',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.2-codex',
+  ];
   readonly chutes: readonly [
     'MiniMaxAI/MiniMax-M2.1-TEE',
     'NousResearch/DeepHermes-3-Mistral-24B-Preview',
@@ -905,10 +914,12 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
   ];
+  readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M1-80k',
     'MiniMaxAI/MiniMax-M2',
+    'MiniMaxAI/MiniMax-M2.1',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -1091,8 +1102,6 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-Flash',
   ];
   readonly opencode: readonly [
-    'alpha-gd4',
-    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -1103,6 +1112,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3-pro',
     'glm-4.6',
+    'glm-4.7',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -1112,7 +1122,6 @@ export type ProviderModelsMap = {
     'gpt-5.1-codex-mini',
     'gpt-5.2',
     'gpt-5.2-codex',
-    'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
     'qwen3-coder',
@@ -1676,6 +1685,42 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
+  ];
+  readonly aihubmix: readonly [
+    'Kimi-K2-0905',
+    'claude-haiku-4-5',
+    'claude-opus-4-1',
+    'claude-opus-4-5',
+    'claude-sonnet-4-5',
+    'coding-glm-4.7-free',
+    'coding-minimax-m2.1-free',
+    'deepseek-v3.2',
+    'deepseek-v3.2-fast',
+    'deepseek-v3.2-speciale',
+    'deepseek-v3.2-think',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-3-pro-preview',
+    'glm-4.7',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-5',
+    'gpt-5-codex',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-5-pro',
+    'gpt-5.1',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2',
+    'minimax-m2.1',
+    'o4-mini',
+    'qwen3-235b-a22b-instruct-2507',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-coder-480b-a35b-instruct',
   ];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-r1-0528',
