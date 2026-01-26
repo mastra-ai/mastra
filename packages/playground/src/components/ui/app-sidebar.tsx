@@ -8,6 +8,7 @@ import {
   CloudUploadIcon,
   MessagesSquareIcon,
   Cpu,
+  Database,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -84,6 +85,12 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <Database className="size-4" />,
         isOnMastraPlatform: true,
       },
     ],

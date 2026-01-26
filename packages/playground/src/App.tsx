@@ -74,6 +74,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetRunLink: (datasetId: string, runId: string) => `/datasets/${datasetId}/runs/${runId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -128,6 +130,13 @@ function App() {
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
                 <Route path="/observability" element={<Observability />} />
+                <Route
+                  path="/datasets"
+                  lazy={async () => {
+                    const { Datasets } = await import('./pages/datasets');
+                    return { Component: Datasets };
+                  }}
+                />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
