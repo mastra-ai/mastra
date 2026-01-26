@@ -1868,7 +1868,7 @@ export class Workflow<
           runId: runIdToUse,
           status: 'pending',
           value: {},
-          // @ts-expect-error
+          // @ts-expect-error - context type mismatch
           context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
           activePaths: [],
           activeStepsPath: {},
@@ -2072,7 +2072,7 @@ export class Workflow<
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-expect-error
+        // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         await suspend(
           {
@@ -3434,7 +3434,7 @@ export class Run<
           steps,
           stepResults,
           resumePayload: resumeDataToUse,
-          // @ts-expect-error
+          // @ts-expect-error - context type mismatch
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
           label: params.label,
