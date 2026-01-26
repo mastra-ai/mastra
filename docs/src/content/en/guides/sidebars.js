@@ -279,6 +279,11 @@ const sidebars = {
           id: "guide/whatsapp-chat-bot",
           label: "WhatsApp Chat Bot",
         },
+        {
+          type: "doc",
+          id: "guide/github-actions-pr-description",
+          label: "GitHub Actions: PR Description",
+        },
       ],
     },
   ],
