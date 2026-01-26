@@ -6,13 +6,9 @@ export type UseMastraInstanceStatusResponse = {
 
 const getMastraInstanceStatus = async (
   endpoint: string = 'http://localhost:4111',
-  prefix: string = '/api',
 ): Promise<UseMastraInstanceStatusResponse> => {
   try {
-    // Check if the Mastra server is running by fetching the agents endpoint
-    // We use the prefixed endpoint since MastraServer doesn't create a root route
-    const url = `${endpoint}${prefix}/agents`;
-    const response = await fetch(url);
+    const response = await fetch(endpoint);
 
     return { status: response.ok ? 'active' : 'inactive' };
   } catch {
@@ -20,10 +16,10 @@ const getMastraInstanceStatus = async (
   }
 };
 
-export const useMastraInstanceStatus = (endpoint: string = 'http://localhost:4111', prefix: string = '/api') => {
+export const useMastraInstanceStatus = (endpoint: string = 'http://localhost:4111') => {
   return useQuery({
-    queryKey: ['mastra-instance-status', endpoint, prefix],
-    queryFn: () => getMastraInstanceStatus(endpoint, prefix),
+    queryKey: ['mastra-instance-status', endpoint],
+    queryFn: () => getMastraInstanceStatus(endpoint),
     retry: false,
   });
 };

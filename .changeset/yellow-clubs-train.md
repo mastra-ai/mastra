@@ -25,4 +25,4 @@ mastra studio --server-port 3000 --server-prefix /mastra
 
 **@mastra/server** - Added prefix normalization to handle leading/trailing slashes consistently.
 
-**@mastra/playground-ui** - Fixed instance status check to use the prefixed endpoint when verifying server connectivity.
+**@mastra/playground-ui** - Added `prefix` field to studio configuration form and context.

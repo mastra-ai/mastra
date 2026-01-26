@@ -32,7 +32,7 @@ export const StudioConfigProvider = ({
   endpoint = 'http://localhost:4111',
   defaultPrefix = '/api',
 }: StudioConfigProviderProps) => {
-  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, defaultPrefix);
+  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
