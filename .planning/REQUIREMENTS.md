@@ -125,10 +125,10 @@ Calculate statistical significance on score deltas between runs.
 | ANAL-01 | Phase 5 | Complete |
 | ANAL-02 | Phase 5 | Complete |
 | ANAL-03 | Phase 5 | Deferred |
-| UI-01 | Phase 6 | Pending |
-| UI-02 | Phase 6 | Pending |
-| UI-03 | Phase 6 | Pending |
-| UI-04 | Phase 6 | Pending |
+| UI-01 | Phase 6 | Complete |
+| UI-02 | Phase 6 | Complete |
+| UI-03 | Phase 6 | Complete |
+| UI-04 | Phase 6 | Complete |
 | CSV-01 | Phase 7 | Pending |
 | CSV-02 | Phase 7 | Pending |
 | SEL-01 | Phase 8 | Pending |
