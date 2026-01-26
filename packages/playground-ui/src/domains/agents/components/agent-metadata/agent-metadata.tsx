@@ -388,10 +388,15 @@ export interface AgentMetadataWorkspaceToolsListProps {
 
 /**
  * Format a workspace tool name for display.
- * Converts "workspace_read_file" to "read_file"
+ * Converts "mastra_workspace_read_file" to "read_file"
  */
 function formatWorkspaceToolName(toolName: string): string {
-  return toolName.replace(/^workspace_/, '');
+  // Strip the "mastra_workspace_" prefix
+  const prefix = 'mastra_workspace_';
+  if (toolName.startsWith(prefix)) {
+    return toolName.slice(prefix.length);
+  }
+  return toolName;
 }
 
 export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspaceToolsListProps) => {

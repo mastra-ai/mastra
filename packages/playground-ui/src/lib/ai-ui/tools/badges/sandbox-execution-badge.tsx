@@ -1,4 +1,5 @@
 import { MastraUIMessage } from '@mastra/react';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/tool-names';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -7,6 +8,7 @@ import { TooltipIconButton } from '../../tooltip-icon-button';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
+import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 
 interface SandboxInfo {
   id?: string;
@@ -61,20 +63,6 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   suspendPayload?: any;
   toolCalled?: boolean;
 }
-
-const useCopyToClipboard = ({ copiedDuration = 1500 }: { copiedDuration?: number } = {}) => {
-  const [isCopied, setIsCopied] = useState(false);
-
-  const copyToClipboard = (value: string) => {
-    if (!value) return;
-    navigator.clipboard.writeText(value).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), copiedDuration);
-    });
-  };
-
-  return { isCopied, copyToClipboard };
-};
 
 // Hook for live elapsed time while running
 const useElapsedTime = (isRunning: boolean, startTime?: number) => {
@@ -177,14 +165,10 @@ export const SandboxExecutionBadge = ({
   let commandDisplay = '';
   try {
     const parsedArgs = typeof args === 'object' ? args : JSON.parse(args);
-    if (toolName === 'workspace_execute_command') {
+    if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
       const cmd = parsedArgs.command || '';
       const cmdArgs = parsedArgs.args?.join(' ') || '';
       commandDisplay = `${cmd} ${cmdArgs}`.trim();
-    } else if (toolName === 'workspace_execute_code') {
-      const runtime = parsedArgs.runtime || 'node';
-      const codePreview = parsedArgs.code?.slice(0, 50) + (parsedArgs.code?.length > 50 ? '...' : '');
-      commandDisplay = `${runtime}: ${codePreview}`;
     }
   } catch {
     commandDisplay = toolName;
@@ -233,7 +217,7 @@ export const SandboxExecutionBadge = ({
   const exitSuccess = exitChunk?.success ?? finalResult?.success;
   const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
 
-  const displayName = toolName === 'workspace_execute_command' ? 'Execute Command' : 'Execute Code';
+  const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
 
   // Get start time from first streaming chunk for live timer
   const firstChunkTime = sandboxChunks[0]?.timestamp;
