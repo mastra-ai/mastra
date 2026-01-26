@@ -114,6 +114,19 @@ interface AgentObservationalMemoryProps {
 export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: AgentObservationalMemoryProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [expandedReflections, setExpandedReflections] = useState<Set<string>>(new Set());
+  
+  const toggleReflection = (id: string) => {
+    setExpandedReflections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Get real-time observation status and progress from streaming context
   const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } = useObservationalMemoryContext();
@@ -157,31 +170,41 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const record = omData?.record;
   const history = omData?.history ?? [];
 
-  // Extract threshold values from config (handle both number and {min, max} formats)
-  // The config response includes observationalMemory when OM is enabled
-  const omConfig = (configData?.config as { observationalMemory?: {
+  // Extract threshold values - try multiple sources in priority order:
+  // 1. Stream progress (real-time during streaming)
+  // 2. Record config (from OM processor when added via input/output processors)
+  // 3. Agent config endpoint (when OM is configured on agent)
+  // 4. Sensible defaults
+  const omAgentConfig = (configData?.config as { observationalMemory?: {
     enabled: boolean;
     scope?: 'thread' | 'resource';
     observationThreshold?: number | { min: number; max: number };
     reflectionThreshold?: number | { min: number; max: number };
   }})?.observationalMemory;
+  const recordConfig = record?.config as { observationThreshold?: number; reflectionThreshold?: number } | undefined;
+  
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
     if (typeof threshold === 'number') return threshold;
     return threshold.max; // Use max for progress display
   };
-  // Use stream progress thresholds when available (real-time), fallback to config
-  const observationThreshold = streamProgress?.threshold ?? getThresholdValue(omConfig?.observationThreshold, 10000);
-  const reflectionThreshold = streamProgress?.reflectionThreshold ?? getThresholdValue(omConfig?.reflectionThreshold, 30000);
+  
+  // Priority: streamProgress > recordConfig > agentConfig > defaults
+  const observationThreshold = streamProgress?.threshold 
+    ?? recordConfig?.observationThreshold 
+    ?? getThresholdValue(omAgentConfig?.observationThreshold, 10000);
+  const reflectionThreshold = streamProgress?.reflectionThreshold 
+    ?? recordConfig?.reflectionThreshold 
+    ?? getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
   const observationTokenCount = streamProgress?.observationTokens ?? record?.observationTokenCount ?? 0;
 
-  // Only show history if there are reflected records (more than just the current active one)
+  // Only show history if there are reflected records (exclude current active record)
   const reflectedHistory = useMemo(() => {
-    return history.filter(h => h.originType === 'reflection');
-  }, [history]);
+    return history.filter(h => h.originType === 'reflection' && h.id !== record?.id);
+  }, [history, record?.id]);
 
   // Format the observations for display
   const observations = useMemo(() => {
@@ -343,25 +366,44 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               </button>
               {showHistory && (
                 <div className="mt-2 space-y-2">
-                  {reflectedHistory.map((historyRecord) => (
-                    <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
-                      <div className="px-3 py-2 border-b border-border1 flex items-center justify-between">
-                        <span className="text-xs font-medium text-neutral4">Reflection</span>
-                        <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
-                      </div>
-                      <div className="p-3 max-h-48 overflow-y-auto">
-                        {historyRecord.activeObservations ? (
-                          <ObservationRenderer 
-                            observations={historyRecord.activeObservations} 
-                            maxHeight={undefined}
-                            className="text-neutral3"
-                          />
-                        ) : (
-                          <span className="text-xs text-neutral3 italic">No observations</span>
+                  {reflectedHistory.map((historyRecord) => {
+                    const isRecordExpanded = expandedReflections.has(historyRecord.id);
+                    return (
+                      <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
+                        <button
+                          onClick={() => toggleReflection(historyRecord.id)}
+                          className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface3 transition-colors rounded-lg"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isRecordExpanded ? (
+                              <ChevronDown className="w-3 h-3 text-neutral3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3 text-neutral3" />
+                            )}
+                            <span className="text-xs font-medium text-neutral4">Reflection</span>
+                            {historyRecord.observationTokenCount !== undefined && (
+                              <span className="text-xs text-neutral3">
+                                {formatTokens(historyRecord.observationTokenCount)} tokens
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
+                        </button>
+                        {isRecordExpanded && (
+                          <div className="p-3 max-h-48 overflow-y-auto border-t border-border1">
+                            {historyRecord.activeObservations ? (
+                              <ObservationRenderer 
+                                observations={historyRecord.activeObservations} 
+                                maxHeight={undefined}
+                              />
+                            ) : (
+                              <span className="text-xs text-neutral3 italic">No observations</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

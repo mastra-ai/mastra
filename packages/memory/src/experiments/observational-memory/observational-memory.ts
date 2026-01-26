@@ -717,6 +717,30 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Get the current configuration for this OM instance.
+   * Used by the server to expose config to the UI when OM is added via processors.
+   */
+  get config(): {
+    scope: 'resource' | 'thread';
+    observer: {
+      observationThreshold: number | ThresholdRange;
+    };
+    reflector: {
+      reflectionThreshold: number | ThresholdRange;
+    };
+  } {
+    return {
+      scope: this.scope,
+      observer: {
+        observationThreshold: this.observerConfig.observationThreshold,
+      },
+      reflector: {
+        reflectionThreshold: this.reflectorConfig.reflectionThreshold,
+      },
+    };
+  }
+
+  /**
    * Emit a debug event if the callback is configured
    */
   private emitDebugEvent(event: ObservationDebugEvent): void {

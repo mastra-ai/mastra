@@ -189,9 +189,7 @@ async function getOMConfigFromAgent(
   reflectorModel?: string;
 } | null> {
   try {
-    console.log('[DEBUG getOMConfigFromAgent] Looking for observational-memory processor in agent:', agent.id);
     const omProcessor = await agent.findProcessor('observational-memory', requestContext);
-    console.log('[DEBUG getOMConfigFromAgent] Found processor:', omProcessor ? omProcessor.id : 'null');
     if (!omProcessor) {
       return null;
     }

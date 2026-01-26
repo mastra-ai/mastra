@@ -78,9 +78,8 @@ export const ObservationMarkerBadge = ({
   const completeBgColor = 'bg-green-500/10';
   const completeTextColor = 'text-green-600';
   const completeHoverBgColor = 'hover:bg-green-500/20';
-  // Same colors for expanded state - no purple
+  // Same colors for expanded state
   const expandedBgColor = 'bg-green-500/5';
-  const expandedTextColor = 'text-green-700';
   const expandedBorderColor = 'border-green-500/10';
   const labelColor = 'text-green-600';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
@@ -134,19 +133,20 @@ export const ObservationMarkerBadge = ({
           </span>
         </button>
         {isExpanded && (
-          <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} ${expandedTextColor} text-xs space-y-1.5 border ${expandedBorderColor} max-w-md`}>
-            <div className="flex gap-4 text-[11px]">
+          <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}>
+            {/* Stats row - all green */}
+            <div className={`flex gap-4 text-[11px] ${labelColor}`}>
               {tokensObserved && (
-                <span><span className={labelColor}>Input:</span> {formatTokens(tokensObserved)}</span>
+                <span>Input: {formatTokens(tokensObserved)}</span>
               )}
               {observationTokens && (
-                <span><span className={labelColor}>Output:</span> {formatTokens(observationTokens)}</span>
+                <span>Output: {formatTokens(observationTokens)}</span>
               )}
               {compressionRatio && compressionRatio > 1 && (
-                <span><span className={labelColor}>Compression:</span> {compressionRatio}x</span>
+                <span>Compression: {compressionRatio}x</span>
               )}
               {durationMs && (
-                <span><span className={labelColor}>Duration:</span> {(durationMs / 1000).toFixed(2)}s</span>
+                <span>Duration: {(durationMs / 1000).toFixed(2)}s</span>
               )}
             </div>
             {observations && (
@@ -154,8 +154,6 @@ export const ObservationMarkerBadge = ({
                 <ObservationRenderer 
                   observations={observations} 
                   maxHeight="500px"
-                  className={`${expandedTextColor} max-w-2xl`}
-                  useInheritedTextColor
                 />
               </div>
             )}
@@ -164,7 +162,7 @@ export const ObservationMarkerBadge = ({
                 <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
                   Current Task
                 </div>
-                <div className={`text-[11px] ${expandedTextColor} [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]`}>
+                <div className="text-[11px] text-foreground [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
                   <MarkdownRenderer>{currentTask}</MarkdownRenderer>
                 </div>
               </div>
@@ -174,7 +172,7 @@ export const ObservationMarkerBadge = ({
                 <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
                   Suggested Response
                 </div>
-                <div className={`text-[11px] ${expandedTextColor}/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]`}>
+                <div className="text-[11px] text-foreground/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
                   <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
                 </div>
               </div>

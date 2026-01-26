@@ -5,16 +5,27 @@ import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 // Priority emoji to color mapping
+// P1 (🔴) = highest priority = pink/magenta theme with dark bg
+// P2 (🟡) = medium priority = amber/orange theme with dark bg  
+// P3 (🟢) = lower priority = subtle, no bg
 const PRIORITY_COLORS = {
-  '🔴': 'text-red-500',
-  '🟡': 'text-yellow-500',
-  '🟢': 'text-green-500',
+  '🔴': 'text-foreground',
+  '🟡': 'text-foreground',
+  '🟢': 'text-muted-foreground',
 } as const;
 
+// Dark backgrounds for P1/P2, none for P3
 const PRIORITY_BG = {
-  '🔴': 'bg-red-500/10',
-  '🟡': 'bg-yellow-500/10',
-  '🟢': 'bg-green-500/10',
+  '🔴': 'bg-pink-500/15',
+  '🟡': 'bg-amber-500/15',
+  '🟢': 'bg-transparent',
+} as const;
+
+// Full color left border accent
+const PRIORITY_BORDER = {
+  '🔴': 'border-l-pink-500',
+  '🟡': 'border-l-amber-500',
+  '🟢': 'border-l-neutral-500/30',
 } as const;
 
 type Priority = keyof typeof PRIORITY_COLORS;
@@ -205,9 +216,9 @@ function ObservationItem({ observation, useInheritedTextColor }: { observation: 
     : (observation.priority ? PRIORITY_COLORS[observation.priority] : 'text-muted-foreground');
   const bgColor = useInheritedTextColor ? '' : (observation.priority ? PRIORITY_BG[observation.priority] : '');
   
-  // Get a subtle left border color based on priority (instead of emoji)
+  // Get a subtle left border color based on priority (using blue shades for visual hierarchy)
   const borderColor = observation.priority 
-    ? { '🔴': 'border-l-red-500', '🟡': 'border-l-yellow-500', '🟢': 'border-l-green-500' }[observation.priority]
+    ? PRIORITY_BORDER[observation.priority]
     : 'border-l-transparent';
   
   return (
@@ -247,7 +258,7 @@ function ObservationItem({ observation, useInheritedTextColor }: { observation: 
 function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; useInheritedTextColor?: boolean }) {
   return (
     <div className="mb-2">
-      <div className={cn('flex items-center gap-2 mb-1 sticky top-0 backdrop-blur-sm py-1', useInheritedTextColor ? 'bg-transparent' : 'bg-background/95')}>
+      <div className={cn('flex items-center gap-2 mb-1 sticky top-0 backdrop-blur-sm pb-1', useInheritedTextColor ? 'bg-transparent' : 'bg-background/95')}>
         <span className={cn('text-xs font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>{block.date}</span>
         {block.relativeTime && (
           <span className={cn('text-[10px]', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>({block.relativeTime})</span>
