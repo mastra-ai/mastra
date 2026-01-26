@@ -12,8 +12,8 @@
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
-    "@arizeai/openinference-genai": "^0.1.0",
-    "@arizeai/openinference-semantic-conventions": "^2.1.2",
+    "@arizeai/openinference-genai": "^0.1.5",
+    "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@google-cloud/monitoring": "5.3.0",
     "@google-cloud/opentelemetry-cloud-trace-exporter": "3.0.0",
     "@hono/otel": "^1.0.1",
@@ -35,7 +35,7 @@
     "@opentelemetry/semantic-conventions": "1.38.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.30",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3"
   }

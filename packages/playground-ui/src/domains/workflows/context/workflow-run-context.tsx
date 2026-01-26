@@ -1,12 +1,13 @@
 import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { createContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
-import { useCreateWorkflowRun } from '@mastra/react';
-import { useCancelWorkflowRun, useStreamWorkflow } from '../hooks';
+import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
 import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { toast } from '@/lib/toast';
 
 export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
@@ -97,8 +98,9 @@ export function WorkflowRunProvider({
   }, [runExecutionResult, initialRunId]);
 
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
+  const { settings } = useTracingSettings();
 
-  const { createWorkflowRun } = useCreateWorkflowRun();
+  const createWorkflowRun = useCreateWorkflowRun();
   const {
     streamWorkflow,
     streamResult,
@@ -107,8 +109,12 @@ export function WorkflowRunProvider({
     closeStreamsAndReset,
     resumeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamWorkflow({ debugMode });
-  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
+  } = useStreamWorkflow({
+    debugMode,
+    tracingOptions: settings?.tracingOptions,
+    onError: error => toast.error(error.message),
+  });
+  const cancelWorkflowRun = useCancelWorkflowRun();
 
   const clearData = () => {
     setResult(null);
@@ -160,8 +166,8 @@ export function WorkflowRunProvider({
         },
         streamResult,
         isStreamingWorkflow: isStreaming,
-        isCancellingWorkflowRun,
-        cancelWorkflowRun,
+        isCancellingWorkflowRun: cancelWorkflowRun.isPending,
+        cancelWorkflowRun: cancelWorkflowRun.mutateAsync,
         observeWorkflowStream: props => {
           setIsRunning(true);
           return observeWorkflowStream.mutate(props);

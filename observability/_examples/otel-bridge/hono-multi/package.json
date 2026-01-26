@@ -19,12 +19,12 @@
   ],
   "devDependencies": {
     "@hono/otel": "^1.0.1",
-    "@types/node": "^20.19.0",
-    "dotenv": "^17.2.0",
+    "@types/node": "^20.19.30",
+    "dotenv": "^17.2.3",
     "specifier-resolution-node": "^1.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "vitest": "^2.0.0"
+    "vitest": "^2.1.9"
   },
   "pnpm": {
     "overrides": {

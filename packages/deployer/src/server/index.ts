@@ -75,6 +75,18 @@ export async function createHonoServer(
     tools: {},
   },
 ) {
+  // Register bundled tools with Mastra so they can be used by stored agents
+  // This bridges the gap between tools discovered by the CLI bundler and the Mastra instance
+  if (options.tools) {
+    for (const [key, tool] of Object.entries(options.tools)) {
+      try {
+        mastra.addTool(tool as any, key);
+      } catch {
+        // Tool may already be registered (e.g., if defined in Mastra config), ignore
+      }
+    }
+  }
+
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
@@ -367,11 +379,13 @@ export async function createHonoServer(
       const protocol = key && cert ? 'https' : 'http';
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
+      const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, `'${experimentalFeatures}'`);
 
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly

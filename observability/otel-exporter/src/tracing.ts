@@ -102,7 +102,6 @@ export class OtelExporter extends BaseExporter {
         // Dynamically import @grpc/grpc-js to create metadata
         let metadata: any;
         try {
-          // @ts-ignore - Dynamic import for optional dependency
           const grpcModule = await import('@grpc/grpc-js');
           metadata = new grpcModule.Metadata();
           Object.entries(headers).forEach(([key, value]) => {

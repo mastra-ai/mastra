@@ -5,78 +5,21 @@ packages:
   - "@mastra/create-mastra"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # create-mastra
 
 The `create-mastra` command **creates** a new standalone Mastra project. Use this command to scaffold a complete Mastra setup in a dedicated directory. You can run it with additional flags to customize the setup process.
 
 ## Usage
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx create-mastra@latest
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx create-mastra@latest
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest
-```
-
-</TabItem>
-</Tabs>
-
 `create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx create-mastra@latest my-mastra-project -- --template coding-agent
 ```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx create-mastra@latest --template coding-agent
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest --template coding-agent
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest --template coding-agent
-```
-
-</TabItem>
-</Tabs>
 
 Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
 

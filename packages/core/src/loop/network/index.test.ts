@@ -1,6 +1,7 @@
 import { it, describe, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { MessageListInput } from '../../agent/message-list';
+import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows';
@@ -88,10 +89,14 @@ describe('getRoutingAgent', () => {
     workflows = {},
     tools = {},
     agents = {},
+    configuredInputProcessors = [],
+    configuredOutputProcessors = [],
   }: {
     workflows?: Record<string, any>;
     tools?: Record<string, any>;
     agents?: Record<string, any>;
+    configuredInputProcessors?: any[];
+    configuredOutputProcessors?: any[];
   }) {
     return {
       id: 'test-agent',
@@ -102,7 +107,12 @@ describe('getRoutingAgent', () => {
       getModel: vi.fn().mockResolvedValue('openai/gpt-4o-mini'),
       getMemory: vi.fn().mockResolvedValue({
         listTools: vi.fn().mockResolvedValue({}),
+        getInputProcessors: vi.fn().mockResolvedValue([]),
+        getOutputProcessors: vi.fn().mockResolvedValue([]),
       }),
+      // New methods for configured-only processors
+      listConfiguredInputProcessors: vi.fn().mockResolvedValue(configuredInputProcessors),
+      listConfiguredOutputProcessors: vi.fn().mockResolvedValue(configuredOutputProcessors),
     } as any;
   }
 
@@ -274,5 +284,76 @@ describe('getRoutingAgent', () => {
         requestContext,
       }),
     ).resolves.toBeDefined();
+  });
+
+  it('should pass through configured input processors from the parent agent', async () => {
+    // Create a mock input processor (e.g., token limiter)
+    const mockInputProcessor: Processor = {
+      id: 'test-token-limiter',
+      name: 'Test Token Limiter',
+      processInput: vi.fn().mockImplementation(({ messages }) => messages),
+    };
+
+    const mockAgent = createMockAgent({
+      configuredInputProcessors: [mockInputProcessor],
+    });
+
+    const requestContext = new RequestContext();
+
+    const routingAgent = await getRoutingAgent({
+      agent: mockAgent,
+      requestContext,
+    });
+
+    // Verify that listConfiguredInputProcessors was called (not listInputProcessors)
+    expect(mockAgent.listConfiguredInputProcessors).toHaveBeenCalledWith(requestContext);
+
+    // The routing agent should have input processors configured
+    const routingAgentInputProcessors = await routingAgent.listInputProcessors(requestContext);
+    expect(routingAgentInputProcessors.length).toBeGreaterThan(0);
+  });
+
+  it('should pass through configured output processors from the parent agent', async () => {
+    // Create a mock output processor
+    const mockOutputProcessor: Processor = {
+      id: 'test-output-processor',
+      name: 'Test Output Processor',
+      processOutputResult: vi.fn().mockImplementation(({ messages }) => messages),
+    };
+
+    const mockAgent = createMockAgent({
+      configuredOutputProcessors: [mockOutputProcessor],
+    });
+
+    const requestContext = new RequestContext();
+
+    const routingAgent = await getRoutingAgent({
+      agent: mockAgent,
+      requestContext,
+    });
+
+    // Verify that listConfiguredOutputProcessors was called (not listOutputProcessors)
+    expect(mockAgent.listConfiguredOutputProcessors).toHaveBeenCalledWith(requestContext);
+
+    // The routing agent should have output processors configured
+    const routingAgentOutputProcessors = await routingAgent.listOutputProcessors(requestContext);
+    expect(routingAgentOutputProcessors.length).toBeGreaterThan(0);
+  });
+
+  it('should not call listInputProcessors (which includes memory processors)', async () => {
+    const mockAgent = createMockAgent({});
+    // Add a spy for listInputProcessors to ensure it's NOT called
+    mockAgent.listInputProcessors = vi.fn().mockResolvedValue([]);
+
+    const requestContext = new RequestContext();
+
+    await getRoutingAgent({
+      agent: mockAgent,
+      requestContext,
+    });
+
+    // listInputProcessors should NOT be called - only listConfiguredInputProcessors
+    expect(mockAgent.listInputProcessors).not.toHaveBeenCalled();
+    expect(mockAgent.listConfiguredInputProcessors).toHaveBeenCalled();
   });
 });

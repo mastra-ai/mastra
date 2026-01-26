@@ -578,7 +578,7 @@ ${workingMemory}`;
     const promise = embedFn({
       values: chunks,
       maxRetries: 3,
-      // @ts-ignore
+      // @ts-expect-error - embedder type mismatch
       model: this.embedder,
       ...(this.embedderOptions || {}),
     });

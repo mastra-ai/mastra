@@ -8,6 +8,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_SPANS,
+  TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -22,6 +23,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
+  [TABLE_AGENT_VERSIONS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
