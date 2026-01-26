@@ -7,10 +7,8 @@ import {
   SkillCompatibilitySchema,
   SkillLicenseSchema,
   SkillMetadataFieldSchema,
-  SkillAllowedToolsSchema,
   SkillMetadataSchema,
   validateSkillMetadata,
-  parseAllowedTools,
 } from './schemas';
 
 describe('schemas', () => {
@@ -207,24 +205,6 @@ describe('schemas', () => {
   });
 
   // ===========================================================================
-  // SkillAllowedToolsSchema
-  // ===========================================================================
-  describe('SkillAllowedToolsSchema', () => {
-    it('should accept array of tool names', () => {
-      const tools = ['file-read', 'file-write', 'search'];
-      expect(SkillAllowedToolsSchema.parse(tools)).toEqual(tools);
-    });
-
-    it('should accept empty array', () => {
-      expect(SkillAllowedToolsSchema.parse([])).toEqual([]);
-    });
-
-    it('should accept undefined (optional)', () => {
-      expect(SkillAllowedToolsSchema.parse(undefined)).toBeUndefined();
-    });
-  });
-
-  // ===========================================================================
   // SkillMetadataSchema (full object)
   // ===========================================================================
   describe('SkillMetadataSchema', () => {
@@ -235,7 +215,6 @@ describe('schemas', () => {
         license: 'MIT',
         compatibility: 'Node.js 18+',
         metadata: { author: 'john', version: '1.0.0' },
-        allowedTools: ['read', 'write'],
       };
       expect(SkillMetadataSchema.parse(metadata)).toEqual(metadata);
     });
@@ -251,7 +230,6 @@ describe('schemas', () => {
       expect(result.license).toBeUndefined();
       expect(result.compatibility).toBeUndefined();
       expect(result.metadata).toBeUndefined();
-      expect(result.allowedTools).toBeUndefined();
     });
 
     it('should reject missing name', () => {
@@ -292,7 +270,6 @@ describe('schemas', () => {
           license: 'MIT',
           compatibility: 'Node.js 18+',
           metadata: { author: 'john' },
-          allowedTools: ['read'],
         });
         expect(result.valid).toBe(true);
         expect(result.errors).toHaveLength(0);
@@ -427,73 +404,6 @@ describe('schemas', () => {
         expect(result.valid).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
         expect(result.warnings.length).toBeGreaterThan(0);
-      });
-    });
-  });
-
-  // ===========================================================================
-  // parseAllowedTools function
-  // ===========================================================================
-  describe('parseAllowedTools', () => {
-    describe('string input', () => {
-      it('should parse space-delimited string', () => {
-        expect(parseAllowedTools('tool1 tool2 tool3')).toEqual(['tool1', 'tool2', 'tool3']);
-      });
-
-      it('should handle multiple spaces', () => {
-        expect(parseAllowedTools('tool1  tool2   tool3')).toEqual(['tool1', 'tool2', 'tool3']);
-      });
-
-      it('should handle tabs and newlines', () => {
-        expect(parseAllowedTools('tool1\ttool2\ntool3')).toEqual(['tool1', 'tool2', 'tool3']);
-      });
-
-      it('should return empty array for empty string', () => {
-        expect(parseAllowedTools('')).toEqual([]);
-      });
-
-      it('should return empty array for whitespace-only string', () => {
-        expect(parseAllowedTools('   ')).toEqual([]);
-      });
-
-      it('should handle single tool', () => {
-        expect(parseAllowedTools('tool1')).toEqual(['tool1']);
-      });
-    });
-
-    describe('array input', () => {
-      it('should return array as-is', () => {
-        expect(parseAllowedTools(['tool1', 'tool2'])).toEqual(['tool1', 'tool2']);
-      });
-
-      it('should filter out non-string values', () => {
-        expect(parseAllowedTools(['tool1', 123 as any, 'tool2', null as any])).toEqual(['tool1', 'tool2']);
-      });
-
-      it('should return empty array for empty array', () => {
-        expect(parseAllowedTools([])).toEqual([]);
-      });
-    });
-
-    describe('invalid input', () => {
-      it('should return undefined for number', () => {
-        expect(parseAllowedTools(123)).toBeUndefined();
-      });
-
-      it('should return undefined for object', () => {
-        expect(parseAllowedTools({ tools: ['a'] })).toBeUndefined();
-      });
-
-      it('should return undefined for null', () => {
-        expect(parseAllowedTools(null)).toBeUndefined();
-      });
-
-      it('should return undefined for undefined', () => {
-        expect(parseAllowedTools(undefined)).toBeUndefined();
-      });
-
-      it('should return undefined for boolean', () => {
-        expect(parseAllowedTools(true)).toBeUndefined();
       });
     });
   });

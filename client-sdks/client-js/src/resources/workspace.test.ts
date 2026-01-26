@@ -452,7 +452,7 @@ describe('Workspace Resource', () => {
     it('should list all skills', async () => {
       const mockResponse = {
         skills: [
-          { name: 'code-review', description: 'Code review skill', allowedTools: ['read_file'] },
+          { name: 'code-review', description: 'Code review skill' },
           { name: 'documentation', description: 'Documentation skill' },
         ],
         isSkillsConfigured: true,
@@ -579,7 +579,6 @@ describe('WorkspaceSkillResource', () => {
         references: ['api.md', 'guide.md'],
         scripts: [],
         assets: [],
-        allowedTools: ['read_file', 'write_file'],
       };
       mockFetchResponse(mockResponse);
 

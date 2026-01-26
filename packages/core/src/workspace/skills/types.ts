@@ -74,12 +74,6 @@ export interface SkillMetadata {
   compatibility?: string;
   /** Optional arbitrary metadata */
   metadata?: Record<string, string>;
-  /**
-   * Pre-approved tools the skill may use (experimental).
-   * In YAML: space-delimited string. Parsed to array.
-   * @experimental Support may vary between agent implementations.
-   */
-  allowedTools?: string[];
 }
 
 /**

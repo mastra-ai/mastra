@@ -12,7 +12,7 @@
 import matter from 'gray-matter';
 
 import type { IndexDocument, SearchResult } from '../search-engine';
-import { parseAllowedTools, validateSkillMetadata } from './schemas';
+import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
 import { isWritableSource } from './skill-source';
 import type {
@@ -149,7 +149,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       license: skill.license,
       compatibility: skill.compatibility,
       metadata: skill.metadata,
-      allowedTools: skill.allowedTools,
     }));
   }
 
@@ -410,7 +409,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       license: updatedMetadata?.license ?? skill.license,
       compatibility: updatedMetadata?.compatibility ?? skill.compatibility,
       metadata: updatedMetadata?.metadata ?? skill.metadata,
-      allowedTools: skill.allowedTools, // Preserve allowedTools
     };
 
     const newInstructions = updatedInstructions ?? skill.instructions;
@@ -697,9 +695,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const frontmatter = parsed.data;
     const body = parsed.content.trim();
 
-    // Parse allowed-tools (can be space-delimited string or array in YAML)
-    const allowedTools = parseAllowedTools(frontmatter['allowed-tools'] ?? frontmatter.allowedTools);
-
     // Extract required fields
     const metadata: SkillMetadata = {
       name: frontmatter.name,
@@ -707,7 +702,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       license: frontmatter.license,
       compatibility: frontmatter.compatibility,
       metadata: frontmatter.metadata,
-      allowedTools,
     };
 
     // Validate if enabled (includes token/line count warnings)
@@ -933,9 +927,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
     if (metadata.metadata) {
       frontmatter.metadata = metadata.metadata;
-    }
-    if (metadata.allowedTools && metadata.allowedTools.length > 0) {
-      frontmatter['allowed-tools'] = metadata.allowedTools.join(' ');
     }
 
     return matter.stringify(instructions, frontmatter);

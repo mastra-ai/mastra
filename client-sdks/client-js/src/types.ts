@@ -961,7 +961,6 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
-  allowedTools?: string[];
 }
 
 /**

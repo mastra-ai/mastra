@@ -90,14 +90,6 @@ export const SkillMetadataFieldSchema = z
   .describe('Arbitrary key-value metadata (e.g., author, version)');
 
 /**
- * Allowed tools schema (experimental)
- */
-export const SkillAllowedToolsSchema = z
-  .array(z.string())
-  .optional()
-  .describe('Pre-approved tools the skill may use (experimental)');
-
-/**
  * Complete skill metadata schema (frontmatter fields)
  */
 export const SkillMetadataSchema = z.object({
@@ -106,7 +98,6 @@ export const SkillMetadataSchema = z.object({
   license: SkillLicenseSchema,
   compatibility: SkillCompatibilitySchema,
   metadata: SkillMetadataFieldSchema,
-  allowedTools: SkillAllowedToolsSchema,
 });
 
 /**
@@ -210,33 +201,4 @@ export function validateSkillMetadata(
     errors,
     warnings,
   };
-}
-
-/**
- * Parse allowed-tools from YAML (space-delimited string) to array.
- * The Agent Skills spec allows allowed-tools to be specified as a
- * space-delimited string in YAML frontmatter.
- *
- * @param value - The value from YAML (string or array)
- * @returns Array of tool names, or undefined if invalid
- *
- * @example
- * ```typescript
- * // From YAML: allowed-tools: "tool1 tool2 tool3"
- * parseAllowedTools("tool1 tool2 tool3");
- * // Returns: ["tool1", "tool2", "tool3"]
- *
- * // From YAML array: allowed-tools: ["tool1", "tool2"]
- * parseAllowedTools(["tool1", "tool2"]);
- * // Returns: ["tool1", "tool2"]
- * ```
- */
-export function parseAllowedTools(value: unknown): string[] | undefined {
-  if (typeof value === 'string') {
-    return value.split(/\s+/).filter(Boolean);
-  }
-  if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === 'string');
-  }
-  return undefined;
 }

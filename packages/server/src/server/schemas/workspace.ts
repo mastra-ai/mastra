@@ -251,7 +251,6 @@ export const skillMetadataSchema = z.object({
   license: z.string().optional(),
   compatibility: z.string().optional(),
   metadata: z.record(z.string()).optional(),
-  allowedTools: z.array(z.string()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [

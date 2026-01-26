@@ -87,24 +87,6 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
         />
       </div>
 
-      {/* Allowed Tools */}
-      {skill.allowedTools && skill.allowedTools.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-icon5">Allowed Tools</h3>
-          <div className="flex flex-wrap gap-2">
-            {skill.allowedTools.map(tool => (
-              <span
-                key={tool}
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-500/10 text-green-400"
-              >
-                <Code className="h-3 w-3" />
-                {tool}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Instructions */}
       <CollapsibleSection
         title="Instructions"

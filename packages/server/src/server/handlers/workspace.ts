@@ -702,7 +702,6 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
           license: skill.license,
           compatibility: skill.compatibility,
           metadata: skill.metadata,
-          allowedTools: skill.allowedTools,
         })),
         isSkillsConfigured: true,
       };
@@ -744,7 +743,6 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         license: skill.license,
         compatibility: skill.compatibility,
         metadata: skill.metadata,
-        allowedTools: skill.allowedTools,
         path: skill.path,
         instructions: skill.instructions,
         source: skill.source,

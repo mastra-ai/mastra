@@ -71,7 +71,6 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
-  allowedTools?: string[];
 }
 
 export interface SerializedTool {
@@ -220,7 +219,6 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
-      allowedTools: skill.allowedTools,
     }));
   } catch {
     return [];
@@ -1545,7 +1543,6 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         license: skill.license,
         compatibility: skill.compatibility,
         metadata: skill.metadata,
-        allowedTools: skill.allowedTools,
         path: skill.path,
         instructions: skill.instructions,
         source: skill.source,
