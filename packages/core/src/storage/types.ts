@@ -670,6 +670,8 @@ export interface RunResult {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /** Trace ID from agent/workflow execution */
+  traceId?: string | null;
   createdAt: Date;
 }
 
@@ -713,6 +715,8 @@ export interface AddRunResultInput {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /** Trace ID from agent/workflow execution */
+  traceId?: string | null;
 }
 
 /** Input for listing runs */

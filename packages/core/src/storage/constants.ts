@@ -179,6 +179,7 @@ export const DATASET_RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
+  traceId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

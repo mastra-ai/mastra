@@ -43,10 +43,12 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     version,
     maxConcurrency = 5,
     signal,
+    runId: providedRunId,
   } = config;
 
   const startedAt = new Date();
-  const runId = crypto.randomUUID();
+  // Use provided runId (async trigger) or generate new one
+  const runId = providedRunId ?? crypto.randomUUID();
 
   // 1. Get storage and resolve components
   const storage = mastra.getStorage();
@@ -82,16 +84,20 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
   // 4. Resolve scorers
   const scorers = resolveScorers(mastra, scorerInput);
 
-  // 5. Create run record (if storage available)
+  // 5. Create run record (if storage available and not pre-created)
   if (runsStore) {
-    await runsStore.createRun({
-      id: runId,
-      datasetId,
-      datasetVersion,
-      targetType,
-      targetId,
-      totalItems: items.length,
-    });
+    if (!providedRunId) {
+      // Create new run record (sync trigger path)
+      await runsStore.createRun({
+        id: runId,
+        datasetId,
+        datasetVersion,
+        targetType,
+        targetId,
+        totalItems: items.length,
+      });
+    }
+    // Update status to running (both sync and async paths)
     await runsStore.updateRun({
       id: runId,
       status: 'running',
@@ -170,6 +176,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
             startedAt: itemStartedAt,
             completedAt: itemCompletedAt,
             retryCount: 0,
+            traceId: execResult.traceId,
           });
         }
 
