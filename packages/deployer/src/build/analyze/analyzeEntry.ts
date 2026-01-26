@@ -60,6 +60,55 @@ function getInputPlugins(
           }
         },
       } satisfies Plugin,
+      // Resolve dependencies when importing from workspace @mastra/* packages
+      {
+        name: 'workspace-deps-resolver',
+        async resolveId(id: string, importer: string | undefined) {
+          // Skip if no importer or if it's already resolved
+          if (!importer || id.startsWith('/') || id.startsWith('.')) {
+            return null;
+          }
+
+          // Check if the importer is from a workspace @mastra/* package
+          const monorepoRoot = path.resolve(import.meta.dirname, '../../..');
+          const workspaceDirs = ['packages', 'stores', 'observability', 'deployers', 'voice', 'client-sdks', 'sources', 'routers', 'runners'];
+
+          const isFromWorkspace = workspaceDirs.some(dir =>
+            importer.startsWith(path.join(monorepoRoot, dir) + path.sep)
+          );
+
+          if (!isFromWorkspace) {
+            return null;
+          }
+
+          // Try to resolve the dependency from the workspace context
+          try {
+            const resolved = await getPackageRootPath(id, importer);
+            if (resolved) {
+              // Return the resolved path for the main entry
+              const pkgJsonContent = await readFile(path.join(resolved, 'package.json'), 'utf-8');
+              const pkgJson = JSON.parse(pkgJsonContent);
+              const mainEntry = pkgJson.main || pkgJson.module || 'index.js';
+              return { id: path.join(resolved, mainEntry), external: false };
+            }
+          } catch {
+            // Try resolving from monorepo root's node_modules
+            try {
+              const resolved = await getPackageRootPath(id, monorepoRoot);
+              if (resolved) {
+                const pkgJsonContent = await readFile(path.join(resolved, 'package.json'), 'utf-8');
+                const pkgJson = JSON.parse(pkgJsonContent);
+                const mainEntry = pkgJson.main || pkgJson.module || 'index.js';
+                return { id: path.join(resolved, mainEntry), external: false };
+              }
+            } catch {
+              // Let other resolvers handle it
+            }
+          }
+
+          return null;
+        },
+      } satisfies Plugin,
       // Resolve @mastra/* packages from workspace directories to ensure consistent versions
       {
         name: 'mastra-package-resolver',
