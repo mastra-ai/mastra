@@ -120,28 +120,20 @@ async function listScorersFromSystem({
     }
   }
 
-  // Process stored scorers (database-backed scorers created via UI)
+  // Also fetch and include stored scorers (database-backed scorers created via UI)
   try {
-    const storage = mastra.getStorage();
-    if (storage) {
-      const storedScorersStore = await storage.getStore('storedScorers');
-      if (storedScorersStore) {
-        const storedScorersResult = await storedScorersStore.listScorers({});
-        if (storedScorersResult?.scorers) {
-          for (const storedScorer of storedScorersResult.scorers) {
-            const scorerId = storedScorer.id;
+    const storedScorersResult = await mastra.listStoredScorers();
+    if (storedScorersResult?.scorers) {
+      for (const storedScorer of storedScorersResult.scorers) {
+        try {
+          // Resolve stored scorer to MastraScorer
+          const resolvedScorer = await mastra.resolveStoredScorer(storedScorer.id);
+          if (resolvedScorer) {
+            const scorerId = resolvedScorer.id;
             // Don't overwrite code-defined scorers with same ID
             if (!scorersMap.has(scorerId)) {
-              // Create a scorer-like object that matches the expected response schema
-              // The response schema expects { scorer: { config: { id, name, description } } }
               scorersMap.set(scorerId, {
-                scorer: {
-                  config: {
-                    id: storedScorer.id,
-                    name: storedScorer.name,
-                    description: storedScorer.description ?? '',
-                  },
-                } as MastraScorerEntry['scorer'],
+                scorer: resolvedScorer,
                 agentIds: [],
                 agentNames: [],
                 workflowIds: [],
@@ -149,11 +141,17 @@ async function listScorersFromSystem({
               });
             }
           }
+        } catch (scorerError) {
+          // Log but continue with other scorers
+          const logger = mastra.getLogger();
+          logger.warn('Failed to resolve stored scorer', { scorerId: storedScorer.id, error: scorerError });
         }
       }
     }
-  } catch {
-    // Silently ignore if stored scorers storage is not configured
+  } catch (storageError) {
+    // Storage not configured or doesn't support scorers - log and ignore
+    const logger = mastra.getLogger();
+    logger.debug('Failed to fetch stored scorers', { error: storageError });
   }
 
   return Object.fromEntries(scorersMap.entries());
