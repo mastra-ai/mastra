@@ -61,10 +61,6 @@ export type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  WatchEvent,
-  WatchCallback,
-  WatchOptions,
-  WatchHandle,
 } from './filesystem';
 
 export {

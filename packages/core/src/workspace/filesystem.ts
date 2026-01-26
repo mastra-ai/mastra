@@ -85,26 +85,6 @@ export interface CopyOptions {
   recursive?: boolean;
 }
 
-export interface WatchEvent {
-  type: 'create' | 'modify' | 'delete';
-  path: string;
-  stat?: FileStat;
-}
-
-export type WatchCallback = (event: WatchEvent) => void | Promise<void>;
-
-export interface WatchOptions {
-  /** Watch subdirectories */
-  recursive?: boolean;
-  /** Debounce time in milliseconds */
-  debounce?: number;
-}
-
-export interface WatchHandle {
-  /** Stop watching */
-  unsubscribe(): void;
-}
-
 // =============================================================================
 // Filesystem Safety Options
 // =============================================================================
@@ -270,16 +250,6 @@ export interface WorkspaceFilesystem {
    * Check if path is a directory.
    */
   isDirectory(path: string): Promise<boolean>;
-
-  // ---------------------------------------------------------------------------
-  // Watch Operations (optional)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Watch for changes to a path.
-   * Returns undefined if watching is not supported.
-   */
-  watch?(path: string, callback: WatchCallback, options?: WatchOptions): Promise<WatchHandle | undefined>;
 
   // ---------------------------------------------------------------------------
   // Lifecycle
