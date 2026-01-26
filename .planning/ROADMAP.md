@@ -23,6 +23,13 @@ The evented workflow runtime already implements most features (119/125 tests pas
 
 **Gap Analysis:** 12 tests reference `state` parameter not available in evented runtime
 
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 01-01-PLAN.md - Port 12 state-related tests from default to evented runtime (RED phase)
+- [ ] 01-02-PLAN.md - Implement state support to make tests pass (GREEN phase)
+
 **Missing Tests:**
 
 - should execute a single step workflow successfully with state
