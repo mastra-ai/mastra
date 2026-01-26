@@ -16,12 +16,12 @@ describe('MastraClient', () => {
       });
     };
 
-    it('should use custom prefix when provided', async () => {
+    it('should use custom apiPrefix when provided', async () => {
       mockFetchResponse();
 
       const client = new MastraClient({
         baseUrl: 'http://localhost:3000',
-        prefix: '/mastra', // Custom prefix instead of default /api
+        apiPrefix: '/mastra', // Custom prefix instead of default /api
       });
 
       await client.listAgents();
@@ -33,12 +33,12 @@ describe('MastraClient', () => {
       );
     });
 
-    it('should default to /api prefix for backward compatibility', async () => {
+    it('should default to /api apiPrefix for backward compatibility', async () => {
       mockFetchResponse();
 
       const client = new MastraClient({
         baseUrl: 'http://localhost:3000',
-        // No prefix specified - should default to /api
+        // No apiPrefix specified - should default to /api
       });
 
       await client.listAgents();
@@ -50,10 +50,10 @@ describe('MastraClient', () => {
       );
     });
 
-    it('should use custom prefix for all API endpoints', async () => {
+    it('should use custom apiPrefix for all API endpoints', async () => {
       const client = new MastraClient({
         baseUrl: 'http://localhost:3000',
-        prefix: '/v2',
+        apiPrefix: '/v2',
       });
 
       // Test listTools
@@ -97,12 +97,12 @@ describe('MastraClient', () => {
       );
     });
 
-    it('should handle prefix with trailing slash correctly', async () => {
+    it('should handle apiPrefix with trailing slash correctly', async () => {
       mockFetchResponse();
 
       const client = new MastraClient({
         baseUrl: 'http://localhost:3000',
-        prefix: '/mastra/', // Trailing slash should be normalized
+        apiPrefix: '/mastra/', // Trailing slash should be normalized
       });
 
       await client.listAgents();
@@ -114,12 +114,12 @@ describe('MastraClient', () => {
       );
     });
 
-    it('should handle prefix without leading slash', async () => {
+    it('should handle apiPrefix without leading slash', async () => {
       mockFetchResponse();
 
       const client = new MastraClient({
         baseUrl: 'http://localhost:3000',
-        prefix: 'mastra', // No leading slash should be normalized
+        apiPrefix: 'mastra', // No leading slash should be normalized
       });
 
       await client.listAgents();

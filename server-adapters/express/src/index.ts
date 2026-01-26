@@ -250,7 +250,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${this.apiPrefix ?? ''}${httpPath}`,
           req: request,
           res: response,
         });
@@ -276,8 +276,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${this.apiPrefix ?? ''}${ssePath}`,
+          messagePath: `${this.apiPrefix ?? ''}${messagePath}`,
           req: request,
           res: response,
         });
@@ -292,7 +292,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: Application, route: ServerRoute, { apiPrefix }: { apiPrefix?: string }): Promise<void> {
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -320,7 +320,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
 
     app[route.method.toLowerCase() as keyof Application](
-      `${prefix}${route.path}`,
+      `${apiPrefix}${route.path}`,
       ...middlewares,
       async (req: Request, res: Response) => {
         // Check route-level authentication/authorization
@@ -379,7 +379,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
-          routePrefix: this.prefix,
+          routePrefix: this.apiPrefix,
         };
 
         try {

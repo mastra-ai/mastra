@@ -40,8 +40,8 @@ import type { ZodSchema } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
-  /** API route prefix. Defaults to '/api'. Set this to match your server's prefix configuration. */
-  prefix?: string;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */

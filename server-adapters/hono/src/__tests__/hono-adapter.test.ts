@@ -33,7 +33,7 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        prefix: options?.prefix,
+        apiPrefix: options?.apiPrefix,
       });
 
       await adapter.init();
@@ -144,7 +144,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const response = await app.request(
         new Request('http://localhost/test/stream', {
@@ -202,7 +202,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const response = await app.request(
         new Request('http://localhost/test/stream', {
@@ -249,7 +249,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const response = await app.request(
         new Request('http://localhost/test/stream-v1', {
@@ -296,7 +296,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const response = await app.request(
         new Request('http://localhost/test/stream', {
@@ -346,7 +346,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Make a POST request with a JSON body (this triggers body parsing which can cause the issue)
       const response = await app.request(
@@ -386,7 +386,7 @@ describe('Hono Server Adapter', () => {
       };
 
       app.use('*', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const response = await app.request(
         new Request('http://localhost/test/abort-signal-exists', {
@@ -452,7 +452,7 @@ describe('Hono Server Adapter', () => {
     },
 
     registerRoute: async (adapter, app, route, options) => {
-      await adapter.registerRoute(app, route, options || { prefix: '' });
+      await adapter.registerRoute(app, route, options || { apiPrefix: '' });
     },
 
     getContextMiddleware: adapter => adapter.createContextMiddleware(),

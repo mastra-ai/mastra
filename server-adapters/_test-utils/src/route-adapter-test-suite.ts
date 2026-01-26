@@ -463,7 +463,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     describe('Route Prefix', () => {
       it('should register routes at prefixed paths without double /api', async () => {
         // Create a new adapter with a custom prefix
-        const prefixedSetup = await setupAdapter(context, { prefix: '/v2' });
+        const prefixedSetup = await setupAdapter(context, { apiPrefix: '/v2' });
         const prefixedApp = prefixedSetup.app;
 
         // Request the expected path: /v2/agents (not /v2/api/agents)
@@ -478,7 +478,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
       it('should not have routes at double /api path when prefix is set', async () => {
         // Create a new adapter with a custom prefix
-        const prefixedSetup = await setupAdapter(context, { prefix: '/v2' });
+        const prefixedSetup = await setupAdapter(context, { apiPrefix: '/v2' });
         const prefixedApp = prefixedSetup.app;
 
         // The buggy path /v2/api/agents should NOT work
@@ -493,7 +493,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
       it('should normalize prefix with trailing slash', async () => {
         // Create adapter with trailing slash in prefix
-        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedSetup = await setupAdapter(context, { apiPrefix: '/mastra/' });
         const prefixedApp = prefixedSetup.app;
 
         // Request should work at normalized path /mastra/agents (not /mastra//agents)
@@ -508,7 +508,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
       it('should normalize prefix without leading slash', async () => {
         // Create adapter without leading slash in prefix
-        const prefixedSetup = await setupAdapter(context, { prefix: 'mastra' });
+        const prefixedSetup = await setupAdapter(context, { apiPrefix: 'mastra' });
         const prefixedApp = prefixedSetup.app;
 
         // Request should work at normalized path /mastra/agents
@@ -523,7 +523,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
       it('should not have routes at double-slash path when prefix has trailing slash', async () => {
         // Create adapter with trailing slash in prefix
-        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedSetup = await setupAdapter(context, { apiPrefix: '/mastra/' });
         const prefixedApp = prefixedSetup.app;
 
         // The double-slash path /mastra//agents should NOT work

@@ -70,8 +70,8 @@ export interface HttpResponse {
  * Options for adapter setup
  */
 export interface AdapterSetupOptions {
-  /** Route prefix (e.g., '/v2' or '/api/v2') */
-  prefix?: string;
+  /** API route prefix (e.g., '/v2' or '/api/v2') */
+  apiPrefix?: string;
 }
 
 /**
@@ -879,14 +879,14 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
-  /** Prefix to prepend to the route path (defaults to '/api') */
-  prefix?: string;
+  /** API route prefix to prepend to the route path (defaults to '/api') */
+  apiPrefix?: string;
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  const prefix = overrides.prefix ?? '/api';
-  let path = `${prefix}${route.path}`;
+  const apiPrefix = overrides.apiPrefix ?? '/api';
+  let path = `${apiPrefix}${route.path}`;
 
   if (route.pathParamSchema) {
     const defaults = getDefaultValidPathParams(route);

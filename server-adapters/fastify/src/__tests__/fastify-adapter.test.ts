@@ -32,7 +32,7 @@ describe('Fastify Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        prefix: options?.prefix,
+        apiPrefix: options?.apiPrefix,
       });
 
       await adapter.init();
@@ -163,7 +163,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Start server
       const address = await app.listen({ port: 0 });
@@ -222,7 +222,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Start server
       const address = await app.listen({ port: 0 });
@@ -270,7 +270,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Start server
       const address = await app.listen({ port: 0 });
@@ -318,7 +318,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Start server
       const address = await app.listen({ port: 0 });
@@ -377,7 +377,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       // Start server
       const address = await app.listen({ port: 0 });
@@ -418,7 +418,7 @@ describe('Fastify Server Adapter', () => {
       };
 
       app.addHook('preHandler', adapter.createContextMiddleware());
-      await adapter.registerRoute(app, testRoute, { prefix: '' });
+      await adapter.registerRoute(app, testRoute, { apiPrefix: '' });
 
       const address = await app.listen({ port: 0 });
 
@@ -469,7 +469,7 @@ describe('Fastify Server Adapter', () => {
     },
 
     registerRoute: async (adapter, app, route, options) => {
-      await adapter.registerRoute(app, route, options || { prefix: '' });
+      await adapter.registerRoute(app, route, options || { apiPrefix: '' });
     },
 
     getContextMiddleware: adapter => adapter.createContextMiddleware(),

@@ -9,7 +9,7 @@ declare global {
     MASTRA_STUDIO_BASE_PATH?: string;
     MASTRA_SERVER_HOST: string;
     MASTRA_SERVER_PORT: string;
-    MASTRA_SERVER_PREFIX?: string;
+    MASTRA_API_PREFIX?: string;
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
@@ -92,7 +92,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, prefix, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
   const { isMastraPlatform } = useMastraPlatform();
 
   if (isLoading) {
@@ -106,7 +106,7 @@ function App() {
   }
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} prefix={prefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
       <PostHogProvider>
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>
@@ -184,13 +184,13 @@ export default function AppWrapper() {
   const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
   const host = window.MASTRA_SERVER_HOST || 'localhost';
   const port = window.MASTRA_SERVER_PORT || 4111;
-  const prefix = window.MASTRA_SERVER_PREFIX || '/api';
+  const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultPrefix={prefix}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

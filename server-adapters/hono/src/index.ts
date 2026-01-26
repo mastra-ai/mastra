@@ -228,7 +228,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${this.apiPrefix ?? ''}${httpPath}`,
           req,
           res,
         });
@@ -254,8 +254,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${this.apiPrefix ?? ''}${ssePath}`,
+          messagePath: `${this.apiPrefix ?? ''}${messagePath}`,
           context: response,
         });
       } catch {
@@ -266,7 +266,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     }
   }
 
-  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: HonoApp, route: ServerRoute, { apiPrefix }: { apiPrefix?: string }): Promise<void> {
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -286,7 +286,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     }
 
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
-      `${prefix}${route.path}`,
+      `${apiPrefix}${route.path}`,
       ...middlewares,
       async (c: Context) => {
         // Check route-level authentication/authorization
@@ -351,7 +351,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
-          routePrefix: this.prefix,
+          routePrefix: this.apiPrefix,
         };
 
         try {

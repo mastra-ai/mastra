@@ -96,7 +96,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: ToolsInput;
-  protected prefix?: string;
+  protected apiPrefix?: string;
   protected openapiPath?: string;
   protected taskStore?: InMemoryTaskStore;
   protected customRouteAuthConfig?: Map<string, boolean>;
@@ -107,7 +107,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     mastra,
     bodyLimitOptions,
     tools,
-    prefix = '/api',
+    apiPrefix = '/api',
     openapiPath = '',
     taskStore,
     customRouteAuthConfig,
@@ -117,7 +117,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     mastra: Mastra;
     bodyLimitOptions?: BodyLimitOptions;
     tools?: ToolsInput;
-    prefix?: string;
+    apiPrefix?: string;
     openapiPath?: string;
     taskStore?: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
@@ -127,7 +127,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
-    this.prefix = normalizeRoutePath(prefix);
+    this.apiPrefix = normalizeRoutePath(apiPrefix);
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
@@ -287,7 +287,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract getParams(route: ServerRoute, request: TRequest): Promise<ParsedRequestParams>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
-  abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
+  abstract registerRoute(app: TApp, route: ServerRoute, { apiPrefix }: { apiPrefix?: string }): Promise<void>;
   abstract registerContextMiddleware(): void;
   abstract registerAuthMiddleware(): void;
 
@@ -297,7 +297,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     await this.registerRoutes();
   }
 
-  async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
+  async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { apiPrefix }: { apiPrefix?: string }): Promise<void> {
     const {
       title = 'Mastra API',
       version = '1.0.0',
@@ -318,7 +318,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       handler: async () => openApiSpec,
     };
 
-    await this.registerRoute(app, openApiRoute, { prefix });
+    await this.registerRoute(app, openApiRoute, { apiPrefix });
   }
 
   async registerRoutes(): Promise<void> {
@@ -326,7 +326,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // more specific routes (e.g., /versions/compare) must be registered before
     // parameterized routes (e.g., /versions/:versionId)
     for (const route of SERVER_ROUTES) {
-      await this.registerRoute(this.app, route, { prefix: this.prefix });
+      await this.registerRoute(this.app, route, { apiPrefix: this.apiPrefix });
     }
 
     if (this.openapiPath) {
@@ -338,7 +338,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           description: 'Mastra Server API',
           path: this.openapiPath,
         },
-        { prefix: this.prefix },
+        { apiPrefix: this.apiPrefix },
       );
     }
   }

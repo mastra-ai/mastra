@@ -4,11 +4,11 @@ import type { RequestOptions, ClientOptions } from '../types';
 
 export class BaseResource {
   readonly options: ClientOptions;
-  protected readonly prefix: string;
+  protected readonly apiPrefix: string;
 
   constructor(options: ClientOptions) {
     this.options = options;
-    this.prefix = normalizeRoutePath(options.prefix ?? '/api');
+    this.apiPrefix = normalizeRoutePath(options.apiPrefix ?? '/api');
   }
 
   /**
@@ -49,8 +49,8 @@ export class BaseResource {
 
     let delay = backoffMs;
 
-    // Build the full URL with prefix (unless it's a protocol-specific path)
-    const fullPath = this.shouldApplyPrefix(path) ? `${this.prefix}${path}` : path;
+    // Build the full URL with apiPrefix (unless it's a protocol-specific path)
+    const fullPath = this.shouldApplyPrefix(path) ? `${this.apiPrefix}${path}` : path;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {

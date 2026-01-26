@@ -10,7 +10,7 @@ export type StudioConfigContextType = StudioConfig & {
 export const StudioConfigContext = createContext<StudioConfigContextType>({
   baseUrl: '',
   headers: {},
-  prefix: undefined,
+  apiPrefix: undefined,
   isLoading: false,
   setConfig: () => {},
 });
@@ -22,7 +22,7 @@ export const useStudioConfig = () => {
 export interface StudioConfigProviderProps {
   children: React.ReactNode;
   endpoint?: string;
-  defaultPrefix?: string;
+  defaultApiPrefix?: string;
 }
 
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
@@ -30,20 +30,20 @@ const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
-  defaultPrefix = '/api',
+  defaultApiPrefix = '/api',
 }: StudioConfigProviderProps) => {
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
-    prefix: undefined,
+    apiPrefix: undefined,
     isLoading: true,
   });
 
   useLayoutEffect(() => {
     // Handle error case - stop loading but don't configure
     if (error && !isStatusLoading) {
-      return setConfig({ baseUrl: '', headers: {}, prefix: undefined, isLoading: false });
+      return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
     }
 
     // Don't run the effect during the fetch request
@@ -54,21 +54,21 @@ export const StudioConfigProvider = ({
       const parsedConfig = JSON.parse(storedConfig);
 
       if (typeof parsedConfig === 'object' && parsedConfig !== null) {
-        // Use stored prefix if set, otherwise fall back to CLI default for back-compat
+        // Use stored apiPrefix if set, otherwise fall back to CLI default for back-compat
         const normalizedConfig = {
           ...parsedConfig,
-          prefix: parsedConfig.prefix ?? defaultPrefix,
+          apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
         };
         return setConfig({ ...normalizedConfig, isLoading: false });
       }
     }
 
     if (instanceStatus.status === 'active') {
-      return setConfig(prev => ({ ...prev, baseUrl: endpoint, prefix: defaultPrefix, isLoading: false }));
+      return setConfig(prev => ({ ...prev, baseUrl: endpoint, apiPrefix: defaultApiPrefix, isLoading: false }));
     }
 
-    return setConfig({ baseUrl: '', headers: {}, prefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, defaultPrefix, isStatusLoading, error]);
+    return setConfig({ baseUrl: '', headers: {}, apiPrefix: undefined, isLoading: false });
+  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {

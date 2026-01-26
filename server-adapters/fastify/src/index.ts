@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${this.apiPrefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -316,8 +316,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${this.apiPrefix ?? ''}${ssePath}`,
+          messagePath: `${this.apiPrefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -333,8 +333,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
-  async registerRoute(app: FastifyInstance, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
-    const fullPath = `${prefix}${route.path}`;
+  async registerRoute(app: FastifyInstance, route: ServerRoute, { apiPrefix }: { apiPrefix?: string }): Promise<void> {
+    const fullPath = `${apiPrefix}${route.path}`;
 
     // Convert Express-style :param to Fastify-style :param (they're the same, but ensure consistency)
     const fastifyPath = fullPath;
@@ -397,7 +397,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: this.apiPrefix,
       };
 
       try {
