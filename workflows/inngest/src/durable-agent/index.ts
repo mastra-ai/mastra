@@ -3,36 +3,33 @@
  *
  * Provides durable AI agent execution through Inngest's execution engine.
  *
- * @example
+ * @example Recommended: Use createInngestAgent factory
  * ```typescript
- * import {
- *   InngestDurableAgent,
- *   createInngestDurableAgenticWorkflow,
- *   serve as inngestServe
- * } from '@mastra/inngest';
+ * import { Agent } from '@mastra/core/agent';
+ * import { createInngestAgent, serve as inngestServe } from '@mastra/inngest';
  * import { Mastra } from '@mastra/core/mastra';
  * import { Inngest } from 'inngest';
+ * import { realtimeMiddleware } from '@inngest/realtime/middleware';
  *
- * const inngest = new Inngest({ id: 'my-app' });
+ * const inngest = new Inngest({
+ *   id: 'my-app',
+ *   middleware: [realtimeMiddleware()],
+ * });
  *
- * // 1. Create the shared workflow (once per app)
- * const durableAgentWorkflow = createInngestDurableAgenticWorkflow({ inngest });
- *
- * // 2. Create agents
- * const agent = new InngestDurableAgent({
+ * // 1. Create a regular Mastra agent
+ * const agent = new Agent({
  *   id: 'my-agent',
  *   name: 'My Agent',
  *   instructions: 'You are a helpful assistant',
  *   model: openai('gpt-4'),
- *   inngest,
  * });
  *
- * // 3. Initialize agent and register with Mastra
- * await agent.prepare([{ role: 'user', content: 'init' }]);
+ * // 2. Wrap it with Inngest durable execution
+ * const durableAgent = createInngestAgent({ agent, inngest });
  *
+ * // 3. Register with Mastra (workflow is auto-registered)
  * const mastra = new Mastra({
- *   agents: { [agent.id]: agent.agent },
- *   workflows: { [durableAgentWorkflow.id]: durableAgentWorkflow },
+ *   agents: { myAgent: durableAgent },
  *   server: {
  *     apiRoutes: [{
  *       path: '/inngest/api',
@@ -43,13 +40,23 @@
  * });
  *
  * // 4. Use the agent
- * const { output, cleanup } = await agent.stream('Hello!');
+ * const { output, cleanup } = await durableAgent.stream('Hello!');
  * const text = await output.text;
  * cleanup();
  * ```
  */
 
-// Main InngestDurableAgent class
+// Recommended: Factory function for creating Inngest durable agents
+export {
+  createInngestAgent,
+  isInngestAgent,
+  type InngestAgent,
+  type CreateInngestAgentOptions,
+  type InngestAgentStreamOptions,
+  type InngestAgentStreamResult,
+} from './create-inngest-agent';
+
+// Legacy: Direct InngestDurableAgent class (for advanced use cases)
 export {
   InngestDurableAgent,
   type InngestDurableAgentConfig,
@@ -57,7 +64,7 @@ export {
   type InngestDurableAgentStreamResult,
 } from './inngest-durable-agent';
 
-// Workflow factory
+// Workflow factory (for advanced use cases)
 export {
   createInngestDurableAgenticWorkflow,
   type InngestDurableAgenticWorkflowOptions,

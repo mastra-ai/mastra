@@ -1,0 +1,427 @@
+/**
+ * Factory function to create an Inngest-powered durable agent.
+ *
+ * This provides a clean API for wrapping a Mastra Agent with Inngest's
+ * durable execution engine. The returned object can be registered with
+ * Mastra like any other agent, and the required workflow is automatically
+ * registered when added to Mastra.
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { createInngestAgent } from '@mastra/inngest';
+ * import { Inngest } from 'inngest';
+ * import { realtimeMiddleware } from '@inngest/realtime/middleware';
+ *
+ * const inngest = new Inngest({
+ *   id: 'my-app',
+ *   middleware: [realtimeMiddleware()],
+ * });
+ *
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   name: 'My Agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: openai('gpt-4'),
+ * });
+ *
+ * const durableAgent = createInngestAgent({ agent, inngest });
+ *
+ * const mastra = new Mastra({
+ *   agents: { myAgent: durableAgent },
+ * });
+ *
+ * // Use the agent
+ * const { output, cleanup } = await durableAgent.stream('Hello!');
+ * const text = await output.text;
+ * cleanup();
+ * ```
+ */
+
+import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
+import {
+  prepareForDurableExecution,
+  createDurableAgentStream,
+  emitErrorEvent,
+  DurableStepIds,
+} from '@mastra/core/agent/durable';
+import type {
+  AgentFinishEventData,
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+} from '@mastra/core/agent/durable';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { PubSub } from '@mastra/core/events';
+import type { MastraModelOutput, ChunkType } from '@mastra/core/stream';
+import type { Workflow } from '@mastra/core/workflows';
+import type { Inngest } from 'inngest';
+
+import { InngestPubSub } from '../pubsub';
+import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+/**
+ * Options for createInngestAgent factory function.
+ */
+export interface CreateInngestAgentOptions {
+  /** The Mastra Agent to wrap with durable execution */
+  agent: Agent<any, any, any>;
+  /** Inngest client instance */
+  inngest: Inngest;
+  /** Optional PubSub override (defaults to InngestPubSub) */
+  pubsub?: PubSub;
+}
+
+/**
+ * Options for InngestAgent.stream()
+ */
+export interface InngestAgentStreamOptions<OUTPUT = undefined> {
+  /** Custom instructions that override the agent's default instructions */
+  instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
+  /** Additional context messages */
+  context?: AgentExecutionOptions<OUTPUT>['context'];
+  /** Memory configuration */
+  memory?: AgentExecutionOptions<OUTPUT>['memory'];
+  /** Unique identifier for this execution run */
+  runId?: string;
+  /** Request Context */
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /** Maximum number of steps */
+  maxSteps?: number;
+  /** Additional tool sets */
+  toolsets?: AgentExecutionOptions<OUTPUT>['toolsets'];
+  /** Client-side tools */
+  clientTools?: AgentExecutionOptions<OUTPUT>['clientTools'];
+  /** Tool selection strategy */
+  toolChoice?: AgentExecutionOptions<OUTPUT>['toolChoice'];
+  /** Model settings */
+  modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
+  /** Require approval for all tool calls */
+  requireToolApproval?: boolean;
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+  /** Maximum concurrent tool calls */
+  toolCallConcurrency?: number;
+  /** Include raw chunks in output */
+  includeRawChunks?: boolean;
+  /** Maximum processor retries */
+  maxProcessorRetries?: number;
+  /** Callback when chunk is received */
+  onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Callback when step finishes */
+  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes */
+  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback on error */
+  onError?: (error: Error) => void | Promise<void>;
+  /** Callback when workflow suspends */
+  onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+}
+
+/**
+ * Result from InngestAgent.stream()
+ */
+export interface InngestAgentStreamResult<OUTPUT = undefined> {
+  /** The streaming output */
+  output: MastraModelOutput<OUTPUT>;
+  /** The unique run ID */
+  runId: string;
+  /** Thread ID if using memory */
+  threadId?: string;
+  /** Resource ID if using memory */
+  resourceId?: string;
+  /** Cleanup function */
+  cleanup: () => void;
+}
+
+/**
+ * An Inngest-powered durable agent.
+ *
+ * This interface represents an agent that uses Inngest's durable execution engine.
+ * It can be registered with Mastra like a regular Agent, and the required workflow
+ * is automatically registered.
+ */
+export interface InngestAgent<TOutput = undefined> {
+  /** Agent ID */
+  readonly id: string;
+  /** Agent name */
+  readonly name: string;
+  /** The underlying Mastra Agent (for Mastra registration) */
+  readonly agent: Agent<any, any, TOutput>;
+  /** The Inngest client */
+  readonly inngest: Inngest;
+
+  /**
+   * Stream a response using Inngest's durable execution.
+   */
+  stream(
+    messages: MessageListInput,
+    options?: InngestAgentStreamOptions<TOutput>,
+  ): Promise<InngestAgentStreamResult<TOutput>>;
+
+  /**
+   * Resume a suspended workflow execution.
+   */
+  resume(
+    runId: string,
+    resumeData: unknown,
+    options?: {
+      threadId?: string;
+      resourceId?: string;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+      onError?: (error: Error) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<InngestAgentStreamResult<TOutput>>;
+
+  /**
+   * Prepare for durable execution without starting it.
+   */
+  prepare(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<TOutput>,
+  ): Promise<{
+    runId: string;
+    messageId: string;
+    workflowInput: any;
+    threadId?: string;
+    resourceId?: string;
+  }>;
+
+  /**
+   * Get the durable workflows required by this agent.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
+}
+
+// =============================================================================
+// Factory Function
+// =============================================================================
+
+/**
+ * Create an Inngest-powered durable agent from a Mastra Agent.
+ *
+ * This factory function wraps a regular Mastra Agent with Inngest's durable
+ * execution capabilities. The returned InngestAgent can be registered with
+ * Mastra, and the required workflow will be automatically registered.
+ *
+ * @param options - Configuration options
+ * @returns An InngestAgent that can be registered with Mastra
+ *
+ * @example
+ * ```typescript
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are helpful',
+ *   model: openai('gpt-4'),
+ * });
+ *
+ * const durableAgent = createInngestAgent({ agent, inngest });
+ *
+ * const mastra = new Mastra({
+ *   agents: { myAgent: durableAgent },
+ * });
+ * ```
+ */
+export function createInngestAgent<TOutput = undefined>(options: CreateInngestAgentOptions): InngestAgent<TOutput> {
+  const { agent, inngest, pubsub: customPubsub } = options;
+
+  // Create the durable workflow for this agent
+  // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
+  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+
+  // Create pubsub (default to InngestPubSub)
+  const pubsub = customPubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
+
+  /**
+   * Trigger the workflow via Inngest event
+   */
+  async function triggerWorkflow(runId: string, workflowInput: any): Promise<void> {
+    const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}`;
+
+    await inngest.send({
+      name: eventName,
+      data: {
+        inputData: workflowInput,
+        runId,
+        resourceId: workflowInput.state?.resourceId,
+        requestContext: {},
+      },
+    });
+  }
+
+  /**
+   * Emit an error event to pubsub
+   */
+  async function emitError(runId: string, error: Error): Promise<void> {
+    await emitErrorEvent(pubsub, runId, error);
+  }
+
+  // Return the InngestAgent object
+  const inngestAgent: InngestAgent<TOutput> = {
+    get id() {
+      return agent.id;
+    },
+
+    get name() {
+      return agent.name;
+    },
+
+    get agent() {
+      return agent as Agent<any, any, TOutput>;
+    },
+
+    get inngest() {
+      return inngest;
+    },
+
+    async stream(messages, streamOptions) {
+      // 1. Prepare for durable execution
+      const preparation = await prepareForDurableExecution<TOutput>({
+        agent: agent as Agent<string, any, TOutput>,
+        messages,
+        options: streamOptions as AgentExecutionOptions<TOutput>,
+        runId: streamOptions?.runId,
+        requestContext: streamOptions?.requestContext,
+      });
+
+      const { runId, messageId, workflowInput, threadId, resourceId } = preparation;
+
+      // 2. Create the durable agent stream (subscribes to pubsub)
+      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+        pubsub,
+        runId,
+        messageId,
+        model: {
+          modelId: workflowInput.modelConfig.modelId,
+          provider: workflowInput.modelConfig.provider,
+          version: 'v3',
+        },
+        threadId,
+        resourceId,
+        onChunk: streamOptions?.onChunk,
+        onStepFinish: streamOptions?.onStepFinish,
+        onFinish: streamOptions?.onFinish,
+        onError: streamOptions?.onError,
+        onSuspended: streamOptions?.onSuspended,
+      });
+
+      // 3. Trigger the workflow via Inngest (async, don't await)
+      // Small delay to allow subscription to establish
+      setTimeout(() => {
+        void triggerWorkflow(runId, workflowInput).catch(error => {
+          void emitError(runId, error);
+        });
+      }, 100);
+
+      // 4. Return stream result
+      return {
+        output,
+        runId,
+        threadId,
+        resourceId,
+        cleanup: streamCleanup,
+      };
+    },
+
+    async resume(runId, resumeData, resumeOptions) {
+      // Re-subscribe to the stream
+      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+        pubsub,
+        runId,
+        messageId: crypto.randomUUID(),
+        model: {
+          modelId: undefined,
+          provider: undefined,
+          version: 'v3',
+        },
+        threadId: resumeOptions?.threadId,
+        resourceId: resumeOptions?.resourceId,
+        onChunk: resumeOptions?.onChunk,
+        onStepFinish: resumeOptions?.onStepFinish,
+        onFinish: resumeOptions?.onFinish,
+        onError: resumeOptions?.onError,
+        onSuspended: resumeOptions?.onSuspended,
+      });
+
+      // Send resume event to Inngest
+      const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}.resume`;
+
+      setTimeout(() => {
+        void inngest
+          .send({
+            name: eventName,
+            data: {
+              runId,
+              resumeData,
+            },
+          })
+          .catch(error => {
+            void emitError(runId, error);
+          });
+      }, 100);
+
+      return {
+        output,
+        runId,
+        threadId: resumeOptions?.threadId,
+        resourceId: resumeOptions?.resourceId,
+        cleanup: streamCleanup,
+      };
+    },
+
+    async prepare(messages, prepareOptions) {
+      const preparation = await prepareForDurableExecution<TOutput>({
+        agent: agent as Agent<string, any, TOutput>,
+        messages,
+        options: prepareOptions,
+        requestContext: prepareOptions?.requestContext,
+      });
+
+      return {
+        runId: preparation.runId,
+        messageId: preparation.messageId,
+        workflowInput: preparation.workflowInput,
+        threadId: preparation.threadId,
+        resourceId: preparation.resourceId,
+      };
+    },
+
+    getDurableWorkflows() {
+      return [workflow];
+    },
+  };
+
+  return inngestAgent;
+}
+
+// =============================================================================
+// Type Guard
+// =============================================================================
+
+/**
+ * Symbol to identify InngestAgent instances
+ */
+export const INNGEST_AGENT_SYMBOL = Symbol.for('mastra.inngestAgent');
+
+/**
+ * Check if an object is an InngestAgent
+ */
+export function isInngestAgent(obj: any): obj is InngestAgent {
+  if (!obj) return false;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    'agent' in obj &&
+    'inngest' in obj &&
+    typeof obj.stream === 'function' &&
+    typeof obj.getDurableWorkflows === 'function'
+  );
+}
