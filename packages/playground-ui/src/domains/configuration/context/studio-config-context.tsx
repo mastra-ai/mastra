@@ -22,11 +22,16 @@ export const useStudioConfig = () => {
 export interface StudioConfigProviderProps {
   children: React.ReactNode;
   endpoint?: string;
+  defaultPrefix?: string;
 }
 
 const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 
-export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:4111' }: StudioConfigProviderProps) => {
+export const StudioConfigProvider = ({
+  children,
+  endpoint = 'http://localhost:4111',
+  defaultPrefix,
+}: StudioConfigProviderProps) => {
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
@@ -54,11 +59,11 @@ export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:41
     }
 
     if (instanceStatus.status === 'active') {
-      return setConfig(prev => ({ ...prev, baseUrl: endpoint, isLoading: false }));
+      return setConfig(prev => ({ ...prev, baseUrl: endpoint, prefix: defaultPrefix, isLoading: false }));
     }
 
     return setConfig({ baseUrl: '', headers: {}, prefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, isStatusLoading, error]);
+  }, [instanceStatus, endpoint, defaultPrefix, isStatusLoading, error]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {
