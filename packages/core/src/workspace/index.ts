@@ -125,7 +125,14 @@ export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
 // Workspace Tools (for agent auto-injection)
 // =============================================================================
 
-export { createWorkspaceTools, WORKSPACE_TOOL_NAMES } from './tools';
+export { createWorkspaceTools } from './tools';
+export { WORKSPACE_TOOLS, type WorkspaceToolName } from './tool-names';
+
+// =============================================================================
+// Tree Formatter (for directory visualization)
+// =============================================================================
+
+export { formatAsTree, formatEntriesAsTree, type TreeOptions, type TreeResult } from './tree-formatter';
 
 // =============================================================================
 // Search Engine (BM25, Vector, Hybrid search)
