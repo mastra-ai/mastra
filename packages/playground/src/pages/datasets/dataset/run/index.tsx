@@ -17,6 +17,7 @@ import {
   useLinkComponent,
   useDatasetRun,
   useDatasetRunResults,
+  useScoresByRunId,
   ResultsTable,
 } from '@mastra/playground-ui';
 
@@ -26,6 +27,7 @@ function DatasetRun() {
 
   const { data: run, isLoading: runLoading, error: runError } = useDatasetRun(datasetId!, runId!);
   const { data: resultsData, isLoading: resultsLoading } = useDatasetRunResults(datasetId!, runId!);
+  const { data: scores = {} } = useScoresByRunId(runId!);
 
   if (runLoading) {
     return (
@@ -78,10 +80,8 @@ function DatasetRun() {
     },
   ];
 
-  // Transform results for the table (scores would need to come from a separate endpoint)
+  // Transform results for the table
   const results = resultsData?.results ?? [];
-  // Placeholder for scores - in real implementation, fetch from scores endpoint
-  const scores: Record<string, []> = {};
 
   return (
     <MainContentLayout>

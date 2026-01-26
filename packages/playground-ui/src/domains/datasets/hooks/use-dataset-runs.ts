@@ -44,3 +44,32 @@ export const useDatasetRunResults = (datasetId: string, runId: string, paginatio
     enabled: Boolean(datasetId) && Boolean(runId),
   });
 };
+
+/**
+ * Hook to fetch scores for a run, transformed to Record<itemId, ScoreData[]>
+ * ScoreData matches ResultsTable expectation: { id, scorerId, score, reason? }
+ */
+export const useScoresByRunId = (runId: string) => {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['dataset-run-scores', runId],
+    queryFn: async () => {
+      const response = await client.listScoresByRunId({ runId });
+      // Transform flat array to Record<entityId, ScoreData[]>
+      const grouped: Record<string, Array<{ id: string; scorerId: string; score: number; reason?: string }>> = {};
+      for (const row of response.scores) {
+        if (!grouped[row.entityId]) {
+          grouped[row.entityId] = [];
+        }
+        grouped[row.entityId].push({
+          id: row.id,
+          scorerId: row.scorerId,
+          score: row.score,
+          reason: row.reason ?? undefined,
+        });
+      }
+      return grouped;
+    },
+    enabled: Boolean(runId),
+  });
+};
