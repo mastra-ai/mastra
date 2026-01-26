@@ -1651,6 +1651,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       recordId: string;
       threadId: string;
     },
+    reflectionThreshold?: number,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -1682,6 +1683,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
+    
+    // Get the target threshold - use provided value or fall back to config
+    const targetThreshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
 
     // Track total usage across attempts
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -1712,10 +1716,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let parsed = parseReflectorOutput(result.text);
     let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
 
-    // Check if compression was successful
-    if (!validateCompression(originalTokens, reflectedTokens)) {
+    // Check if compression was successful (reflected tokens should be below target threshold)
+    if (!validateCompression(reflectedTokens, targetThreshold)) {
       omDebug(
-        `[OM] Reflection did not compress (${originalTokens} -> ${reflectedTokens}), retrying with compression guidance`,
+        `[OM] Reflection did not compress below threshold (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold}), retrying with compression guidance`,
       );
 
       // Emit failed marker for first attempt, then start marker for retry
@@ -1725,7 +1729,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress enough (${originalTokens} → ${reflectedTokens} tokens), retrying with compression guidance`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying with compression guidance`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -1775,16 +1779,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
 
       // Log result of retry
-      if (!validateCompression(originalTokens, reflectedTokens)) {
+      if (!validateCompression(reflectedTokens, targetThreshold)) {
         omWarn(
-          `[OM] Reflection still did not compress after retry (${originalTokens} -> ${reflectedTokens}). ` +
+          `[OM] Reflection still above threshold after retry (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold}). ` +
             `This may indicate the observations cannot be further condensed.`,
         );
       } else {
-        omDebug(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens})`);
+        omDebug(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold})`);
       }
     } else {
-      omDebug(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens})`);
+      omDebug(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold})`);
     }
 
     writeDebugEntry('callReflector:result', {
@@ -3480,7 +3484,7 @@ ${formattedMessages}
     try {
       // Only pass patterns to Reflector if reflector patterns are enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
-      const reflectResult = await this.callReflector(record.activeObservations, undefined, patternsToReflect, streamContext);
+      const reflectResult = await this.callReflector(record.activeObservations, undefined, patternsToReflect, streamContext, reflectThreshold);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       writeDebugEntry('maybeReflect:before_createReflectionGeneration', {
@@ -3587,7 +3591,8 @@ ${formattedMessages}
     try {
       // Manual reflect also passes patterns if enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
-      const reflectResult = await this.callReflector(record.activeObservations, prompt, patternsToReflect);
+      const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+      const reflectResult = await this.callReflector(record.activeObservations, prompt, patternsToReflect, undefined, reflectThreshold);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({

@@ -310,14 +310,13 @@ function extractReflectorListItems(content: string): string {
 }
 
 /**
- * Validate that reflection actually compressed the observations
+ * Validate that reflection actually compressed the observations below the target threshold
  *
- * @param originalTokens - Token count of original observations
  * @param reflectedTokens - Token count of reflected observations
- * @param threshold - Minimum compression ratio (default: 0.9 = must be at least 10% smaller)
- * @returns true if compression was successful
+ * @param targetThreshold - Target token count to compress below (the reflection threshold)
+ * @returns true if compression was successful (reflected tokens are below target)
  */
-export function validateCompression(originalTokens: number, reflectedTokens: number, threshold: number = 0.9): boolean {
-  // Reflection should be smaller than original
-  return reflectedTokens < originalTokens * threshold;
+export function validateCompression(reflectedTokens: number, targetThreshold: number): boolean {
+  // Reflection should be below the target threshold
+  return reflectedTokens < targetThreshold;
 }
