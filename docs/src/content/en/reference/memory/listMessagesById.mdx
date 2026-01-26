@@ -1,0 +1,56 @@
+---
+title: "Reference: listMessagesById() | Memory"
+description: "Documentation for the `listMessagesById()` method in Mastra, which retrieves specific messages by their IDs."
+packages:
+  - "@mastra/memory"
+---
+
+# listMessagesById()
+
+The `listMessagesById()` method retrieves specific messages by their IDs.
+
+## Usage Example
+
+```typescript
+const storage = mastra.getStorage();
+const memoryStore = await storage?.getStore('memory');
+
+const result = await memoryStore?.listMessagesById({
+  messageIds: ["msg-123", "msg-456", "msg-789"],
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "An array of message IDs to retrieve.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<{ messages: MastraDBMessage[] }>",
+      description: "A promise that resolves to an object containing the requested messages.",
+    },
+  ]}
+/>
+
+The return object contains:
+
+- `messages`: Array of messages in `MastraDBMessage` format matching the provided IDs
+
+### Related
+
+- [Message History](/docs/memory/message-history)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [listMessages](/reference/memory/listMessages)

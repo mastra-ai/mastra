@@ -329,6 +329,11 @@ const sidebars = {
           id: "memory/listMessages",
           label: ".listMessages()",
         },
+        {
+          type: "doc",
+          id: "memory/listMessagesById",
+          label: ".listMessagesById()",
+        },
         { type: "doc", id: "memory/recall", label: ".recall()" },
       ],
     },
