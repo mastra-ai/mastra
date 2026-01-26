@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 6 of 8 (Playground Integration)
-Plan: 3 of 6 in current phase
+Plan: 4 of 6 in current phase
 Status: In progress
-Last activity: 2026-01-26 — Completed 06-03-PLAN.md (Datasets UI Hooks)
+Last activity: 2026-01-26 — Completed 06-04-PLAN.md (Datasets List UI)
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
+- Total plans completed: 15
 - Average duration: 4 min
-- Total execution time: 0.9 hours
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████████░░] 78%
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 3 | 11 min | 4 min |
+| 06-playground-integration | 4 | 16 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3 min), 05-01 (4 min), 06-01 (6 min), 06-02 (2 min), 06-03 (3 min)
+- Last 5 plans: 05-01 (4 min), 06-01 (6 min), 06-02 (2 min), 06-03 (3 min), 06-04 (5 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - Pagination via URLSearchParams pattern (client SDK)
 - useDatasetRun polls every 2s while status is running/pending
 - Mutations invalidate relevant query caches on success
+- Datasets placed in Observability sidebar section (isOnMastraPlatform: true)
+- DatasetsTable follows agent-table pattern with columns.tsx separation
 
 ### Pending Todos
 
@@ -79,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 18:50
-Stopped at: Completed 06-03-PLAN.md — Datasets UI Hooks
+Last session: 2026-01-26 18:58
+Stopped at: Completed 06-04-PLAN.md — Datasets List UI
 Resume file: None
