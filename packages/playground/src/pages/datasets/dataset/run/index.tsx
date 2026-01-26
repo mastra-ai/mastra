@@ -26,7 +26,11 @@ function DatasetRun() {
   const { Link: FrameworkLink } = useLinkComponent();
 
   const { data: run, isLoading: runLoading, error: runError } = useDatasetRun(datasetId!, runId!);
-  const { data: resultsData, isLoading: resultsLoading } = useDatasetRunResults(datasetId!, runId!);
+  const { data: resultsData, isLoading: resultsLoading } = useDatasetRunResults({
+    datasetId: datasetId!,
+    runId: runId!,
+    runStatus: run?.status,
+  });
   const { data: scores = {} } = useScoresByRunId(runId!);
 
   if (runLoading) {

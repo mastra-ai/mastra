@@ -33,15 +33,24 @@ export const useDatasetRun = (datasetId: string, runId: string) => {
   });
 };
 
+interface UseDatasetRunResultsParams {
+  datasetId: string;
+  runId: string;
+  pagination?: { page?: number; perPage?: number };
+  runStatus?: string;
+}
+
 /**
  * Hook to list results for a dataset run with optional pagination
+ * Polls every 2 seconds while run status is 'pending' or 'running'
  */
-export const useDatasetRunResults = (datasetId: string, runId: string, pagination?: { page?: number; perPage?: number }) => {
+export const useDatasetRunResults = ({ datasetId, runId, pagination, runStatus }: UseDatasetRunResultsParams) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-run-results', datasetId, runId, pagination],
     queryFn: () => client.listDatasetRunResults(datasetId, runId, pagination),
     enabled: Boolean(datasetId) && Boolean(runId),
+    refetchInterval: runStatus === 'running' || runStatus === 'pending' ? 2000 : false,
   });
 };
 

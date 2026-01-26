@@ -151,6 +151,7 @@ export const runResultResponseSchema = z.object({
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date(),
   retryCount: z.number(),
+  traceId: z.string().nullable(),
   createdAt: z.coerce.date(),
 });
 
