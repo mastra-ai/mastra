@@ -194,18 +194,31 @@ async function getOMConfigFromAgent(
       return null;
     }
 
-    // The processor config is available on the processor instance
-    // We need to extract the relevant config fields
-    const processorConfig = (omProcessor as any).config || {};
+    // Use getResolvedConfig if available (properly resolves model names)
+    // Fall back to .config for backwards compatibility
+    const hasResolvedConfig = typeof (omProcessor as any).getResolvedConfig === 'function';
+    
+    if (hasResolvedConfig) {
+      const resolvedConfig = await (omProcessor as any).getResolvedConfig();
+      return {
+        enabled: true,
+        scope: resolvedConfig.scope || 'resource',
+        observationThreshold: resolvedConfig.observer?.observationThreshold,
+        reflectionThreshold: resolvedConfig.reflector?.reflectionThreshold,
+        observerModel: resolvedConfig.observer?.model,
+        reflectorModel: resolvedConfig.reflector?.model,
+      };
+    }
 
+    // Fallback for older processor versions
+    const processorConfig = (omProcessor as any).config || {};
     return {
       enabled: true,
       scope: processorConfig.scope || 'resource',
       observationThreshold: processorConfig.observer?.observationThreshold,
       reflectionThreshold: processorConfig.reflector?.reflectionThreshold,
-      observerModel: typeof processorConfig.observer?.model === 'string' ? processorConfig.observer.model : undefined,
-      reflectorModel:
-        typeof processorConfig.reflector?.model === 'string' ? processorConfig.reflector.model : undefined,
+      observerModel: undefined,
+      reflectorModel: undefined,
     };
   } catch (error) {
     return null;

@@ -1,6 +1,7 @@
 import { Agent, convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type { Processor, ProcessInputArgs, ProcessInputStepArgs, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
@@ -736,6 +737,44 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       },
       reflector: {
         reflectionThreshold: this.reflectorConfig.reflectionThreshold,
+      },
+    };
+  }
+
+  /**
+   * Get the full config including resolved model names.
+   * This is async because it needs to resolve the model configs.
+   */
+  async getResolvedConfig(): Promise<{
+    scope: 'resource' | 'thread';
+    observer: {
+      observationThreshold: number | ThresholdRange;
+      model: string;
+    };
+    reflector: {
+      reflectionThreshold: number | ThresholdRange;
+      model: string;
+    };
+  }> {
+    const [observerModel, reflectorModel] = await Promise.all([
+      resolveModelConfig(this.observerConfig.model),
+      resolveModelConfig(this.reflectorConfig.model),
+    ]);
+
+    // Format as provider/modelId (e.g., "google/gemini-2.5-flash")
+    const formatModelName = (model: { provider?: string; modelId: string }) => {
+      return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
+    };
+
+    return {
+      scope: this.scope,
+      observer: {
+        observationThreshold: this.observerConfig.observationThreshold,
+        model: formatModelName(observerModel),
+      },
+      reflector: {
+        reflectionThreshold: this.reflectorConfig.reflectionThreshold,
+        model: formatModelName(reflectorModel),
       },
     };
   }

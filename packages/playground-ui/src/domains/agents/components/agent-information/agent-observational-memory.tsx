@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { ChevronRight, ChevronDown, Brain, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
@@ -48,12 +49,14 @@ const ProgressBar = ({
   value, 
   max, 
   label,
-  isActive = false
+  isActive = false,
+  model
 }: { 
   value: number; 
   max: number; 
   label: string;
   isActive?: boolean;
+  model?: string;
 }) => {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
   const barColor = getBarColor(percentage);
@@ -72,8 +75,24 @@ const ProgressBar = ({
   return (
     <div className="flex-1 min-w-0">
       {/* Label above bar - fixed height to prevent layout shift */}
-      <div className="flex items-center gap-1.5 mb-1 h-4">
+      <div className="flex items-center gap-1 mb-1 h-4">
         <span className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">{label}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="inline-flex items-center justify-center">
+              <Info className="w-2.5 h-2.5 text-neutral4 hover:text-neutral3 cursor-help" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs bg-surface3 border border-border1 text-foreground">
+            <div className="text-xs space-y-1.5">
+              <div className="font-medium text-neutral5">{label === 'Messages' ? 'Observer' : 'Reflector'} Settings</div>
+              <div className="space-y-0.5">
+                <div><span className="text-neutral4">Model:</span> <span className="text-neutral5">{model || 'not configured'}</span></div>
+                <div><span className="text-neutral4">Threshold:</span> <span className="text-neutral5">{formatTokens(max)} tokens</span></div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
       </div>
       
       <div className="flex items-stretch">
@@ -180,8 +199,19 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     scope?: 'thread' | 'resource';
     observationThreshold?: number | { min: number; max: number };
     reflectionThreshold?: number | { min: number; max: number };
+    observerModel?: string;
+    reflectorModel?: string;
   }})?.observationalMemory;
-  const recordConfig = record?.config as { observationThreshold?: number; reflectionThreshold?: number } | undefined;
+  const recordConfig = record?.config as { 
+    observationThreshold?: number; 
+    reflectionThreshold?: number;
+    observerModel?: string;
+    reflectorModel?: string;
+  } | undefined;
+  
+  // Extract model names from config
+  const observerModel = recordConfig?.observerModel ?? omAgentConfig?.observerModel;
+  const reflectorModel = recordConfig?.reflectorModel ?? omAgentConfig?.reflectorModel;
   
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
@@ -283,20 +313,24 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       </div>
 
       {/* Progress Bars for Thresholds - Side by side */}
-      <div className="flex gap-3 mb-3">
-        <ProgressBar
-          value={pendingMessageTokens}
-          max={observationThreshold}
-          label="Messages"
-          isActive={isObserving}
-        />
-        <ProgressBar
-          value={observationTokenCount}
-          max={reflectionThreshold}
-          label="Observations"
-          isActive={isReflecting}
-        />
-      </div>
+      <TooltipProvider delayDuration={0}>
+        <div className="flex gap-3 mb-3">
+          <ProgressBar
+            value={pendingMessageTokens}
+            max={observationThreshold}
+            label="Messages"
+            isActive={isObserving}
+            model={observerModel}
+          />
+          <ProgressBar
+            value={observationTokenCount}
+            max={reflectionThreshold}
+            label="Observations"
+            isActive={isReflecting}
+            model={reflectorModel}
+          />
+        </div>
+      </TooltipProvider>
 
       {/* Observations Content */}
       {hasObservations && (
