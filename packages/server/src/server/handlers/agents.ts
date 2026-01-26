@@ -835,7 +835,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal,  requestContext: serverRequestContext, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 

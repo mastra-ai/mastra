@@ -46,7 +46,10 @@ export type { LLMStepResult } from '../stream/types';
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<string, ToolAction<any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+export type ToolsInput = Record<
+  string,
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
+>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
@@ -130,6 +133,7 @@ export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   /**
    * Identifier for the agent.
@@ -147,7 +151,7 @@ export interface AgentConfig<
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */
-  instructions: DynamicAgentInstructions;
+  instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
    */
@@ -160,7 +164,7 @@ export interface AgentConfig<
   /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
-  tools?: DynamicArgument<TTools>;
+  tools?: DynamicArgument<TTools, TRequestContext>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
@@ -246,6 +250,12 @@ export interface AgentConfig<
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
+   * If validation fails, an error is thrown.
+   */
+  requestContextSchema?: ZodSchema<TRequestContext>;
 }
 
 export type AgentMemoryOption = {

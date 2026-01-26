@@ -233,10 +233,14 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
+export interface ToolExecutionContext<
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<TRequestContext>;
   tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
 
@@ -261,7 +265,12 @@ export interface ToolAction<
   TSchemaOut,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
   TId extends string = string,
 > {
   id: TId;
@@ -270,6 +279,12 @@ export interface ToolAction<
   outputSchema?: SchemaWithValidation<TSchemaOut>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   resumeSchema?: SchemaWithValidation<TResume>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   * If validation fails, a validation error is returned instead of executing the tool.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.

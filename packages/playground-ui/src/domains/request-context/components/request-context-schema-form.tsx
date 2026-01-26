@@ -106,11 +106,7 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
             </div>
           </div>
 
-          <DynamicForm
-            schema={zodSchema}
-            onValuesChange={handleSchemaFormChange}
-            defaultValues={requestContext}
-          />
+          <DynamicForm schema={zodSchema} onValuesChange={handleSchemaFormChange} defaultValues={requestContext} />
         </div>
       </TooltipProvider>
     );

@@ -7,6 +7,9 @@ export const myWorkflow = createWorkflow({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
   outputSchema: z.object({
     result: z.string(),
   }),

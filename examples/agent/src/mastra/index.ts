@@ -1,9 +1,15 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 
-import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
+import {
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+  schemaValidatedAgent,
+} from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {
@@ -52,6 +58,7 @@ const config = {
     dynamicAgent,
     agentThatHarassesYou,
     evalAgent,
+    schemaValidatedAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
