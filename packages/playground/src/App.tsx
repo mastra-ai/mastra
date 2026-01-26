@@ -151,6 +151,13 @@ function App() {
                     return { Component: DatasetCompare };
                   }}
                 />
+                <Route
+                  path="/datasets/:datasetId"
+                  lazy={async () => {
+                    const { Dataset } = await import('./pages/datasets/dataset');
+                    return { Component: Dataset };
+                  }}
+                />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
