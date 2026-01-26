@@ -202,14 +202,13 @@ import { readFileSync, writeFileSync } from "fs";
 import { mastra } from "../../src/mastra";
 
 const agent = mastra.getAgent("descriptionAgent");
-const diff = readFileSync(process.env.PR_DIFF_FILE!, "utf-8");
 
 await agent.generate(
   `Please create a PR description for the following changes.
 
 Git diff:
 \`\`\`diff
-${diff}
+${readFileSync(process.env.PR_DIFF_FILE!, "utf-8")}
 \`\`\``,
   {
     onError: () => {
