@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 6 of 8 (Playground Integration)
-Plan: 10 of 10 in current phase (gap closure complete)
-Status: Plan 06-10 complete — trace link support
-Last activity: 2026-01-26 — Completed 06-10-PLAN.md (trace link support)
+Plan: 11 of 11 in current phase (gap closure complete)
+Status: Plan 06-07 complete — dataset/item edit and delete dialogs
+Last activity: 2026-01-26 — Completed 06-07-PLAN.md (edit/delete UI gaps)
 
-Progress: [████████░░] 85%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: 4 min
-- Total execution time: 1.3 hours
+- Total execution time: 1.4 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████████░░] 85%
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 9 | 36 min | 4 min |
+| 06-playground-integration | 10 | 40 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-06 (5 min), 06-05 (6 min), 06-09 (2 min), 06-08 (3 min), 06-10 (4 min)
+- Last 5 plans: 06-05 (6 min), 06-09 (2 min), 06-08 (3 min), 06-10 (4 min), 06-07 (4 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -77,6 +77,8 @@ Recent decisions affecting current work:
 - Scorer selection optional, only for agent/workflow targets
 - useScoresByRunId groups scores by entityId (itemId) for ResultsTable
 - traceId captured from agent/workflow result and stored with run results
+- Item delete uses inline AlertDialog in ItemsList (matches chat-threads pattern)
+- Edit dialogs use useEffect to sync form state when props change
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 22:23
-Stopped at: Completed 06-10-PLAN.md — Trace Link Support
+Last session: 2026-01-26 22:24
+Stopped at: Completed 06-07-PLAN.md — Dataset/Item Edit and Delete
 Resume file: None
