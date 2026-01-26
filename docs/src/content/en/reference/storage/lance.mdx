@@ -10,6 +10,10 @@ packages:
 
 The LanceDB storage implementation provides a high-performance storage solution using the LanceDB database system, which excels at handling both traditional data storage and vector operations.
 
+:::warning[Observability Not Supported]
+LanceDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to LanceDB, and Mastra Studio's observability features won't work with LanceDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
 ## Installation
 
 ```bash npm2yarn

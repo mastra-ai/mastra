@@ -10,6 +10,10 @@ packages:
 
 The Cloudflare D1 storage implementation provides a serverless SQL database solution using Cloudflare D1, supporting relational operations and transactional consistency.
 
+:::warning[Observability Not Supported]
+Cloudflare D1 storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to D1, and Mastra Studio's observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
 ## Installation
 
 ```bash npm2yarn

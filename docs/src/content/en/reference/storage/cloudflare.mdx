@@ -9,6 +9,10 @@ packages:
 
 The Cloudflare KV storage implementation provides a globally distributed, serverless key-value store solution using Cloudflare Workers KV.
 
+:::warning[Observability Not Supported]
+Cloudflare KV storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to KV, and Mastra Studio's observability features won't work with Cloudflare KV as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
 ## Installation
 
 ```bash npm2yarn
