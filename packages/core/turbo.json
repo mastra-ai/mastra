@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
-      "inputs": []
+      "inputs": ["package.json"]
     },
     "build:patch-commonjs": {
       "dependsOn": ["build:lib"],

@@ -138,7 +138,7 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
 
 export const GET_MEMORY_STATUS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/status',
+  path: '/memory/status',
   responseType: 'json',
   queryParamSchema: getMemoryStatusQuerySchema,
   responseSchema: memoryStatusResponseSchema,
@@ -171,7 +171,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
 export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/config',
+  path: '/memory/config',
   responseType: 'json',
   queryParamSchema: getMemoryConfigQuerySchema,
   responseSchema: memoryConfigResponseSchema,
@@ -199,7 +199,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
 
 export const LIST_THREADS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/threads',
+  path: '/memory/threads',
   responseType: 'json',
   queryParamSchema: listThreadsQuerySchema,
   responseSchema: listThreadsResponseSchema,
@@ -259,7 +259,7 @@ export const LIST_THREADS_ROUTE = createRoute({
 
 export const GET_THREAD_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/threads/:threadId',
+  path: '/memory/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getThreadByIdQuerySchema,
@@ -305,7 +305,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
 
 export const LIST_MESSAGES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/threads/:threadId/messages',
+  path: '/memory/threads/:threadId/messages',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: listMessagesQuerySchema,
@@ -389,7 +389,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 
 export const GET_WORKING_MEMORY_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/threads/:threadId/working-memory',
+  path: '/memory/threads/:threadId/working-memory',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getWorkingMemoryQuerySchema,
@@ -425,7 +425,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
 
 export const SAVE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/save-messages',
+  path: '/memory/save-messages',
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: saveMessagesBodySchema,
@@ -474,7 +474,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
 
 export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/threads',
+  path: '/memory/threads',
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: createThreadBodySchema,
@@ -508,7 +508,7 @@ export const CREATE_THREAD_ROUTE = createRoute({
 
 export const UPDATE_THREAD_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/memory/threads/:threadId',
+  path: '/memory/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -557,7 +557,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
 export const DELETE_THREAD_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/memory/threads/:threadId',
+  path: '/memory/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -590,7 +590,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
 
 export const CLONE_THREAD_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/threads/:threadId/clone',
+  path: '/memory/threads/:threadId/clone',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -627,7 +627,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
 
 export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/threads/:threadId/working-memory',
+  path: '/memory/threads/:threadId/working-memory',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: agentIdQuerySchema,
@@ -659,7 +659,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
 
 export const DELETE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/messages/delete',
+  path: '/memory/messages/delete',
   responseType: 'json',
   queryParamSchema: agentIdQuerySchema,
   bodySchema: deleteMessagesBodySchema,
@@ -723,7 +723,7 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
 
 export const SEARCH_MEMORY_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/search',
+  path: '/memory/search',
   responseType: 'json',
   queryParamSchema: searchMemoryQuerySchema,
   responseSchema: searchMemoryResponseSchema,
@@ -895,7 +895,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 // Network routes (same handlers with /network/ prefix)
 export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/network/status',
+  path: '/memory/network/status',
   responseType: 'json',
   queryParamSchema: getMemoryStatusNetworkQuerySchema,
   responseSchema: memoryStatusResponseSchema,
@@ -908,7 +908,7 @@ export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
 
 export const LIST_THREADS_NETWORK_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/network/threads',
+  path: '/memory/network/threads',
   responseType: 'json',
   queryParamSchema: listThreadsNetworkQuerySchema,
   responseSchema: listThreadsResponseSchema,
@@ -921,7 +921,7 @@ export const LIST_THREADS_NETWORK_ROUTE = createRoute({
 
 export const GET_THREAD_BY_ID_NETWORK_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/network/threads/:threadId',
+  path: '/memory/network/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: getThreadByIdNetworkQuerySchema,
@@ -935,7 +935,7 @@ export const GET_THREAD_BY_ID_NETWORK_ROUTE = createRoute({
 
 export const LIST_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/network/threads/:threadId/messages',
+  path: '/memory/network/threads/:threadId/messages',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: listMessagesNetworkQuerySchema,
@@ -949,7 +949,7 @@ export const LIST_MESSAGES_NETWORK_ROUTE = createRoute({
 
 export const SAVE_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/network/save-messages',
+  path: '/memory/network/save-messages',
   responseType: 'json',
   queryParamSchema: saveMessagesNetworkQuerySchema,
   bodySchema: saveMessagesBodySchema,
@@ -963,7 +963,7 @@ export const SAVE_MESSAGES_NETWORK_ROUTE = createRoute({
 
 export const CREATE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/network/threads',
+  path: '/memory/network/threads',
   responseType: 'json',
   queryParamSchema: createThreadNetworkQuerySchema,
   bodySchema: createThreadBodySchema,
@@ -977,7 +977,7 @@ export const CREATE_THREAD_NETWORK_ROUTE = createRoute({
 
 export const UPDATE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/memory/network/threads/:threadId',
+  path: '/memory/network/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: updateThreadNetworkQuerySchema,
@@ -992,7 +992,7 @@ export const UPDATE_THREAD_NETWORK_ROUTE = createRoute({
 
 export const DELETE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/memory/network/threads/:threadId',
+  path: '/memory/network/threads/:threadId',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
   queryParamSchema: deleteThreadNetworkQuerySchema,
@@ -1006,7 +1006,7 @@ export const DELETE_THREAD_NETWORK_ROUTE = createRoute({
 
 export const DELETE_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/memory/network/messages/delete',
+  path: '/memory/network/messages/delete',
   responseType: 'json',
   queryParamSchema: deleteMessagesNetworkQuerySchema,
   bodySchema: deleteMessagesBodySchema,
