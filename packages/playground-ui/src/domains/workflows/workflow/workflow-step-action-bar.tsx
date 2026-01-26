@@ -16,7 +16,7 @@ import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { usePlaygroundStore } from '@/store/playground-store';
-import { SchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
@@ -70,16 +70,7 @@ export const WorkflowStepActionBar = ({
   } = useContext(WorkflowRunContext);
   const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
   const { requestContext: globalRequestContext } = usePlaygroundStore();
-
-  // Get schema values if provider is available (optional - works without it)
-  const schemaContext = useContext(SchemaRequestContext);
-  const schemaValues = schemaContext?.schemaValues ?? {};
-
-  // Merge global context with schema values (schema values take precedence)
-  const requestContext = {
-    ...(globalRequestContext ?? {}),
-    ...schemaValues,
-  };
+  const requestContext = useMergedRequestContext(globalRequestContext);
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 

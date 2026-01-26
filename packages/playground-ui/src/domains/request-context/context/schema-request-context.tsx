@@ -53,13 +53,15 @@ export function useSchemaRequestContext() {
 /**
  * Hook to get merged request context (global store + schema form values).
  * Schema form values take precedence over global store values.
+ * Works with or without SchemaRequestContextProvider.
  */
 export function useMergedRequestContext(globalRequestContext: Record<string, any> | undefined) {
-  const { schemaValues } = useSchemaRequestContext();
+  const schemaContext = useContext(SchemaRequestContext);
+  const schemaValues = schemaContext?.schemaValues ?? {};
 
-  // Merge global context with schema values (schema values take precedence)
   return {
     ...(globalRequestContext ?? {}),
     ...schemaValues,
   };
 }
+

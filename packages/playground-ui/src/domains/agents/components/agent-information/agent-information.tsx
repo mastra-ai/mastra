@@ -24,7 +24,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
-    hasRequestContextSchema: Boolean(agent?.requestContextSchema),
   });
 
   return (
@@ -71,12 +70,10 @@ const STORAGE_KEY = 'agent-info-selected-tab';
 export interface UseAgentInformationTabArgs {
   isMemoryLoading: boolean;
   hasMemory: boolean;
-  hasRequestContextSchema?: boolean;
 }
 export const useAgentInformationTab = ({
   isMemoryLoading,
   hasMemory,
-  hasRequestContextSchema,
 }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
     return sessionStorage.getItem(STORAGE_KEY) || 'overview';
@@ -95,14 +92,6 @@ export const useAgentInformationTab = ({
       sessionStorage.setItem(STORAGE_KEY, 'overview');
     }
   }, [isMemoryLoading, hasMemory, selectedTab]);
-
-  // Switch away from request-context tab if schema is absent
-  useEffect(() => {
-    if (!hasRequestContextSchema && selectedTab === 'request-context') {
-      setSelectedTab('overview');
-      sessionStorage.setItem(STORAGE_KEY, 'overview');
-    }
-  }, [hasRequestContextSchema, selectedTab]);
 
   return {
     selectedTab,

@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo, useImperativeHandle, forwardRef } from 'react';
-import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -8,8 +7,7 @@ import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { useSchemaRequestContext } from '../context/schema-request-context';
-
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { TooltipIconButton } from '@/lib/ai-ui/tooltip-icon-button';
 import { CopyIcon } from 'lucide-react';
 
 export interface RequestContextSchemaFormRef {
@@ -79,8 +77,6 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
       setSchemaValues(data);
     };
 
-    const buttonClass = 'text-neutral3 hover:text-neutral6';
-
     if (!zodSchema) {
       return (
         <div className="text-neutral3">
@@ -90,29 +86,18 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
     }
 
     return (
-      <TooltipProvider>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Txt as="label" variant="ui-md" className="text-neutral3">
-              Request Context
-            </Txt>
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass}>
-                    <Icon>
-                      <CopyIcon />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy Request Context</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-
-          <DynamicForm schema={zodSchema} onValuesChange={handleSchemaFormChange} defaultValues={requestContext} />
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Txt as="label" variant="ui-md" className="text-neutral3">
+            Request Context
+          </Txt>
+          <TooltipIconButton variant="ghost" tooltip="Copy Request Context" onClick={handleCopy}>
+            <CopyIcon />
+          </TooltipIconButton>
         </div>
-      </TooltipProvider>
+
+        <DynamicForm schema={zodSchema} onValuesChange={handleSchemaFormChange} defaultValues={requestContext} />
+      </div>
     );
   },
 );

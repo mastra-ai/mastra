@@ -13,7 +13,7 @@ import {
   useSchemaRequestContext,
 } from '@/domains/request-context';
 import { Tabs, Tab, TabList } from '@/ds/components/Tabs';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ToolExecutorProps {
@@ -45,13 +45,6 @@ const ToolExecutorContent = ({
   const [selectedTab, setSelectedTab] = useState('input-data');
   const { schemaValues } = useSchemaRequestContext();
 
-  // Reset to input-data tab if request context schema becomes unavailable
-  useEffect(() => {
-    if (!requestContextSchema && selectedTab === 'request-context') {
-      setSelectedTab('input-data');
-    }
-  }, [requestContextSchema, selectedTab]);
-
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
       <div className="bg-surface2 border-r border-border1 w-[20rem] flex flex-col">
@@ -63,13 +56,11 @@ const ToolExecutorContent = ({
               {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
             </TabList>
           </Tabs>
-          {/* Keep both panels mounted to preserve state, use CSS to show/hide */}
           <div className={cn('p-5 overflow-y-auto', selectedTab !== 'input-data' && 'hidden')}>
             <DynamicForm
               isSubmitLoading={isExecutingTool}
               schema={zodInputSchema}
               onSubmit={data => {
-                // Pass schema context values along with input data
                 handleExecuteTool(data, schemaValues);
               }}
               className="h-auto pb-7"

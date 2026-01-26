@@ -12,7 +12,7 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
-import { SchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
@@ -102,16 +102,7 @@ export function WorkflowTrigger({
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
   const { requestContext: globalRequestContext } = usePlaygroundStore();
-
-  // Get schema values if provider is available (optional - works without it)
-  const schemaContext = useContext(SchemaRequestContext);
-  const schemaValues = schemaContext?.schemaValues ?? {};
-
-  // Merge global context with schema values (schema values take precedence)
-  const requestContext = {
-    ...(globalRequestContext ?? {}),
-    ...schemaValues,
-  };
+  const requestContext = useMergedRequestContext(globalRequestContext);
 
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 

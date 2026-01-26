@@ -6,9 +6,9 @@ import { useAgentSettings } from '../context/agent-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
-import { useEffect, useContext } from 'react';
+import { useEffect } from 'react';
 import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import { SchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export const AgentChat = ({
   agentId,
@@ -23,16 +23,7 @@ export const AgentChat = ({
 }: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
   const { settings } = useAgentSettings();
   const { requestContext: globalRequestContext } = usePlaygroundStore();
-
-  // Get schema values if provider is available (optional - works without it)
-  const schemaContext = useContext(SchemaRequestContext);
-  const schemaValues = schemaContext?.schemaValues ?? {};
-
-  // Merge global context with schema values (schema values take precedence)
-  const requestContext = {
-    ...(globalRequestContext ?? {}),
-    ...schemaValues,
-  };
+  const requestContext = useMergedRequestContext(globalRequestContext);
 
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
