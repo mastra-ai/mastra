@@ -98,7 +98,8 @@ export function ResultsTable({ results, isLoading }: ResultsTableProps) {
           </Thead>
           <Tbody>
             {results.map(result => {
-              const itemScores = result.scores ?? [];
+              // Defensive: ensure scores is always an array (old results may have null/undefined/object)
+              const itemScores = Array.isArray(result.scores) ? result.scores : [];
               const hasError = result.error !== null;
               const scoresDisplay = itemScores
                 .filter(s => s.score !== null)
@@ -137,7 +138,7 @@ export function ResultsTable({ results, isLoading }: ResultsTableProps) {
       {selectedResult && (
         <ResultDetailDialog
           result={selectedResult}
-          scores={selectedResult.scores ?? []}
+          scores={Array.isArray(selectedResult.scores) ? selectedResult.scores : []}
           isOpen={Boolean(selectedResultId)}
           onClose={handleCloseDialog}
           onNext={toNextResult}
