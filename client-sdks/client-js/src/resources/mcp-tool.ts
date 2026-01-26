@@ -23,7 +23,7 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the tool's information (name, description, schema).
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<McpToolInfo> {
-    return this.request(`/mcp/${this.serverId}/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -42,7 +42,7 @@ export class MCPTool extends BaseResource {
       body.requestContext = params.requestContext;
     }
 
-    return this.request(`/mcp/${this.serverId}/tools/${this.toolId}/execute`, {
+    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
       method: 'POST',
       body: Object.keys(body).length > 0 ? body : undefined,
     });

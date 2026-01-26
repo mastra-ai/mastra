@@ -7,6 +7,10 @@ import type { RequestOptions, ClientOptions } from '../types';
  */
 function normalizePrefix(prefix: string): string {
   let normalized = prefix.trim();
+  // Empty or just '/' means no prefix
+  if (normalized === '' || normalized === '/') {
+    return '';
+  }
   // Add leading slash if missing
   if (!normalized.startsWith('/')) {
     normalized = '/' + normalized;
@@ -28,17 +32,20 @@ export class BaseResource {
   }
 
   /**
-   * Paths that should NOT have the API prefix applied (protocol-specific paths).
+   * Path segments that should NOT have the API prefix applied (protocol-specific paths).
    * These are special protocol endpoints that exist at the root level.
    */
-  private static readonly NON_API_PATH_PREFIXES = ['/a2a/', '/.well-known/'];
+  private static readonly NON_API_PATHS = ['/a2a', '/.well-known'];
 
   /**
    * Checks if a path should have the API prefix applied.
-   * Returns false for protocol-specific paths like /a2a/ and /.well-known/
+   * Returns false for protocol-specific paths like /a2a and /.well-known
+   * Matches exact path or path followed by / to avoid false positives (e.g., /a2a-other)
    */
   private shouldApplyPrefix(path: string): boolean {
-    return !BaseResource.NON_API_PATH_PREFIXES.some(prefix => path.startsWith(prefix));
+    return !BaseResource.NON_API_PATHS.some(
+      nonApiPath => path === nonApiPath || path.startsWith(nonApiPath + '/'),
+    );
   }
 
   /**

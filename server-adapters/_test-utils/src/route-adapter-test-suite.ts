@@ -521,19 +521,19 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.status).toBeLessThan(400);
       });
 
-      it('should register routes at normalized path when prefix has trailing slash', async () => {
+      it('should not have routes at double-slash path when prefix has trailing slash', async () => {
         // Create adapter with trailing slash in prefix
         const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
         const prefixedApp = prefixedSetup.app;
 
-        // The normalized path should work (prefix '/mastra/' normalized to '/mastra')
+        // The double-slash path /mastra//agents should NOT work
         const response = await executeHttpRequest(prefixedApp, {
           method: 'GET',
-          path: '/mastra/agents',
+          path: '/mastra//agents',
         });
 
-        // Should succeed - route was registered at normalized path
-        expect(response.status).toBeLessThan(400);
+        // Should return 404 - double-slash path should not exist
+        expect(response.status).toBe(404);
       });
     });
   });

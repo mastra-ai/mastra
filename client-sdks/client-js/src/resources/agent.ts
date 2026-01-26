@@ -283,7 +283,7 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-expect-error
+          // @ts-expect-error - tool-result message type differs from generate() overload signatures
           return this.generate({
             ...params,
             messages: updatedMessages,

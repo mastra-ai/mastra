@@ -54,7 +54,12 @@ export const StudioConfigProvider = ({
       const parsedConfig = JSON.parse(storedConfig);
 
       if (typeof parsedConfig === 'object' && parsedConfig !== null) {
-        return setConfig({ ...parsedConfig, isLoading: false });
+        // Use stored prefix if set, otherwise fall back to CLI default for back-compat
+        const normalizedConfig = {
+          ...parsedConfig,
+          prefix: parsedConfig.prefix ?? defaultPrefix,
+        };
+        return setConfig({ ...normalizedConfig, isLoading: false });
       }
     }
 
