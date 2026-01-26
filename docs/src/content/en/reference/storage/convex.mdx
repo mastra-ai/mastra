@@ -31,6 +31,7 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraSpansTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
@@ -42,6 +43,7 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_ai_spans: mastraSpansTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_documents: mastraDocumentsTable,
@@ -134,14 +136,15 @@ const storeCustom = new ConvexStore({
 
 The storage implementation uses typed Convex tables for each Mastra domain:
 
-| Domain         | Convex Table                | Purpose              |
-| -------------- | --------------------------- | -------------------- |
-| Threads        | `mastra_threads`            | Conversation threads |
-| Messages       | `mastra_messages`           | Chat messages        |
-| Resources      | `mastra_resources`          | User working memory  |
-| Workflows      | `mastra_workflow_snapshots` | Workflow state       |
-| Scorers        | `mastra_scorers`            | Evaluation data      |
-| Fallback       | `mastra_documents`          | Unknown tables       |
+| Domain         | Convex Table                | Purpose                         |
+| -------------- | --------------------------- | ------------------------------- |
+| Threads        | `mastra_threads`            | Conversation threads            |
+| Messages       | `mastra_messages`           | Chat messages                   |
+| Resources      | `mastra_resources`          | User working memory             |
+| Workflows      | `mastra_workflow_snapshots` | Workflow state                  |
+| Scorers        | `mastra_scorers`            | Evaluation data                 |
+| Observability  | `mastra_ai_spans`           | Traces/spans for Mastra Studio  |
+| Fallback       | `mastra_documents`          | Unknown tables                  |
 
 ### Architecture
 

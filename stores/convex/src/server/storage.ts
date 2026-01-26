@@ -4,6 +4,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SPANS,
 } from '@mastra/core/storage';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
@@ -30,6 +31,8 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
       return { convexTable: 'mastra_workflow_snapshots', isTyped: true };
     case TABLE_SCORERS:
       return { convexTable: 'mastra_scorers', isTyped: true };
+    case TABLE_SPANS:
+      return { convexTable: 'mastra_ai_spans', isTyped: true };
     case TABLE_VECTOR_INDEXES:
       return { convexTable: 'mastra_vector_indexes', isTyped: true };
     default:

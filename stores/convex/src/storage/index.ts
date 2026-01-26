@@ -4,11 +4,12 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
 import { MemoryConvex } from './domains/memory';
+import { ObservabilityConvex } from './domains/observability';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryConvex, ScoresConvex, WorkflowsConvex };
+export { MemoryConvex, ObservabilityConvex, ScoresConvex, WorkflowsConvex };
 export type { ConvexDomainConfig } from './db';
 
 /**
@@ -103,11 +104,13 @@ export class ConvexStore extends MastraCompositeStore {
     const memory = new MemoryConvex(domainConfig);
     const workflows = new WorkflowsConvex(domainConfig);
     const scores = new ScoresConvex(domainConfig);
+    const observability = new ObservabilityConvex(domainConfig);
 
     this.stores = {
       memory,
       workflows,
       scores,
+      observability,
     };
   }
 }
