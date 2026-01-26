@@ -19,8 +19,6 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
-import { ChatModelSelector } from './chat-model-selector';
-import { ProviderWarningFooter } from './provider-warning-footer';
 
 export interface ThreadProps {
   agentName?: string;
@@ -117,16 +115,12 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
               onChange={e => setThreadInput?.(e.target.value)}
             />
           </ComposerPrimitive.Input>
-          <div className="flex justify-between items-center gap-2">
-            <ChatModelSelector agentId={agentId} />
-            <div className="flex items-center gap-2">
-              <SpeechInput agentId={agentId} />
-              <ComposerAction />
-            </div>
+          <div className="flex justify-end gap-2">
+            <SpeechInput agentId={agentId} />
+            <ComposerAction />
           </div>
         </div>
       </ComposerPrimitive.Root>
-      <ProviderWarningFooter agentId={agentId} />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useCallback } from 'react';
+import { cn } from '@/lib/utils';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
@@ -8,8 +9,6 @@ import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memo
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -75,7 +74,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
   if (isConfigLoading) {
     return (
-      <div className="flex flex-col h-full p-4 gap-4" data-testid="memory-tab-loading">
+      <div className="flex flex-col h-full p-4 gap-4">
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-48 w-full" />
@@ -84,20 +83,16 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="memory-tab">
+    <div className="flex flex-col h-full">
       {/* Clone Thread Section */}
       {threadId && (
-        <div className="p-4 border-b border-border1" data-testid="clone-thread-section">
+        <div className="p-4 border-b border-border1">
           <div className="flex items-center justify-between">
             <div>
-              <Txt as="h3" variant="ui-sm" className="font-medium text-neutral5">
-                Clone Thread
-              </Txt>
-              <Txt variant="ui-xs" className="text-neutral3 mt-1">
-                Create a copy of this conversation
-              </Txt>
+              <h3 className="text-sm font-medium text-neutral5">Clone Thread</h3>
+              <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
-            <Button onClick={handleCloneThread} disabled={isCloning} data-testid="clone-thread-button">
+            <Button onClick={handleCloneThread} disabled={isCloning}>
               <Copy className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
@@ -106,19 +101,22 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
       )}
 
       {/* Memory Search Section */}
-      <div className="p-4 border-b border-border1" data-testid="semantic-recall-section">
+      <div className="p-4 border-b border-border1">
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-2">
-            <Txt as="h3" variant="ui-sm" className="font-medium text-neutral5">
-              Semantic Recall
-            </Txt>
+            <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
             {searchMemoryData?.searchScope && (
-              <Badge
-                variant={searchScope === 'resource' ? 'warning' : 'info'}
-                data-testid="semantic-recall-scope-badge"
+              <span
+                className={cn(
+                  'text-xs font-medium px-2 py-0.5 rounded',
+                  searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+                )}
+                title={
+                  searchScope === 'resource' ? 'Searching across all threads' : 'Searching within current thread only'
+                }
               >
                 {searchScope}
-              </Badge>
+              </span>
             )}
           </div>
         </div>
@@ -131,10 +129,10 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
             chatInputValue={chatInputValue}
           />
         ) : (
-          <div className="bg-surface3 border border-border1 rounded-lg p-4" data-testid="semantic-recall-disabled">
-            <Txt variant="ui-sm" className="text-neutral3 mb-3">
+          <div className="bg-surface3 border border-border1 rounded-lg p-4">
+            <p className="text-sm text-neutral3 mb-3">
               Semantic recall is not enabled for this agent. Enable it to search through conversation history.
-            </Txt>
+            </p>
             <a
               href="https://mastra.ai/en/docs/memory/semantic-recall"
               target="_blank"

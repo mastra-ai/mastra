@@ -1,9 +1,7 @@
+import { cn } from '@/lib/utils';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { ChevronRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { ChevronRight, ChevronDown } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { SemanticRecall } from '@mastra/core/memory';
 
@@ -22,6 +20,7 @@ interface AgentMemoryConfigProps {
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   const { data, isLoading } = useMemoryConfig(agentId);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['General', 'Semantic Recall']));
 
   const config = data?.config;
   const configSections: MemoryConfigSection[] = useMemo(() => {
@@ -76,26 +75,49 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     return sections;
   }, [config]);
 
+  const toggleSection = (title: string) => {
+    const newExpanded = new Set(expandedSections);
+    if (newExpanded.has(title)) {
+      newExpanded.delete(title);
+    } else {
+      newExpanded.add(title);
+    }
+    setExpandedSections(newExpanded);
+  };
+
   const renderValue = (value: string | number | boolean, badge?: 'success' | 'info' | 'warning') => {
     if (typeof value === 'boolean') {
-      const variant = value ? (badge === 'info' ? 'info' : 'success') : 'error';
-      return <Badge variant={variant}>{value ? 'Yes' : 'No'}</Badge>;
+      return (
+        <span
+          className={cn(
+            'text-xs font-medium px-2 py-0.5 rounded',
+            value
+              ? badge === 'info'
+                ? 'bg-blue-500/20 text-blue-400'
+                : 'bg-green-500/20 text-green-400'
+              : 'bg-red-500/20 text-red-400',
+          )}
+        >
+          {value ? 'Yes' : 'No'}
+        </span>
+      );
     }
 
     if (badge) {
-      return <Badge variant={badge}>{value}</Badge>;
+      const badgeColors = {
+        success: 'bg-green-500/20 text-green-400',
+        info: 'bg-blue-500/20 text-blue-400',
+        warning: 'bg-yellow-500/20 text-yellow-400',
+      };
+      return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
     }
 
-    return (
-      <Txt variant="ui-xs" className="text-neutral3">
-        {value}
-      </Txt>
-    );
+    return <span className="text-xs text-neutral3">{value}</span>;
   };
 
   if (isLoading) {
     return (
-      <div className="p-4" data-testid="memory-config-loading">
+      <div className="p-4">
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -103,48 +125,41 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
   if (!config || configSections.length === 0) {
     return (
-      <div className="p-4" data-testid="memory-config-empty">
-        <Txt as="h3" variant="ui-sm" className="font-medium text-neutral5 mb-3">
-          Memory Configuration
-        </Txt>
-        <Txt variant="ui-xs" className="text-neutral3">
-          No memory configuration available
-        </Txt>
+      <div className="p-4">
+        <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
+        <p className="text-xs text-neutral3">No memory configuration available</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4" data-testid="memory-config">
-      <Txt as="h3" variant="ui-sm" className="font-medium text-neutral5 mb-3">
-        Memory Configuration
-      </Txt>
+    <div className="p-4">
+      <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
       <div className="space-y-2">
         {configSections.map(section => (
-          <Collapsible key={section.title} defaultOpen className="border border-border1 rounded-lg bg-surface3">
-            <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 rounded-t-lg">
-              <Txt variant="ui-xs" className="font-medium text-neutral5">
-                {section.title}
-              </Txt>
-              <ChevronRight className="w-3 h-3 text-neutral3" />
-            </CollapsibleTrigger>
-            <CollapsibleContent>
+          <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
+            <button
+              onClick={() => toggleSection(section.title)}
+              className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
+            >
+              <span className="text-xs font-medium text-neutral5">{section.title}</span>
+              {expandedSections.has(section.title) ? (
+                <ChevronDown className="w-3 h-3 text-neutral3" />
+              ) : (
+                <ChevronRight className="w-3 h-3 text-neutral3" />
+              )}
+            </button>
+            {expandedSections.has(section.title) && (
               <div className="px-3 pb-2 space-y-1">
                 {section.items.map(item => (
-                  <div
-                    key={`${section.title}-${item.label}`}
-                    className="flex items-center justify-between py-1"
-                    data-testid={`memory-config-item-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <Txt variant="ui-xs" className="text-neutral3">
-                      {item.label}
-                    </Txt>
+                  <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
+                    <span className="text-xs text-neutral3">{item.label}</span>
                     {renderValue(item.value ?? '', item.badge)}
                   </div>
                 ))}
               </div>
-            </CollapsibleContent>
-          </Collapsible>
+            )}
+          </div>
         ))}
       </div>
     </div>

@@ -10,7 +10,7 @@ export interface ThreadsProps {
 }
 
 export const Threads = ({ children }: ThreadsProps) => {
-  return <nav className="bg-surface2 min-h-full">{children}</nav>;
+  return <nav className="bg-surface2 min-h-full overflow-hidden">{children}</nav>;
 };
 
 export interface ThreadLinkProps {
@@ -44,11 +44,7 @@ export interface ThreadListProps {
 }
 
 export const ThreadList = ({ children }: ThreadListProps) => {
-  return (
-    <ol data-testid="thread-list" className="py-1">
-      {children}
-    </ol>
-  );
+  return <ol data-testid="thread-list">{children}</ol>;
 };
 
 export interface ThreadItemProps {
@@ -61,10 +57,10 @@ export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) =
   return (
     <li
       className={cn(
-        'group flex min-h-[48px] items-center justify-between gap-2 px-3 py-2 rounded-md mx-1 my-0.5',
+        'border-b border-border1 group flex h-[54px] items-center justify-between gap-2 px-3 py-2',
         transitions.colors,
         'hover:bg-surface3',
-        isActive && 'bg-surface3',
+        isActive && 'bg-accent1Dark',
         className,
       )}
     >

@@ -2,10 +2,9 @@ import { useMemoryConfig } from '@/domains/memory/hooks';
 import React, { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from './code-display';
@@ -28,7 +27,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
   if (isLoading || isConfigLoading) {
-    return <Skeleton className="h-32 w-full" data-testid="working-memory-loading" />;
+    return <Skeleton className="h-32 w-full" />;
   }
 
   const { isCopied, handleCopy } = useCopyToClipboard({
@@ -43,25 +42,30 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   }, [workingMemoryData]);
 
   return (
-    <div className="flex flex-col gap-4 p-4" data-testid="working-memory">
+    <div className="flex flex-col gap-4 p-4">
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Txt as="h3" variant="ui-sm" className="font-medium text-neutral5">
-            Working Memory
-          </Txt>
+          <h3 className="text-sm font-medium text-neutral5">Working Memory</h3>
           {isWorkingMemoryEnabled && workingMemorySource && (
-            <Badge
-              variant={workingMemorySource === 'resource' ? 'warning' : 'info'}
-              data-testid="working-memory-source-badge"
+            <span
+              className={cn(
+                'text-xs font-medium px-2 py-0.5 rounded',
+                workingMemorySource === 'resource'
+                  ? 'bg-purple-500/20 text-purple-400'
+                  : 'bg-blue-500/20 text-blue-400',
+              )}
+              title={
+                workingMemorySource === 'resource'
+                  ? 'Shared across all threads for this agent'
+                  : 'Specific to this conversation thread'
+              }
             >
               {workingMemorySource}
-            </Badge>
+            </span>
           )}
         </div>
         {isWorkingMemoryEnabled && !threadExists && (
-          <Txt variant="ui-xs" className="text-neutral3">
-            Send a message to the agent to enable working memory.
-          </Txt>
+          <p className="text-xs text-neutral3">Send a message to the agent to enable working memory.</p>
         )}
       </div>
 
@@ -85,20 +89,16 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                           <div
                             className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                             onClick={handleCopy}
-                            data-testid="working-memory-content"
                           >
                             <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             {isCopied && (
-                              <Badge variant="success" className="absolute top-2 right-2">
+                              <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
                                 Copied!
-                              </Badge>
+                              </span>
                             )}
-                            <Txt
-                              variant="ui-xs"
-                              className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
+                            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
                               Click to copy
-                            </Txt>
+                            </span>
                           </div>
                         </ScrollArea>
                       </div>
@@ -106,9 +106,9 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <Txt variant="ui-sm" className="text-neutral3 font-mono" data-testid="working-memory-empty">
+                <div className="text-sm text-neutral3 font-mono">
                   No working memory content yet. Click "Edit Working Memory" to add content.
-                </Txt>
+                </div>
               )}
             </>
           ) : (
@@ -118,7 +118,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               onChange={e => setEditValue(e.target.value)}
               disabled={isUpdating}
               placeholder="Enter working memory content..."
-              data-testid="working-memory-editor"
             />
           )}
           <div className="flex gap-2">
@@ -134,18 +133,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <Txt variant="ui-xs">
-                        Working memory will be available after the agent calls updateWorkingMemory
-                      </Txt>
+                      <p>Working memory will be available after the agent calls updateWorkingMemory</p>
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button
-                    onClick={() => setIsEditing(true)}
-                    disabled={isUpdating}
-                    className="text-xs"
-                    data-testid="edit-working-memory-button"
-                  >
+                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-xs">
                     Edit Working Memory
                   </Button>
                 )}
@@ -164,7 +156,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   }}
                   disabled={isUpdating}
                   className="text-xs"
-                  data-testid="save-working-memory-button"
                 >
                   {isUpdating ? <RefreshCcwIcon className="w-3 h-3 animate-spin" /> : 'Save Changes'}
                 </Button>
@@ -175,7 +166,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   }}
                   disabled={isUpdating}
                   className="text-xs"
-                  data-testid="cancel-working-memory-button"
                 >
                   Cancel
                 </Button>
@@ -184,10 +174,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           </div>
         </>
       ) : (
-        <div className="bg-surface3 border border-border1 rounded-lg p-4" data-testid="working-memory-disabled">
-          <Txt variant="ui-sm" className="text-neutral3 mb-3">
+        <div className="bg-surface3 border border-border1 rounded-lg p-4">
+          <p className="text-sm text-neutral3 mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
-          </Txt>
+          </p>
           <a
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
