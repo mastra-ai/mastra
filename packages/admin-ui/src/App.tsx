@@ -25,7 +25,6 @@ import { ProjectEnvVars } from './routes/dashboard/projects/[projectId]/env-vars
 import { DeploymentsPage } from './routes/dashboard/projects/[projectId]/deployments';
 import { NewDeploymentPage } from './routes/dashboard/projects/[projectId]/deployments/new';
 import { DeploymentDetail } from './routes/dashboard/projects/[projectId]/deployments/[deploymentId]';
-import { BuildsPage } from './routes/dashboard/projects/[projectId]/deployments/[deploymentId]/builds';
 import { BuildLogs } from './routes/dashboard/projects/[projectId]/deployments/[deploymentId]/builds/[buildId]';
 import { ObservabilityDashboard } from './routes/dashboard/projects/[projectId]/observability';
 import { TracesPage } from './routes/dashboard/projects/[projectId]/observability/traces';
@@ -125,7 +124,6 @@ export function App() {
         <Route path="projects/:projectId/deployments" element={<DeploymentsPage />} />
         <Route path="projects/:projectId/deployments/new" element={<NewDeploymentPage />} />
         <Route path="projects/:projectId/deployments/:deploymentId" element={<DeploymentDetail />} />
-        <Route path="projects/:projectId/deployments/:deploymentId/builds" element={<BuildsPage />} />
         <Route path="projects/:projectId/deployments/:deploymentId/builds/:buildId" element={<BuildLogs />} />
         <Route path="projects/:projectId/observability" element={<ObservabilityDashboard />} />
         <Route path="projects/:projectId/observability/traces" element={<TracesPage />} />
