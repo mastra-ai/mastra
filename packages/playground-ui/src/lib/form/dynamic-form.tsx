@@ -141,11 +141,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   // Memoize normalized default values
   const normalizedDefaultValues = useMemo(
     () =>
-      isNotZodObject
-        ? defaultValues === undefined
-          ? undefined
-          : { '\u200B': defaultValues }
-        : (defaultValues as any),
+      isNotZodObject ? (defaultValues === undefined ? undefined : { '\u200B': defaultValues }) : (defaultValues as any),
     [isNotZodObject, defaultValues],
   );
 
