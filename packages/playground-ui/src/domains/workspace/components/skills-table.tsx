@@ -2,7 +2,7 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, FileCode, Package, Home, Server } from 'lucide-react';
+import { Wand2, BookOpen, Package, Home, Server } from 'lucide-react';
 import type { SkillMetadata, SkillSource } from '../hooks/use-workspace-skills';
 
 export interface SkillsTableProps {
@@ -16,7 +16,6 @@ export interface SkillsTableProps {
 const columns = [
   { name: 'name', label: 'Skill', size: '1fr' },
   { name: 'description', label: 'Description', size: '2fr' },
-  { name: 'tools', label: 'Allowed Tools', size: '8rem' },
 ];
 
 function getSourceIcon(source?: SkillSource) {
@@ -77,7 +76,6 @@ export function SkillsTable({
                 id: skill.name,
                 name: skill.name,
                 description: skill.description || '—',
-                tools: skill.allowedTools?.length || 0,
               };
 
               return (
@@ -97,16 +95,6 @@ export function SkillsTable({
                     <span className="font-medium text-icon6">{skill.name}</span>
                   </div>
                   <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
-                  <div className="flex items-center gap-1.5">
-                    {skill.allowedTools && skill.allowedTools.length > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6875rem] bg-green-500/10 text-green-400">
-                        <FileCode className="h-3 w-3" />
-                        {skill.allowedTools.length}
-                      </span>
-                    ) : (
-                      <span className="text-icon3 text-xs">None</span>
-                    )}
-                  </div>
                 </EntryList.Entry>
               );
             })}
@@ -132,7 +120,6 @@ function SkillsTableSkeleton() {
                 <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
               </div>
               <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
-              <div className="h-5 w-10 rounded bg-surface4 animate-pulse" />
             </EntryList.Entry>
           ))}
         </EntryList.Entries>

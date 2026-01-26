@@ -191,7 +191,6 @@ Use this skill when you need to test things.
 const VALID_SKILL_MD_WITH_TOOLS = `---
 name: api-skill
 description: API design skill
-allowed-tools: Read Edit Grep
 ---
 
 # API Design
@@ -266,20 +265,6 @@ describe('WorkspaceSkillsImpl', () => {
         description: 'A test skill for unit testing',
         license: 'MIT',
       });
-    });
-
-    it('should parse allowed-tools from SKILL.md', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skillsPaths: ['/skills'],
-      });
-
-      const result = await skills.list();
-      expect(result[0]?.allowedTools).toEqual(['Read', 'Edit', 'Grep']);
     });
 
     it('should discover skills from multiple skillsPaths', async () => {

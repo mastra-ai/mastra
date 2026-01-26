@@ -2,9 +2,6 @@
 name: code-review
 description: Provides structured code review guidelines for TypeScript projects. Use when reviewing pull requests, analyzing code quality, or suggesting improvements.
 license: MIT
-allowedTools:
-  - read-file
-  - search-code
 ---
 
 # Code Review Guidelines

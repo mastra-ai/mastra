@@ -2,9 +2,6 @@
 name: customer-support
 description: Guidelines for handling customer support interactions. Use when responding to user inquiries, troubleshooting issues, or escalating problems.
 license: MIT
-allowedTools:
-  - search-knowledge
-  - escalate-ticket
 ---
 
 # Customer Support Guidelines

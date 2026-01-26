@@ -71,9 +71,6 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /** Set of activated skill names */
   private _activatedSkills: Set<string> = new Set();
 
-  /** Map of skill name -> allowed tools (only for skills with allowedTools defined) */
-  private _skillAllowedTools: Map<string, string[]> = new Map();
-
   constructor(opts: SkillsProcessorOptions) {
     this._workspace = opts.workspace;
     this._format = opts.format ?? 'xml';
@@ -95,7 +92,6 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       name: string;
       description: string;
       license?: string;
-      allowedTools?: string[];
     }>
   > {
     const skillsList = await this.skills?.list();
@@ -105,7 +101,6 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       name: skill.name,
       description: skill.description,
       license: skill.license,
-      allowedTools: skill.allowedTools,
     }));
   }
 
@@ -250,27 +245,6 @@ ${skillInstructions}`;
       .replace(/'/g, '&apos;');
   }
 
-  /**
-   * Get all allowed tools from activated skills.
-   * Returns undefined if no skill specifies allowed tools (no restriction).
-   * Returns the union of all allowed tools if any skill specifies them.
-   */
-  getAllowedTools(): string[] | undefined {
-    if (this._skillAllowedTools.size === 0) {
-      return undefined; // No restrictions
-    }
-
-    // Union of all allowed tools from all activated skills
-    const allAllowed = new Set<string>();
-    for (const tools of this._skillAllowedTools.values()) {
-      for (const tool of tools) {
-        allAllowed.add(tool);
-      }
-    }
-
-    return Array.from(allAllowed);
-  }
-
   // ===========================================================================
   // Tool Creation
   // ===========================================================================
@@ -281,7 +255,6 @@ ${skillInstructions}`;
   private createSkillActivateTool() {
     const skills = this.skills;
     const activatedSkills = this._activatedSkills;
-    const skillAllowedTools = this._skillAllowedTools;
 
     return createTool({
       id: 'skill-activate',
@@ -319,22 +292,9 @@ ${skillInstructions}`;
         // Activate the skill
         activatedSkills.add(name);
 
-        // Track allowed tools if specified
-        const skill = await skills.get(name);
-        if (skill?.allowedTools && skill.allowedTools.length > 0) {
-          skillAllowedTools.set(name, skill.allowedTools);
-        }
-
-        // Build response message
-        let message = `Skill "${name}" activated successfully. The skill instructions are now available.`;
-        if (skill?.allowedTools && skill.allowedTools.length > 0) {
-          message += ` This skill pre-approves the following tools: ${skill.allowedTools.join(', ')}.`;
-        }
-
         return {
           success: true,
-          message,
-          allowedTools: skill?.allowedTools,
+          message: `Skill "${name}" activated successfully. The skill instructions are now available.`,
         };
       },
     });
@@ -620,18 +580,6 @@ ${skillInstructions}`;
         messageList.addSystem({
           role: 'system',
           content: activatedSkillsMessage,
-        });
-      }
-
-      // 2b. Add allowed-tools notice if any activated skill specifies them
-      const allowedTools = this.getAllowedTools();
-      if (allowedTools && allowedTools.length > 0) {
-        messageList.addSystem({
-          role: 'system',
-          content: `<skill_allowed_tools>
-The following tools are pre-approved by the activated skills: ${allowedTools.join(', ')}.
-You may use these tools without asking for additional permission.
-</skill_allowed_tools>`,
         });
       }
     }

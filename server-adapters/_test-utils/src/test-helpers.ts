@@ -656,8 +656,6 @@ name: test-skill
 description: A test skill for integration testing
 license: MIT
 compatibility: ">=1.0.0"
-allowedTools:
-  - test-tool
 ---
 
 # Test Skill

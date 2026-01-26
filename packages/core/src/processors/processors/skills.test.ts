@@ -26,7 +26,6 @@ const mockSkill1: Skill = {
   path: '/skills/code-review',
   source: { type: 'local', path: '/skills/code-review' },
   license: 'MIT',
-  allowedTools: ['read-file', 'write-file'],
 };
 
 const mockSkill2: Skill = {
@@ -41,7 +40,6 @@ const mockSkillMetadata1: SkillMetadata = {
   name: mockSkill1.name,
   description: mockSkill1.description,
   license: mockSkill1.license,
-  allowedTools: mockSkill1.allowedTools,
 };
 
 const mockSkillMetadata2: SkillMetadata = {
@@ -154,13 +152,11 @@ describe('SkillsProcessor', () => {
         name: 'code-review',
         description: 'A skill for code review assistance',
         license: 'MIT',
-        allowedTools: ['read-file', 'write-file'],
       });
       expect(skills[1]).toEqual({
         name: 'testing',
         description: 'A skill for writing tests',
         license: undefined,
-        allowedTools: undefined,
       });
     });
 
@@ -286,7 +282,6 @@ describe('SkillsProcessor', () => {
 
       expect(activateResult.success).toBe(true);
       expect(activateResult.message).toContain('activated successfully');
-      expect(activateResult.allowedTools).toEqual(['read-file', 'write-file']);
     });
 
     it('should fail when activating non-existent skill', async () => {
@@ -576,63 +571,6 @@ describe('SkillsProcessor', () => {
     });
   });
 
-  describe('getAllowedTools', () => {
-    it('should return undefined when no skills have allowed tools', async () => {
-      expect(processor.getAllowedTools()).toBeUndefined();
-    });
-
-    it('should return allowed tools after activating skill with allowedTools', async () => {
-      const result = await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: {},
-      });
-
-      const activateTool = result.tools['skill-activate'] as any;
-      await activateTool.execute({ name: 'code-review' });
-
-      const allowedTools = processor.getAllowedTools();
-      expect(allowedTools).toContain('read-file');
-      expect(allowedTools).toContain('write-file');
-    });
-
-    it('should return union of all allowed tools from multiple skills', async () => {
-      // Add another skill with different allowed tools
-      const skill3: Skill = {
-        name: 'deploy',
-        description: 'Deployment skill',
-        instructions: 'Deploy things',
-        path: '/skills/deploy',
-        source: { type: 'local', path: '/skills/deploy' },
-        allowedTools: ['execute-command', 'read-file'],
-      };
-      (mockSkills.get as ReturnType<typeof vi.fn>).mockImplementation((name: string) => {
-        if (name === 'deploy') return Promise.resolve(skill3);
-        if (name === 'code-review') return Promise.resolve(mockSkill1);
-        if (name === 'testing') return Promise.resolve(mockSkill2);
-        return Promise.resolve(null);
-      });
-      (mockSkills.has as ReturnType<typeof vi.fn>).mockImplementation((name: string) =>
-        Promise.resolve(['code-review', 'testing', 'deploy'].includes(name)),
-      );
-
-      const result = await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: {},
-      });
-
-      const activateTool = result.tools['skill-activate'] as any;
-      await activateTool.execute({ name: 'code-review' });
-      await activateTool.execute({ name: 'deploy' });
-
-      const allowedTools = processor.getAllowedTools();
-      expect(allowedTools).toContain('read-file');
-      expect(allowedTools).toContain('write-file');
-      expect(allowedTools).toContain('execute-command');
-      // read-file should only appear once
-      expect(allowedTools?.filter(t => t === 'read-file')).toHaveLength(1);
-    });
-  });
-
   describe('activated skills injection', () => {
     it('should inject activated skill instructions into system message', async () => {
       // Activate a skill
@@ -663,29 +601,6 @@ describe('SkillsProcessor', () => {
         expect.objectContaining({
           role: 'system',
           content: expect.stringContaining('Code Review'),
-        }),
-      );
-    });
-
-    it('should inject allowed tools notice when activated skills have allowedTools', async () => {
-      // Activate a skill with allowed tools
-      const result1 = await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: {},
-      });
-      const activateTool = result1.tools['skill-activate'] as any;
-      await activateTool.execute({ name: 'code-review' });
-
-      mockMessageList.addSystem.mockClear();
-      await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: {},
-      });
-
-      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          role: 'system',
-          content: expect.stringContaining('<skill_allowed_tools>'),
         }),
       );
     });

@@ -61,7 +61,6 @@ function createMockSkills(skillsData: Map<string, any> = new Map()) {
         name: s.name,
         description: s.description,
         license: s.license,
-        allowedTools: s.allowedTools,
       })),
     ),
     get: vi.fn().mockImplementation((name: string) => Promise.resolve(skillsData.get(name) ?? null)),

@@ -74,7 +74,6 @@ async function main() {
         console.log(`  Name: ${skill.name}`);
         console.log(`  Description: ${skill.description?.slice(0, 60) || 'N/A'}...`);
         console.log(`  Instructions: ${skill.instructions.length} characters`);
-        console.log(`  Allowed tools: ${skill.allowedTools?.join(', ') || 'None'}`);
       }
     }
   }
@@ -215,7 +214,6 @@ async function main() {
         metadata: {
           name: testSkillName,
           description: 'A test skill created by the demo',
-          allowedTools: ['workspace_read_file', 'workspace_list_files'],
         },
         instructions: 'This is a test skill. Follow these instructions when activated.',
       });
