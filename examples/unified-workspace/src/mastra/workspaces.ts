@@ -223,30 +223,6 @@ export const supervisedSandboxWorkspace = new Workspace({
 });
 
 /**
- * Command approval workspace - requires approval for shell commands.
- *
- * Safety feature: requireApproval: 'commands' on sandbox
- * - execute_command requires approval
- */
-export const commandApprovalWorkspace = new Workspace({
-  id: 'command-approval-workspace',
-  name: 'Command Approval Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: PROJECT_ROOT,
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
-    safety: {
-      requireApproval: 'commands',
-    },
-  }),
-  bm25: true,
-  skillsPaths: ['/skills'],
-  autoInit: true,
-});
-
-/**
  * Filesystem write approval workspace - requires approval for write operations.
  *
  * Safety feature: requireFilesystemApproval: 'write'

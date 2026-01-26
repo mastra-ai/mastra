@@ -38,8 +38,7 @@ async function main() {
   console.log('  - isolatedAgent: isolatedDocsWorkspace (agent-specific skills only)');
   console.log('  - readonlyAgent: readonlyWorkspace (readOnly: true)');
   console.log('  - safeWriteAgent: safeWriteWorkspace (requireReadBeforeWrite: true)');
-  console.log('  - supervisedAgent: supervisedSandboxWorkspace (requireSandboxApproval: all)');
-  console.log('  - commandApprovalAgent: commandApprovalWorkspace (requireSandboxApproval: commands)');
+  console.log('  - automationAgent: supervisedSandboxWorkspace (sandbox.requireApproval: all)');
   console.log();
 
   // Show skills available to each workspace
@@ -85,9 +84,7 @@ async function main() {
   console.log('    - workspace_list_files');
   if (globalWorkspace.sandbox) {
     console.log('  Sandbox tools:');
-    console.log('    - workspace_execute_code');
     console.log('    - workspace_execute_command');
-    console.log('    - workspace_install_package');
   }
   if (globalWorkspace.canBM25 || globalWorkspace.canVector) {
     console.log('  Search tools:');

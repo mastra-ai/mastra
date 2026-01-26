@@ -8,7 +8,7 @@ import { skillsOnlyWorkspace } from '../workspaces';
  * Workspace: skillsOnlyWorkspace
  * - Skills: /skills and /docs-skills (loaded read-only via LocalSkillSource)
  * - No filesystem tools (workspace_read_file, workspace_write_file, etc.)
- * - No sandbox tools (execute_code, execute_command)
+ * - No sandbox tools (execute_command)
  *
  * This demonstrates the minimal workspace configuration for agents that only
  * need behavioral guidelines without file or code execution access.
