@@ -23,7 +23,9 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the tool's information (name, description, schema).
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<McpToolInfo> {
-    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}${requestContextQueryString(requestContext)}`);
+    return this.request(
+      `/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**

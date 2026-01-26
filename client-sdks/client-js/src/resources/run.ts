@@ -253,22 +253,19 @@ export class Run extends BaseResource {
     searchParams.set('runId', this.runId);
 
     const requestContext = parseClientRequestContext(params.requestContext);
-    const response: Response = await this.request(
-      `/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        body: {
-          inputData: params.inputData,
-          initialState: params.initialState,
-          requestContext,
-          tracingOptions: params.tracingOptions,
-          resourceId: params.resourceId,
-          perStep: params.perStep,
-          closeOnSuspend: params.closeOnSuspend,
-        },
-        stream: true,
+    const response: Response = await this.request(`/workflows/${this.workflowId}/stream?${searchParams.toString()}`, {
+      method: 'POST',
+      body: {
+        inputData: params.inputData,
+        initialState: params.initialState,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+        resourceId: params.resourceId,
+        perStep: params.perStep,
+        closeOnSuspend: params.closeOnSuspend,
       },
-    );
+      stream: true,
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to stream workflow: ${response.statusText}`);

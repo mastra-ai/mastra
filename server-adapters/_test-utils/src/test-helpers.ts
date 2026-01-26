@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { normalizeRoutePath } from '@mastra/core/utils';
+import { normalizeRoutePath } from '@mastra/core/route-utils';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';

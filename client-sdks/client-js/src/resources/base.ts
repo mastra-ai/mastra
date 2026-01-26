@@ -1,5 +1,4 @@
-import { normalizeRoutePath } from '@mastra/core/utils';
-
+import { normalizeRoutePath } from '@mastra/core/route-utils';
 import type { RequestOptions, ClientOptions } from '../types';
 
 export class BaseResource {
@@ -23,9 +22,7 @@ export class BaseResource {
    * Matches exact path or path followed by / to avoid false positives (e.g., /a2a-other)
    */
   private shouldApplyPrefix(path: string): boolean {
-    return !BaseResource.NON_API_PATHS.some(
-      nonApiPath => path === nonApiPath || path.startsWith(nonApiPath + '/'),
-    );
+    return !BaseResource.NON_API_PATHS.some(nonApiPath => path === nonApiPath || path.startsWith(nonApiPath + '/'));
   }
 
   /**

@@ -1,8 +1,8 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { normalizeRoutePath } from '@mastra/core/route-utils';
 import { MastraServerBase } from '@mastra/core/server';
-import { normalizeRoutePath } from '@mastra/core/utils';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';

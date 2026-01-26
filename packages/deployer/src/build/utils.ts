@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { builtinModules } from 'node:module';
-import { normalizeRoutePath } from '@mastra/core/utils';
+import { normalizeRoutePath } from '@mastra/core/route-utils';
 
 /** The detected JavaScript runtime environment */
 export type RuntimePlatform = 'node' | 'bun';

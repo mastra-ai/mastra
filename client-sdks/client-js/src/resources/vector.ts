@@ -48,7 +48,9 @@ export class Vector extends BaseResource {
    * @returns Promise containing array of index names
    */
   getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
-    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`);
+    return this.request(
+      `/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**

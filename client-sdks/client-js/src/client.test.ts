@@ -27,10 +27,7 @@ describe('MastraClient', () => {
       await client.listAgents();
 
       // Should call /mastra/agents, NOT /api/agents
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/mastra/agents',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
     });
 
     it('should default to /api apiPrefix for backward compatibility', async () => {
@@ -44,10 +41,7 @@ describe('MastraClient', () => {
       await client.listAgents();
 
       // Should default to /api/agents
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/api/agents',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/agents', expect.any(Object));
     });
 
     it('should use custom apiPrefix for all API endpoints', async () => {
@@ -59,42 +53,27 @@ describe('MastraClient', () => {
       // Test listTools
       mockFetchResponse();
       await client.listTools();
-      expect(global.fetch).toHaveBeenLastCalledWith(
-        'http://localhost:3000/v2/tools',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/tools', expect.any(Object));
 
       // Test listWorkflows
       mockFetchResponse();
       await client.listWorkflows();
-      expect(global.fetch).toHaveBeenLastCalledWith(
-        'http://localhost:3000/v2/workflows',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/workflows', expect.any(Object));
 
       // Test listProcessors
       mockFetchResponse();
       await client.listProcessors();
-      expect(global.fetch).toHaveBeenLastCalledWith(
-        'http://localhost:3000/v2/processors',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/processors', expect.any(Object));
 
       // Test listScorers
       mockFetchResponse();
       await client.listScorers();
-      expect(global.fetch).toHaveBeenLastCalledWith(
-        'http://localhost:3000/v2/scores/scorers',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/scores/scorers', expect.any(Object));
 
       // Test getMcpServers
       mockFetchResponse();
       await client.getMcpServers();
-      expect(global.fetch).toHaveBeenLastCalledWith(
-        'http://localhost:3000/v2/mcp/v0/servers',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/mcp/v0/servers', expect.any(Object));
     });
 
     it('should handle apiPrefix with trailing slash correctly', async () => {
@@ -108,10 +87,7 @@ describe('MastraClient', () => {
       await client.listAgents();
 
       // Should normalize and call /mastra/agents (not /mastra//agents)
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/mastra/agents',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
     });
 
     it('should handle apiPrefix without leading slash', async () => {
@@ -125,13 +101,9 @@ describe('MastraClient', () => {
       await client.listAgents();
 
       // Should normalize and call /mastra/agents
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/mastra/agents',
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
     });
   });
-
 
   let client: MastraClient;
   const clientOptions = {
