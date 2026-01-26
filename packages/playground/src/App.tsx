@@ -137,6 +137,20 @@ function App() {
                     return { Component: Datasets };
                   }}
                 />
+                <Route
+                  path="/datasets/:datasetId/runs/:runId"
+                  lazy={async () => {
+                    const { DatasetRun } = await import('./pages/datasets/dataset/run');
+                    return { Component: DatasetRun };
+                  }}
+                />
+                <Route
+                  path="/datasets/:datasetId/compare"
+                  lazy={async () => {
+                    const { DatasetCompare } = await import('./pages/datasets/dataset/compare');
+                    return { Component: DatasetCompare };
+                  }}
+                />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
