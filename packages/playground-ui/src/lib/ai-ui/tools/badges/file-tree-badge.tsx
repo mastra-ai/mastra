@@ -13,7 +13,6 @@ interface FilesystemInfo {
   id?: string;
   name?: string;
   provider?: string;
-  basePath?: string;
 }
 
 interface WorkspaceInfo {

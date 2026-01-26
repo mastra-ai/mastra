@@ -5,7 +5,8 @@
  * making it safe to import in both Node.js and browser environments.
  */
 
-const TOOLS_NAMESPACE = 'mastra_workspace' as const;
+export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
+const TOOLS_NAMESPACE = WORKSPACE_TOOLS_PREFIX;
 
 /**
  * Workspace tool name constants.

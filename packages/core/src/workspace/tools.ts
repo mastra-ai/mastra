@@ -269,7 +269,6 @@ Examples:
               id: z.string().optional(),
               name: z.string().optional(),
               provider: z.string().optional(),
-              basePath: z.string().optional(),
             }).optional(),
           })
           .optional()
@@ -295,7 +294,6 @@ Examples:
             id: fs.id,
             name: fs.name,
             provider: fs.provider,
-            basePath: 'basePath' in fs ? (fs as any).basePath : undefined,
           },
         };
 
