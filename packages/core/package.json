@@ -51,16 +51,6 @@
         "default": "./dist/workflows/constants.cjs"
       }
     },
-    "./workspace/tool-names": {
-      "import": {
-        "types": "./dist/workspace/tool-names.d.ts",
-        "default": "./dist/workspace/tool-names.js"
-      },
-      "require": {
-        "types": "./dist/workspace/tool-names.d.ts",
-        "default": "./dist/workspace/tool-names.cjs"
-      }
-    },
     "./network/vNext": {
       "import": {
         "types": "./dist/network/vNext/index.d.ts",

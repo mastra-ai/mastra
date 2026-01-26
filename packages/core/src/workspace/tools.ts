@@ -15,12 +15,12 @@ import {
   StringNotUniqueError,
 } from './line-utils';
 import { formatAsTree } from './tree-formatter';
-import { WORKSPACE_TOOLS } from './tool-names';
+import { WORKSPACE_TOOLS } from './constants';
 import type { Workspace } from './workspace';
 
 // Re-export for convenience
-export { WORKSPACE_TOOLS } from './tool-names';
-export type { WorkspaceToolName } from './tool-names';
+export { WORKSPACE_TOOLS } from './constants';
+export type { WorkspaceToolName } from './constants';
 
 
 /**

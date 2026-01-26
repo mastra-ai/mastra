@@ -1,5 +1,5 @@
 import { MastraUIMessage } from '@mastra/react';
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace/tool-names';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
