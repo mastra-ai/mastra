@@ -29,6 +29,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('task')) return 'test-task';
   if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
   if (field.includes('processor')) return 'test-processor';
+  if (field.includes('integration')) return 'test-integration';
   if (field.includes('trace')) return 'test-trace';
   if (field.includes('span')) return 'test-span';
   if (field.includes('vector')) return 'test-vector';
@@ -38,6 +39,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('model')) return 'gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
+  if (field.includes('provider')) return 'composio';
 
   return 'test-string';
 }
@@ -101,6 +103,18 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
       }
       obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
     }
+
+    // Special case: MCP transport schemas require url for http transport or command for stdio
+    // The schema uses .refine() which requires these fields to be present based on transport type
+    if ('transport' in obj && 'url' in shape && 'command' in shape) {
+      if (obj.transport === 'http') {
+        obj.url = 'https://example.com/mcp';
+      } else if (obj.transport === 'stdio') {
+        obj.command = 'npx';
+        obj.args = ['-y', '@modelcontextprotocol/server-filesystem'];
+      }
+    }
+
     return obj;
   }
 
@@ -199,6 +213,12 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+  // Integration route params
+  if (route.path.includes(':integrationId')) params.integrationId = 'test-integration';
+  if (route.path.includes(':qualifiedName')) params.qualifiedName = 'test-qualified-name';
+  if (route.path.includes(':provider')) params.provider = 'composio';
+  // Override toolId for integration routes to use cached tool ID
+  if (route.path.includes(':toolId') && route.path.includes('/integrations/')) params.toolId = 'test-cached-tool';
 
   return params;
 }

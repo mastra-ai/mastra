@@ -286,6 +286,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // This is needed for routes like ENHANCE_INSTRUCTIONS_ROUTE that check provider connectivity
   vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
 
+  // Mock Arcade and Composio API keys so provider routes can be tested
+  // These routes check for API keys and will fail without them
+  vi.stubEnv('ARCADE_API_KEY', 'test-arcade-api-key');
+  vi.stubEnv('COMPOSIO_API_KEY', 'test-composio-api-key');
+
   // Create memory and pre-populate with test thread
   const memory = createMockMemory();
   await memory.createThread({
@@ -548,6 +553,39 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
             createdAt: new Date(),
           },
         ],
+      });
+    }
+
+    // Add test integration for integrations routes
+    const integrationsStore = await storage.getStore('integrations');
+    if (integrationsStore) {
+      await integrationsStore.createIntegration({
+        integration: {
+          id: 'test-integration',
+          name: 'Test Integration',
+          provider: 'composio',
+          enabled: true,
+          selectedToolkits: ['test-toolkit'],
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Add a test cached tool
+      await integrationsStore.cacheTool({
+        tool: {
+          id: 'test-cached-tool',
+          integrationId: 'test-integration',
+          provider: 'composio',
+          toolkitSlug: 'test-toolkit',
+          toolSlug: 'test-tool',
+          name: 'Test Cached Tool',
+          description: 'A test cached tool',
+          inputSchema: { type: 'object', properties: {} },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       });
     }
   }
