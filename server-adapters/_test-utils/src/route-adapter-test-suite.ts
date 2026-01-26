@@ -490,6 +490,51 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         // Should return 404 - this path should not exist
         expect(response.status).toBe(404);
       });
+
+      it('should normalize prefix with trailing slash', async () => {
+        // Create adapter with trailing slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedApp = prefixedSetup.app;
+
+        // Request should work at normalized path /mastra/agents (not /mastra//agents)
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra/agents',
+        });
+
+        // Should succeed - trailing slash should be normalized
+        expect(response.status).toBeLessThan(400);
+      });
+
+      it('should normalize prefix without leading slash', async () => {
+        // Create adapter without leading slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: 'mastra' });
+        const prefixedApp = prefixedSetup.app;
+
+        // Request should work at normalized path /mastra/agents
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra/agents',
+        });
+
+        // Should succeed - leading slash should be added
+        expect(response.status).toBeLessThan(400);
+      });
+
+      it('should not create double-slash routes when prefix has trailing slash', async () => {
+        // Create adapter with trailing slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedApp = prefixedSetup.app;
+
+        // The double-slash path should NOT work
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra//agents',
+        });
+
+        // Should return 404 - double-slash path should not exist
+        expect(response.status).toBe(404);
+      });
     });
   });
 }
