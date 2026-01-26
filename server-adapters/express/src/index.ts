@@ -214,7 +214,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     });
   }
 
-  async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request, prefix?: string): Promise<void> {
+  async sendResponse(
+    route: ServerRoute,
+    response: Response,
+    result: unknown,
+    request?: Request,
+    prefix?: string,
+  ): Promise<void> {
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
