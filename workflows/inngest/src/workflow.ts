@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
@@ -12,7 +13,6 @@ import type {
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
-import { emitErrorEvent, AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
