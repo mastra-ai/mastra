@@ -46,6 +46,10 @@ export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** Whether this entry is a symbolic link */
+  isSymlink?: boolean;
+  /** Target path of the symlink (only set if isSymlink is true) */
+  symlinkTarget?: string;
 }
 
 export interface ReadOptions {

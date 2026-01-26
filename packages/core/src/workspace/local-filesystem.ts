@@ -368,12 +368,34 @@ export class LocalFilesystem implements WorkspaceFilesystem {
           }
         }
 
+        // Check if entry is a symlink
+        const isSymlink = entry.isSymbolicLink();
+        let symlinkTarget: string | undefined;
+        let resolvedType: 'file' | 'directory' = 'file';
+
+        if (isSymlink) {
+          try {
+            // Get the symlink target path
+            symlinkTarget = await fs.readlink(entryPath);
+            // Determine the type of the target (follow the symlink)
+            const targetStat = await fs.stat(entryPath);
+            resolvedType = targetStat.isDirectory() ? 'directory' : 'file';
+          } catch {
+            // If we can't read the symlink target or it's broken, treat as file
+            resolvedType = 'file';
+          }
+        } else {
+          resolvedType = entry.isDirectory() ? 'directory' : 'file';
+        }
+
         const fileEntry: FileEntry = {
           name: entry.name,
-          type: entry.isDirectory() ? 'directory' : 'file',
+          type: resolvedType,
+          isSymlink: isSymlink || undefined,
+          symlinkTarget,
         };
 
-        if (entry.isFile()) {
+        if (resolvedType === 'file' && !isSymlink) {
           try {
             const stat = await fs.stat(entryPath);
             fileEntry.size = stat.size;
@@ -384,7 +406,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
         result.push(fileEntry);
 
-        if (options?.recursive && entry.isDirectory()) {
+        // Only recurse into directories (follow symlinks to directories)
+        if (options?.recursive && resolvedType === 'directory') {
           const depth = options.maxDepth ?? Infinity;
           if (depth > 0) {
             const subEntries = await this.readdir(this.toRelativePath(entryPath), { ...options, maxDepth: depth - 1 });
