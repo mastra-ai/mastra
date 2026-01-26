@@ -28,10 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Browser launches lazily on first tool use (not at construction)
   4. Browser closes cleanly via close() method with no memory leaks
   5. Navigation operations timeout after 10 seconds with clear error message
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: [TBD - defined during plan-phase]
+- [ ] 01-01-PLAN.md - Package scaffolding and type definitions
+- [ ] 01-02-PLAN.md - Navigate tool and BrowserToolset class implementation
 
 ### Phase 2: Core Actions
 **Goal**: Agents can perceive page structure and interact with elements using refs
@@ -85,10 +86,11 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 0/TBD | Not started | - |
+| 1. Infrastructure | 0/2 | Planned | - |
 | 2. Core Actions | 0/TBD | Not started | - |
 | 3. Screenshot | 0/TBD | Not started | - |
 
 ---
 
 *Roadmap created: 2026-01-26*
+*Phase 1 planned: 2026-01-26*
