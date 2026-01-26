@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 6 of 8 (Playground Integration)
-Plan: 6 of 6 in current phase
+Plan: 5 of 6 in current phase (06-05 completed after 06-06)
 Status: Phase complete
-Last activity: 2026-01-26 — Completed 06-06-PLAN.md (Results View and Comparison)
+Last activity: 2026-01-26 — Completed 06-05-PLAN.md (Dataset Detail & Run Trigger)
 
 Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: 4 min
-- Total execution time: 1.1 hours
+- Total execution time: 1.2 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████████░░] 83%
 | 03-agent-workflow-targets | 1 | 2 min | 2 min |
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 5 | 21 min | 4 min |
+| 06-playground-integration | 6 | 27 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (6 min), 06-02 (2 min), 06-03 (3 min), 06-04 (5 min), 06-06 (5 min)
+- Last 5 plans: 06-02 (2 min), 06-03 (3 min), 06-04 (5 min), 06-06 (5 min), 06-05 (6 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -73,6 +73,8 @@ Recent decisions affecting current work:
 - ScoreDelta uses unicode arrows for direction indicators
 - AlertDescription requires explicit 'as' prop for semantic HTML
 - Routes use lazy loading pattern for code splitting
+- Two-step target selection: type first (agent/workflow/scorer), then specific target
+- Scorer selection optional, only for agent/workflow targets
 
 ### Pending Todos
 
@@ -84,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26 18:59
-Stopped at: Completed 06-06-PLAN.md — Results View and Comparison
+Last session: 2026-01-26 19:00
+Stopped at: Completed 06-05-PLAN.md — Dataset Detail & Run Trigger
 Resume file: None
