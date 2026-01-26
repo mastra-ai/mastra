@@ -180,6 +180,7 @@ export const DATASET_RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
   traceId: { type: 'text', nullable: true },
+  scores: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

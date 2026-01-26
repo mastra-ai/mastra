@@ -83,6 +83,7 @@ export class RunsLibSQL extends RunsStorage {
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
+      scores: row.scores ? safelyParseJSON(row.scores as string) : [],
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -314,6 +315,7 @@ export class RunsLibSQL extends RunsStorage {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
+      const scores = input.scores ?? [];
 
       await this.#db.insert({
         tableName: TABLE_DATASET_RUN_RESULTS,
@@ -331,6 +333,7 @@ export class RunsLibSQL extends RunsStorage {
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
+          scores: JSON.stringify(scores),
           createdAt: nowIso,
         },
       });
@@ -349,6 +352,7 @@ export class RunsLibSQL extends RunsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
+        scores,
         createdAt: now,
       };
     } catch (error) {
