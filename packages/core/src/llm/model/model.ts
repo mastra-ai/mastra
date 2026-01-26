@@ -109,8 +109,10 @@ export class MastraLLMV1 extends MastraBase {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion needed to avoid
+    // "Type instantiation is excessively deep" error from complex ZodSchema generic inference
     return applyCompatLayer({
-      schema: schema,
+      schema: schema as any,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
