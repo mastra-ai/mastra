@@ -2,12 +2,6 @@
 
 Standards and conventions for building the local studio in `packages/playground`.
 
-## Ensuring quality and consistency
-
-- MUST use `/e2e-frontend-validation` skill
-- MUST use `/react-best-practices` skill
-- MUST use `/tailwind-best-practices` skill
-
 ## Commands
 
 ### Local Commands (run from `packages/playground`)

@@ -1,6 +1,10 @@
 ---
-name: e2e-frontend-validation
-description: E2E validation workflow for frontend changes in playground packages using Playwright MCP
+name: e2e-tests-studio
+description: >
+  REQUIRED when modifying any file in packages/playground-ui or packages/playground.
+  Triggers on: React component creation/modification/refactoring, UI changes in general (even the smallest),
+  new playground features, bug fixes affecting studio UI. Generates Playwright E2E tests
+  to maintain coverage and prevent regressions in the studio/playground application.
 model: claude-opus-4-5
 ---
 

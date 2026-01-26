@@ -2,23 +2,7 @@
 
 Standards and conventions for building components in `packages/playground-ui`.
 
-## Ensuring quality and consistency
-
-- MUST use `/e2e-frontend-validation` skill
-- MUST use `/react-best-practices` skill
-- MUST use `/tailwind-best-practices` skill
-
-
 ## Commands
-
-### Local Commands (run from `packages/playground-ui`)
-
-- `pnpm build`: TypeCheck and build the package with Vite
-- `pnpm dev`: Build in watch mode
-- `pnpm test`: Run tests with Vitest
-- `pnpm preview`: Preview the production build
-- `pnpm storybook`: Start Storybook dev server on port 6006
-- `pnpm build-storybook`: Build Storybook for production
 
 ### Root Commands (run from monorepo root)
 
