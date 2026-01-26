@@ -7,7 +7,7 @@ import { handleError } from './error';
 
 export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/system/packages',
+  path: '/system/packages',
   responseType: 'json',
   responseSchema: systemPackagesResponseSchema,
   summary: 'Get installed Mastra packages',

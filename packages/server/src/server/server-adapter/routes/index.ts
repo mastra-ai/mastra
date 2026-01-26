@@ -33,6 +33,8 @@ export type ServerContext = {
   registeredTools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
+  /** The route prefix configured for the server (e.g., '/api') */
+  routePrefix?: string;
 };
 
 /**

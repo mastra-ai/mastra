@@ -108,7 +108,7 @@ async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
 
 export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces',
+  path: '/observability/traces',
   responseType: 'json',
   queryParamSchema: wrapSchemaForQueryParams(
     tracesFilterSchema
@@ -141,7 +141,7 @@ export const LIST_TRACES_ROUTE = createRoute({
 
 export const GET_TRACE_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId',
+  path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
   responseSchema: getTraceResponseSchema,
@@ -167,7 +167,7 @@ export const GET_TRACE_ROUTE = createRoute({
 
 export const SCORE_TRACES_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/observability/traces/score',
+  path: '/observability/traces/score',
   responseType: 'json',
   bodySchema: scoreTracesRequestSchema,
   responseSchema: scoreTracesResponseSchema,
@@ -209,7 +209,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/observability/traces/:traceId/:spanId/scores',
+  path: '/observability/traces/:traceId/:spanId/scores',
   responseType: 'json',
   pathParamSchema: spanIdsSchema,
   queryParamSchema: paginationArgsSchema,

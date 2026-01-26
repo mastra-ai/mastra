@@ -199,7 +199,11 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
 :::info
-`mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
+`mastra.getWorkflow()` is preferred over a direct import for two reasons:
+1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
+2. It provides full TypeScript type inference for workflow input and output schemas
+
+**Note:** Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it does not provide the same level of type inference.
 :::
 
 ## Running workflows
