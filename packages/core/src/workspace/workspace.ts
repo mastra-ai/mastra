@@ -598,57 +598,6 @@ export class Workspace {
   }
 
   /**
-   * Index multiple documents.
-   *
-   * @param docs - Array of documents with path, content, and optional options
-   * @throws {SearchNotAvailableError} if search is not configured
-   */
-  async indexMany(
-    docs: Array<{
-      path: string;
-      content: string;
-      options?: {
-        type?: 'text' | 'image' | 'file';
-        mimeType?: string;
-        metadata?: Record<string, unknown>;
-        startLineOffset?: number;
-      };
-    }>,
-  ): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-
-    const indexDocs: IndexDocument[] = docs.map(({ path, content, options }) => ({
-      id: path,
-      content,
-      metadata: {
-        type: options?.type,
-        mimeType: options?.mimeType,
-        ...options?.metadata,
-      },
-      startLineOffset: options?.startLineOffset,
-    }));
-
-    await this._searchEngine.indexMany(indexDocs);
-  }
-
-  /**
-   * Remove a document from the search index.
-   *
-   * @param path - File path (document ID) to remove
-   * @throws {SearchNotAvailableError} if search is not configured
-   */
-  async unindex(path: string): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-    await this._searchEngine.remove(path);
-  }
-
-  /**
    * Search indexed content.
    *
    * @param query - Search query string
@@ -665,23 +614,11 @@ export class Workspace {
   }
 
   /**
-   * Rebuild the BM25 index from filesystem paths.
-   * Reads files from the specified paths (or autoIndexPaths from config) and indexes them.
-   *
-   * @param paths - Paths to index (defaults to autoIndexPaths from config)
-   * @throws {SearchNotAvailableError} if search is not configured
-   * @throws {FilesystemNotAvailableError} if filesystem is not configured
+   * Rebuild the search index from filesystem paths.
+   * Used internally for auto-indexing on init.
    */
-  async rebuildIndex(paths?: string[]): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const pathsToIndex = paths ?? this._config.autoIndexPaths ?? [];
-    if (pathsToIndex.length === 0) {
+  private async rebuildSearchIndex(paths: string[]): Promise<void> {
+    if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
 
@@ -749,7 +686,7 @@ export class Workspace {
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
-        await this.rebuildIndex(this._config.autoIndexPaths);
+        await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
       }
 
       this._status = 'ready';
@@ -757,26 +694,6 @@ export class Workspace {
       this._status = 'error';
       throw error;
     }
-  }
-
-  /**
-   * Pause the workspace (stop sandbox but keep state).
-   */
-  async pause(): Promise<void> {
-    if (this._sandbox?.stop) {
-      await this._sandbox.stop();
-    }
-    this._status = 'paused';
-  }
-
-  /**
-   * Resume a paused workspace.
-   */
-  async resume(): Promise<void> {
-    if (this._sandbox) {
-      await this._sandbox.start();
-    }
-    this._status = 'ready';
   }
 
   /**
@@ -796,13 +713,6 @@ export class Workspace {
     } finally {
       this._status = 'destroyed';
     }
-  }
-
-  /**
-   * Extend the workspace timeout (for providers that have timeouts).
-   */
-  async keepAlive(): Promise<void> {
-    this.lastAccessedAt = new Date();
   }
 
   /**

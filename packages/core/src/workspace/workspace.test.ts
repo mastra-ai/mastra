@@ -243,62 +243,12 @@ describe('Workspace', () => {
       expect(results.some(r => r.id === '/doc1.txt')).toBe(true);
     });
 
-    it('should support indexMany', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
-        bm25: true,
-      });
-
-      await workspace.indexMany([
-        { path: '/doc1.txt', content: 'First document' },
-        { path: '/doc2.txt', content: 'Second document' },
-      ]);
-
-      const results = await workspace.search('document');
-      expect(results.length).toBe(2);
-    });
-
-    it('should unindex document', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
-        bm25: true,
-      });
-
-      await workspace.index('/doc1.txt', 'Some content');
-      await workspace.unindex('/doc1.txt');
-
-      const results = await workspace.search('content');
-      expect(results.length).toBe(0);
-    });
-
-    it('should rebuild index from filesystem', async () => {
-      // Create test files
-      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
-      await fs.writeFile(path.join(tempDir, 'docs', 'file1.txt'), 'Content of file one');
-      await fs.writeFile(path.join(tempDir, 'docs', 'file2.txt'), 'Content of file two');
-
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
-        bm25: true,
-        autoIndexPaths: ['/docs'],
-      });
-
-      await workspace.rebuildIndex();
-
-      const results = await workspace.search('Content');
-      expect(results.length).toBeGreaterThan(0);
-    });
-
     it('should throw SearchNotAvailableError when search not configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
       await expect(workspace.index('/test', 'content')).rejects.toThrow(SearchNotAvailableError);
       await expect(workspace.search('query')).rejects.toThrow(SearchNotAvailableError);
-      await expect(workspace.rebuildIndex()).rejects.toThrow(SearchNotAvailableError);
     });
 
     it('should support search with topK and minScore options', async () => {
@@ -308,11 +258,9 @@ describe('Workspace', () => {
         bm25: true,
       });
 
-      await workspace.indexMany([
-        { path: '/doc1.txt', content: 'machine learning is great' },
-        { path: '/doc2.txt', content: 'machine learning algorithms' },
-        { path: '/doc3.txt', content: 'deep learning neural networks' },
-      ]);
+      await workspace.index('/doc1.txt', 'machine learning is great');
+      await workspace.index('/doc2.txt', 'machine learning algorithms');
+      await workspace.index('/doc3.txt', 'deep learning neural networks');
 
       const resultsTopK = await workspace.search('learning', { topK: 2 });
       expect(resultsTopK.length).toBe(2);
@@ -413,33 +361,6 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem, sandbox });
 
       await workspace.init();
-
-      expect(workspace.status).toBe('ready');
-
-      await workspace.destroy();
-    });
-
-    it('should pause workspace', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
-      const workspace = new Workspace({ filesystem, sandbox });
-
-      await workspace.init();
-      await workspace.pause();
-
-      expect(workspace.status).toBe('paused');
-
-      await workspace.destroy();
-    });
-
-    it('should resume workspace', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
-      const workspace = new Workspace({ filesystem, sandbox });
-
-      await workspace.init();
-      await workspace.pause();
-      await workspace.resume();
 
       expect(workspace.status).toBe('ready');
 
