@@ -1,5 +1,5 @@
 import type { StandardSchemaWithJSON } from '../schema/schema';
-import type { StandardSchemaIssue } from '../schema/standard-schema';
+import { standardSchemaToJSONSchema, type StandardSchemaIssue } from '../schema/standard-schema';
 
 /**
  * Formatted validation errors structure.
@@ -143,7 +143,7 @@ function normalizeNullishInput(schema: StandardSchemaWithJSON<any>, input: unkno
     return input;
   }
 
-  const jsonSchema = schema['~standard'].jsonSchema.input({ target: 'draft-07' });
+  const jsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
 
   // Check if schema is an array type (using typeName to avoid dual-package hazard)
   if (jsonSchema.type === 'array') {

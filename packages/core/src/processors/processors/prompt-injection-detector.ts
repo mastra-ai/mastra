@@ -2,6 +2,7 @@ import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { toStandardSchema, type PublicSchema } from '../../schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -250,7 +251,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
       } else {
         const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.detectionAgent.generateLegacy(prompt, {
-          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,

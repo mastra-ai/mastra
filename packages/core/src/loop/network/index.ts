@@ -29,7 +29,7 @@ import { PRIMITIVE_TYPES } from '../types';
  */
 function schemaToJsonSchema(schema: StandardSchemaWithJSON | unknown): unknown {
   if (isStandardSchemaWithJSON(schema)) {
-    return schema['~standard'].jsonSchema.output({ target: 'draft-07' });
+    return standardSchemaToJSONSchema(schema);
   }
 
   throw new Error('We could not convert the schema to a JSONSChema');

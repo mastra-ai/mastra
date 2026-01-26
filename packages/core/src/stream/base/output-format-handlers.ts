@@ -8,6 +8,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -420,8 +421,7 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     }
 
     // Get enum values from the schema using StandardSchemaWithJSON's jsonSchema conversion
-    // Use StandardSchemaWithJSON's jsonSchema conversion
-    const outputJsonSchema = this.schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
+    const outputJsonSchema = standardSchemaToJSONSchema(this.schema);
     const enumValues = outputJsonSchema?.enum;
 
     if (!enumValues) {

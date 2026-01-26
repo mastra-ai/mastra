@@ -44,6 +44,7 @@ import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { toStandardSchema } from '../schema/schema';
+import { standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -2305,7 +2306,7 @@ export class Agent<
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
                   resumeSchema: normalizedResumeSchema
-                    ? JSON.stringify(normalizedResumeSchema['~standard'].jsonSchema.output({ target: 'draft-07' }))
+                    ? JSON.stringify(standardSchemaToJSONSchema(normalizedResumeSchema))
                     : undefined,
                 });
               } else {

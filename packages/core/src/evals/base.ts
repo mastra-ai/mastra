@@ -11,6 +11,7 @@ import type { TracingContext } from '../observability';
 import { InternalSpans } from '../observability';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema } from '../schema';
+import { standardSchemaToJSONSchema } from '../schema/standard-schema';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
@@ -614,7 +615,7 @@ class MastraScorer<
         });
         const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
-          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchemaToJSONSchema(standardSchema),
           tracingContext,
         });
       }
@@ -645,7 +646,7 @@ class MastraScorer<
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchemaToJSONSchema(standardSchema),
           tracingContext,
         });
       }

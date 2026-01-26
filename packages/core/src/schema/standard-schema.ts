@@ -8,6 +8,15 @@ import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
 import type { PublicSchema } from './schema';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
+/**
+ * Library options for JSON Schema conversion.
+ * - unrepresentable: 'any' allows z.custom() and other unrepresentable types to be converted to {}
+ *   instead of throwing "Custom types cannot be represented in JSON Schema"
+ */
+export const JSON_SCHEMA_LIBRARY_OPTIONS = {
+  unrepresentable: 'any' as const,
+};
+
 export type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,
@@ -134,10 +143,12 @@ export function isStandardSchemaWithJSON(value: unknown): value is StandardSchem
 /**
  * Converts a StandardSchemaWithJSON to a JSON Schema.
  *
- * Uses the built-in jsonSchema.output() method from the StandardJSONSchemaV1 interface.
- *
  * @param schema - The StandardSchemaWithJSON schema to convert
- * @param target - The JSON Schema target version (default: 'draft-07')
+ * @param options - Conversion options
+ * @param options.target - The JSON Schema target version (default: 'draft-07')
+ * @param options.io - Whether to use input or output schema (default: 'output')
+ *   - 'input': Use for tool parameters, function arguments, request bodies
+ *   - 'output': Use for return types, response bodies
  * @returns The JSON Schema representation
  *
  * @example
@@ -147,13 +158,22 @@ export function isStandardSchemaWithJSON(value: unknown): value is StandardSchem
  *
  * const zodSchema = z.object({ name: z.string() });
  * const standardSchema = toStandardSchema(zodSchema);
- * const jsonSchema = standardSchemaToJSONSchema(standardSchema);
- * // { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] }
+ *
+ * // For output types (default)
+ * const outputSchema = standardSchemaToJSONSchema(standardSchema);
+ *
+ * // For input types (tool parameters)
+ * const inputSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
  * ```
  */
 export function standardSchemaToJSONSchema(
   schema: StandardSchemaWithJSON,
-  target: StandardJSONSchemaV1.Target = 'draft-07',
+  options: {
+    target?: StandardJSONSchemaV1.Target;
+    io?: 'input' | 'output';
+  } = {},
 ): JSONSchema7 {
-  return schema['~standard'].jsonSchema.output({ target }) as JSONSchema7;
+  const { target = 'draft-07', io = 'output' } = options;
+  const jsonSchemaFn = schema['~standard'].jsonSchema[io];
+  return jsonSchemaFn({ target, libraryOptions: JSON_SCHEMA_LIBRARY_OPTIONS }) as JSONSchema7;
 }

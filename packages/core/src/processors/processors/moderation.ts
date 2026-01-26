@@ -3,6 +3,7 @@ import type { GenerateObjectResult } from '@internal/ai-sdk-v4';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { toStandardSchema, type PublicSchema } from '../../schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -303,7 +304,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       } else {
         const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.moderationAgent.generateLegacy(prompt, {
-          output: standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }),
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,

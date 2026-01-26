@@ -3,6 +3,7 @@ import type z4 from 'zod';
 import type z3 from 'zod/v3';
 import { isStandardSchemaWithJSON } from '../../schema/schema';
 import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 
 export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
 
@@ -30,7 +31,7 @@ export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSc
 
   // Handle StandardSchemaWithJSON
   if (isStandardSchemaWithJSON(schema)) {
-    return schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
+    return standardSchemaToJSONSchema(schema);
   }
 
   return undefined;
