@@ -199,24 +199,23 @@ This script reads the PR diff from `PR_DIFF_FILE`, generates a description using
 
 ```typescript title=".github/scripts/generate-description.ts"
 import { readFileSync, writeFileSync } from "fs";
-import { execSync } from "child_process";
 import { mastra } from "../../src/mastra";
 
 const agent = mastra.getAgent("descriptionAgent");
+const diff = readFileSync(process.env.PR_DIFF_FILE!, "utf-8");
 
 await agent.generate(
   `Please create a PR description for the following changes.
 
 Git diff:
 \`\`\`diff
-${readFileSync(process.env.PR_DIFF_FILE!, "utf-8")}
+${diff}
 \`\`\``,
   {
     onError: () => {
-      const fileCount = execSync("git diff --name-only HEAD~1 | wc -l").toString().trim();
       writeFileSync(
         process.env.PR_DESCRIPTION_FILE!,
-        `This PR contains a large diff (${fileCount} files changed) that exceeds the agent's context window limit.`
+        "This PR diff is too large to generate a description automatically."
       );
     },
     onFinish: (result) => {
