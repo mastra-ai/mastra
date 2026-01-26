@@ -91,7 +91,7 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { baseUrl, headers, prefix, isLoading } = useStudioConfig();
   const { isMastraPlatform } = useMastraPlatform();
 
   if (isLoading) {
@@ -105,7 +105,7 @@ function App() {
   }
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} prefix={prefix}>
       <PostHogProvider>
         <BrowserRouter basename={studioBasePath}>
           <LinkComponentWrapper>

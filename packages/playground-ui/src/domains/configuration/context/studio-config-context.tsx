@@ -10,6 +10,7 @@ export type StudioConfigContextType = StudioConfig & {
 export const StudioConfigContext = createContext<StudioConfigContextType>({
   baseUrl: '',
   headers: {},
+  prefix: undefined,
   isLoading: false,
   setConfig: () => {},
 });
@@ -30,13 +31,14 @@ export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:41
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: {},
+    prefix: undefined,
     isLoading: true,
   });
 
   useLayoutEffect(() => {
     // Handle error case - stop loading but don't configure
     if (error && !isStatusLoading) {
-      return setConfig({ baseUrl: '', headers: {}, isLoading: false });
+      return setConfig({ baseUrl: '', headers: {}, prefix: undefined, isLoading: false });
     }
 
     // Don't run the effect during the fetch request
@@ -55,7 +57,7 @@ export const StudioConfigProvider = ({ children, endpoint = 'http://localhost:41
       return setConfig(prev => ({ ...prev, baseUrl: endpoint, isLoading: false }));
     }
 
-    return setConfig({ baseUrl: '', headers: {}, isLoading: false });
+    return setConfig({ baseUrl: '', headers: {}, prefix: undefined, isLoading: false });
   }, [instanceStatus, endpoint, isStatusLoading, error]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
