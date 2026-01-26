@@ -82,6 +82,7 @@ export class RunsLibSQL extends RunsStorage {
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
+      traceId: (row.traceId as string | null) ?? null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -329,6 +330,7 @@ export class RunsLibSQL extends RunsStorage {
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
+          traceId: input.traceId ?? null,
           createdAt: nowIso,
         },
       });
@@ -346,6 +348,7 @@ export class RunsLibSQL extends RunsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        traceId: input.traceId ?? null,
         createdAt: now,
       };
     } catch (error) {

@@ -671,7 +671,7 @@ export interface RunResult {
   completedAt: Date;
   retryCount: number;
   /** Trace ID from agent/workflow execution */
-  traceId?: string | null;
+  traceId: string | null;
   createdAt: Date;
 }
 
