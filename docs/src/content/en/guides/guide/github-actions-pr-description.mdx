@@ -1,5 +1,5 @@
 ---
-title: "Guide: Automating Multi-Language PR Descriptions in GitHub Actions | Mastra Workflows | Guides"
+title: "Guide: Automating Multi-Language PR Descriptions in GitHub Actions | Mastra | Guides"
 description: Automate multi-language pull request descriptions with a GitHub Actions workflow that uses Mastra to read diffs and generate concise PR descriptions.
 ---
 
@@ -17,7 +17,17 @@ The setup consists of three parts:
 
 The finished action writes a description with summaries in English, Spanish, and Japanese, each marked with a flag emoji for easy scanning.
 
-![Screenshot of PR description in GitHub UI](/img/guides/github-action-pr-summary.jpg)
+```text
+🇬🇧 English
+This PR integrates Astro into the project, adding configuration files and updating scripts to support Astro development.
+
+🇪🇸 Español
+Este PR integra Astro en el proyecto, añadiendo archivos de configuración y actualizando scripts para soportar el desarrollo con Astro.
+
+🇯🇵 日本語
+このPRは、Astroをプロジェクトに統合し、Astro開発をサポートするための設定ファイルを追加し、スクリプトを更新します。
+```
+
 
 ## Before you begin
 
@@ -117,7 +127,7 @@ GitHub Actions run your workflows in short-lived environments on GitHub's infras
 
 ### Create the workflow
 
-GitHub Actions workflows live in the `.github/workflows` directory. Create a `.github` directory at the root of your project, then create a `workflows` directory inside it and add a file named `pr-description.yml`.
+GitHub Actions workflows live in the `.github/workflows` directory. Create a `.github` directory at the root of your project, then create a `workflows` directory inside it. Add a file named `pr-description.yml`.
 
 This workflow runs whenever a pull request is opened or updated. It generates a diff for the PR, calls the Mastra agent to describe the changes, and writes the description directly into the PR in the GitHub UI.
 
