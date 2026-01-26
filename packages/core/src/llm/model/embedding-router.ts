@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -5,6 +7,65 @@ import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
+
+// Create require function for ESM compatibility
+const require = createRequire(import.meta.url);
+
+/**
+ * Creates a VoyageAI embedding model wrapper that implements EmbeddingModelV2.
+ * Uses the official VoyageAI SDK internally.
+ *
+ * @param modelId - The VoyageAI model ID (e.g., 'voyage-3.5', 'voyage-3-large')
+ * @param apiKey - The VoyageAI API key
+ * @returns An EmbeddingModelV2-compatible model
+ */
+function createVoyageEmbeddingModel(modelId: string, apiKey: string): EmbeddingModelV2<string> {
+  // Lazy import to avoid bundling voyageai if not used
+  // This allows the package to be optional
+  // Try @mastra/voyageai first (re-exports VoyageAIClient), then fall back to voyageai
+  let VoyageAIClient: any;
+  try {
+    // First try @mastra/voyageai which provides additional Mastra integrations
+    VoyageAIClient = require('@mastra/voyageai').VoyageAIClient;
+  } catch {
+    try {
+      // Fall back to the official voyageai SDK
+      VoyageAIClient = require('voyageai').VoyageAIClient;
+    } catch {
+      throw new Error(
+        'VoyageAI SDK not found. Please install one of the following packages:\n' +
+          '  - npm install @mastra/voyageai (recommended, includes Mastra integrations)\n' +
+          '  - npm install voyageai (official VoyageAI SDK)\n' +
+          'Note: With pnpm or other strict package managers, ensure the package is explicitly listed in your dependencies.',
+      );
+    }
+  }
+
+  const client = new VoyageAIClient({ apiKey });
+
+  return {
+    specificationVersion: 'v2',
+    provider: 'voyage',
+    modelId,
+    maxEmbeddingsPerCall: 1000, // VoyageAI supports up to 1000 inputs per API call
+    supportsParallelCalls: true,
+
+    async doEmbed({ values }: { values: string[] }): Promise<{ embeddings: number[][] }> {
+      const response = await client.embed({
+        input: values,
+        model: modelId,
+      });
+
+      // Extract embeddings from response, sorted by index
+      const embeddings =
+        response.data
+          ?.sort((a: { index?: number }, b: { index?: number }) => (a.index ?? 0) - (b.index ?? 0))
+          .map((item: { embedding?: number[] }) => item.embedding ?? []) ?? [];
+
+      return { embeddings };
+    },
+  };
+}
 
 /**
  * Information about a known embedding model
@@ -59,6 +120,71 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
     maxInputTokens: 3072,
     description: 'Google text-embedding-004 model',
   },
+  // VoyageAI - voyage-4 series
+  {
+    id: 'voyage-4-large',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 120000,
+    description: 'VoyageAI voyage-4-large - best quality, 120k batch tokens',
+  },
+  {
+    id: 'voyage-4',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 320000,
+    description: 'VoyageAI voyage-4 - balanced quality and speed, 320k batch tokens',
+  },
+  {
+    id: 'voyage-4-lite',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 1000000,
+    description: 'VoyageAI voyage-4-lite - optimized for throughput, 1M batch tokens',
+  },
+  // VoyageAI - voyage-3 series
+  {
+    id: 'voyage-3-large',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 120000,
+    description: 'VoyageAI voyage-3-large - best quality general-purpose and multilingual',
+  },
+  {
+    id: 'voyage-3.5',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 320000,
+    description: 'VoyageAI voyage-3.5 - balanced quality and speed',
+  },
+  {
+    id: 'voyage-3.5-lite',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 1000000,
+    description: 'VoyageAI voyage-3.5-lite - optimized for latency and cost',
+  },
+  {
+    id: 'voyage-code-3',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-code-3 - optimized for code retrieval',
+  },
+  {
+    id: 'voyage-finance-2',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-finance-2 - optimized for financial domain',
+  },
+  {
+    id: 'voyage-law-2',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-law-2 - optimized for legal domain',
+  },
 ];
 
 /**
@@ -69,7 +195,16 @@ export type EmbeddingModelId =
   | 'openai/text-embedding-3-large'
   | 'openai/text-embedding-ada-002'
   | 'google/gemini-embedding-001'
-  | 'google/text-embedding-004';
+  | 'google/text-embedding-004'
+  | 'voyage/voyage-4-large'
+  | 'voyage/voyage-4'
+  | 'voyage/voyage-4-lite'
+  | 'voyage/voyage-3-large'
+  | 'voyage/voyage-3.5'
+  | 'voyage/voyage-3.5-lite'
+  | 'voyage/voyage-code-3'
+  | 'voyage/voyage-finance-2'
+  | 'voyage/voyage-law-2';
 
 /**
  * Check if a model ID is a known embedding model
@@ -199,6 +334,10 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         this.providerModel = createGoogleGenerativeAI({ apiKey }).textEmbedding(
           normalizedConfig.modelId,
         ) as EmbeddingModelV2<VALUE>;
+      } else if (normalizedConfig.providerId === 'voyage') {
+        // VoyageAI uses its own SDK - create a simple wrapper that implements EmbeddingModelV2
+        // Note: Requires @mastra/voyageai or voyageai package to be installed
+        this.providerModel = createVoyageEmbeddingModel(normalizedConfig.modelId, apiKey) as EmbeddingModelV2<VALUE>;
       } else {
         // Use OpenAI-compatible provider for other providers
         if (!providerConfig.url) {

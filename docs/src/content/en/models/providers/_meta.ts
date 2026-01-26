@@ -3,6 +3,7 @@ const meta = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
+  voyage: "VoyageAI",
   deepseek: "DeepSeek",
   groq: "Groq",
   mistral: "Mistral",
