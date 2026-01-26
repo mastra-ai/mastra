@@ -220,7 +220,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       id: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
       description: `List files and directories in the workspace filesystem.
 Returns a tree-style view (like the Unix "tree" command) for easy visualization.
-The output is displayed to the user automatically - do not repeat or summarize it in your response.
+The output is displayed to the user as a tree-like structure in the tool result.
 Options mirror common tree command flags for familiarity.
 
 Examples:
