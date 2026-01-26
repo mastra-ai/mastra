@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { createTool } from '../tools';
+import { WORKSPACE_TOOLS } from './constants';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -15,7 +16,6 @@ import {
   StringNotUniqueError,
 } from './line-utils';
 import { formatAsTree } from './tree-formatter';
-import { WORKSPACE_TOOLS } from './constants';
 import type { Workspace } from './workspace';
 
 /**
