@@ -58,6 +58,9 @@ export const ObservationMarkerBadge = ({
   metadata,
 }: ObservationMarkerBadgeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
+  const [isTaskExpanded, setIsTaskExpanded] = useState(false);
+  const [isResponseExpanded, setIsResponseExpanded] = useState(false);
   const omData = (metadata?.omData || args) as OmMarkerData;
   
   // Use the _state field set during part merging, or fallback to detecting from data
@@ -151,30 +154,63 @@ export const ObservationMarkerBadge = ({
             </div>
             {observations && (
               <div className={`mt-1 pt-1 border-t ${expandedBorderColor}`}>
-                <ObservationRenderer 
-                  observations={observations} 
-                  maxHeight="500px"
-                />
+                {/* If there's no currentTask or suggestedResponse, show observations directly without collapsible wrapper */}
+                {!currentTask && !suggestedResponse ? (
+                  <ObservationRenderer 
+                    observations={observations} 
+                    maxHeight="500px"
+                  />
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setIsObservationsExpanded(!isObservationsExpanded)}
+                      className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
+                    >
+                      {isObservationsExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                      {isReflection ? 'Reflections' : 'Observations'}
+                    </button>
+                    {isObservationsExpanded && (
+                      <div className="mt-1">
+                        <ObservationRenderer 
+                          observations={observations} 
+                          maxHeight="500px"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
             {currentTask && (
               <div className={`mt-2 pt-2 border-t ${expandedBorderColor}`}>
-                <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
+                <button
+                  onClick={() => setIsTaskExpanded(!isTaskExpanded)}
+                  className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
+                >
+                  {isTaskExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
                   Current Task
-                </div>
-                <div className="text-[11px] text-foreground [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
-                  <MarkdownRenderer>{currentTask}</MarkdownRenderer>
-                </div>
+                </button>
+                {isTaskExpanded && (
+                  <div className="mt-1 text-[11px] text-foreground [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                    <MarkdownRenderer>{currentTask}</MarkdownRenderer>
+                  </div>
+                )}
               </div>
             )}
             {suggestedResponse && (
               <div className={`mt-2 pt-2 border-t ${expandedBorderColor}`}>
-                <div className={`text-[10px] font-medium ${labelColor} uppercase tracking-wide mb-1`}>
+                <button
+                  onClick={() => setIsResponseExpanded(!isResponseExpanded)}
+                  className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
+                >
+                  {isResponseExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
                   Suggested Response
-                </div>
-                <div className="text-[11px] text-foreground/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
-                  <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
-                </div>
+                </button>
+                {isResponseExpanded && (
+                  <div className="mt-1 text-[11px] text-foreground/80 italic [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                    <MarkdownRenderer>{suggestedResponse}</MarkdownRenderer>
+                  </div>
+                )}
               </div>
             )}
           </div>
