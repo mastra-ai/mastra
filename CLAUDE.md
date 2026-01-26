@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Focus on core framework packages, integrations, and documentation. Only include examples when the user specifically asks about them.
 
-**UI Development**: When working on UI-related tasks, or inside `packages/playground/` or `packages/playground-ui/`, you MUST read `packages/playground/CLAUDE.md` and `packages/playground-ui/CLAUDE.md` before making any changes.
-
 ## Development Commands
 
 ### Setup and Build
