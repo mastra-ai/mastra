@@ -3,7 +3,7 @@ status: complete
 phase: 06-playground-integration
 source: [06-04-SUMMARY.md, 06-05-SUMMARY.md, 06-06-SUMMARY.md]
 started: 2026-01-26T19:30:00Z
-updated: 2026-01-26T19:35:00Z
+updated: 2026-01-26T20:00:00Z
 ---
 
 ## Current Test
@@ -32,41 +32,37 @@ severity: major
 
 ### 5. Dataset Detail Page
 expected: /datasets/:id shows dataset name in header, tabbed view with Items and Run History tabs.
-result: skipped
-reason: user requested skip
+result: pass
 
 ### 6. Run Trigger Dialog
 expected: "Run" button opens dialog with target type selector (Agent/Workflow/Scorer). After selecting type, specific target dropdown appears. Optional scorer selection shown for Agent/Workflow.
-result: skipped
-reason: user requested skip
+result: pass
 
 ### 7. Run History Display
 expected: Run History tab shows table with status badge, target info, created date, and checkbox for comparison selection.
-result: skipped
-reason: user requested skip
+result: pass
 
 ### 8. Run Results View
 expected: /datasets/:id/runs/:runId shows results table with item ID, input preview, output preview, scores, and status. Row click opens side dialog with full details.
-result: skipped
-reason: user requested skip
+result: issue
+reported: "I can't view the run, I will only toggle the checkbox"
+severity: major
 
 ### 9. Comparison Selection
 expected: Selecting exactly 2 runs via checkboxes in Run History enables Compare button. Clicking navigates to comparison view.
-result: skipped
-reason: user requested skip
+result: pass
 
 ### 10. Comparison View
 expected: /datasets/:id/compare?runA=x&runB=y shows side-by-side comparison with score deltas. Regression indicators show arrows and colors (red for regression, green for improvement).
-result: skipped
-reason: user requested skip
+result: pass
 
 ## Summary
 
 total: 10
-passed: 3
-issues: 1
+passed: 8
+issues: 2
 pending: 0
-skipped: 6
+skipped: 0
 
 ## Gaps
 
@@ -75,6 +71,16 @@ skipped: 6
   reason: "User reported: Create Item button does nothing (no request, no modal). 500 error on GET /api/datasets/:id/runs"
   severity: major
   test: 4
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
+- truth: "Run row click navigates to /datasets/:id/runs/:runId with results view"
+  status: failed
+  reason: "User reported: I can't view the run, I will only toggle the checkbox"
+  severity: major
+  test: 8
   root_cause: ""
   artifacts: []
   missing: []

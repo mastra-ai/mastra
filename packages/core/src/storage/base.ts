@@ -201,6 +201,7 @@ export class MastraCompositeStore extends MastraBase {
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
         datasets: domainOverrides.datasets ?? defaultStores?.datasets,
+        runs: domainOverrides.runs ?? defaultStores?.runs,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves

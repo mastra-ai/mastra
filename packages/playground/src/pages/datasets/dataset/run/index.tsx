@@ -19,7 +19,6 @@ import {
   useDatasetRunResults,
   ResultsTable,
 } from '@mastra/playground-ui';
-import { format } from 'date-fns/format';
 
 function DatasetRun() {
   const { datasetId, runId } = useParams<{ datasetId: string; runId: string }>();
@@ -70,7 +69,7 @@ function DatasetRun() {
     {
       key: 'created',
       label: 'Created',
-      value: format(new Date(run.createdAt), 'MMM d, yyyy h:mm aaa'),
+      value: new Date(run.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
     },
     {
       key: 'progress',

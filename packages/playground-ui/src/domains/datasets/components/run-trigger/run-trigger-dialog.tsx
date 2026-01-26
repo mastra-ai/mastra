@@ -50,7 +50,8 @@ export function RunTriggerDialog({
 
       toast.success('Run triggered successfully');
       onOpenChange(false);
-      onSuccess?.(result.id);
+      // API returns runId, not id (RunSummary type)
+      onSuccess?.((result as unknown as { runId: string }).runId);
 
       // Reset state
       setTargetType('');

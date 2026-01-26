@@ -49,6 +49,10 @@ import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
+import { Datasets } from './pages/datasets';
+import { Dataset } from './pages/datasets/dataset';
+import { DatasetRun } from './pages/datasets/dataset/run';
+import { DatasetCompare } from './pages/datasets/dataset/compare';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
@@ -130,34 +134,10 @@ function App() {
                 <Route path="/scorers" element={<Scorers />} />
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
                 <Route path="/observability" element={<Observability />} />
-                <Route
-                  path="/datasets"
-                  lazy={async () => {
-                    const { Datasets } = await import('./pages/datasets');
-                    return { Component: Datasets };
-                  }}
-                />
-                <Route
-                  path="/datasets/:datasetId/runs/:runId"
-                  lazy={async () => {
-                    const { DatasetRun } = await import('./pages/datasets/dataset/run');
-                    return { Component: DatasetRun };
-                  }}
-                />
-                <Route
-                  path="/datasets/:datasetId/compare"
-                  lazy={async () => {
-                    const { DatasetCompare } = await import('./pages/datasets/dataset/compare');
-                    return { Component: DatasetCompare };
-                  }}
-                />
-                <Route
-                  path="/datasets/:datasetId"
-                  lazy={async () => {
-                    const { Dataset } = await import('./pages/datasets/dataset');
-                    return { Component: Dataset };
-                  }}
-                />
+                <Route path="/datasets" element={<Datasets />} />
+                <Route path="/datasets/:datasetId/runs/:runId" element={<DatasetRun />} />
+                <Route path="/datasets/:datasetId/compare" element={<DatasetCompare />} />
+                <Route path="/datasets/:datasetId" element={<Dataset />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />

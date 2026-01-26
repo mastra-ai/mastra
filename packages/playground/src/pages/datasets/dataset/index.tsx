@@ -5,6 +5,7 @@ import {
   MainContentContent,
   DatasetDetail,
   RunTriggerDialog,
+  AddItemDialog,
   Button,
   Icon,
 } from '@mastra/playground-ui';
@@ -14,6 +15,7 @@ function Dataset() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const navigate = useNavigate();
   const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
 
   if (!datasetId) {
     return (
@@ -35,6 +37,7 @@ function Dataset() {
       <MainContentContent>
         <DatasetDetail
           datasetId={datasetId}
+          onAddItemClick={() => setAddItemDialogOpen(true)}
           runTriggerSlot={
             <Button variant="primary" size="sm" onClick={() => setRunDialogOpen(true)}>
               <Icon>
@@ -50,6 +53,12 @@ function Dataset() {
           open={runDialogOpen}
           onOpenChange={setRunDialogOpen}
           onSuccess={handleRunSuccess}
+        />
+
+        <AddItemDialog
+          datasetId={datasetId}
+          open={addItemDialogOpen}
+          onOpenChange={setAddItemDialogOpen}
         />
       </MainContentContent>
     </MainContentLayout>
