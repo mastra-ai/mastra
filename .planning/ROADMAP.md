@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Agent & Workflow Targets** - Complete target adapters for agents and workflows ✓
 - [x] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment ✓
 - [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
-- [ ] **Phase 6: Playground Integration** - Datasets UI with run triggering and results
+- [x] **Phase 6: Playground Integration** - Datasets UI with run triggering and results ✓
 - [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files
 - [ ] **Phase 8: Item Selection** - Run subsets via itemIds parameter
 
@@ -118,12 +118,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Server API routes for datasets, runs, and comparison
-- [ ] 06-02-PLAN.md — Client-js methods for dataset operations
-- [ ] 06-03-PLAN.md — Playground-ui hooks for data fetching and mutations
-- [ ] 06-04-PLAN.md — Datasets list page with table and create dialog
-- [ ] 06-05-PLAN.md — Dataset detail page with items, runs, and trigger dialog
-- [ ] 06-06-PLAN.md — Results view and comparison UI
+- [x] 06-01-PLAN.md — Server API routes for datasets, runs, and comparison
+- [x] 06-02-PLAN.md — Client-js methods for dataset operations
+- [x] 06-03-PLAN.md — Playground-ui hooks for data fetching and mutations
+- [x] 06-04-PLAN.md — Datasets list page with table and create dialog
+- [x] 06-05-PLAN.md — Dataset detail page with items, runs, and trigger dialog
+- [x] 06-06-PLAN.md — Results view and comparison UI
 
 ### Phase 7: CSV Import
 **Goal**: Bulk item creation from CSV with validation and explicit column mapping
@@ -169,6 +169,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Agent & Workflow Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
-| 6. Playground Integration | 0/TBD | Not started | - |
+| 6. Playground Integration | 6/6 | ✓ Complete | 2026-01-26 |
 | 7. CSV Import | 0/TBD | Not started | - |
 | 8. Item Selection | 0/TBD | Not started | - |
