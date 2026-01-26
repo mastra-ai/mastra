@@ -4,6 +4,28 @@
  * Provides the core Workspace class, interfaces, and built-in providers
  * for filesystem and sandbox capabilities.
  *
+ * ## API Stability
+ *
+ * This module exports three categories of APIs:
+ *
+ * ### Public API (Stable)
+ * - `Workspace` class and its configuration types
+ * - `LocalFilesystem` and `LocalSandbox` providers
+ * - Error classes
+ * - `createWorkspaceTools` for manual tool injection
+ *
+ * ### Provider Interface (Stable)
+ * - `WorkspaceFilesystem` and `WorkspaceSandbox` interfaces
+ * - Related types for building custom providers
+ *
+ * ### Internal API (Unstable)
+ * - `SearchEngine`, `BM25Index` - search implementation details
+ * - `InMemoryFileReadTracker` - safety feature internals
+ * - Line utilities - edit tool internals
+ * - `WorkspaceSkillsImpl` - skills implementation
+ *
+ * Internal APIs may change without notice. Use at your own risk.
+ *
  * @example
  * ```typescript
  * import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
@@ -16,66 +38,76 @@
  *
  * await workspace.init();
  * await workspace.writeFile('/hello.txt', 'Hello World!');
- * const result = await workspace.executeCode('console.log("Hi")', { runtime: 'node' });
+ * const result = await workspace.executeCommand('cat', ['/hello.txt']);
  * ```
  *
- * For cloud/remote providers, import them from their respective packages:
- *
- * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { AgentFS } from '@mastra/filesystem-agentfs';
- * import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
- *
- * const cloudWorkspace = new Workspace({
- *   filesystem: new AgentFS({ path: './agent.db' }),
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
- * });
- * ```
+ * @packageDocumentation
  */
 
 // =============================================================================
-// Workspace (Main API)
+// PUBLIC API - Workspace (Main Entry Point)
 // =============================================================================
 
+/**
+ * The main Workspace class and its configuration types.
+ * This is the primary API for creating and managing workspaces.
+ *
+ * @public
+ */
 export {
   Workspace,
   type WorkspaceConfig,
-  type WorkspaceScope,
-  type WorkspaceOwner,
   type WorkspaceStatus,
   type WorkspaceInfo,
-  type SyncResult,
-  type SnapshotOptions,
-  type WorkspaceSnapshot,
-  type RestoreOptions,
   type PathContext,
   type PathContextType,
 } from './workspace';
 
 // =============================================================================
-// Filesystem Interface (for provider implementers)
+// PUBLIC API - Built-in Providers
 // =============================================================================
 
-export type {
-  WorkspaceFilesystem,
-  WorkspaceState,
-  WorkspaceFilesystemAudit,
-  FileContent,
-  FileStat,
-  FileEntry,
-  ReadOptions,
-  WriteOptions,
-  ListOptions,
-  RemoveOptions,
-  CopyOptions,
-  WatchEvent,
-  WatchCallback,
-  WatchOptions,
-  WatchHandle,
-  FilesystemAuditEntry,
-  FilesystemAuditOptions,
-} from './filesystem';
+/**
+ * LocalFilesystem stores files in a directory on the local disk.
+ * Use this for development, testing, or single-machine deployments.
+ *
+ * @public
+ */
+export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
 
+/**
+ * LocalSandbox executes commands on the local machine.
+ * Use this for development, testing, or trusted local execution.
+ *
+ * @public
+ */
+export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
+
+// =============================================================================
+// PUBLIC API - Errors
+// =============================================================================
+
+/**
+ * Error classes for workspace operations.
+ * These provide specific error types for different failure modes.
+ *
+ * @public
+ */
+export {
+  WorkspaceError,
+  FilesystemNotAvailableError,
+  SandboxNotAvailableError,
+  SandboxFeatureNotSupportedError,
+  SearchNotAvailableError,
+  WorkspaceNotReadyError,
+  WorkspaceReadOnlyError,
+} from './errors';
+
+/**
+ * Filesystem-specific error classes.
+ *
+ * @public
+ */
 export {
   FilesystemError,
   FileNotFoundError,
@@ -88,100 +120,77 @@ export {
   FileReadRequiredError,
 } from './filesystem';
 
+/**
+ * Sandbox-specific error classes.
+ *
+ * @public
+ */
+export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
+
 // =============================================================================
-// File Read Tracking (for safety features)
+// PUBLIC API - Tool Creation
 // =============================================================================
 
-export type { FileReadRecord, FileReadTracker } from './file-read-tracker';
-export { InMemoryFileReadTracker } from './file-read-tracker';
+/**
+ * Creates workspace tools for agent injection.
+ * Use this if you need to manually add workspace tools to an agent.
+ *
+ * @public
+ */
+export { createWorkspaceTools } from './tools';
+export { WORKSPACE_TOOLS } from './constants';
 
 // =============================================================================
-// Sandbox Interface (for provider implementers)
+// PROVIDER INTERFACE - Filesystem
 // =============================================================================
 
+/**
+ * Filesystem interface and types for building custom providers.
+ * Implement `WorkspaceFilesystem` to create a new storage backend.
+ *
+ * @public
+ */
+export type {
+  WorkspaceFilesystem,
+  FileContent,
+  FileStat,
+  FileEntry,
+  ReadOptions,
+  WriteOptions,
+  ListOptions,
+  RemoveOptions,
+  CopyOptions,
+} from './filesystem';
+
+// =============================================================================
+// PROVIDER INTERFACE - Sandbox
+// =============================================================================
+
+/**
+ * Sandbox interface and types for building custom providers.
+ * Implement `WorkspaceSandbox` to create a new execution backend.
+ *
+ * @public
+ */
 export type {
   WorkspaceSandbox,
   ExecutionResult,
   CommandResult,
   ExecuteCommandOptions,
-  InstallPackageOptions,
   SandboxStatus,
   SandboxInfo,
-  SandboxSyncResult,
 } from './sandbox';
 
-export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
-
-export type { InstallPackageResult } from './sandbox';
-
 // =============================================================================
-// Built-in Providers
+// PROVIDER INTERFACE - Skills
 // =============================================================================
 
-export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
-export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
-
-// =============================================================================
-// Workspace Tools (for agent auto-injection)
-// =============================================================================
-
-export { createWorkspaceTools } from './tools';
-
-// =============================================================================
-// Tree Formatter (for directory visualization)
-// =============================================================================
-
-export { formatAsTree, formatEntriesAsTree, type TreeOptions, type TreeResult } from './tree-formatter';
-
-// =============================================================================
-// Search Engine (BM25, Vector, Hybrid search)
-// =============================================================================
-
-export {
-  SearchEngine,
-  type Embedder,
-  type VectorConfig,
-  type BM25SearchConfig,
-  type IndexDocument,
-  type SearchResult,
-  type SearchOptions,
-  type SearchEngineConfig,
-  type SearchMode,
-} from './search-engine';
-
-// =============================================================================
-// BM25 Index (for advanced use cases)
-// =============================================================================
-
-export {
-  BM25Index,
-  tokenize,
-  DEFAULT_STOPWORDS,
-  type BM25Config,
-  type BM25Document,
-  type BM25SearchResult,
-  type BM25IndexData,
-  type TokenizeOptions,
-} from './bm25';
-
-// =============================================================================
-// Line Utilities
-// =============================================================================
-
-export {
-  extractLines,
-  extractLinesWithLimit,
-  formatWithLineNumbers,
-  findLineRange,
-  replaceString,
-  StringNotFoundError,
-  StringNotUniqueError,
-} from './line-utils';
-
-// =============================================================================
-// Skills (types, schemas, and implementation)
-// =============================================================================
-
+/**
+ * Skill types for building custom skill sources.
+ * Implement `SkillSource` to create a new skill provider.
+ *
+ * @public
+ */
 export type {
   SkillSource,
   SkillFormat,
@@ -196,6 +205,100 @@ export type {
   SkillsPathsContext,
 } from './skills';
 
+// =============================================================================
+// INTERNAL API - Search Engine
+// =============================================================================
+
+/**
+ * Search engine implementation.
+ *
+ * @internal
+ * @remarks
+ * This is an internal API and may change without notice.
+ * For search functionality, use `workspace.search()` instead.
+ */
+export {
+  SearchEngine,
+  type Embedder,
+  type VectorConfig,
+  type BM25SearchConfig,
+  type IndexDocument,
+  type SearchResult,
+  type SearchOptions,
+  type SearchEngineConfig,
+  type SearchMode,
+} from './search-engine';
+
+// =============================================================================
+// INTERNAL API - BM25 Index
+// =============================================================================
+
+/**
+ * BM25 search index implementation.
+ *
+ * @internal
+ * @remarks
+ * This is an internal API and may change without notice.
+ * For search functionality, use `workspace.search()` instead.
+ */
+export {
+  BM25Index,
+  tokenize,
+  DEFAULT_STOPWORDS,
+  type BM25Config,
+  type BM25Document,
+  type BM25SearchResult,
+  type BM25IndexData,
+  type TokenizeOptions,
+} from './bm25';
+
+// =============================================================================
+// INTERNAL API - File Read Tracking
+// =============================================================================
+
+/**
+ * File read tracking for requireReadBeforeWrite safety feature.
+ *
+ * @internal
+ * @remarks
+ * This is an internal API and may change without notice.
+ */
+export type { FileReadRecord, FileReadTracker } from './file-read-tracker';
+export { InMemoryFileReadTracker } from './file-read-tracker';
+
+// =============================================================================
+// INTERNAL API - Line Utilities
+// =============================================================================
+
+/**
+ * Line manipulation utilities for edit tools.
+ *
+ * @internal
+ * @remarks
+ * This is an internal API and may change without notice.
+ */
+export {
+  extractLines,
+  extractLinesWithLimit,
+  formatWithLineNumbers,
+  findLineRange,
+  replaceString,
+  StringNotFoundError,
+  StringNotUniqueError,
+} from './line-utils';
+
+// =============================================================================
+// INTERNAL API - Skills Implementation
+// =============================================================================
+
+/**
+ * Skills validation and implementation.
+ *
+ * @internal
+ * @remarks
+ * This is an internal API and may change without notice.
+ * For skills functionality, use `workspace.skills` instead.
+ */
 export {
   SKILL_LIMITS,
   SkillNameSchema,
@@ -211,17 +314,3 @@ export {
   WorkspaceSkillsImpl,
   type WorkspaceSkillsImplConfig,
 } from './skills';
-
-// =============================================================================
-// Errors
-// =============================================================================
-
-export {
-  WorkspaceError,
-  FilesystemNotAvailableError,
-  SandboxNotAvailableError,
-  SandboxFeatureNotSupportedError,
-  SearchNotAvailableError,
-  WorkspaceNotReadyError,
-  WorkspaceReadOnlyError,
-} from './errors';

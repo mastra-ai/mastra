@@ -32,6 +32,12 @@ const filesystem = new LocalFilesystem({
       type: "string",
       description: "Root directory for the filesystem. All paths are relative to this directory.",
     },
+    {
+      name: "safety",
+      type: "FilesystemSafetyOptions",
+      description: "Safety configuration for filesystem operations",
+      isOptional: true,
+    },
   ]}
 />
 

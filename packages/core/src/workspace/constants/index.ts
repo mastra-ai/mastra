@@ -36,7 +36,6 @@ export const WORKSPACE_TOOLS = {
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${TOOLS_NAMESPACE}_execute_command` as const,
-    INSTALL_PACKAGE: `${TOOLS_NAMESPACE}_install_package` as const,
   },
   SEARCH: {
     SEARCH: `${TOOLS_NAMESPACE}_search` as const,

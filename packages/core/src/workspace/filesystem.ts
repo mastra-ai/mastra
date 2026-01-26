@@ -89,26 +89,6 @@ export interface CopyOptions {
   recursive?: boolean;
 }
 
-export interface WatchEvent {
-  type: 'create' | 'modify' | 'delete';
-  path: string;
-  stat?: FileStat;
-}
-
-export type WatchCallback = (event: WatchEvent) => void | Promise<void>;
-
-export interface WatchOptions {
-  /** Watch subdirectories */
-  recursive?: boolean;
-  /** Debounce time in milliseconds */
-  debounce?: number;
-}
-
-export interface WatchHandle {
-  /** Stop watching */
-  unsubscribe(): void;
-}
-
 // =============================================================================
 // Filesystem Safety Options
 // =============================================================================
@@ -276,16 +256,6 @@ export interface WorkspaceFilesystem {
   isDirectory(path: string): Promise<boolean>;
 
   // ---------------------------------------------------------------------------
-  // Watch Operations (optional)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Watch for changes to a path.
-   * Returns undefined if watching is not supported.
-   */
-  watch?(path: string, callback: WatchCallback, options?: WatchOptions): Promise<WatchHandle | undefined>;
-
-  // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
 
@@ -298,48 +268,6 @@ export interface WorkspaceFilesystem {
    * Clean up resources.
    */
   destroy?(): Promise<void>;
-}
-
-// =============================================================================
-// State Storage Interface (Optional KV layer)
-// =============================================================================
-
-/**
- * Key-value state storage, typically backed by the filesystem.
- * Provides structured data storage for agent state.
- */
-export interface WorkspaceState {
-  /**
-   * Get a value by key.
-   * @returns The value, or null if not found
-   */
-  get<T = unknown>(key: string): Promise<T | null>;
-
-  /**
-   * Set a value for a key.
-   */
-  set<T = unknown>(key: string, value: T): Promise<void>;
-
-  /**
-   * Delete a key.
-   * @returns true if the key existed
-   */
-  delete(key: string): Promise<boolean>;
-
-  /**
-   * Check if a key exists.
-   */
-  has(key: string): Promise<boolean>;
-
-  /**
-   * List all keys, optionally filtered by prefix.
-   */
-  keys(prefix?: string): Promise<string[]>;
-
-  /**
-   * Clear all state.
-   */
-  clear(): Promise<void>;
 }
 
 // =============================================================================

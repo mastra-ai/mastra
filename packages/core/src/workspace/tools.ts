@@ -242,29 +242,27 @@ Examples:
           .optional()
           .default(false)
           .describe('List directories only, no files (default: false). Similar to tree -d flag.'),
-        exclude: z
-          .string()
-          .optional()
-          .describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
-        extension: z
-          .string()
-          .optional()
-          .describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
+        exclude: z.string().optional().describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
+        extension: z.string().optional().describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
       }),
       outputSchema: z.object({
         tree: z.string().describe('Tree-style directory listing'),
         summary: z.string().describe('Summary of directories and files (e.g., "3 directories, 12 files")'),
         metadata: z
           .object({
-            workspace: z.object({
-              id: z.string().optional(),
-              name: z.string().optional(),
-            }).optional(),
-            filesystem: z.object({
-              id: z.string().optional(),
-              name: z.string().optional(),
-              provider: z.string().optional(),
-            }).optional(),
+            workspace: z
+              .object({
+                id: z.string().optional(),
+                name: z.string().optional(),
+              })
+              .optional(),
+            filesystem: z
+              .object({
+                id: z.string().optional(),
+                name: z.string().optional(),
+                provider: z.string().optional(),
+              })
+              .optional(),
           })
           .optional()
           .describe('Metadata about the workspace and filesystem'),
@@ -552,44 +550,7 @@ Examples:
         },
       });
     }
-
-    // Only add install_package tool if sandbox implements it
-    if (workspace.sandbox.installPackage) {
-      tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE] = createTool({
-        id: WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE,
-        description: 'Install a package in the workspace sandbox environment',
-        // Require approval when sandboxApproval is 'all' or 'commands'
-        requireApproval: sandboxApproval === 'all' || sandboxApproval === 'commands',
-        inputSchema: z.object({
-          packageName: z.string().describe('The name of the package to install'),
-          packageManager: z
-            .enum(['npm', 'pip', 'yarn', 'pnpm'])
-            .optional()
-            .default('npm')
-            .describe('The package manager to use'),
-          version: z.string().optional().describe('Specific version to install'),
-        }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          packageName: z.string(),
-          version: z.string().optional(),
-          errorMessage: z.string().optional(),
-          executionTimeMs: z.number(),
-        }),
-        execute: async ({ packageName, packageManager, version }) => {
-          const result = await workspace.sandbox!.installPackage!(packageName, { packageManager, version });
-          return {
-            success: result.success,
-            packageName: result.packageName,
-            version: result.version,
-            errorMessage: result.error,
-            executionTimeMs: result.executionTimeMs,
-          };
-        },
-      });
-    }
   }
 
   return tools;
 }
-

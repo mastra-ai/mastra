@@ -54,14 +54,20 @@ export const globalWorkspace = new Workspace({
   name: 'Global Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    // Explicitly disable safety for full access (demo/development purposes)
+    safety: {
+      requireReadBeforeWrite: false,
+    },
   }),
-  // Enable sandbox for code execution
-  // scriptDirectory enables __dirname to resolve within workspace
+  // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
+    // No approval required for commands (demo/development purposes)
+    safety: {
+      requireApproval: 'none',
+    },
   }),
   // Enable BM25 search for skills and files
   bm25: true,
@@ -71,12 +77,6 @@ export const globalWorkspace = new Workspace({
   skillsPaths: ['/skills'],
   // Auto-initialize on construction (needed for mastra dev)
   autoInit: true,
-  // Explicitly disable safety for full access (demo/development purposes)
-  // This overrides the secure-by-default settings
-  safety: {
-    requireReadBeforeWrite: false,
-    requireSandboxApproval: 'none',
-  },
 });
 
 /**
@@ -94,14 +94,19 @@ export const docsAgentWorkspace = new Workspace({
   name: 'Docs Agent Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    // Full access for documentation agent
+    safety: {
+      requireReadBeforeWrite: false,
+    },
   }),
-  // Enable sandbox for code execution
-  // scriptDirectory enables __dirname to resolve within workspace
+  // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
+    safety: {
+      requireApproval: 'none',
+    },
   }),
   // Enable BM25 search
   bm25: true,
@@ -109,11 +114,6 @@ export const docsAgentWorkspace = new Workspace({
   skillsPaths: ['/skills', '/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
-  // Full access for documentation agent
-  safety: {
-    requireReadBeforeWrite: false,
-    requireSandboxApproval: 'none',
-  },
 });
 
 /**
@@ -127,14 +127,19 @@ export const isolatedDocsWorkspace = new Workspace({
   name: 'Isolated Docs Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    // Full access for support agent
+    safety: {
+      requireReadBeforeWrite: false,
+    },
   }),
-  // Enable sandbox for code execution
-  // scriptDirectory enables __dirname to resolve within workspace
+  // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
+    safety: {
+      requireApproval: 'none',
+    },
   }),
   bm25: true,
   // Auto-index support FAQ content for search
@@ -143,11 +148,6 @@ export const isolatedDocsWorkspace = new Workspace({
   skillsPaths: ['/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
-  // Full access for support agent
-  safety: {
-    requireReadBeforeWrite: false,
-    requireSandboxApproval: 'none',
-  },
 });
 
 /**
@@ -162,13 +162,13 @@ export const readonlyWorkspace = new Workspace({
   name: 'Readonly Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    safety: {
+      readOnly: true,
+    },
   }),
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
-  safety: {
-    readOnly: true,
-  },
 });
 
 /**
@@ -184,25 +184,24 @@ export const safeWriteWorkspace = new Workspace({
   name: 'Safe Write Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    safety: {
+      requireReadBeforeWrite: true,
+    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
-  safety: {
-    requireReadBeforeWrite: true,
-  },
 });
 
 /**
  * Supervised sandbox workspace - requires approval for all sandbox operations.
  *
- * Safety feature: requireSandboxApproval: 'all'
- * - Both execute_code and execute_command require approval
+ * Safety feature: requireApproval: 'all' on sandbox
+ * - execute_command requires approval
  * - Tools have requireApproval: true flag for approval flow
  */
 export const supervisedSandboxWorkspace = new Workspace({
@@ -213,41 +212,14 @@ export const supervisedSandboxWorkspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
+    safety: {
+      requireApproval: 'all',
+    },
   }),
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
-  safety: {
-    requireSandboxApproval: 'all',
-  },
-});
-
-/**
- * Command approval workspace - requires approval only for shell commands.
- *
- * Safety feature: requireSandboxApproval: 'commands'
- * - execute_code runs without approval (sandboxed code execution)
- * - execute_command requires approval (shell commands are riskier)
- */
-export const commandApprovalWorkspace = new Workspace({
-  id: 'command-approval-workspace',
-  name: 'Command Approval Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: PROJECT_ROOT,
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
-    inheritEnv: true,
-  }),
-  bm25: true,
-  skillsPaths: ['/skills'],
-  autoInit: true,
-  safety: {
-    requireSandboxApproval: 'commands',
-  },
 });
 
 /**
@@ -263,18 +235,17 @@ export const fsWriteApprovalWorkspace = new Workspace({
   name: 'Filesystem Write Approval Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    safety: {
+      requireApproval: 'write',
+    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
   }),
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
-  safety: {
-    requireFilesystemApproval: 'write',
-  },
 });
 
 /**
@@ -290,20 +261,21 @@ export const fsAllApprovalWorkspace = new Workspace({
   name: 'Filesystem All Approval Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
+    safety: {
+      requireApproval: 'all',
+    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    scriptDirectory: join(PROJECT_ROOT, '.mastra', 'sandbox'),
     inheritEnv: true,
+    // Sandbox ops don't need approval - this tests FS approval only
+    safety: {
+      requireApproval: 'none',
+    },
   }),
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
-  safety: {
-    requireFilesystemApproval: 'all',
-    // Sandbox ops don't need approval - this tests FS approval only
-    requireSandboxApproval: 'none',
-  },
 });
 
 /**
@@ -328,13 +300,13 @@ export const testAgentWorkspace = new Workspace({
  * - Only skillsPaths is provided
  * - Skills are loaded read-only via LocalSkillSource (using Node.js fs/promises)
  * - No filesystem tools (workspace_read_file, workspace_write_file, etc.)
- * - No sandbox tools (execute_code, execute_command)
+ * - No sandbox tools (execute_command)
  * - Only skills are available to the agent
  *
  * Use cases:
  * - Agents that only need behavioral guidelines (skills) without file access
  * - Lightweight agents focused on following instructions
- * - Security-conscious deployments where file/code access is not needed
+ * - Security-conscious deployments where file/command access is not needed
  */
 export const skillsOnlyWorkspace = new Workspace({
   id: 'skills-only-workspace',

@@ -269,9 +269,6 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       if (workspace.sandbox.executeCommand) {
         tools.push('workspace_execute_command');
       }
-      if (workspace.sandbox.installPackage) {
-        tools.push('workspace_install_package');
-      }
     }
 
     return tools;

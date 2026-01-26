@@ -7,7 +7,6 @@ import {
   researchAgent,
   editorAgent,
   automationAgent,
-  scriptRunnerAgent,
   fsWriteApprovalAgent,
   fsAllApprovalAgent,
   testAgent,
@@ -25,7 +24,6 @@ export {
   readonlyWorkspace,
   safeWriteWorkspace,
   supervisedSandboxWorkspace,
-  commandApprovalWorkspace,
   fsWriteApprovalWorkspace,
   fsAllApprovalWorkspace,
   testAgentWorkspace,
@@ -49,8 +47,9 @@ const storage = new LibSQLStore({
  * - supportAgent: isolatedDocsWorkspace (agent-specific skills only)
  * - researchAgent: readonlyWorkspace (safety: readOnly)
  * - editorAgent: safeWriteWorkspace (safety: requireReadBeforeWrite)
- * - automationAgent: supervisedSandboxWorkspace (safety: requireSandboxApproval: 'all')
- * - scriptRunnerAgent: commandApprovalWorkspace (safety: requireSandboxApproval: 'commands')
+ * - automationAgent: supervisedSandboxWorkspace (safety: sandbox requireApproval: 'all')
+ * - fsWriteApprovalAgent: fsWriteApprovalWorkspace (safety: filesystem requireApproval: 'write')
+ * - fsAllApprovalAgent: fsAllApprovalWorkspace (safety: filesystem requireApproval: 'all')
  * - skillsOnlyAgent: skillsOnlyWorkspace (skills only, no filesystem or sandbox)
  */
 export const mastra = new Mastra({
@@ -61,7 +60,6 @@ export const mastra = new Mastra({
     researchAgent,
     editorAgent,
     automationAgent,
-    scriptRunnerAgent,
     fsWriteApprovalAgent,
     fsAllApprovalAgent,
     testAgent,

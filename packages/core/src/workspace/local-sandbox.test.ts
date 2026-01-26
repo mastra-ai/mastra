@@ -174,23 +174,6 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
-  // installPackage
-  // ===========================================================================
-  describe('installPackage', () => {
-    it('should return error for unsupported package manager', async () => {
-      const result = await sandbox.installPackage('test-package', {
-        packageManager: 'unsupported' as any,
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Unsupported package manager');
-    });
-
-    // Note: We don't test actual package installation as it would modify the system
-    // In a real test environment, we'd use a clean container or mock the execFile
-  });
-
-  // ===========================================================================
   // Timeout Handling
   // ===========================================================================
   describe('timeout handling', () => {
@@ -333,16 +316,6 @@ describe('LocalSandbox', () => {
       } finally {
         delete process.env[testVarName];
       }
-    });
-  });
-
-  // ===========================================================================
-  // getFilesystem
-  // ===========================================================================
-  describe('getFilesystem', () => {
-    it('should return undefined (local sandbox does not provide filesystem)', async () => {
-      const fs = await sandbox.getFilesystem();
-      expect(fs).toBeUndefined();
     });
   });
 });

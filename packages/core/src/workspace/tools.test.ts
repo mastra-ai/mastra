@@ -3,9 +3,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { WORKSPACE_TOOLS } from './constants';
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
-import { createWorkspaceTools, WORKSPACE_TOOLS } from './tools';
+import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 describe('createWorkspaceTools', () => {
@@ -84,7 +85,6 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE);
     });
 
     it('should not create sandbox tools when no sandbox', () => {
@@ -118,7 +118,6 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
       // Sandbox tools
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE);
     });
   });
 
@@ -147,7 +146,10 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt', showLineNumbers: false });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
+        path: '/test.txt',
+        showLineNumbers: false,
+      });
 
       expect(result.content).toBe('Hello World');
       expect(result.size).toBe(11);
@@ -510,7 +512,10 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({ path: '/nonexistent.txt', force: true });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({
+        path: '/nonexistent.txt',
+        force: true,
+      });
 
       expect(result.success).toBe(true);
     });
@@ -693,37 +698,24 @@ describe('createWorkspaceTools', () => {
     });
   });
 
-  describe('workspace_install_package', () => {
-    it('should have install_package tool', async () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-
-      // Just verify the tool exists - actually installing packages is slow
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE]).toBeDefined();
-    });
-  });
-
   // ===========================================================================
   // WORKSPACE_TOOLS
   // ===========================================================================
   describe('WORKSPACE_TOOLS', () => {
     it('should have all expected tool names with proper namespacing', () => {
       // Filesystem tools
-      expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_filesystem_read_file');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_filesystem_write_file');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE).toBe('mastra_workspace_filesystem_edit_file');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES).toBe('mastra_workspace_filesystem_list_files');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE).toBe('mastra_workspace_filesystem_delete_file');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS).toBe('mastra_workspace_filesystem_file_exists');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_filesystem_mkdir');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE).toBe('mastra_workspace_edit_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES).toBe('mastra_workspace_list_files');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE).toBe('mastra_workspace_delete_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS).toBe('mastra_workspace_file_exists');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
       // Search tools
-      expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search_search');
-      expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_search_index');
+      expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
+      expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
       // Sandbox tools
-      expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_sandbox_execute_command');
-      expect(WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE).toBe('mastra_workspace_sandbox_install_package');
+      expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
     });
   });
 });

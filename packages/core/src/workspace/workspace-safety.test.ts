@@ -2,11 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { WORKSPACE_TOOLS } from './constants';
 import { WorkspaceReadOnlyError } from './errors';
 import { FileReadRequiredError } from './filesystem';
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
-import { createWorkspaceTools, WORKSPACE_TOOLS } from './tools';
+import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 describe('Workspace Safety Features', () => {
@@ -393,7 +394,6 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE].requireApproval).toBe(true);
 
       await workspace.destroy();
     });
@@ -411,7 +411,6 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE].requireApproval).toBe(false);
 
       await workspace.destroy();
     });
@@ -427,7 +426,6 @@ describe('Workspace Safety Features', () => {
 
       // Default is 'all' - all sandbox tools require approval
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.INSTALL_PACKAGE].requireApproval).toBe(true);
 
       await workspace.destroy();
     });

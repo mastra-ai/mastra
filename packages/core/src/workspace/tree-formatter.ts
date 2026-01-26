@@ -74,11 +74,7 @@ const SPACE = '    ';
  * @param options - Formatting options
  * @returns Tree result with formatted string and counts
  */
-export async function formatAsTree(
-  fs: WorkspaceFilesystem,
-  path: string,
-  options?: TreeOptions,
-): Promise<TreeResult> {
+export async function formatAsTree(fs: WorkspaceFilesystem, path: string, options?: TreeOptions): Promise<TreeResult> {
   const maxDepth = options?.maxDepth ?? Infinity;
   const showHidden = options?.showHidden ?? false;
   const dirsOnly = options?.dirsOnly ?? false;
@@ -155,9 +151,8 @@ export async function formatAsTree(
       const childPrefix = prefix + (isLast ? SPACE : VERTICAL);
 
       // Format entry name, including symlink target if present
-      const displayName = entry.isSymlink && entry.symlinkTarget
-        ? `${entry.name} -> ${entry.symlinkTarget}`
-        : entry.name;
+      const displayName =
+        entry.isSymlink && entry.symlinkTarget ? `${entry.name} -> ${entry.symlinkTarget}` : entry.name;
 
       lines.push(prefix + connector + displayName);
 

@@ -22,10 +22,9 @@ This document contains test cases for verifying workspace safety features work c
 | ----------------------- | ---------------------------- | ------------------------------------ | --------------------------------- |
 | Research Agent          | `readonlyWorkspace`          | `readOnly: true`                     | No write operations               |
 | Editor Agent            | `safeWriteWorkspace`         | `requireReadBeforeWrite: true`       | Must read before write            |
-| Automation Agent        | `supervisedSandboxWorkspace` | `requireSandboxApproval: 'all'`      | All sandbox ops need approval     |
-| Script Runner Agent     | `commandApprovalWorkspace`   | `requireSandboxApproval: 'commands'` | Only shell commands need approval |
-| FS Write Approval Agent | `fsWriteApprovalWorkspace`   | `requireFilesystemApproval: 'write'` | Write ops need approval           |
-| FS All Approval Agent   | `fsAllApprovalWorkspace`     | `requireFilesystemApproval: 'all'`   | All fs ops need approval          |
+| Automation Agent        | `supervisedSandboxWorkspace` | `sandbox.requireApproval: 'all'`     | All sandbox ops need approval     |
+| FS Write Approval Agent | `fsWriteApprovalWorkspace`   | `filesystem.requireApproval: 'write'`| Write ops need approval           |
+| FS All Approval Agent   | `fsAllApprovalWorkspace`     | `filesystem.requireApproval: 'all'`  | All fs ops need approval          |
 | Developer Agent         | `globalWorkspace`            | None                                 | Full access                       |
 | Documentation Agent     | `docsAgentWorkspace`         | None                                 | Full access + extra skills        |
 | Support Agent           | `isolatedDocsWorkspace`      | None                                 | Full access, limited skills       |
@@ -40,20 +39,19 @@ This document contains test cases for verifying workspace safety features work c
 | Test Section                               | Tests     | Status      | Notes                                                  |
 | ------------------------------------------ | --------- | ----------- | ------------------------------------------------------ |
 | 1. Research Agent (readOnly)               | 1.1-1.6   | ✅ Complete | All read ops work, write tools correctly excluded      |
-| 2. Editor Agent (requireReadBeforeWrite)   | 2.1-2.4   | ✅ Complete | Safety feature blocks unread writes, LLMs auto-recover |
-| 3. Automation Agent (sandbox approval)     | 3.1-3.4   | ✅ Complete | Approval dialogs appear correctly                      |
-| 4. Script Runner Agent (commands approval) | 4.1-4.4   | ✅ Complete | Code runs without approval, commands need approval     |
-| 5. Developer Agent (full access)           | 5.1-5.5   | ✅ Complete | All operations work without restrictions               |
-| 6. Documentation Agent (skill inheritance) | 6.1-6.3   | ✅ Complete | Both global and agent-specific skills available        |
-| 7. Support Agent (limited skills)          | 7.1-7.3   | ✅ Complete | Only agent-specific skills available                   |
-| 8. Edge Cases: requireReadBeforeWrite      | 8.1-8.3   | ✅ Complete | NEW files allowed, only EXISTING files need read first |
-| 9. Edge Cases: Error Handling              | 9.1-9.3   | ✅ Complete | Graceful errors, LLM-level security for path traversal |
-| 10. Edge Cases: Sandbox Errors             | 10.1-10.3 | ⚠️ Partial  | LLM refused infinite loop - defense-in-depth working   |
-| 11. Edge Cases: Skills                     | 11.1-11.2 | ✅ Complete | Non-existent skill handled, search works               |
-| 12. Edge Cases: Search                     | 12.1-12.2 | ✅ Complete | Empty results handled, special chars work              |
-| 13. Edge Cases: Approval Flow              | 13.1-13.2 | ✅ Complete | Multiple approvals work, partial approve/decline works |
-| 14. FS Write Approval Agent                | 14.1-14.8 | ✅ Complete | Approval dialogs work correctly for write ops          |
-| 15. FS All Approval Agent                  | 15.1-15.7 | ✅ Complete | Approval dialogs work for ALL fs ops including reads   |
+| 2. Editor Agent (requireReadBeforeWrite)   | 2.1-2.3   | ✅ Complete | Safety feature blocks unread writes, LLMs auto-recover |
+| 3. Automation Agent (sandbox approval)     | 3.1-3.3   | ✅ Complete | Approval dialogs appear correctly                      |
+| 4. Developer Agent (full access)           | 4.1-4.5   | ✅ Complete | All operations work without restrictions               |
+| 5. Documentation Agent (skill inheritance) | 5.1-5.2   | ✅ Complete | Both global and agent-specific skills available        |
+| 6. Support Agent (limited skills)          | 6.1-6.3   | ✅ Complete | Only agent-specific skills available                   |
+| 7. Edge Cases: requireReadBeforeWrite      | 7.1-7.3   | ✅ Complete | NEW files allowed, only EXISTING files need read first |
+| 8. Edge Cases: Error Handling              | 8.1-8.3   | ✅ Complete | Graceful errors, LLM-level security for path traversal |
+| 9. Edge Cases: Sandbox Errors              | 9.1-9.3   | ⚠️ Partial  | LLM refused infinite loop - defense-in-depth working   |
+| 10. Edge Cases: Skills                     | 10.1-10.2 | ✅ Complete | Non-existent skill handled, search works               |
+| 11. Edge Cases: Search                     | 11.1-11.2 | ✅ Complete | Empty results handled, special chars work              |
+| 12. Edge Cases: Approval Flow              | 12.1-12.2 | ✅ Complete | Multiple approvals work, partial approve/decline works |
+| 13. FS Write Approval Agent                | 13.1-13.8 | ✅ Complete | Approval dialogs work correctly for write ops          |
+| 14. FS All Approval Agent                  | 14.1-14.7 | ✅ Complete | Approval dialogs work for ALL fs ops including reads   |
 
 ### Key Findings
 

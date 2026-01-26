@@ -576,10 +576,7 @@ describe('tree-formatter', () => {
     it('should display symlinks with target path', async () => {
       // Create a real file and a symlink to it
       await fs.writeFile(path.join(tempDir, 'real-file.txt'), 'content');
-      await fs.symlink(
-        path.join(tempDir, 'real-file.txt'),
-        path.join(tempDir, 'link-to-file.txt'),
-      );
+      await fs.symlink(path.join(tempDir, 'real-file.txt'), path.join(tempDir, 'link-to-file.txt'));
 
       const result = await formatAsTree(filesystem, '/');
 
@@ -592,10 +589,7 @@ describe('tree-formatter', () => {
       // Create a real directory and a symlink to it
       await fs.mkdir(path.join(tempDir, 'real-dir'));
       await fs.writeFile(path.join(tempDir, 'real-dir', 'file.txt'), 'content');
-      await fs.symlink(
-        path.join(tempDir, 'real-dir'),
-        path.join(tempDir, 'link-to-dir'),
-      );
+      await fs.symlink(path.join(tempDir, 'real-dir'), path.join(tempDir, 'link-to-dir'));
 
       const result = await formatAsTree(filesystem, '/');
 
@@ -610,10 +604,7 @@ describe('tree-formatter', () => {
       await fs.mkdir(path.join(tempDir, 'source'));
       await fs.writeFile(path.join(tempDir, 'source', 'nested.txt'), 'content');
       // Create a symlink to the directory
-      await fs.symlink(
-        path.join(tempDir, 'source'),
-        path.join(tempDir, 'linked'),
-      );
+      await fs.symlink(path.join(tempDir, 'source'), path.join(tempDir, 'linked'));
 
       const result = await formatAsTree(filesystem, '/', { maxDepth: 3 });
 
@@ -632,10 +623,7 @@ describe('tree-formatter', () => {
       await fs.writeFile(path.join(tempDir, 'packages', 'core', 'index.ts'), '');
       await fs.mkdir(path.join(tempDir, 'node_modules'));
       // Create relative symlink like pnpm/npm does
-      await fs.symlink(
-        '../packages/core',
-        path.join(tempDir, 'node_modules', 'core'),
-      );
+      await fs.symlink('../packages/core', path.join(tempDir, 'node_modules', 'core'));
 
       const result = await formatAsTree(filesystem, '/');
 
@@ -644,10 +632,7 @@ describe('tree-formatter', () => {
 
     it('should handle broken symlinks gracefully', async () => {
       // Create a symlink to a non-existent target
-      await fs.symlink(
-        path.join(tempDir, 'does-not-exist'),
-        path.join(tempDir, 'broken-link'),
-      );
+      await fs.symlink(path.join(tempDir, 'does-not-exist'), path.join(tempDir, 'broken-link'));
 
       // Should not throw, should display the symlink
       const result = await formatAsTree(filesystem, '/');

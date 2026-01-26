@@ -44,46 +44,13 @@ import {
 import { InMemoryFileReadTracker } from './file-read-tracker';
 import type { FileReadTracker } from './file-read-tracker';
 import { FileReadRequiredError } from './filesystem';
-import type {
-  WorkspaceFilesystem,
-  WorkspaceState,
-  FileContent,
-  FileEntry,
-  ReadOptions,
-  WriteOptions,
-  ListOptions,
-} from './filesystem';
+import type { WorkspaceFilesystem, FileContent, FileEntry, ReadOptions, WriteOptions, ListOptions } from './filesystem';
 import type { WorkspaceSandbox, CommandResult, ExecuteCommandOptions } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
-import { FilesystemState } from './state';
 import type { WorkspaceStatus } from './types';
-
-// =============================================================================
-// Workspace Scope
-// =============================================================================
-
-/**
- * Determines how the workspace is scoped and shared.
- */
-export type WorkspaceScope =
-  | 'global' // Shared across all agents
-  | 'agent' // Shared across all threads for a single agent
-  | 'thread'; // Isolated per conversation thread
-
-/**
- * Identifies the owner of a workspace.
- */
-export interface WorkspaceOwner {
-  /** Scope of the workspace */
-  scope: WorkspaceScope;
-  /** Agent ID (for agent and thread scopes) */
-  agentId?: string;
-  /** Thread ID (for thread scope only) */
-  threadId?: string;
-}
 
 // =============================================================================
 // Workspace Configuration
@@ -215,8 +182,6 @@ export interface PathContext {
     provider: string;
     /** Working directory for command execution */
     workingDirectory?: string;
-    /** Directory where script files are written */
-    scriptDirectory?: string;
   };
 
   /**
@@ -261,55 +226,6 @@ export interface WorkspaceInfo {
 }
 
 // =============================================================================
-// Sync Types
-// =============================================================================
-
-export interface SyncResult {
-  /** Files that were synced */
-  synced: string[];
-  /** Files that failed to sync */
-  failed: Array<{ path: string; error: string }>;
-  /** Total bytes transferred */
-  bytesTransferred: number;
-  /** Duration in milliseconds */
-  duration: number;
-}
-
-// =============================================================================
-// Snapshot Types
-// =============================================================================
-
-export interface SnapshotOptions {
-  /** Include sandbox state (if supported) */
-  includeSandbox?: boolean;
-  /** Only snapshot specific paths */
-  paths?: string[];
-  /** Snapshot name/description */
-  name?: string;
-  /** Additional metadata */
-  metadata?: Record<string, unknown>;
-}
-
-export interface WorkspaceSnapshot {
-  id: string;
-  workspaceId: string;
-  name?: string;
-  createdAt: Date;
-  /** Size in bytes */
-  size: number;
-  /** Provider-specific snapshot data */
-  data: unknown;
-  metadata?: Record<string, unknown>;
-}
-
-export interface RestoreOptions {
-  /** Merge with existing state instead of replacing */
-  merge?: boolean;
-  /** Only restore specific paths */
-  paths?: string[];
-}
-
-// =============================================================================
 // Workspace Class
 // =============================================================================
 
@@ -328,7 +244,6 @@ export class Workspace {
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
-  private _state?: WorkspaceState;
   private readonly _config: WorkspaceConfig;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
@@ -353,11 +268,6 @@ export class Workspace {
     this._requireReadBeforeWrite = config.filesystem?.safety?.requireReadBeforeWrite ?? true;
     if (this._requireReadBeforeWrite) {
       this._readTracker = new InMemoryFileReadTracker();
-    }
-
-    // Create state layer if filesystem is available
-    if (this._fs) {
-      this._state = new FilesystemState(this._fs);
     }
 
     // Create search engine if search is configured
@@ -422,13 +332,6 @@ export class Workspace {
    */
   get sandbox(): WorkspaceSandbox | undefined {
     return this._sandbox;
-  }
-
-  /**
-   * Key-value state storage (available when filesystem is present).
-   */
-  get state(): WorkspaceState | undefined {
-    return this._state;
   }
 
   /**
@@ -693,57 +596,6 @@ export class Workspace {
   }
 
   /**
-   * Index multiple documents.
-   *
-   * @param docs - Array of documents with path, content, and optional options
-   * @throws {SearchNotAvailableError} if search is not configured
-   */
-  async indexMany(
-    docs: Array<{
-      path: string;
-      content: string;
-      options?: {
-        type?: 'text' | 'image' | 'file';
-        mimeType?: string;
-        metadata?: Record<string, unknown>;
-        startLineOffset?: number;
-      };
-    }>,
-  ): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-
-    const indexDocs: IndexDocument[] = docs.map(({ path, content, options }) => ({
-      id: path,
-      content,
-      metadata: {
-        type: options?.type,
-        mimeType: options?.mimeType,
-        ...options?.metadata,
-      },
-      startLineOffset: options?.startLineOffset,
-    }));
-
-    await this._searchEngine.indexMany(indexDocs);
-  }
-
-  /**
-   * Remove a document from the search index.
-   *
-   * @param path - File path (document ID) to remove
-   * @throws {SearchNotAvailableError} if search is not configured
-   */
-  async unindex(path: string): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-    await this._searchEngine.remove(path);
-  }
-
-  /**
    * Search indexed content.
    *
    * @param query - Search query string
@@ -760,23 +612,11 @@ export class Workspace {
   }
 
   /**
-   * Rebuild the BM25 index from filesystem paths.
-   * Reads files from the specified paths (or autoIndexPaths from config) and indexes them.
-   *
-   * @param paths - Paths to index (defaults to autoIndexPaths from config)
-   * @throws {SearchNotAvailableError} if search is not configured
-   * @throws {FilesystemNotAvailableError} if filesystem is not configured
+   * Rebuild the search index from filesystem paths.
+   * Used internally for auto-indexing on init.
    */
-  async rebuildIndex(paths?: string[]): Promise<void> {
-    if (!this._searchEngine) {
-      throw new SearchNotAvailableError();
-    }
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const pathsToIndex = paths ?? this._config.autoIndexPaths ?? [];
-    if (pathsToIndex.length === 0) {
+  private async rebuildSearchIndex(paths: string[]): Promise<void> {
+    if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
 
@@ -784,7 +624,7 @@ export class Workspace {
     this._searchEngine.clear();
 
     // Index all files from specified paths
-    for (const basePath of pathsToIndex) {
+    for (const basePath of paths) {
       try {
         const files = await this.getAllFiles(basePath);
         for (const filePath of files) {
@@ -804,58 +644,6 @@ export class Workspace {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Sync Operations
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Sync files from the workspace filesystem to the sandbox.
-   * Useful for making persisted files available for execution.
-   *
-   * Delegates to the sandbox's `syncFromFilesystem` method, allowing each
-   * sandbox provider to implement its preferred transfer mechanism.
-   *
-   * @param paths - Paths to sync (default: all files)
-   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
-   */
-  async syncToSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.syncFromFilesystem) {
-      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
-    }
-
-    return this._sandbox.syncFromFilesystem(this._fs, paths);
-  }
-
-  /**
-   * Sync files from the sandbox back to the workspace filesystem.
-   * Useful for persisting execution outputs.
-   *
-   * Delegates to the sandbox's `syncToFilesystem` method, allowing each
-   * sandbox provider to implement its preferred transfer mechanism.
-   *
-   * @param paths - Paths to sync (default: all files in sandbox)
-   * @throws {WorkspaceError} if filesystem or sandbox is not available, or sandbox doesn't support sync
-   */
-  async syncFromSandbox(paths?: string[]): Promise<SyncResult> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.syncToFilesystem) {
-      throw new WorkspaceError('Sandbox does not support sync operations', 'SYNC_UNSUPPORTED');
-    }
-
-    return this._sandbox.syncToFilesystem(this._fs, paths);
-  }
-
   private async getAllFiles(dir: string): Promise<string[]> {
     if (!this._fs) return [];
 
@@ -872,75 +660,6 @@ export class Workspace {
     }
 
     return files;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Snapshots
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Create a snapshot of the current workspace state.
-   * Captures filesystem contents (and optionally sandbox state).
-   */
-  async snapshot(options?: SnapshotOptions): Promise<WorkspaceSnapshot> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const files: Record<string, string | Buffer> = {};
-    const pathsToSnapshot = options?.paths ?? (await this.getAllFiles('/'));
-
-    for (const filePath of pathsToSnapshot) {
-      try {
-        files[filePath] = await this._fs.readFile(filePath);
-      } catch {
-        // Skip files that can't be read
-      }
-    }
-
-    let size = 0;
-    for (const content of Object.values(files)) {
-      size += typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-    }
-
-    return {
-      id: this.generateId(),
-      workspaceId: this.id,
-      name: options?.name,
-      createdAt: new Date(),
-      size,
-      data: files,
-      metadata: options?.metadata,
-    };
-  }
-
-  /**
-   * Restore workspace from a snapshot.
-   */
-  async restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    const files = snapshot.data as Record<string, string | Buffer>;
-    const pathsToRestore = options?.paths ?? Object.keys(files);
-
-    // Clear existing files if not merging
-    if (!options?.merge) {
-      const existingFiles = await this.getAllFiles('/');
-      for (const file of existingFiles) {
-        if (!options?.paths || options.paths.includes(file)) {
-          await this._fs.deleteFile(file, { force: true });
-        }
-      }
-    }
-
-    // Restore files
-    for (const filePath of pathsToRestore) {
-      if (files[filePath]) {
-        await this._fs.writeFile(filePath, files[filePath], { recursive: true });
-      }
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -965,7 +684,7 @@ export class Workspace {
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
-        await this.rebuildIndex(this._config.autoIndexPaths);
+        await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
       }
 
       this._status = 'ready';
@@ -973,26 +692,6 @@ export class Workspace {
       this._status = 'error';
       throw error;
     }
-  }
-
-  /**
-   * Pause the workspace (stop sandbox but keep state).
-   */
-  async pause(): Promise<void> {
-    if (this._sandbox?.stop) {
-      await this._sandbox.stop();
-    }
-    this._status = 'paused';
-  }
-
-  /**
-   * Resume a paused workspace.
-   */
-  async resume(): Promise<void> {
-    if (this._sandbox) {
-      await this._sandbox.start();
-    }
-    this._status = 'ready';
   }
 
   /**
@@ -1012,13 +711,6 @@ export class Workspace {
     } finally {
       this._status = 'destroyed';
     }
-  }
-
-  /**
-   * Extend the workspace timeout (for providers that have timeouts).
-   */
-  async keepAlive(): Promise<void> {
-    this.lastAccessedAt = new Date();
   }
 
   /**
@@ -1088,10 +780,9 @@ export class Workspace {
         sandbox: {
           provider: this._sandbox!.provider,
           workingDirectory: (this._sandbox as any).workingDirectory,
-          scriptDirectory: (this._sandbox as any).scriptDirectory,
         },
         requiresSync: false,
-        instructions: 'No filesystem configured. Code execution is available but files are ephemeral.',
+        instructions: 'No filesystem configured. Command execution is available but files are ephemeral.',
       };
     }
 
@@ -1106,14 +797,13 @@ export class Workspace {
     if (isSameContext) {
       const basePath = (this._fs as any).basePath as string | undefined;
       const workingDirectory = (this._sandbox as any).workingDirectory as string | undefined;
-      const scriptDirectory = (this._sandbox as any).scriptDirectory as string | undefined;
 
       let instructions: string;
       if (basePath) {
-        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in sandbox code. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
+        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in executed commands. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
       } else {
         instructions =
-          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents, then pass them to your code.';
+          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents.';
       }
 
       return {
@@ -1125,7 +815,6 @@ export class Workspace {
         sandbox: {
           provider: sandboxProvider,
           workingDirectory,
-          scriptDirectory,
         },
         requiresSync: false,
         instructions,
@@ -1142,11 +831,10 @@ export class Workspace {
       sandbox: {
         provider: sandboxProvider,
         workingDirectory: (this._sandbox as any).workingDirectory,
-        scriptDirectory: (this._sandbox as any).scriptDirectory,
       },
       requiresSync: true,
       instructions:
-        'Filesystem and sandbox are in different environments. To use workspace files in code: 1) Read file contents using workspace_read_file, 2) Pass contents as variables to your code, or 3) Use workspace_sync_to_sandbox to sync files before execution.',
+        'Filesystem and sandbox are in different environments. To use workspace files in commands: 1) Read file contents using workspace_read_file, 2) Pass contents to commands as needed.',
     };
   }
 }
