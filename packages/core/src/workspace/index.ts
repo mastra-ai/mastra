@@ -137,7 +137,7 @@ export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotRea
  *
  * @public
  */
-export { createWorkspaceTools, WORKSPACE_TOOL_NAMES } from './tools';
+export { createWorkspaceTools, WORKSPACE_TOOLS } from './tools';
 
 // =============================================================================
 // PROVIDER INTERFACE - Filesystem

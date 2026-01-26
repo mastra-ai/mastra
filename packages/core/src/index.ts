@@ -45,5 +45,4 @@ export {
   type LocalSandboxOptions,
   // Workspace tools for agent integration
   createWorkspaceTools,
-  WORKSPACE_TOOL_NAMES,
 } from './workspace';

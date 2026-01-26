@@ -12,6 +12,7 @@ import { TooltipIconButton } from '../tooltip-icon-button';
 import { cn } from '@/lib/utils';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { useCopyToClipboard } from '../hooks/use-copy-to-clipboard';
 
 const SyntaxHighlighter = makePrismLightSyntaxHighlighter({
   style: coldarkDark,
@@ -73,24 +74,6 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   );
 };
 
-const useCopyToClipboard = ({
-  copiedDuration = 1500,
-}: {
-  copiedDuration?: number;
-} = {}) => {
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  const copyToClipboard = (value: string) => {
-    if (!value) return;
-
-    navigator.clipboard.writeText(value).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), copiedDuration);
-    });
-  };
-
-  return { isCopied, copyToClipboard };
-};
 
 const ImageWithFallback = ({ alt, src, ...rest }: ImgHTMLAttributes<HTMLImageElement>) => {
   const [error, setError] = useState(false);

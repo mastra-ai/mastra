@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { LocalFilesystem } from './local-filesystem';
 import { LocalSandbox } from './local-sandbox';
-import { createWorkspaceTools, WORKSPACE_TOOL_NAMES } from './tools';
+import { createWorkspaceTools, WORKSPACE_TOOLS } from './tools';
 import { Workspace } from './workspace';
 
 describe('createWorkspaceTools', () => {
@@ -34,12 +34,12 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.READ_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.WRITE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.LIST_FILES);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.DELETE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.FILE_EXISTS);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.MKDIR);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
     });
 
     it('should not create filesystem tools when no filesystem', () => {
@@ -49,8 +49,8 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.READ_FILE);
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.WRITE_FILE);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
     });
 
     it('should create search tools when BM25 is enabled', () => {
@@ -61,8 +61,8 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.SEARCH);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INDEX);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
     });
 
     it('should not create search tools when search not configured', () => {
@@ -72,8 +72,8 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.SEARCH);
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.INDEX);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
     });
 
     it('should create sandbox tools when sandbox is available', () => {
@@ -83,7 +83,7 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     });
 
     it('should not create sandbox tools when no sandbox', () => {
@@ -93,7 +93,7 @@ describe('createWorkspaceTools', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     });
 
     it('should create all tools when all capabilities available', () => {
@@ -106,17 +106,17 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       // Filesystem tools
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.READ_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.WRITE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.LIST_FILES);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.DELETE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.FILE_EXISTS);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.MKDIR);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
       // Search tools
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.SEARCH);
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.INDEX);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
       // Sandbox tools
-      expect(tools).toHaveProperty(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     });
   });
 
@@ -131,7 +131,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_read_file.execute({ path: '/test.txt' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' });
 
       expect(result.content).toBe('     1→Hello World');
       expect(result.size).toBe(11);
@@ -145,7 +145,10 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_read_file.execute({ path: '/test.txt', showLineNumbers: false });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
+        path: '/test.txt',
+        showLineNumbers: false,
+      });
 
       expect(result.content).toBe('Hello World');
       expect(result.size).toBe(11);
@@ -160,7 +163,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_read_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
         path: '/test.txt',
         offset: 2,
         limit: 2,
@@ -182,7 +185,7 @@ describe('createWorkspaceTools', () => {
 
       // With utf-8 encoding (default), binary content is read as string
       // The tool should still return something readable
-      const result = await tools.workspace_read_file.execute({ path: '/binary.bin' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' });
 
       expect(result.path).toBe('/binary.bin');
       expect(result.size).toBe(4);
@@ -198,7 +201,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_write_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
         path: '/new.txt',
         content: 'New content',
       });
@@ -222,7 +225,7 @@ describe('createWorkspaceTools', () => {
       // Read first (required by safety)
       await workspace.readFile('/existing.txt');
 
-      await tools.workspace_write_file.execute({
+      await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
         path: '/existing.txt',
         content: 'updated',
       });
@@ -240,7 +243,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_edit_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
         path: '/test.txt',
         old_string: 'World',
         new_string: 'Universe',
@@ -260,7 +263,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_edit_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
         path: '/test.txt',
         old_string: 'foo',
         new_string: 'bar',
@@ -278,7 +281,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_edit_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
         path: '/test.txt',
         old_string: 'hello',
         new_string: 'hi',
@@ -296,7 +299,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_edit_file.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
         path: '/test.txt',
         old_string: 'hello',
         new_string: 'hi',
@@ -312,7 +315,7 @@ describe('createWorkspaceTools', () => {
   });
 
   describe('workspace_list_files', () => {
-    it('should list directory contents', async () => {
+    it('should list directory contents as tree (default depth 1)', async () => {
       await fs.mkdir(path.join(tempDir, 'dir'));
       await fs.writeFile(path.join(tempDir, 'dir', 'file1.txt'), 'content1');
       await fs.writeFile(path.join(tempDir, 'dir', 'file2.txt'), 'content2');
@@ -321,14 +324,14 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_list_files.execute({ path: '/dir' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/dir' });
 
-      expect(result.path).toBe('/dir');
-      expect(result.count).toBe(2);
-      expect(result.entries).toHaveLength(2);
+      expect(result.tree).toContain('file1.txt');
+      expect(result.tree).toContain('file2.txt');
+      expect(result.summary).toBe('0 directories, 2 files');
     });
 
-    it('should list files recursively', async () => {
+    it('should list files recursively with maxDepth', async () => {
       await fs.mkdir(path.join(tempDir, 'dir'));
       await fs.mkdir(path.join(tempDir, 'dir', 'subdir'));
       await fs.writeFile(path.join(tempDir, 'dir', 'file1.txt'), 'content1');
@@ -338,12 +341,146 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_list_files.execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
         path: '/dir',
-        recursive: true,
+        maxDepth: 5,
       });
 
-      expect(result.count).toBeGreaterThanOrEqual(2);
+      expect(result.tree).toContain('subdir');
+      expect(result.tree).toContain('file1.txt');
+      expect(result.tree).toContain('file2.txt');
+      expect(result.summary).toContain('1 directory');
+      expect(result.summary).toContain('2 files');
+    });
+
+    it('should respect maxDepth parameter (tree -L flag)', async () => {
+      await fs.mkdir(path.join(tempDir, 'level1'));
+      await fs.mkdir(path.join(tempDir, 'level1', 'level2'));
+      await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
+      await fs.writeFile(path.join(tempDir, 'level1', 'level2', 'level3', 'deep.txt'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        maxDepth: 2,
+      });
+
+      expect(result.tree).toContain('level1');
+      expect(result.tree).toContain('level2');
+      expect(result.tree).not.toContain('level3');
+      expect(result.tree).not.toContain('deep.txt');
+      expect(result.summary).toContain('truncated at depth 2');
+    });
+
+    it('should default maxDepth to 3', async () => {
+      await fs.mkdir(path.join(tempDir, 'level1'));
+      await fs.mkdir(path.join(tempDir, 'level1', 'level2'));
+      await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
+      await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3', 'level4'));
+      await fs.writeFile(path.join(tempDir, 'level1', 'level2', 'level3', 'level4', 'deep.txt'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' });
+
+      // With default maxDepth of 3, should show up to level3 but not level4 contents
+      expect(result.tree).toContain('level1');
+      expect(result.tree).toContain('level2');
+      expect(result.tree).toContain('level3');
+      expect(result.tree).not.toContain('level4');
+      expect(result.tree).not.toContain('deep.txt');
+    });
+
+    it('should filter by extension (tree -P flag)', async () => {
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'style.css'), '');
+      await fs.writeFile(path.join(tempDir, 'utils.ts'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        extension: '.ts',
+      });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('utils.ts');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.summary).toBe('0 directories, 2 files');
+    });
+
+    it('should show hidden files with showHidden (tree -a flag)', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), '');
+      await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
+      await fs.mkdir(path.join(tempDir, '.hidden-dir'));
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      // Without showHidden
+      const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' });
+      expect(resultHidden.tree).not.toContain('.gitignore');
+      expect(resultHidden.tree).not.toContain('.hidden-dir');
+      expect(resultHidden.tree).toContain('visible.txt');
+
+      // With showHidden
+      const resultVisible = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/', showHidden: true });
+      expect(resultVisible.tree).toContain('.gitignore');
+      expect(resultVisible.tree).toContain('.hidden-dir');
+      expect(resultVisible.tree).toContain('visible.txt');
+    });
+
+    it('should list directories only with dirsOnly (tree -d flag)', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'tests'));
+      await fs.writeFile(path.join(tempDir, 'package.json'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        maxDepth: 3,
+        dirsOnly: true,
+      });
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('tests');
+      expect(result.tree).not.toContain('package.json');
+      expect(result.tree).not.toContain('index.ts');
+      expect(result.summary).toContain('0 files');
+    });
+
+    it('should exclude patterns with exclude (tree -I flag)', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.mkdir(path.join(tempDir, 'node_modules', 'lodash'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        maxDepth: 3,
+        exclude: 'node_modules',
+      });
+
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('node_modules');
+      expect(result.tree).not.toContain('lodash');
     });
   });
 
@@ -355,7 +492,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_delete_file.execute({ path: '/test.txt' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({ path: '/test.txt' });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/test.txt');
@@ -374,7 +511,10 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_delete_file.execute({ path: '/nonexistent.txt', force: true });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({
+        path: '/nonexistent.txt',
+        force: true,
+      });
 
       expect(result.success).toBe(true);
     });
@@ -388,7 +528,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_file_exists.execute({ path: '/test.txt' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/test.txt' });
 
       expect(result.exists).toBe(true);
       expect(result.type).toBe('file');
@@ -400,7 +540,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_file_exists.execute({ path: '/nonexistent' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/nonexistent' });
 
       expect(result.exists).toBe(false);
       expect(result.type).toBe('none');
@@ -413,7 +553,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_file_exists.execute({ path: '/subdir' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/subdir' });
 
       expect(result.exists).toBe(true);
       expect(result.type).toBe('directory');
@@ -427,7 +567,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_mkdir.execute({ path: '/newdir' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/newdir' });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/newdir');
@@ -443,7 +583,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_mkdir.execute({ path: '/a/b/c' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/a/b/c' });
 
       expect(result.success).toBe(true);
 
@@ -466,7 +606,7 @@ describe('createWorkspaceTools', () => {
       // Index some content
       await workspace.index('/doc.txt', 'The quick brown fox');
 
-      const result = await tools.workspace_search.execute({ query: 'quick' });
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'quick' });
 
       expect(result.count).toBeGreaterThan(0);
       expect(result.mode).toBe('bm25');
@@ -481,7 +621,7 @@ describe('createWorkspaceTools', () => {
 
       await workspace.index('/doc.txt', 'The quick brown fox');
 
-      const result = await tools.workspace_search.execute({ query: 'elephant' });
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'elephant' });
 
       expect(result.count).toBe(0);
     });
@@ -495,7 +635,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_index.execute({
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.INDEX].execute({
         path: '/doc.txt',
         content: 'Document content',
       });
@@ -504,7 +644,7 @@ describe('createWorkspaceTools', () => {
       expect(result.path).toBe('/doc.txt');
 
       // Verify it's searchable
-      const searchResult = await tools.workspace_search.execute({ query: 'Document' });
+      const searchResult = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'Document' });
       expect(searchResult.count).toBeGreaterThan(0);
     });
   });
@@ -520,7 +660,7 @@ describe('createWorkspaceTools', () => {
       await workspace.init();
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_execute_command.execute(
+      const result = await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
         {
           command: 'echo',
           args: ['hello'],
@@ -542,7 +682,7 @@ describe('createWorkspaceTools', () => {
       await workspace.init();
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools.workspace_execute_command.execute(
+      const result = await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
         {
           command: 'ls',
           args: ['/nonexistent/path/that/does/not/exist'],
@@ -558,19 +698,23 @@ describe('createWorkspaceTools', () => {
   });
 
   // ===========================================================================
-  // WORKSPACE_TOOL_NAMES
+  // WORKSPACE_TOOLS
   // ===========================================================================
-  describe('WORKSPACE_TOOL_NAMES', () => {
-    it('should have all expected tool names', () => {
-      expect(WORKSPACE_TOOL_NAMES.READ_FILE).toBe('workspace_read_file');
-      expect(WORKSPACE_TOOL_NAMES.WRITE_FILE).toBe('workspace_write_file');
-      expect(WORKSPACE_TOOL_NAMES.LIST_FILES).toBe('workspace_list_files');
-      expect(WORKSPACE_TOOL_NAMES.DELETE_FILE).toBe('workspace_delete_file');
-      expect(WORKSPACE_TOOL_NAMES.FILE_EXISTS).toBe('workspace_file_exists');
-      expect(WORKSPACE_TOOL_NAMES.MKDIR).toBe('workspace_mkdir');
-      expect(WORKSPACE_TOOL_NAMES.SEARCH).toBe('workspace_search');
-      expect(WORKSPACE_TOOL_NAMES.INDEX).toBe('workspace_index');
-      expect(WORKSPACE_TOOL_NAMES.EXECUTE_COMMAND).toBe('workspace_execute_command');
+  describe('WORKSPACE_TOOLS', () => {
+    it('should have all expected tool names with proper namespacing', () => {
+      // Filesystem tools
+      expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE).toBe('mastra_workspace_edit_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES).toBe('mastra_workspace_list_files');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE).toBe('mastra_workspace_delete_file');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS).toBe('mastra_workspace_file_exists');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
+      // Search tools
+      expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
+      expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
+      // Sandbox tools
+      expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
     });
   });
 });

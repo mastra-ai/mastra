@@ -1,8 +1,10 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useEffect } from 'react';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
 
 import { ToolBadge } from './badges/tool-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { FileTreeBadge } from './badges/file-tree-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
@@ -95,8 +97,26 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     );
   }
 
+  // Use custom tree UI for list_files tool
+  const isListFiles = toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
+
+  if (isListFiles) {
+    return (
+      <FileTreeBadge
+        toolName={toolName}
+        args={args}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        isNetwork={isNetwork ?? false}
+        toolCalled={toolCalled}
+      />
+    );
+  }
+
   // Use custom terminal UI for sandbox execution tools
-  const isSandboxExecution = toolName === 'workspace_execute_command' || toolName === 'workspace_execute_code';
+  const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
 
   if (isSandboxExecution) {
     // During streaming, result might be an array of output chunks
