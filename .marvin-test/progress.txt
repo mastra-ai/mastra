@@ -1,0 +1,43 @@
+## Task 1: Navigation - Clean up breadcrumb navigation (COMPLETED)
+
+### Changes Made:
+- Removed 'Chat' button from agent-header.tsx (packages/playground/src/domains/agents/agent-header.tsx)
+- Removed the DividerIcon that preceded the Chat button
+- The 'Traces' button remains intact and navigates to `/observability?entity=${agentId}`
+- Traces button uses Button component from @mastra/playground-ui which follows the design system
+
+### Files Modified:
+- packages/playground/src/domains/agents/agent-header.tsx
+
+### Verification:
+- TypeScript type checks passed
+- The Traces button CSS is inherited from the playground-ui design system Button component
+
+
+## Task 2: UI-UX - Modernize Thread List layout to minimalist, list-based design (COMPLETED)
+
+### Changes Made:
+- Removed bottom borders (`border-b border-border1`) from ThreadItem component
+- Changed from fixed height (`h-[54px]`) to minimum height (`min-h-[48px]`) for flexible content
+- Added rounded corners (`rounded-md`) for modern appearance
+- Added horizontal margin (`mx-1`) and vertical spacing (`my-0.5`) for visual separation
+- Changed active state from `bg-accent1Dark` to `bg-surface3` for consistent hover/active styling
+- Added vertical padding (`py-1`) to ThreadList container
+- Removed `overflow-hidden` from Threads container to allow proper scroll behavior
+
+### Files Modified:
+- packages/playground-ui/src/ds/components/Threads/threads.tsx
+
+### E2E Tests Added:
+- packages/playground/e2e/tests/agents/$agentId/thread-list.spec.ts
+  - Tests thread list navigation behavior
+  - Tests hover feedback on thread items
+  - Tests active thread highlighting
+  - Tests thread deletion behavior
+  - Tests scroll container existence
+
+### Verification:
+- TypeScript type checks passed (tsc --noEmit)
+- Design follows minimalist list-based pattern (no borders, subtle hover states, rounded items)
+- Smooth scrolling enabled through proper overflow handling
+
