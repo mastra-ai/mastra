@@ -12,7 +12,7 @@ interface StudioOptions {
   serverHost?: string;
   serverPort?: string | number;
   serverProtocol?: string;
-  apiPrefix?: string;
+  serverApiPrefix?: string;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -74,7 +74,7 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
     .replaceAll('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
     .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
     .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
-    .replaceAll('%%MASTRA_API_PREFIX%%', options.apiPrefix || '/api')
+    .replaceAll('%%MASTRA_API_PREFIX%%', options.serverApiPrefix || '/api')
     .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
