@@ -153,7 +153,7 @@ export async function getRoutingAgent({
     memory: memoryToUse,
     inputProcessors: configuredInputProcessors,
     outputProcessors: configuredOutputProcessors,
-    // @ts-expect-error
+    // @ts-expect-error - internal property for agent network
     _agentNetworkAppend: true,
   });
 }
