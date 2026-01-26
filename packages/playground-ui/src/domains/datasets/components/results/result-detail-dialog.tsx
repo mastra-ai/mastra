@@ -92,7 +92,7 @@ export function ResultDetailDialog({
                     {
                       label: 'Trace',
                       value: (
-                        <Link href={`/traces/${result.traceId}`} className="text-accent1 hover:underline inline-flex items-center gap-1">
+                        <Link href={`/observability?traceId=${result.traceId}`} className="text-accent1 hover:underline inline-flex items-center gap-1">
                           <RouteIcon className="w-3 h-3" />
                           View Trace
                         </Link>
