@@ -55,6 +55,26 @@ export interface ParsedRequestParams {
 }
 
 /**
+ * Normalizes a route prefix to ensure it has a leading slash and no trailing slash.
+ * This prevents double-slash routes (e.g., '/mastra//agents') when prefix has trailing slash.
+ *
+ * @param prefix - The prefix to normalize (e.g., 'mastra', '/mastra/', '/mastra')
+ * @returns Normalized prefix with leading slash and no trailing slash (e.g., '/mastra')
+ */
+function normalizePrefix(prefix: string): string {
+  let normalized = prefix.trim();
+  // Add leading slash if missing
+  if (!normalized.startsWith('/')) {
+    normalized = '/' + normalized;
+  }
+  // Remove trailing slash if present (but keep single '/')
+  if (normalized.endsWith('/') && normalized.length > 1) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+/**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
  * Filters out non-string values that some frameworks may include.
@@ -126,7 +146,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
-    this.prefix = prefix;
+    this.prefix = normalizePrefix(prefix);
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;

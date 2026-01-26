@@ -208,7 +208,7 @@ describe('MastraClient', () => {
       expect(result).toEqual({ success: true });
       expect(global.fetch).toHaveBeenCalledTimes(3);
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/test',
+        'http://localhost:4111/api/test',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Custom-Header': 'value',
@@ -225,7 +225,7 @@ describe('MastraClient', () => {
       expect(result2).toEqual({ success: true });
       expect(global.fetch).toHaveBeenCalledTimes(4);
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/test',
+        'http://localhost:4111/api/test',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Custom-Header': 'new-value',
