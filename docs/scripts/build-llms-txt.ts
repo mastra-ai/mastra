@@ -17,7 +17,14 @@ The documentation is organized into key sections:
 - [**Guides**](https://mastra.ai/guides): Step-by-step tutorials for building specific applications
 - [**Reference**](https://mastra.ai/reference): API reference documentation
 
-Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.`;
+Each section contains detailed docs that provide comprehensive information about Mastra's features and how to use them effectively.
+
+These are the most popular starting points:
+
+- [Getting Started](https://mastra.ai/docs/getting-started/start): Create a new project with the \`create mastra\` CLI or use one of the framework quickstart guides
+- [Agent Overview](https://mastra.ai/docs/agents/overview): Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met.
+- [Workflows Overview](https://mastra.ai/docs/workflows/overview): Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent.
+- [Memory Overview](https://mastra.ai/docs/memory/overview): Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.`;
 
 const SIDEBAR_LOCATIONS = [
   {
@@ -27,6 +34,8 @@ const SIDEBAR_LOCATIONS = [
   {
     id: "Models",
     path: path.join(DOCS_DIR, "models", "sidebars.js"),
+    // Condense these categories to just their overview link
+    condensedCategories: ["Gateways", "Providers"],
   },
   {
     id: "Guides",
@@ -105,12 +114,29 @@ function getDocId(item: SidebarItem): string | null {
 }
 
 /**
+ * Find the overview/index doc in a category's items
+ */
+function findCategoryOverviewUrl(
+  items: SidebarItem[],
+  baseUrl: string,
+): string | null {
+  for (const item of items) {
+    const docId = getDocId(item);
+    if (docId && (docId.endsWith("/index") || docId === "index")) {
+      return `${baseUrl}/${docId}`;
+    }
+  }
+  return null;
+}
+
+/**
  * Generate markdown list for sidebar items recursively
  */
 function generateMarkdownList(
   items: SidebarItem[],
   baseUrl: string,
   depth: number = 0,
+  condensedCategories: string[] = [],
 ): string {
   const indent = "  ".repeat(depth);
   let output = "";
@@ -124,9 +150,25 @@ function generateMarkdownList(
       const url = docId === "index" ? baseUrl : `${baseUrl}/${docId}`;
       output += `${indent}- [${label}](${url})\n`;
     } else if (item.type === "category") {
-      // It's a category - create a label and recurse
-      output += `${indent}- ${label}\n`;
-      output += generateMarkdownList(item.items, baseUrl, depth + 1);
+      // Check if this category should be condensed to just its overview link
+      if (condensedCategories.includes(label)) {
+        const overviewUrl = findCategoryOverviewUrl(item.items, baseUrl);
+        if (overviewUrl) {
+          output += `${indent}- [${label}](${overviewUrl})\n`;
+        } else {
+          // Fallback: just show category name without link
+          output += `${indent}- ${label}\n`;
+        }
+      } else {
+        // It's a category - create a label and recurse
+        output += `${indent}- ${label}\n`;
+        output += generateMarkdownList(
+          item.items,
+          baseUrl,
+          depth + 1,
+          condensedCategories,
+        );
+      }
     }
   }
 
@@ -153,9 +195,11 @@ async function buildLlmsTxt(): Promise<void> {
     try {
       const items = await parseSidebarFile(sidebar.path);
       const baseUrl = getBaseUrl(sidebar.id);
+      const condensedCategories = sidebar.condensedCategories || [];
 
       output += `## ${sidebar.id}\n\n`;
-      output += generateMarkdownList(items, baseUrl);
+      output += generateMarkdownList(items, baseUrl, 0, condensedCategories);
+      output += "\n";
     } catch (error) {
       console.error(`Error processing ${sidebar.id}:`, error);
     }
