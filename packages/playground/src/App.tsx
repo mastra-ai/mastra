@@ -13,6 +13,7 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_EXPERIMENTAL_FEATURES?: string;
   }
 }
 

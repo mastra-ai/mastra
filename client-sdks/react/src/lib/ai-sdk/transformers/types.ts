@@ -1,5 +1,5 @@
-import { NetworkChunkType } from '@mastra/core/stream';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { type NetworkChunkType } from '@mastra/core/stream';
+import { type MastraUIMessage, type MastraUIMessageMetadata } from '../types';
 
 export interface TransformerArgs<T> {
   chunk: NetworkChunkType;

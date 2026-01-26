@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@ai-sdk/google": "^1.2.19",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tsx": "^4.19.2",

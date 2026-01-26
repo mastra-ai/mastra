@@ -64,6 +64,57 @@ export const weatherAgent = new Agent({
 });
 ```
 
+## Controlling `toolName` in stream responses
+
+The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
+
+```typescript
+// Tool defined with id: "weather-tool"
+export const weatherTool = createTool({
+  id: "weather-tool",
+  // ...
+});
+
+// Using the variable name as the key
+tools: { weatherTool }
+// Stream returns: toolName: "weatherTool"
+
+// Using the tool's id as the key
+tools: { [weatherTool.id]: weatherTool }
+// Stream returns: toolName: "weather-tool"
+
+// Using a custom key
+tools: { "my-custom-name": weatherTool }
+// Stream returns: toolName: "my-custom-name"
+```
+
+This lets you specify how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
+
+### Sub-agents and workflows as tools
+
+Sub-agents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+
+| Property | Prefix | Example key | `toolName` |
+|----------|--------|-------------|------------|
+| `agents` | `agent-` | `weather` | `agent-weather` |
+| `workflows` | `workflow-` | `research` | `workflow-research` |
+
+```typescript
+const orchestrator = new Agent({
+  // ...
+  agents: {
+    weather: weatherAgent,  // toolName: "agent-weather"
+  },
+  workflows: {
+    research: researchWorkflow,  // toolName: "workflow-research"
+  },
+});
+```
+
+Note that for sub-agents, you'll see two different identifiers in stream responses:
+- `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
+- `id: "weather-agent"` in `data-tool-agent` chunks — the sub-agent's actual `id` property
+
 ## Calling an agent
 
 The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.

@@ -1,6 +1,6 @@
-import { AgentChunkType, ChunkType } from '@mastra/core/stream';
-import { MastraUIMessage, MastraUIMessageMetadata, MastraExtendedTextPart } from '../types';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { type AgentChunkType, type ChunkType } from '@mastra/core/stream';
+import { type MastraUIMessage, type MastraUIMessageMetadata, type MastraExtendedTextPart } from '../types';
+import { type WorkflowStreamResult, type StepResult } from '@mastra/core/workflows';
 
 type StreamChunk = {
   type: string;

@@ -19,9 +19,9 @@
     "hono": "^4.11.3"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.30",
     "prettier": "^3.6.2",
-    "tsx": "^4.19.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

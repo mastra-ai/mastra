@@ -17,3 +17,5 @@ export * from './components/agent-information/agent-information';
 export * from './components/agent-entity-header';
 export * from './components/agent-information/agent-memory';
 export * from './components/agent-layout';
+export * from './components/create-agent/create-agent-dialog';
+export * from './components/create-agent/edit-agent-dialog';

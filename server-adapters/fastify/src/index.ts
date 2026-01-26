@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -316,8 +316,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -341,6 +341,19 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     // Define the route handler
     const handler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+      // Check route-level authentication/authorization
+      const authError = await this.checkRouteAuth(route, {
+        path: String(request.url.split('?')[0] || '/'),
+        method: String(request.method || 'GET'),
+        getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
+        getQuery: name => (request.query as Record<string, string>)[name],
+        requestContext: request.requestContext,
+      });
+
+      if (authError) {
+        return reply.status(authError.status).send({ error: authError.error });
+      }
+
       const params = await this.getParams(route, request);
 
       if (params.queryParams) {
@@ -384,6 +397,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
+        routePrefix: this.prefix,
       };
 
       try {
