@@ -135,3 +135,67 @@
 - Send button and input remain fully accessible
 - Environment variable names are displayed in a code block for easy copying
 
+
+## Task 5: UI-UX - Optimize Agent Sidebar and Model Settings for scannability and modern UX (COMPLETED)
+
+### Changes Made:
+- Enhanced `Entry` component (packages/playground-ui/src/ds/components/Entry/entry.tsx)
+  - Added `description` prop for contextual help text under labels
+  - Added `layout` prop supporting 'stacked' (default) and 'inline' layouts
+  - Inline layout places label/description on left, control on right with separator borders
+  - Updated label styling to use `text-neutral6 font-medium` for better visual hierarchy
+
+- Modernized `AgentSettings` component (packages/playground-ui/src/domains/agents/components/agent-settings.tsx)
+  - Replaced Checkbox with Switch component for "Require Tool Approval" toggle
+  - Added card-like selection styling for Chat Method radio options
+    - Selected state uses `border-accent1 bg-accent1/5 shadow-sm`
+    - Hover state uses `hover:border-border2 hover:bg-surface2`
+  - Added descriptions to form fields explaining what each setting does
+  - Organized settings into logical sections with visual separators
+  - Added "Sampling Parameters" section header for temperature/top P
+  - Improved slider value display with monospace font and conditional coloring
+  - Updated info alert styling for sampling restrictions
+  - Renamed "Reset" button to "Reset All Settings" for clarity
+  - Added `data-testid="agent-settings"` for E2E testing
+
+- Modernized `AgentAdvancedSettings` component (packages/playground-ui/src/domains/agents/components/agent-advanced-settings.tsx)
+  - Redesigned collapsible header with settings icon and improved typography
+  - Organized inputs into logical groups: "Generation Limits" and "Sampling Penalties"
+  - Added responsive 3-column grid layout for better use of space
+  - Added placeholder text to inputs (e.g., "Default", "-1 to 1", "Random")
+  - Upgraded action buttons to use Button component with ghost variant
+  - Added description text for Provider Options JSON editor
+  - Improved error display with visual indicator dot
+  - Added `data-testid="advanced-settings-collapsible"` for E2E testing
+
+### Files Modified:
+- packages/playground-ui/src/ds/components/Entry/entry.tsx
+  - Added description, layout, and className props
+  - Implemented inline layout variant
+- packages/playground-ui/src/domains/agents/components/agent-settings.tsx
+  - Replaced Checkbox with Switch
+  - Added card-like radio selection styling
+  - Added section headers and descriptions
+  - Improved visual hierarchy
+- packages/playground-ui/src/domains/agents/components/agent-advanced-settings.tsx
+  - Reorganized inputs into logical groups
+  - Added section headers and descriptions
+  - Improved collapsible styling
+
+### E2E Tests Updated:
+- packages/playground/e2e/tests/agents/$agentId/page.spec.ts
+  - Updated "model settings" test suite with behavior-focused tests
+  - Added test for chat method selection persistence
+  - Added test for tool approval toggle with immediate UI feedback
+  - Added test for sampling parameter persistence
+  - Added test for advanced settings collapsible behavior
+  - Renamed tests to focus on behavior rather than UI states
+
+### Verification:
+- TypeScript type checks passed for both playground-ui and playground packages
+- Settings no longer use standard HTML "back-office" form styles
+- Toggle switches (Switch component) provide immediate visual feedback
+- Card-like radio selections provide clear visual indication of selected state
+- Settings persist correctly after page reload
+- Reset button clears all custom settings to defaults
+

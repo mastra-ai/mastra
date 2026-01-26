@@ -8,7 +8,7 @@
       "Click 'Traces' button and verify navigation to the trace logs",
       "Verify 'Traces' button CSS matches the design system (no broken styles)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "ui-ux",
@@ -52,7 +52,7 @@
       "Verify settings no longer use standard HTML 'back-office' form styles",
       "Test toggle switches and inputs for immediate UI feedback"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "technical-refactor",
