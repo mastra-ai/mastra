@@ -98,4 +98,32 @@ export class DepsService {
     };
     await fsPromises.writeFile('package.json', JSON.stringify(packageJson, null, 2));
   }
+
+  // Install missing dependencies, optionally filtered by `when`
+  public async ensureDependencies(
+    dependencies: Array<{ name: string; versionTag?: string; when?: boolean }>,
+  ): Promise<void> {
+    // Filter to only packages that should be installed (when is true or undefined)
+    const toInstall = dependencies.filter(dep => dep.when !== false);
+
+    if (toInstall.length === 0) {
+      return;
+    }
+
+    // Check which packages are missing
+    const missingPackages: string[] = [];
+
+    for (const dep of toInstall) {
+      const checkResult = await this.checkDependencies([dep.name]);
+      if (checkResult !== 'ok') {
+        const packageName = dep.versionTag ? `${dep.name}@${dep.versionTag}` : dep.name;
+        missingPackages.push(packageName);
+      }
+    }
+
+    // Install all missing packages at once for efficiency
+    if (missingPackages.length > 0) {
+      await this.installPackages(missingPackages);
+    }
+  }
 }

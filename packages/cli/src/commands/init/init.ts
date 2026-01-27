@@ -64,31 +64,14 @@ export const init = async ({
 
       const depService = new DepsService();
 
-      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-      if (needsLibsql) {
-        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
-      }
-      const needsMemory =
-        components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
-      if (needsMemory) {
-        await depService.installPackages([`@mastra/memory${packageVersionTag}`]);
-      }
-
-      const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
-      if (needsLoggers) {
-        await depService.installPackages([`@mastra/loggers${packageVersionTag}`]);
-      }
-
-      const needsObservability = (await depService.checkDependencies(['@mastra/observability'])) !== `ok`;
-      if (needsObservability) {
-        await depService.installPackages([`@mastra/observability${packageVersionTag}`]);
-      }
-
-      const needsEvals =
-        components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
-      if (needsEvals) {
-        await depService.installPackages([`@mastra/evals${packageVersionTag}`]);
-      }
+      // Use ensureDependencies to avoid repetitive check-install patterns
+      await depService.ensureDependencies([
+        { name: '@mastra/libsql', versionTag },
+        { name: '@mastra/memory', versionTag, when: components.includes('agents') },
+        { name: '@mastra/loggers', versionTag },
+        { name: '@mastra/observability', versionTag },
+        { name: '@mastra/evals', versionTag, when: components.includes('scorers') },
+      ]);
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
