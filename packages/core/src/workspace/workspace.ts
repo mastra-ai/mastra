@@ -602,6 +602,21 @@ export class Workspace {
   }
 
   /**
+   * Remove content from the search index.
+   *
+   * @param path - The path (document ID) to remove from the index
+   * @throws {SearchNotAvailableError} if search is not configured
+   */
+  async unindex(path: string): Promise<void> {
+    if (!this._searchEngine) {
+      throw new SearchNotAvailableError();
+    }
+    this.lastAccessedAt = new Date();
+
+    await this._searchEngine.remove(path);
+  }
+
+  /**
    * Search indexed content.
    *
    * @param query - Search query string

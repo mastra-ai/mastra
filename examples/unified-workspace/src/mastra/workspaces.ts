@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 /**
  * Get the project root directory.
@@ -54,21 +54,18 @@ export const globalWorkspace = new Workspace({
   name: 'Global Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    // Explicitly disable safety for full access (demo/development purposes)
-    safety: {
-      requireReadBeforeWrite: false,
-    },
   }),
   // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
-    // No approval required for commands (demo/development purposes)
-    safety: {
-      requireApproval: 'none',
-    },
   }),
+  // Tool configuration - full access for demo/development purposes
+  // No approval required, no read-before-write enforcement
+  tools: {
+    requireApproval: false,
+  },
   // Enable BM25 search for skills and files
   bm25: true,
   // Auto-index support FAQ content for search
@@ -94,20 +91,17 @@ export const docsAgentWorkspace = new Workspace({
   name: 'Docs Agent Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    // Full access for documentation agent
-    safety: {
-      requireReadBeforeWrite: false,
-    },
   }),
   // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
-    safety: {
-      requireApproval: 'none',
-    },
   }),
+  // Tool configuration - full access for documentation agent
+  tools: {
+    requireApproval: false,
+  },
   // Enable BM25 search
   bm25: true,
   // Inherit global skills + add agent-specific skills
@@ -127,20 +121,17 @@ export const isolatedDocsWorkspace = new Workspace({
   name: 'Isolated Docs Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    // Full access for support agent
-    safety: {
-      requireReadBeforeWrite: false,
-    },
   }),
   // Enable sandbox for command execution
   // inheritEnv: true allows access to PATH and other system env vars
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
-    safety: {
-      requireApproval: 'none',
-    },
   }),
+  // Tool configuration - full access
+  tools: {
+    requireApproval: false,
+  },
   bm25: true,
   // Auto-index support FAQ content for search
   autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
@@ -174,24 +165,31 @@ export const readonlyWorkspace = new Workspace({
 /**
  * Safe write workspace - requires reading files before writing.
  *
- * Safety feature: requireReadBeforeWrite: true
- * - Agent must read a file before writing to it
+ * Safety feature: requireReadBeforeWrite on write/edit tools
+ * - Agent must read a file (via read_file tool) before writing to it
  * - If file was modified externally since last read, write fails
  * - Prevents accidental overwrites of changed content
+ * - Note: Direct workspace.writeFile() calls are NOT restricted (only tool calls)
  */
 export const safeWriteWorkspace = new Workspace({
   id: 'safe-write-workspace',
   name: 'Safe Write Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    safety: {
-      requireReadBeforeWrite: true,
-    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
   }),
+  // Tool configuration - require read before write on write/edit tools
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: {
+      requireReadBeforeWrite: true,
+    },
+  },
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
@@ -200,9 +198,9 @@ export const safeWriteWorkspace = new Workspace({
 /**
  * Supervised sandbox workspace - requires approval for all sandbox operations.
  *
- * Safety feature: requireApproval: 'all' on sandbox
- * - execute_command requires approval
- * - Tools have requireApproval: true flag for approval flow
+ * Safety feature: requireApproval on execute_command tool
+ * - execute_command requires approval before execution
+ * - Uses tools config for per-tool approval settings
  */
 export const supervisedSandboxWorkspace = new Workspace({
   id: 'supervised-sandbox-workspace',
@@ -213,10 +211,13 @@ export const supervisedSandboxWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
-    safety: {
-      requireApproval: 'all',
-    },
   }),
+  // Tool configuration - require approval for sandbox commands
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+  },
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
@@ -225,24 +226,28 @@ export const supervisedSandboxWorkspace = new Workspace({
 /**
  * Filesystem write approval workspace - requires approval for write operations.
  *
- * Safety feature: requireFilesystemApproval: 'write'
- * - Read operations (workspace_read_file, workspace_list_files, workspace_file_exists) run without approval
- * - Write operations (workspace_write_file, workspace_delete_file, workspace_mkdir) require approval
- * - Search/index operations: workspace_search runs without approval, workspace_index requires approval
+ * Safety feature: requireApproval on write tools
+ * - Read operations (read_file, list_files, file_exists, search) run without approval
+ * - Write operations (write_file, edit_file, delete_file, mkdir, index) require approval
  */
 export const fsWriteApprovalWorkspace = new Workspace({
   id: 'fs-write-approval-workspace',
   name: 'Filesystem Write Approval Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    safety: {
-      requireApproval: 'write',
-    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
   }),
+  // Tool configuration - require approval for write operations
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: true },
+    [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireApproval: true },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]: { requireApproval: true },
+    [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { requireApproval: true },
+    [WORKSPACE_TOOLS.SEARCH.INDEX]: { requireApproval: true },
+  },
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
@@ -251,28 +256,27 @@ export const fsWriteApprovalWorkspace = new Workspace({
 /**
  * Filesystem all approval workspace - requires approval for all filesystem operations.
  *
- * Safety feature: requireFilesystemApproval: 'all'
- * - All filesystem operations require approval
- * - Read operations: workspace_read_file, workspace_list_files, workspace_file_exists, workspace_search
- * - Write operations: workspace_write_file, workspace_delete_file, workspace_mkdir, workspace_index
+ * Safety feature: requireApproval: true on all tools (top-level default)
+ * - All filesystem operations require approval (read and write)
+ * - Sandbox ops don't need approval (per-tool override)
  */
 export const fsAllApprovalWorkspace = new Workspace({
   id: 'fs-all-approval-workspace',
   name: 'Filesystem All Approval Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    safety: {
-      requireApproval: 'all',
-    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
     inheritEnv: true,
-    // Sandbox ops don't need approval - this tests FS approval only
-    safety: {
-      requireApproval: 'none',
-    },
   }),
+  // Tool configuration - require approval for all tools, except sandbox
+  tools: {
+    // Top-level default: all tools require approval
+    requireApproval: true,
+    // Override: sandbox commands don't require approval (testing FS approval only)
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireApproval: false },
+  },
   bm25: true,
   skillsPaths: ['/skills'],
   autoInit: true,
