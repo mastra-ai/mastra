@@ -6,22 +6,22 @@
 ## Current Position
 
 **Phase:** 6 IN PROGRESS
-**Plan:** 2/? complete (06-02)
-**Status:** Phase 6 in progress - agent and streaming edge cases ported
+**Plan:** 3/? complete (06-03)
+**Status:** Phase 6 in progress - schema and sleep fn tests complete
 
 ```
-Progress: [█████████░] 87%
+Progress: [█████████░] 88%
 Phases:   5/6 complete (Phase 6 in progress)
-Tests:    181/232 passing (78% parity), 31 skipped
+Tests:    184/215 passing (85.6% parity), 31 skipped
 ```
 
 ## Gap Analysis Summary
 
 **Current evented runtime state:**
 
-- 181 tests passing in evented-workflow.test.ts
+- 184 tests passing in evented-workflow.test.ts
 - 31 tests skipped (2 streaming vNext + 3 schema validation + 13 Phase 4 + 6 storage/error + 7 agent/streaming)
-- ~43 tests in default that don't exist in evented
+- ~37 tests remaining to port in Phase 6
 
 **Major gaps identified:**
 
@@ -53,17 +53,24 @@ Phase 6 in progress. Storage, error handling, agent, and streaming tests ported.
 - Test count increased from 179 to 181 passing
 - Documented evented runtime limitations: V2 models, tripwire propagation, writer API
 
-**Next action:** Continue porting remaining ~43 tests in Phase 6
+**Completed in 06-03:**
+- Ported 3 sleep fn parameter tests (sleep, sleepUntil, streaming flow)
+- All 3 tests passing - evented runtime fully supports fn parameter
+- Verified 3 schema validation tests already exist from Phase 3 (all skipped)
+- Test count increased from 181 to 184 passing (+3)
+- Total tests now 215 (184 passing, 31 skipped)
+
+**Next action:** Continue porting remaining ~37 tests in Phase 6
 
 ## Performance Metrics
 
 | Metric           | Value |
 | ---------------- | ----- |
 | Phases completed | 5     |
-| Plans completed  | 12    |
-| Tests ported     | 84 (62 + 12 + 10 new) |
-| Tests to port    | ~43   |
-| Session count    | 12    |
+| Plans completed  | 13    |
+| Tests ported     | 87 (62 + 12 + 10 + 3 new) |
+| Tests to port    | ~37   |
+| Session count    | 13    |
 
 ## Accumulated Context
 
@@ -133,8 +140,8 @@ None.
 ### Last Session
 
 **Date:** 2026-01-27
-**Work completed:** Phase 6 Plan 2 - Agent and streaming edge case tests ported
-**Stopping point:** 06-02 complete, 181 passing, 31 skipped
+**Work completed:** Phase 6 Plan 3 - Schema validation and sleep fn tests ported
+**Stopping point:** 06-03 complete, 184 passing, 31 skipped
 
 ### Session History
 
@@ -153,13 +160,14 @@ None.
 | 2026-01-27 | Phase 5-01: vNext streaming API (4 passing, 2 skipped)  |
 | 2026-01-27 | Phase 6-01: Storage/error handling (6 passing, 6 skipped)|
 | 2026-01-27 | Phase 6-02: Agent/streaming edge cases (3 passing, 7 skipped)|
+| 2026-01-27 | Phase 6-03: Schema/sleep fn tests (3 passing, 0 skipped)|
 
 ### Resumption Notes
 
-1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 181 tests passing
-2. Phase 6-02 complete - Agent/streaming edge cases ported (3 passing + 7 skipped)
+1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 184 tests passing
+2. Phase 6-03 complete - Schema/sleep fn tests ported (3 passing, 0 skipped)
 3. Total skipped: 31 (2 streaming vNext, 3 schema validation, 13 Phase 4, 6 storage/error, 7 agent/streaming)
-4. Next: Continue Phase 6 (Remaining ~43 tests to port)
+4. Next: Continue Phase 6 (Remaining ~37 tests to port)
 5. Known limitations: V2 models, tripwire propagation, writer API documented in skipped tests
 
 ---
