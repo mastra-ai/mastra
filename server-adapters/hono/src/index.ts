@@ -81,7 +81,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const contentType = c.req.header('content-type');
         if (contentType?.includes('application/json')) {
           try {
-            const body = (await c.req.json()) as { requestContext?: Record<string, any> };
+            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }
