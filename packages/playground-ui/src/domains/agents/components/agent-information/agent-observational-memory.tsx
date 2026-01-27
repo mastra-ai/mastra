@@ -50,14 +50,17 @@ const ProgressBar = ({
   max, 
   label,
   isActive = false,
-  model
+  model,
+  baseThreshold
 }: { 
   value: number; 
   max: number; 
   label: string;
   isActive?: boolean;
   model?: string;
+  baseThreshold?: number; // When adaptive, shows the configured base threshold
 }) => {
+  const isAdaptive = baseThreshold !== undefined && baseThreshold !== max;
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
   const barColor = getBarColor(percentage);
   const elapsed = useElapsedTime(isActive && percentage >= 100);
@@ -88,7 +91,10 @@ const ProgressBar = ({
               <div className="font-medium text-neutral5">{label === 'Messages' ? 'Observer' : 'Reflector'} Settings</div>
               <div className="space-y-0.5">
                 <div><span className="text-neutral4">Model:</span> <span className="text-neutral5">{model || 'not configured'}</span></div>
-                <div><span className="text-neutral4">Threshold:</span> <span className="text-neutral5">{formatTokens(max)} tokens</span></div>
+                <div><span className="text-neutral4">Threshold:</span> <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span></div>
+                {isAdaptive && (
+                  <div><span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span> <span className="text-neutral4">({formatTokens(max)} shared budget)</span></div>
+                )}
               </div>
             </div>
           </TooltipContent>
@@ -116,8 +122,22 @@ const ProgressBar = ({
         </div>
         
         {/* Token count connected to bar */}
-        <span className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center rounded-r -ml-px`}>
+        <span className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center gap-1 rounded-r -ml-px`}>
           {formatTokens(value)}<span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
+          {isAdaptive && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-amber-400 cursor-help">({formatTokens(baseThreshold)})</span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs bg-surface3 border border-border1 text-foreground">
+                <div className="text-xs">
+                  <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
+                  <span className="text-neutral4"> is the configured threshold. </span>
+                  <span className="text-neutral5">Adaptive mode shares a {formatTokens(max)} token budget between messages and observations.</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </span>
       </div>
     </div>
@@ -224,16 +244,44 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
     if (typeof threshold === 'number') return threshold;
-    return threshold.max; // Use max for progress display
+    return threshold.max; // Use max for progress display (adaptive budget)
   };
+  
+  const getBaseThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
+    if (!threshold) return defaultValue;
+    if (typeof threshold === 'number') return threshold;
+    return threshold.min; // Use min for base threshold (configured value)
+  };
+  
+  // Check if adaptive mode is enabled (threshold is an object with min/max)
+  const isAdaptiveMode = omAgentConfig?.observationThreshold !== undefined 
+    && typeof omAgentConfig.observationThreshold !== 'number';
+  
+  // Get total budget for adaptive mode (stored as max in observation threshold)
+  const totalBudget = isAdaptiveMode 
+    ? getThresholdValue(omAgentConfig?.observationThreshold, 10000)
+    : 0;
+  
+  // Base thresholds (configured values, before adaptive adjustment)
+  const baseObservationThreshold = isAdaptiveMode 
+    ? getBaseThresholdValue(omAgentConfig?.observationThreshold, 10000)
+    : undefined;
+  const baseReflectionThreshold = isAdaptiveMode
+    ? getBaseThresholdValue(omAgentConfig?.reflectionThreshold, 30000)
+    : undefined;
   
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   const observationThreshold = streamProgress?.threshold 
     ?? recordConfig?.observationThreshold 
     ?? getThresholdValue(omAgentConfig?.observationThreshold, 10000);
+  
+  // For reflection threshold in adaptive mode, calculate based on remaining budget
+  // effectiveReflectionThreshold = totalBudget - messageThreshold
+  const configReflectionThreshold = getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
   const reflectionThreshold = streamProgress?.reflectionThreshold 
-    ?? recordConfig?.reflectionThreshold 
-    ?? getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
+    ?? (isAdaptiveMode 
+      ? Math.max(totalBudget - observationThreshold, 1000) // What's left after message threshold
+      : (recordConfig?.reflectionThreshold ?? configReflectionThreshold));
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
@@ -329,12 +377,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             label="Messages"
             isActive={isObserving}
             model={observerModel}
+            baseThreshold={baseObservationThreshold}
           />
           <ProgressBar
             value={observationTokenCount}
             max={reflectionThreshold}
             label="Observations"
             isActive={isReflecting}
+            baseThreshold={baseReflectionThreshold}
             model={reflectorModel}
           />
         </div>

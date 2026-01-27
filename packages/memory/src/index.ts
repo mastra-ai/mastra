@@ -67,6 +67,7 @@ export class Memory extends MastraMemory {
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
+      observationalMemory: config.options?.observationalMemory,
     });
     this.threadConfig = mergedConfig;
   }
@@ -1526,6 +1527,7 @@ ${
             ? {
                 model: omConfig.observer.model,
                 observationThreshold: omConfig.observer.observationThreshold,
+                adaptiveThreshold: omConfig.observer.adaptiveThreshold,
                 modelSettings: omConfig.observer.modelSettings,
                 maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
               }
@@ -1534,6 +1536,7 @@ ${
             ? {
                 model: omConfig.reflector.model,
                 reflectionThreshold: omConfig.reflector.reflectionThreshold,
+                adaptiveThreshold: omConfig.reflector.adaptiveThreshold,
                 modelSettings: omConfig.reflector.modelSettings,
               }
             : undefined,

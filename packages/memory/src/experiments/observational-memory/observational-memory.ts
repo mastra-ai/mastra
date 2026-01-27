@@ -417,11 +417,16 @@ export interface ObservationalMemoryConfig {
 }
 
 /**
- * Internal resolved config with all defaults applied
+ * Internal resolved config with all defaults applied.
+ * Thresholds are stored as ThresholdRange internally for dynamic calculation,
+ * even when user provides a simple number (converted based on adaptiveThreshold).
  */
 interface ResolvedObserverConfig {
   model: MastraModelConfig;
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationThreshold: number | ThresholdRange;
+  /** Whether adaptive threshold is enabled */
+  adaptiveThreshold: boolean;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
@@ -429,7 +434,10 @@ interface ResolvedObserverConfig {
 
 interface ResolvedReflectorConfig {
   model: MastraModelConfig;
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   reflectionThreshold: number | ThresholdRange;
+  /** Whether adaptive threshold is enabled */
+  adaptiveThreshold: boolean;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
 }
@@ -647,11 +655,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.reflectorRecognizePatterns = false;
     this.observeFutureOnly = config.observeFutureOnly ?? false;
 
+    // Get base thresholds first (needed for adaptive calculation)
+    const observerThreshold = config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold;
+    const reflectorThreshold = config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold;
+    const observerAdaptive = config.observer?.adaptiveThreshold ?? false;
+    const reflectorAdaptive = config.reflector?.adaptiveThreshold ?? false;
+    
+    // Total context budget when adaptive is enabled
+    const totalBudget = observerThreshold + reflectorThreshold;
+    
+    // Debug: log adaptive threshold config
+    omDebug(`[OM] Observer config: threshold=${observerThreshold}, adaptive=${observerAdaptive}, totalBudget=${totalBudget}`);
+    
     // Resolve observer config with defaults
     this.observerConfig = {
       model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
-      observationThreshold:
-        config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+      // When adaptive, store as range: min = base threshold, max = total budget
+      // This allows messages to expand into unused observation space
+      observationThreshold: observerAdaptive
+        ? { min: observerThreshold, max: totalBudget }
+        : observerThreshold,
+      adaptiveThreshold: observerAdaptive,
       modelSettings: {
         temperature:
           config.observer?.modelSettings?.temperature ??
@@ -665,10 +689,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     };
 
     // Resolve reflector config with defaults
+    // Note: reflector adaptive threshold would work similarly but in reverse
+    // (observation budget expands when message history is small)
+    // For now, reflector just uses fixed threshold
     this.reflectorConfig = {
       model: config.reflector?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
-      reflectionThreshold:
-        config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+      reflectionThreshold: reflectorThreshold,
+      adaptiveThreshold: reflectorAdaptive,
       modelSettings: {
         temperature:
           config.reflector?.modelSettings?.temperature ??
@@ -795,23 +822,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Calculate dynamic threshold based on observation space.
-   * When observations are full, use min threshold.
-   * When observations have room, use max threshold.
+   * When adaptiveThreshold is enabled, the message threshold can expand
+   * into unused observation space, up to the total context budget.
+   * 
+   * Total budget = observationThreshold + reflectionThreshold
+   * Effective threshold = totalBudget - currentObservationTokens
+   * 
+   * Example with 20k:20k thresholds (40k total):
+   * - 0 observations → messages can use ~40k
+   * - 3k observations → messages can use ~37k  
+   * - 20k observations → messages back to ~20k
    */
   private calculateDynamicThreshold(
     threshold: number | ThresholdRange,
     currentObservationTokens: number,
-    maxObservationTokens: number,
   ): number {
+    // If not using adaptive threshold (simple number), return as-is
     if (typeof threshold === 'number') {
       return threshold;
     }
 
-    // Calculate how "full" observations are (0 = empty, 1 = full)
-    const fullness = Math.min(currentObservationTokens / maxObservationTokens, 1);
-
-    // Interpolate: full observations = min threshold, empty = max threshold
-    return Math.round(threshold.max - fullness * (threshold.max - threshold.min));
+    // Adaptive threshold: use remaining space in total budget
+    // Total budget is stored as threshold.max (base + reflection threshold)
+    // Base threshold is stored as threshold.min
+    const totalBudget = threshold.max;
+    const baseThreshold = threshold.min;
+    
+    // Effective threshold = total budget minus current observations
+    // But never go below the base threshold
+    const effectiveThreshold = Math.max(
+      totalBudget - currentObservationTokens,
+      baseThreshold,
+    );
+    
+    return Math.round(effectiveThreshold);
   }
 
   /**
@@ -2053,11 +2097,20 @@ ${suggestedResponse}
       const threshold = this.calculateDynamicThreshold(
         this.observerConfig.observationThreshold,
         currentObservationTokens,
-        this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
       );
 
-      const reflectionThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-      const reflectionThresholdPercent = Math.round((currentObservationTokens / reflectionThreshold) * 100);
+      // Calculate effective reflection threshold for UI display
+      // When adaptive threshold is enabled, both thresholds share a budget
+      // Reflection threshold = total budget - message threshold (what's left for observations)
+      const baseReflectionThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+      const isAdaptive = typeof this.observerConfig.observationThreshold !== 'number';
+      const totalBudget = isAdaptive 
+        ? (this.observerConfig.observationThreshold as { min: number; max: number }).max 
+        : 0;
+      const effectiveReflectionThreshold = isAdaptive
+        ? Math.max(totalBudget - threshold, 1000) // What's left after message threshold
+        : baseReflectionThreshold;
+      const reflectionThresholdPercent = Math.round((currentObservationTokens / effectiveReflectionThreshold) * 100);
 
       omDebug(
         `[OM processInputStep] Token check: ${totalPendingTokens}/${threshold} (${Math.round((totalPendingTokens / threshold) * 100)}%)`,
@@ -2087,7 +2140,7 @@ ${suggestedResponse}
             threshold,
             thresholdPercent: Math.round((totalPendingTokens / threshold) * 100),
             observationTokens: currentObservationTokens,
-            reflectionThreshold,
+            reflectionThreshold: effectiveReflectionThreshold,
             reflectionThresholdPercent,
             willObserve: totalPendingTokens >= threshold,
             recordId: record.id,

@@ -74,12 +74,19 @@ export interface ObserverConfig {
    * Token threshold for message history before triggering observation.
    * When unobserved messages exceed this, Observer is called.
    *
-   * Simple form: `10_000` (blocks at threshold)
-   * Range form: `{ min: 8_000, max: 15_000 }` (dynamic based on observation space)
-   *
    * @default 10000
    */
-  observationThreshold?: number | ThresholdRange;
+  observationThreshold?: number;
+
+  /**
+   * Enable adaptive threshold that adjusts based on observation space.
+   * When true, the threshold dynamically adjusts:
+   * - When observations are empty: allows more messages (threshold * 1.5)
+   * - When observations are full: triggers earlier (threshold * 0.8)
+   *
+   * @default false
+   */
+  adaptiveThreshold?: boolean;
 
   /**
    * Model settings for the Observer agent.
@@ -121,12 +128,19 @@ export interface ReflectorConfig {
    * Token threshold for observations before triggering reflection.
    * When observations exceed this, Reflector is called to condense them.
    *
-   * Simple form: `30_000` (blocks at threshold)
-   * Range form: `{ min: 25_000, max: 35_000 }` (dynamic)
-   *
    * @default 30000
    */
-  reflectionThreshold?: number | ThresholdRange;
+  reflectionThreshold?: number;
+
+  /**
+   * Enable adaptive threshold that adjusts based on message history space.
+   * When true, the threshold dynamically adjusts:
+   * - When message history is small: allows more observations (threshold * 1.5)
+   * - When message history is large: triggers earlier (threshold * 0.8)
+   *
+   * @default false
+   */
+  adaptiveThreshold?: boolean;
 
   /**
    * Model settings for the Reflector agent.
