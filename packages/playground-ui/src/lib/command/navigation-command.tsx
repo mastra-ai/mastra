@@ -1,15 +1,4 @@
-import {
-  Bot,
-  Cpu,
-  Eye,
-  Gauge,
-  LayoutGrid,
-  Server,
-  Settings,
-  PackageIcon,
-  Wrench,
-  Workflow,
-} from 'lucide-react';
+import { Cpu, EyeIcon, GaugeIcon, PackageIcon } from 'lucide-react';
 
 import {
   CommandDialog,
@@ -20,6 +9,7 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/ds/components/Command';
+import { AgentIcon, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -66,37 +56,37 @@ export const NavigationCommand = () => {
 
         <CommandGroup heading="Navigation">
           <CommandItem value="all agents" onSelect={() => handleSelect('/agents')}>
-            <LayoutGrid className="text-neutral3" />
+            <AgentIcon className="text-neutral3" />
             <span>All Agents</span>
           </CommandItem>
           <CommandItem value="all workflows" onSelect={() => handleSelect('/workflows')}>
-            <LayoutGrid className="text-neutral3" />
+            <WorkflowIcon className="text-neutral3" />
             <span>All Workflows</span>
           </CommandItem>
           <CommandItem value="all tools" onSelect={() => handleSelect('/tools')}>
-            <LayoutGrid className="text-neutral3" />
+            <ToolsIcon className="text-neutral3" />
             <span>All Tools</span>
           </CommandItem>
           <CommandItem value="all scorers" onSelect={() => handleSelect('/scorers')}>
-            <LayoutGrid className="text-neutral3" />
+            <GaugeIcon className="text-neutral3" />
             <span>All Scorers</span>
           </CommandItem>
           <CommandItem value="all processors" onSelect={() => handleSelect('/processors')}>
-            <LayoutGrid className="text-neutral3" />
+            <Cpu className="text-neutral3" />
             <span>All Processors</span>
           </CommandItem>
           <CommandItem value="all mcp servers" onSelect={() => handleSelect('/mcps')}>
-            <LayoutGrid className="text-neutral3" />
+            <McpServerIcon className="text-neutral3" />
             <span>All MCP Servers</span>
           </CommandItem>
           <CommandItem value="observability traces" onSelect={() => handleSelect('/observability')}>
-            <Eye className="text-neutral3" />
+            <EyeIcon className="text-neutral3" />
             <span>Observability</span>
           </CommandItem>
           {!isMastraPlatform && (
             <>
               <CommandItem value="settings" onSelect={() => handleSelect('/settings')}>
-                <Settings className="text-neutral3" />
+                <SettingsIcon className="text-neutral3" />
                 <span>Settings</span>
               </CommandItem>
               <CommandItem value="templates" onSelect={() => handleSelect('/templates')}>
@@ -113,7 +103,7 @@ export const NavigationCommand = () => {
             <CommandGroup heading="Agents">
               {agentEntries.map(([id, agent]) => (
                 <CommandItem key={id} value={`agent ${agent.name}`} onSelect={() => handleSelect(paths.agentLink(id))}>
-                  <Bot className="text-neutral3" />
+                  <AgentIcon className="text-neutral3" />
                   <span>{agent.name}</span>
                 </CommandItem>
               ))}
@@ -131,7 +121,7 @@ export const NavigationCommand = () => {
                   value={`workflow ${workflow.name}`}
                   onSelect={() => handleSelect(paths.workflowLink(id))}
                 >
-                  <Workflow className="text-neutral3" />
+                  <WorkflowIcon className="text-neutral3" />
                   <span>{workflow.name}</span>
                 </CommandItem>
               ))}
@@ -145,7 +135,7 @@ export const NavigationCommand = () => {
             <CommandGroup heading="Tools">
               {toolEntries.map(([id, tool]) => (
                 <CommandItem key={id} value={`tool ${tool.id}`} onSelect={() => handleSelect(paths.toolLink(id))}>
-                  <Wrench className="text-neutral3" />
+                  <ToolsIcon className="text-neutral3" />
                   <span>{tool.id}</span>
                 </CommandItem>
               ))}
@@ -165,7 +155,7 @@ export const NavigationCommand = () => {
                     value={`scorer ${name}`}
                     onSelect={() => handleSelect(paths.scorerLink(id))}
                   >
-                    <Gauge className="text-neutral3" />
+                    <GaugeIcon className="text-neutral3" />
                     <span>{name}</span>
                   </CommandItem>
                 );
@@ -208,7 +198,7 @@ export const NavigationCommand = () => {
                   value={`mcp server ${server.name}`}
                   onSelect={() => handleSelect(paths.mcpServerLink(server.id))}
                 >
-                  <Server className="text-neutral3" />
+                  <McpServerIcon className="text-neutral3" />
                   <span>{server.name}</span>
                 </CommandItem>
               ))}
