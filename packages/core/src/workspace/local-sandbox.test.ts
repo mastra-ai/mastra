@@ -14,8 +14,8 @@ describe('LocalSandbox', () => {
   beforeEach(async () => {
     // Create a unique temp directory for each test
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-sandbox-test-'));
-    // Pass process.env so PATH and other essential vars are available for tests
-    sandbox = new LocalSandbox({ workingDirectory: tempDir, env: { ...process.env } });
+    // PATH is included by default, so basic commands work out of the box
+    sandbox = new LocalSandbox({ workingDirectory: tempDir });
   });
 
   afterEach(async () => {
@@ -199,7 +199,7 @@ describe('LocalSandbox', () => {
   describe('working directory', () => {
     it('should create working directory on start', async () => {
       const newDir = path.join(tempDir, 'new-sandbox-dir');
-      const newSandbox = new LocalSandbox({ workingDirectory: newDir, env: { ...process.env } });
+      const newSandbox = new LocalSandbox({ workingDirectory: newDir });
 
       await newSandbox.start();
 
@@ -387,7 +387,6 @@ describe('LocalSandbox', () => {
       const sandboxedSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: detection.backend,
-        env: { ...process.env },
       });
 
       expect(sandboxedSandbox.isolation).toBe(detection.backend);
@@ -433,7 +432,6 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -464,7 +462,6 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -484,7 +481,6 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -512,7 +508,6 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -550,7 +545,6 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        env: { ...process.env },
       });
 
       await bwrapSandbox.start();
@@ -570,7 +564,6 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        env: { ...process.env },
       });
 
       await bwrapSandbox.start();
@@ -598,7 +591,6 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        env: { ...process.env },
         nativeSandbox: {
           allowNetwork: false, // Default, but explicit for test clarity
         },
@@ -626,7 +618,6 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        env: { ...process.env },
         nativeSandbox: {
           allowNetwork: true,
         },
