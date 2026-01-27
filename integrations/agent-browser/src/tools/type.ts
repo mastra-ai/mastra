@@ -1,39 +1,8 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
-import { type BrowserToolError, createError } from '../errors.js';
-
-/**
- * Zod schema for type tool input parameters.
- */
-const typeInputSchema = z.object({
-  ref: z.string().describe('Element ref from snapshot (e.g., @e3)'),
-  text: z.string().describe('Text to type'),
-  clearFirst: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Clear existing content before typing'),
-});
-
-/**
- * Zod schema for type tool output.
- */
-const typeOutputSchema = z.object({
-  success: z.boolean().describe('Whether the type operation succeeded'),
-  value: z.string().optional().describe('Current field value after typing'),
-});
-
-/**
- * Input type for the type tool.
- */
-export type TypeInput = z.infer<typeof typeInputSchema>;
-
-/**
- * Output type for the type tool.
- */
-export type TypeOutput = z.infer<typeof typeOutputSchema>;
+import { type BrowserToolError } from '../errors.js';
+import { typeInputSchema, typeOutputSchema, type TypeOutput } from '../types.js';
 
 /**
  * Creates a type tool that types text into form fields using ref identifiers.
@@ -63,12 +32,17 @@ export function createTypeTool(getBrowser: () => Promise<BrowserManager>, defaul
       // Resolve ref to Playwright locator
       const locator = browser.getLocatorFromRef(input.ref);
 
+      const page = browser.getPage();
+
       if (!locator) {
-        return createError(
-          'stale_ref',
-          `Ref ${input.ref} not found. The page may have changed.`,
-          'Take a new snapshot to get current element refs.',
-        );
+        return {
+          success: false,
+          code: 'stale_ref',
+          message: `Ref ${input.ref} not found. The page has changed.`,
+          url: page.url(),
+          hint: 'IMPORTANT: Take a new snapshot NOW to see the current page state and get fresh refs.',
+          canRetry: false,
+        };
       }
 
       try {
@@ -86,21 +60,43 @@ export function createTypeTool(getBrowser: () => Promise<BrowserManager>, defaul
         // Get current value for verification
         const value = await locator.inputValue({ timeout: 1000 });
 
-        return { success: true, value };
+        return {
+          success: true,
+          value,
+          url: page.url(),
+          hint: 'Take a new snapshot if you need to interact with more elements.',
+        };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const url = page.url();
 
         // Element cannot receive text input
-        if (message.includes('not an input') || message.includes('Cannot type') || message.includes('not focusable')) {
-          return createError(
-            'not_focusable',
-            `Element ${input.ref} cannot receive text input.`,
-            'Only textbox and searchbox elements can be typed into.',
-          );
+        if (
+          errorMsg.includes('is not an <input>') ||
+          errorMsg.includes('not an input') ||
+          errorMsg.includes('Cannot type') ||
+          errorMsg.includes('not focusable') ||
+          errorMsg.includes('does not have a role allowing')
+        ) {
+          return {
+            success: false,
+            code: 'not_editable',
+            message: `Element ${input.ref} is not a text input field (it's a ${errorMsg.includes('link') ? 'link' : 'non-editable element'}).`,
+            url,
+            hint: 'Take a new snapshot and look for elements with role "textbox" or "searchbox" - those are the actual input fields you can type into.',
+            canRetry: false,
+          };
         }
 
         // Generic browser error
-        return createError('browser_error', `Type failed: ${message}`);
+        return {
+          success: false,
+          code: 'browser_error',
+          message: `Type failed: ${errorMsg}`,
+          url,
+          hint: 'Take a new snapshot to see the current page state.',
+          canRetry: false,
+        };
       }
     },
   });
