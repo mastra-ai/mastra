@@ -129,8 +129,8 @@ Calculate statistical significance on score deltas between runs.
 | UI-02 | Phase 6 | Complete |
 | UI-03 | Phase 6 | Complete |
 | UI-04 | Phase 6 | Complete |
-| CSV-01 | Phase 7 | Pending |
-| CSV-02 | Phase 7 | Pending |
+| CSV-01 | Phase 7 | Complete |
+| CSV-02 | Phase 7 | Complete |
 | SEL-01 | Phase 8 | Pending |
 
 **Coverage:** 24/24 v1 requirements mapped ✓
