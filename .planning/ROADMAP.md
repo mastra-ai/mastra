@@ -98,6 +98,12 @@ Plans:
 
 **Gap Analysis:** ~12 tests for schema defaults and validation edge cases
 
+**Plans:** 1 plan
+
+Plans:
+
+- [ ] 03-01-PLAN.md - Port 12 schema validation tests and fix any validation gaps
+
 **Missing Tests:**
 
 - should use default value from inputSchema
