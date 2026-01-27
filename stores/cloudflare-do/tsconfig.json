@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src/**/*", "tsup.config.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
