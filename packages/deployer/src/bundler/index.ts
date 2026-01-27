@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, relative, resolve } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -25,6 +25,83 @@ export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
+/**
+ * Package manager override fields extracted from source project's package.json
+ */
+export interface SourceOverrides {
+  pnpmOverrides?: Record<string, string>; // pnpm.overrides
+  npmOverrides?: Record<string, string>; // overrides (npm/bun)
+  yarnResolutions?: Record<string, string>; // resolutions (yarn)
+}
+
+/**
+ * Read override configurations from source project's package.json
+ * Supports pnpm.overrides, npm/bun overrides, and yarn resolutions
+ */
+export async function getSourceOverrides(projectRoot: string): Promise<SourceOverrides> {
+  try {
+    const pkgPath = join(projectRoot, 'package.json');
+    const pkg = await readJSON(pkgPath);
+
+    return {
+      pnpmOverrides: pkg.pnpm?.overrides,
+      npmOverrides: pkg.overrides,
+      yarnResolutions: pkg.resolutions,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Transform override paths for the output directory
+ * Handles link:, file:, portal: protocols and adjusts relative paths
+ */
+export function transformOverrideForOutput(override: string, projectRoot: string, outputDir: string): string {
+  // Handle link: protocol (pnpm, npm)
+  if (override.startsWith('link:')) {
+    const linkPath = override.slice(5);
+    const absolutePath = resolve(projectRoot, linkPath);
+    const relativeFromOutput = relative(outputDir, absolutePath);
+    return `link:${relativeFromOutput}`;
+  }
+
+  // Handle file: protocol (npm, yarn)
+  if (override.startsWith('file:')) {
+    const filePath = override.slice(5);
+    const absolutePath = resolve(projectRoot, filePath);
+    const relativeFromOutput = relative(outputDir, absolutePath);
+    return `file:${relativeFromOutput}`;
+  }
+
+  // Handle portal: protocol (pnpm)
+  if (override.startsWith('portal:')) {
+    const portalPath = override.slice(7);
+    const absolutePath = resolve(projectRoot, portalPath);
+    const relativeFromOutput = relative(outputDir, absolutePath);
+    return `portal:${relativeFromOutput}`;
+  }
+
+  // Pass through other overrides (workspace:, npm:, version ranges, git URLs, etc.)
+  return override;
+}
+
+/**
+ * Transform all overrides in a record, adjusting paths for output directory
+ */
+export function transformOverrides(
+  overrides: Record<string, string> | undefined,
+  projectRoot: string,
+  outputDir: string,
+): Record<string, string> | undefined {
+  if (!overrides) return undefined;
+  const transformed: Record<string, string> = {};
+  for (const [pkg, override] of Object.entries(overrides)) {
+    transformed[pkg] = transformOverrideForOutput(override, projectRoot, outputDir);
+  }
+  return transformed;
+}
+
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
@@ -46,6 +123,7 @@ export abstract class Bundler extends MastraBundler {
     outputDirectory: string,
     dependencies: Map<string, string>,
     resolutions?: Record<string, string>,
+    projectRoot: string = process.cwd(),
   ) {
     this.logger.debug(`Writing project's package.json`);
 
@@ -65,6 +143,33 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // Get source overrides from all package manager formats
+    const sourceOverrides = await getSourceOverrides(projectRoot);
+
+    // Build pnpm config with overrides if present
+    const pnpmConfig: { neverBuiltDependencies: string[]; overrides?: Record<string, string> } = {
+      neverBuiltDependencies: [],
+    };
+    if (sourceOverrides.pnpmOverrides) {
+      pnpmConfig.overrides = transformOverrides(sourceOverrides.pnpmOverrides, projectRoot, outputDirectory);
+    }
+
+    // Build npm/bun overrides if present
+    const npmOverrides = sourceOverrides.npmOverrides
+      ? transformOverrides(sourceOverrides.npmOverrides, projectRoot, outputDirectory)
+      : undefined;
+
+    // Build yarn resolutions - merge with passed resolutions if any
+    let yarnResolutions = resolutions;
+    if (sourceOverrides.yarnResolutions) {
+      const transformedYarnResolutions = transformOverrides(
+        sourceOverrides.yarnResolutions,
+        projectRoot,
+        outputDirectory,
+      );
+      yarnResolutions = { ...transformedYarnResolutions, ...resolutions };
+    }
+
     await writeFile(
       pkgPath,
       JSON.stringify(
@@ -80,10 +185,9 @@ export abstract class Bundler extends MastraBundler {
           author: 'Mastra',
           license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
-          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
-          pnpm: {
-            neverBuiltDependencies: [],
-          },
+          ...(Object.keys(yarnResolutions ?? {}).length > 0 && { resolutions: yarnResolutions }),
+          ...(npmOverrides && Object.keys(npmOverrides).length > 0 && { overrides: npmOverrides }),
+          pnpm: pnpmConfig,
         },
         null,
         2,
@@ -371,7 +475,7 @@ export abstract class Bundler extends MastraBundler {
     }
 
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, undefined, projectRoot);
 
       this.logger.info('Bundling Mastra application');
 
