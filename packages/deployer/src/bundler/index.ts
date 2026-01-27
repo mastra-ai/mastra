@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -34,12 +34,17 @@ export interface PackageManagerOverrides {
 /**
  * Transform override path for the output directory.
  * Handles link:, file:, portal: protocols and adjusts relative paths.
+ * Absolute paths are left unchanged.
  */
 function transformOverridePath(override: string, projectRoot: string, outputDir: string): string {
   const protocols = ['link:', 'file:', 'portal:'];
   for (const protocol of protocols) {
     if (override.startsWith(protocol)) {
       const path = override.slice(protocol.length);
+      // Leave absolute paths unchanged
+      if (isAbsolute(path)) {
+        return override;
+      }
       const absolutePath = resolve(projectRoot, path);
       return `${protocol}${relative(outputDir, absolutePath)}`;
     }

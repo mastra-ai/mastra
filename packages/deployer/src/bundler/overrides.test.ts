@@ -174,4 +174,25 @@ describe('getTransformedOverrides', () => {
       'pkg-version': '^2.0.0',
     });
   });
+
+  it('should leave absolute paths unchanged', async () => {
+    await writeJSON(join(tempDir, 'package.json'), {
+      name: 'test-project',
+      pnpm: {
+        overrides: {
+          'pkg-absolute-link': 'link:/absolute/path/to/package',
+          'pkg-absolute-file': 'file:/absolute/path/to/package',
+          'pkg-relative-link': 'link:../relative/path',
+        },
+      },
+    });
+
+    const result = await getTransformedOverrides(tempDir, outputDir);
+
+    expect(result.pnpm?.overrides).toEqual({
+      'pkg-absolute-link': 'link:/absolute/path/to/package',
+      'pkg-absolute-file': 'file:/absolute/path/to/package',
+      'pkg-relative-link': 'link:../../../relative/path',
+    });
+  });
 });
