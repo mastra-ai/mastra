@@ -141,11 +141,14 @@ Plans:
   3. Import validates mapped data before committing
   4. Invalid rows are reported with line numbers and error messages
   5. Successful import auto-increments dataset version
-  6. Import works from both CLI and playground UI
-**Plans**: TBD
+  6. Import works from playground UI (CLI deferred)
+**Plans**: 4 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — PapaParse installation + CSV parsing/validation utilities
+- [ ] 07-02-PLAN.md — Drag-drop column mapping component with state hook
+- [ ] 07-03-PLAN.md — Multi-step CSV import dialog (upload → preview → map → validate → import)
+- [ ] 07-04-PLAN.md — Integration into dataset detail page items list
 
 ### Phase 8: Item Selection
 **Goal**: Run subsets of dataset for quick iteration via UI selection
@@ -176,5 +179,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
 | 6. Playground Integration | 12/12 | ✓ Complete | 2026-01-26 |
-| 7. CSV Import | 0/TBD | Not started | - |
+| 7. CSV Import | 0/4 | Not started | - |
 | 8. Item Selection | 0/TBD | Not started | - |
