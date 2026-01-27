@@ -11,7 +11,6 @@ const { packages: allPackages } = await getPackages(resolve(__dirname, '..', '..
 
 const globalIgnore = [
   '@mastra/longmemeval',
-  '@mastra/dane',
   '@mastra/mcp-docs-server',
   '@mastra/mcp-registry-registry',
 ];

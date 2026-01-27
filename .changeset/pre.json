@@ -18,7 +18,6 @@
     "@internal/client-js-test-utils": "1.0.0",
     "client-js-e2e-tests-zod-v3": "1.0.0",
     "client-js-e2e-tests-zod-v4": "1.0.0",
-    "@mastra/dane": "1.0.1",
     "@mastra/longmemeval": "1.0.1",
     "@observability/test-utils": "0.0.1",
     "@mastra/arize": "1.0.0",
