@@ -4,6 +4,7 @@ import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { ItemsList } from './items-list';
 import { RunHistory } from './run-history';
+import { CSVImportDialog } from '../csv-import';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -34,6 +35,7 @@ export function DatasetDetail({
   runTriggerSlot,
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
@@ -122,6 +124,7 @@ export function DatasetDetail({
               onAddClick={onAddItemClick ?? (() => {})}
               onEditItem={onEditItem}
               onDeleteItem={onDeleteItem}
+              onImportClick={() => setImportDialogOpen(true)}
             />
           </TabContent>
 
@@ -134,6 +137,13 @@ export function DatasetDetail({
           </TabContent>
         </Tabs>
       </div>
+
+      {/* CSV Import Dialog */}
+      <CSVImportDialog
+        datasetId={datasetId}
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+      />
     </div>
   );
 }

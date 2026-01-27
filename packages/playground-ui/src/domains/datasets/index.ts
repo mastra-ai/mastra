@@ -25,6 +25,9 @@ export { RunHistory } from './components/dataset-detail/run-history';
 export { AddItemDialog } from './components/add-item-dialog';
 export { EditItemDialog } from './components/edit-item-dialog';
 
+// CSV import components
+export { CSVImportDialog } from './components/csv-import';
+
 // Run trigger components
 export { RunTriggerDialog } from './components/run-trigger/run-trigger-dialog';
 export { TargetSelector, type TargetType } from './components/run-trigger/target-selector';
