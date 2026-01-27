@@ -1,40 +1,31 @@
-import { useForm } from "react-hook-form";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@site/src/components/ui/forms";
-import { Spinner } from "./spinner";
-import { cn } from "@site/src/lib/utils";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
-import { toast } from "./custom-toast";
-import { z } from "zod/v4";
-import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import { Button } from "./ui/button";
+import { useForm } from 'react-hook-form'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@site/src/components/ui/forms'
+import { Spinner } from './spinner'
+import { cn } from '@site/src/lib/utils'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { AnimatePresence, motion } from 'motion/react'
+import { useState } from 'react'
+import { toast } from './custom-toast'
+import { z } from 'zod/v4'
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import { Button } from './ui/button'
 
 export const formSchema = z.object({
   email: z.email(),
-});
+})
 
 const buttonCopy = ({
   idleIcon,
   successIcon,
 }: {
-  idleIcon?: React.ReactNode;
-  successIcon?: React.ReactNode;
-  isDark?: boolean;
+  idleIcon?: React.ReactNode
+  successIcon?: React.ReactNode
+  isDark?: boolean
 }) => ({
-  idle: idleIcon ? idleIcon : "Subscribe",
-  loading: (
-    <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />
-  ),
-  success: successIcon ? successIcon : "Subscribed!",
-});
+  idle: idleIcon ? idleIcon : 'Subscribe',
+  loading: <Spinner className="h-4 w-4 text-black duration-300! dark:text-white" />,
+  success: successIcon ? successIcon : 'Subscribed!',
+})
 
 const SubscribeForm = ({
   idleIcon,
@@ -46,54 +37,54 @@ const SubscribeForm = ({
   inputClassName,
   buttonClassName,
 }: {
-  idleIcon?: React.ReactNode;
-  successIcon?: React.ReactNode;
-  placeholder?: string;
-  label?: string;
-  className?: string;
-  showLabel?: boolean;
-  inputClassName?: string;
-  buttonClassName?: string;
+  idleIcon?: React.ReactNode
+  successIcon?: React.ReactNode
+  placeholder?: string
+  label?: string
+  className?: string
+  showLabel?: boolean
+  inputClassName?: string
+  buttonClassName?: string
 }) => {
-  const { siteConfig } = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext()
   const { hsPortalId, hsFormGuid } = siteConfig.customFields as {
-    hsPortalId?: string;
-    hsFormGuid?: string;
-  };
+    hsPortalId?: string
+    hsFormGuid?: string
+  }
 
-  const [buttonState, setButtonState] = useState("idle");
+  const [buttonState, setButtonState] = useState('idle')
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "",
+      email: '',
     },
-    reValidateMode: "onSubmit",
-  });
+    reValidateMode: 'onSubmit',
+  })
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (buttonState === "success") return;
+    if (buttonState === 'success') return
 
-    const sanitizedEmail = values.email.trim();
+    const sanitizedEmail = values.email.trim()
     if (!sanitizedEmail) {
       return toast({
-        title: "Error Validating Email",
-        description: "Please enter an email",
-      });
+        title: 'Error Validating Email',
+        description: 'Please enter an email',
+      })
     }
-    setButtonState("loading");
+    setButtonState('loading')
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${hsPortalId}/${hsFormGuid}`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             fields: [
               {
-                objectTypeId: "0-1",
-                name: "email",
+                objectTypeId: '0-1',
+                name: 'email',
                 value: sanitizedEmail,
               },
             ],
@@ -104,34 +95,34 @@ const SubscribeForm = ({
             },
           }),
         },
-      );
+      )
 
       if (!response.ok) {
-        throw new Error("Submission failed");
+        throw new Error('Submission failed')
       }
-      setButtonState("success");
-      await new Promise((resolve) => setTimeout(resolve, 1750));
+      setButtonState('success')
+      await new Promise(resolve => setTimeout(resolve, 1750))
     } catch (error) {
-      console.error("Error submitting form:", error);
+      console.error('Error submitting form:', error)
       toast({
-        title: "Error Submitting Form",
-        description: "Please try again",
-      });
-      setButtonState("idle");
+        title: 'Error Submitting Form',
+        description: 'Please try again',
+      })
+      setButtonState('idle')
     } finally {
-      setButtonState("idle");
-      form.reset();
+      setButtonState('idle')
+      form.reset()
     }
-  };
+  }
 
   return (
     <Form {...form}>
       <form
-        className={cn("items-end flex flex-col w-full gap-2 ", className)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            form.handleSubmit(onSubmit)();
+        className={cn('flex w-full flex-col items-end gap-2', className)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            form.handleSubmit(onSubmit)()
           }
         }}
       >
@@ -139,24 +130,24 @@ const SubscribeForm = ({
           control={form.control}
           name="email"
           render={({ field }) => (
-            <FormItem className="flex-1 w-full">
+            <FormItem className="w-full flex-1">
               {showLabel ? (
-                <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                  {label || "Mastra Newsletter"}
+                <FormLabel className="mb-[0.69rem] block text-[13px] text-gray-500 dark:text-[#E6E6E6]">
+                  {label || 'Mastra Newsletter'}
                 </FormLabel>
               ) : null}
 
               <FormControl>
                 <input
-                  placeholder={placeholder || "you@example.com"}
+                  placeholder={placeholder || 'you@example.com'}
                   {...field}
                   className={cn(
-                    "bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]",
+                    'h-[35px] w-full flex-1 rounded-[10px] border border-(--border) bg-transparent px-4 py-[0.56rem] text-sm placeholder:text-sm placeholder:text-[#939393] focus:ring-2 focus:ring-(--mastra-green-accent)/50 focus:outline-none focus-visible:border-green-500 dark:border-[#343434] dark:text-white',
                     inputClassName,
                   )}
                 />
               </FormControl>
-              <span className="flex gap-2 items-center">
+              <span className="flex items-center gap-2">
                 {form.formState.errors.email && (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -175,7 +166,7 @@ const SubscribeForm = ({
                     <line x1="12" x2="12.01" y1="16" y2="16" />
                   </svg>
                 )}
-                <FormMessage className="text-red-500 mb-0!" />
+                <FormMessage className="mb-0! text-red-500" />
               </span>
             </FormItem>
           )}
@@ -183,18 +174,18 @@ const SubscribeForm = ({
 
         <Button
           className={cn(
-            "bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4  dark:text-white text-[14px]",
+            'flex h-[32px] w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
             buttonClassName,
           )}
-          onClick={(e) => {
-            e.preventDefault();
-            form.handleSubmit(onSubmit)();
+          onClick={e => {
+            e.preventDefault()
+            form.handleSubmit(onSubmit)()
           }}
-          disabled={buttonState === "loading"}
+          disabled={buttonState === 'loading'}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
-              transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+              transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
@@ -211,7 +202,7 @@ const SubscribeForm = ({
         </Button>
       </form>
     </Form>
-  );
-};
+  )
+}
 
-export default SubscribeForm;
+export default SubscribeForm
