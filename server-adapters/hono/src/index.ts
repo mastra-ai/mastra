@@ -222,15 +222,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return fetchResponse;
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
       try {
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(response.req.url),
           httpPath: `${this.prefix ?? ''}${httpPath}`,
           req,
           res,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         return await toFetchResponse(res);
       } catch {

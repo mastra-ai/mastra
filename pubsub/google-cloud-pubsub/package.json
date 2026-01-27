@@ -29,7 +29,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@google-cloud/pubsub": "^5.2.0",
+    "@google-cloud/pubsub": "^5.2.2",
     "@inngest/realtime": "^0.4.5",
     "@opentelemetry/api": "^1.9.0",
     "inngest": "^3.44.2",
