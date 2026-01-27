@@ -241,7 +241,6 @@ export const AgentMetadataModelSwitcher = ({
             options={providerOptions}
             value={currentModelProvider}
             onValueChange={handleProviderSelect}
-            onOpenChange={setProviderOpen}
             placeholder="Select provider..."
             searchPlaceholder="Search providers..."
             emptyText="No providers found"
@@ -255,13 +254,11 @@ export const AgentMetadataModelSwitcher = ({
             options={modelOptions}
             value={selectedModel}
             onValueChange={handleModelSelect}
-            onOpenChange={setModelOpen}
             placeholder="Select model..."
             searchPlaceholder="Search or enter custom model..."
             emptyText="No models found"
             variant="default"
             size="md"
-            allowCustomValue
           />
         </div>
 

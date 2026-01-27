@@ -9,6 +9,8 @@ import { transitions } from '@/ds/primitives/transitions';
 export type ComboboxOption = {
   label: string;
   value: string;
+  start?: React.ReactNode;
+  end?: React.ReactNode;
 };
 
 export type ComboboxProps = {
@@ -97,7 +99,11 @@ export function Combobox({
                       <Check className={cn('h-4 w-4 text-accent1', transitions.opacity)} />
                     </BaseCombobox.ItemIndicator>
                   </span>
-                  <span className="whitespace-nowrap">{option.label}</span>
+                  <span className="whitespace-nowrap flex items-center gap-2">
+                    {option.start}
+                    {option.label}
+                    {option.end}
+                  </span>
                 </BaseCombobox.Item>
               )}
             </BaseCombobox.List>
