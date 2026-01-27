@@ -159,5 +159,5 @@ export type {
 } from './workflows/shared';
 
 // Workflow executors
-export { LocalWorkflowExecutor, localExecutor, EventedWorkflowExecutor, eventedExecutor } from './executors';
+export { LocalWorkflowExecutor, localExecutor } from './executors';
 export type { WorkflowExecutor, WorkflowExecutionResult } from './executors';

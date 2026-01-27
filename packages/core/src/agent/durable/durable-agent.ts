@@ -95,8 +95,8 @@ export interface DurableAgentConfig<
    * Workflow executor for running the durable workflow.
    * Defaults to LocalWorkflowExecutor (direct execution).
    *
-   * Use EventedWorkflowExecutor for fire-and-forget execution
-   * with EventedExecutionEngine.
+   * For fire-and-forget execution, use createEventedAgent() factory
+   * which uses the built-in workflow engine with startAsync().
    */
   executor?: WorkflowExecutor;
 }
