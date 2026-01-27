@@ -32,6 +32,36 @@ export interface ToolSearchProcessorOptions {
 }
 
 /**
+ * Internal interface for indexed tool entries
+ */
+interface ToolEntry {
+  tool: Tool<any, any>;
+  name: string;
+  description: string;
+  tokens: string[];
+}
+
+/**
+ * Search result with ranking score
+ */
+interface SearchResult {
+  name: string;
+  description: string;
+  score: number;
+}
+
+/**
+ * Tokenize text into searchable terms.
+ * Splits on whitespace and special characters, lowercases, and filters short tokens.
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[\s\-_.,;:!?()[\]{}'"]+/)
+    .filter(token => token.length > 1);
+}
+
+/**
  * Processor that enables dynamic tool discovery and loading.
  *
  * Instead of providing all tools to the agent upfront, this processor:
@@ -68,6 +98,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private allTools: Record<string, Tool<any, any>>;
   private enabledTools: Record<string, Tool<any, any>> = {};
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
+  private toolEntries: ToolEntry[] = [];
+
+  // BM25 parameters
+  private readonly k1 = 1.5; // Term frequency saturation
+  private readonly b = 0.75; // Length normalization factor
 
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
@@ -75,6 +110,105 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
     };
+
+    // Index all tools for BM25 search
+    this.indexTools();
+  }
+
+  /**
+   * Index all tools for BM25 search
+   */
+  private indexTools(): void {
+    this.toolEntries = Object.values(this.allTools).map(tool => ({
+      tool,
+      name: tool.id,
+      description: tool.description || '',
+      tokens: tokenize(`${tool.id} ${tool.description || ''}`),
+    }));
+  }
+
+  /**
+   * Calculate average document length across all entries
+   */
+  private getAverageDocLength(): number {
+    if (this.toolEntries.length === 0) return 0;
+    const totalLength = this.toolEntries.reduce((sum, entry) => sum + entry.tokens.length, 0);
+    return totalLength / this.toolEntries.length;
+  }
+
+  /**
+   * Calculate IDF (Inverse Document Frequency) for a term.
+   * Rarer terms get higher scores.
+   */
+  private calculateIDF(term: string): number {
+    const N = this.toolEntries.length;
+    const n = this.toolEntries.filter(entry => entry.tokens.includes(term)).length;
+
+    if (n === 0) return 0;
+
+    // Standard IDF formula with smoothing
+    return Math.log((N - n + 0.5) / (n + 0.5) + 1);
+  }
+
+  /**
+   * Calculate BM25 score for a single term in a document
+   */
+  private calculateTermScore(term: string, entry: ToolEntry, avgDl: number): number {
+    const tf = entry.tokens.filter(t => t === term).length;
+    if (tf === 0) return 0;
+
+    const idf = this.calculateIDF(term);
+    const dl = entry.tokens.length;
+
+    // BM25 formula
+    const numerator = tf * (this.k1 + 1);
+    const denominator = tf + this.k1 * (1 - this.b + this.b * (dl / avgDl));
+
+    return idf * (numerator / denominator);
+  }
+
+  /**
+   * Search for tools matching the query using BM25 ranking.
+   *
+   * @param query - Search keywords
+   * @returns Array of matching tools with scores, sorted by relevance
+   */
+  private searchTools(query: string): SearchResult[] {
+    if (this.toolEntries.length === 0) return [];
+
+    const queryTokens = tokenize(query);
+    if (queryTokens.length === 0) return [];
+
+    const avgDl = this.getAverageDocLength();
+
+    // Score each document
+    const scored = this.toolEntries.map(entry => {
+      let score = 0;
+
+      for (const term of queryTokens) {
+        score += this.calculateTermScore(term, entry, avgDl);
+
+        // Boost exact name matches significantly
+        if (entry.name.toLowerCase() === term) {
+          score += 5;
+        } else if (entry.name.toLowerCase().includes(term)) {
+          score += 2;
+        }
+      }
+
+      return { entry, score };
+    });
+
+    // Filter by minScore, sort by relevance, apply topK limit
+    return scored
+      .filter(s => s.score > this.searchConfig.minScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, this.searchConfig.topK)
+      .map(s => ({
+        name: s.entry.name,
+        description: s.entry.description.length > 150 ? s.entry.description.slice(0, 147) + '...' : s.entry.description,
+        score: Math.round(s.score * 100) / 100,
+      }));
   }
 
   async processInputStep({ tools, messageList }: ProcessInputStepArgs) {
@@ -85,7 +219,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         'Tools must be loaded before they can be used.',
     );
 
-    // Create the search tool (currently returns all tools - will be replaced with BM25 in next task)
+    // Create the search tool with BM25 ranking
     const searchTool = createTool({
       id: 'search_tools',
       description: 'Search for available tools by keyword. Returns a ranked list of relevant tools.',
@@ -93,27 +227,19 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         query: z.string().describe('Search query to find relevant tools'),
       }),
       execute: async ({ query }) => {
-        // TODO: Replace with BM25 search in task 002
-        // For now, return all tools (simple implementation from Caleb)
-        const allToolsList = Object.values(this.allTools).map(tool => ({
-          name: tool.id,
-          description: tool.description,
-          score: 1.0, // Placeholder score
-        }));
-
-        // Apply topK limit
-        const results = allToolsList.slice(0, this.searchConfig.topK);
+        // Use BM25 search for relevance-ranked results
+        const results = this.searchTools(query);
 
         if (results.length === 0) {
           return {
             tools: [],
-            message: `No tools found matching query: "${query}"`,
+            message: `No tools found matching query: "${query}". Try different keywords or search more broadly.`,
           };
         }
 
         return {
           tools: results,
-          message: `Found ${results.length} tools. Use load_tool to add them to the conversation.`,
+          message: `Found ${results.length} relevant tool${results.length === 1 ? '' : 's'}. Use load_tool to add them to the conversation.`,
         };
       },
     });
