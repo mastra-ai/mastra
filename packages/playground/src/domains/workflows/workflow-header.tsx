@@ -14,9 +14,6 @@ import {
   DividerIcon,
   WorkflowCombobox,
   Badge,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from '@mastra/playground-ui';
 
 export function WorkflowHeader({
@@ -32,45 +29,28 @@ export function WorkflowHeader({
     <div className="shrink-0">
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/workflows`} isCurrent>
+          <Crumb as={Link} to={`/workflows`}>
             <Icon>
               <WorkflowIcon />
             </Icon>
             Workflows
           </Crumb>
+          <Crumb as="span" to="" isCurrent>
+            <WorkflowCombobox value={workflowId} variant="ghost" />
+          </Crumb>
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-48">
-            <WorkflowCombobox value={workflowId} />
-          </div>
-
           {runId && (
             <>
-              <DividerIcon />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="default">#{runId.slice(0, 8)}</Badge>
-                </TooltipTrigger>
-                <TooltipContent>{`Workflow Run ID: ${runId}`}</TooltipContent>
-              </Tooltip>
-
+              <Badge variant="default">Run: {runId}</Badge>
               <DividerIcon />
             </>
           )}
 
-          <div className="flex items-center gap-1">
-            <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
-            <Button as={Link} to={`/observability?entity=${workflowName}`}>
-              Workflow
-            </Button>
-
-            {runId && (
-              <Button as={Link} to={`/observability?runId=${runId}`}>
-                Run
-              </Button>
-            )}
-          </div>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
+            Traces
+          </Button>
         </HeaderGroup>
 
         <HeaderAction>
