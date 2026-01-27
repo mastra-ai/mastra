@@ -18,7 +18,7 @@
   color: rgb(34, 197, 94);
 }
 
-[data-theme="dark"] .badge--new {
+[data-theme='dark'] .badge--new {
   background-color: rgba(34, 197, 94, 0.2);
   color: rgb(74, 222, 128);
 }
@@ -29,7 +29,7 @@
   color: rgb(59, 130, 246);
 }
 
-[data-theme="dark"] .badge--advanced {
+[data-theme='dark'] .badge--advanced {
   background-color: rgba(59, 130, 246, 0.2);
   color: rgb(96, 165, 250);
 }
@@ -40,7 +40,7 @@
   color: rgb(251, 146, 60);
 }
 
-[data-theme="dark"] .badge--beta {
+[data-theme='dark'] .badge--beta {
   background-color: rgba(251, 146, 60, 0.2);
   color: rgb(254, 215, 170);
 }

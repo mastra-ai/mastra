@@ -1,39 +1,30 @@
-import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
-import { Input } from "./ui/input";
-import { cn } from "@site/src/lib/utils";
-import { zodResolver } from "@hookform/resolvers/zod";
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "./ui/forms";
-import { Label } from "./ui/label";
-import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import { CancelIcon } from "./copy-page-icons";
+import { Button } from './ui/button'
+import { Textarea } from './ui/textarea'
+import { Input } from './ui/input'
+import { cn } from '@site/src/lib/utils'
+import { zodResolver } from '@hookform/resolvers/zod'
+import React, { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/forms'
+import { Label } from './ui/label'
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import { CancelIcon } from './copy-page-icons'
 
 const feedbackSchema = z.object({
-  feedback: z.string().min(5, "Please enter your feedback"),
-  email: z
-    .email("Please enter a valid email address")
-    .optional()
-    .or(z.literal("")),
+  feedback: z.string().min(5, 'Please enter your feedback'),
+  email: z.email('Please enter a valid email address').optional().or(z.literal('')),
   rating: z.number().min(1).max(5).optional(),
   page: z.string(),
   userAgent: z.string().optional(),
-});
+})
 
-type FeedbackFormData = z.infer<typeof feedbackSchema>;
+type FeedbackFormData = z.infer<typeof feedbackSchema>
 
 interface FeedbackFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentPage: string;
+  isOpen: boolean
+  onClose: () => void
+  currentPage: string
 }
 
 const ratings = [
@@ -57,7 +48,7 @@ const ratings = [
         <line x1="15" x2="15.01" y1="9" y2="9" />
       </svg>
     ),
-    label: "Helpful",
+    label: 'Helpful',
   },
   {
     rating: 2,
@@ -79,7 +70,7 @@ const ratings = [
         <line x1="15" x2="15.01" y1="9" y2="9" />
       </svg>
     ),
-    label: "Somewhat helpful",
+    label: 'Somewhat helpful',
   },
   {
     rating: 1,
@@ -103,130 +94,110 @@ const ratings = [
         <path d="M15 10h.01" />
       </svg>
     ),
-    label: "Not helpful",
+    label: 'Not helpful',
   },
-];
+]
 
-export const FeedbackForm = ({
-  isOpen,
-  onClose,
-  currentPage,
-}: FeedbackFormProps) => {
-  const { siteConfig } = useDocusaurusContext();
+export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps) => {
+  const { siteConfig } = useDocusaurusContext()
   const { mastraWebsite } = siteConfig.customFields as {
-    mastraWebsite?: string;
-  };
+    mastraWebsite?: string
+  }
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<
-    "idle" | "success" | "error"
-  >("idle");
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState<string>('')
 
   const form = useForm<FeedbackFormData>({
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
-      feedback: "",
-      email: "",
+      feedback: '',
+      email: '',
       rating: 5,
       page: currentPage,
-      userAgent:
-        typeof window !== "undefined" ? window.navigator.userAgent : "",
+      userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : '',
     },
-    reValidateMode: "onSubmit",
-  });
+    reValidateMode: 'onSubmit',
+  })
 
   const onSubmit = async (data: FeedbackFormData) => {
-    setIsSubmitting(true);
-    setSubmitStatus("idle");
-    setErrorMessage("");
+    setIsSubmitting(true)
+    setSubmitStatus('idle')
+    setErrorMessage('')
 
     try {
       if (!mastraWebsite) {
-        throw new Error("Website URL is not configured");
+        throw new Error('Website URL is not configured')
       }
 
       const response = await fetch(`${mastraWebsite}/api/feedback`, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           ...data,
           timestamp: new Date().toISOString(),
         }),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
-        throw new Error(errorData.error || `Server error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(errorData.error || `Server error: ${response.status}`)
       }
 
-      setSubmitStatus("success");
-      form.reset();
+      setSubmitStatus('success')
+      form.reset()
 
       setTimeout(() => {
-        onClose();
-        setSubmitStatus("idle");
-      }, 2000);
+        onClose()
+        setSubmitStatus('idle')
+      }, 2000)
     } catch (error) {
-      setSubmitStatus("error");
-      setErrorMessage(
-        error instanceof Error ? error.message : "An unexpected error occurred",
-      );
+      setSubmitStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
-  const currentRating = form.watch("rating");
+  const currentRating = form.watch('rating')
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <>
-      {submitStatus === "success" ? (
-        <div className="text-center py-8">
-          <p className="text-base mb-0! text-black dark:text-white">
-            Thank you! Your feedback has been submitted
-          </p>
+      {submitStatus === 'success' ? (
+        <div className="py-8 text-center">
+          <p className="mb-0! text-base text-black dark:text-white">Thank you! Your feedback has been submitted</p>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="px-6 flex items-start justify-between py-4 border-b-[0.5px] border-(--border)">
-              <Label
-                htmlFor="feedback"
-                className="flex items-start gap-0 flex-col"
-              >
+            <div className="flex items-start justify-between border-b-[0.5px] border-(--border) px-6 py-4">
+              <Label htmlFor="feedback" className="flex flex-col items-start gap-0">
                 <span className="text-lg font-semibold">Share feedback</span>
-                <span className="text-xs text-(--mastra-text-secondary)">
-                  Tell us how this can be better.
-                </span>
+                <span className="text-xs text-(--mastra-text-secondary)">Tell us how this can be better.</span>
               </Label>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-6 w-6 p-0 rounded-full hover:bg-(--mastra-surface-3) transition-colors"
+                className="h-6 w-6 rounded-full p-0 transition-colors hover:bg-(--mastra-surface-3)"
               >
-                <CancelIcon className="w-4 h-4" />
+                <CancelIcon className="h-4 w-4" />
               </Button>
             </div>
 
-            <div className="flex gap-4 py-4 px-6 flex-col items-start">
-              <div className="flex gap-2 items-center justify-center w-full">
+            <div className="flex flex-col items-start gap-4 px-6 py-4">
+              <div className="flex w-full items-center justify-center gap-2">
                 {ratings.map(({ rating, emoji, label }) => (
                   <Button
                     variant="ghost"
                     key={rating}
                     type="button"
-                    onClick={() => form.setValue("rating", rating)}
+                    onClick={() => form.setValue('rating', rating)}
                     className={cn(
-                      "w-10 h-10 rounded-full flex hover:bg-(--mastra-surface-3) items-center justify-center text-lg transition-all hover:scale-110",
-                      currentRating === rating
-                        ? "ring-2 ring-(--mastra-green-accent)"
-                        : "",
+                      'flex h-10 w-10 items-center justify-center rounded-full text-lg transition-all hover:scale-110 hover:bg-(--mastra-surface-3)',
+                      currentRating === rating ? 'ring-2 ring-(--mastra-green-accent)' : '',
                     )}
                     title={label}
                   >
@@ -243,7 +214,7 @@ export const FeedbackForm = ({
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-20 w-full text-black dark:text-white resize-none text-sm"
+                        className="min-h-20 w-full resize-none text-sm text-black dark:text-white"
                         {...field}
                       />
                     </FormControl>
@@ -261,7 +232,7 @@ export const FeedbackForm = ({
                       <Input
                         type="email"
                         placeholder="Your email (optional)"
-                        className="w-full text-black dark:text-white text-sm"
+                        className="w-full text-sm text-black dark:text-white"
                         {...field}
                       />
                     </FormControl>
@@ -273,25 +244,21 @@ export const FeedbackForm = ({
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="dark:bg-[#121212] bg-(--mastra-surface-3) font-medium w-full rounded-[10px] hover:opacity-90 h-10 justify-center flex items-center px-4 text-(--light-color-text-5) dark:text-white text-[14px]"
+                className="flex h-10 w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] font-medium text-(--light-color-text-5) hover:opacity-90 dark:bg-[#121212] dark:text-white"
               >
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
-                  "Send Feedback"
+                  'Send Feedback'
                 )}
               </Button>
             </div>
 
             {errorMessage && (
-              <div className="mx-6 mb-4 p-3 rounded-[10px] bg-red-50 dark:bg-red-900/20">
-                <p className="text-xs mb-0! text-red-500 font-mono dark:text-red-400">
+              <div className="mx-6 mb-4 rounded-[10px] bg-red-50 p-3 dark:bg-red-900/20">
+                <p className="mb-0! font-mono text-xs text-red-500 dark:text-red-400">
                   Something went wrong. Please try again
-                  {errorMessage && (
-                    <span className="block mt-1 opacity-75">
-                      {errorMessage}
-                    </span>
-                  )}
+                  {errorMessage && <span className="mt-1 block opacity-75">{errorMessage}</span>}
                 </p>
               </div>
             )}
@@ -299,5 +266,5 @@ export const FeedbackForm = ({
         </Form>
       )}
     </>
-  );
-};
+  )
+}

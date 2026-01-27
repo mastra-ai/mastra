@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed sub-agents in Agent Networks receiving completion check feedback messages in their conversation context. Previously, when a completion check failed, the feedback message (containing text like '#### Completion Check Results') was being passed to sub-agents on subsequent iterations, causing them to get confused and potentially mimic routing agent responses instead of focusing on their actual task. Fixes #12224
+Fixed sub-agents in Agent Networks seeing completion-check feedback from prior iterations, so delegated agents stay focused on their task. Fixes #12224
