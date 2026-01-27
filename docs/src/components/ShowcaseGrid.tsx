@@ -51,6 +51,13 @@ const ShowcaseCard = ({
 
 const showcaseItems: ShowcaseCardProps[] = [
   {
+    title: "Drawin",
+    description:
+      "Text in. Infographics out. Paste into slides.",
+    image: "drawin-app.png",
+    link: "https://www.drawin.app/",
+  },
+  {
     title: "Olive",
     description:
       "Generate powerful tools and dashboards connected to your data sources in minutes",
