@@ -1323,7 +1323,7 @@ export class EventedRun<
 
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
-    step:
+    step?:
       | Step<string, any, any, TResumeSchema, any, any, TEngineType>
       | [
           ...Step<string, any, any, any, any, any, TEngineType>[],
@@ -1334,19 +1334,6 @@ export class EventedRun<
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
-    }
-
-    if (steps.length === 0) {
-      throw new Error('No steps provided to resume');
-    }
-
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
@@ -1359,12 +1346,70 @@ export class EventedRun<
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
 
-    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-    if (!resumePath) {
+    // Check if workflow is suspended before proceeding
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    // Auto-detect suspended steps if no step is provided
+    let steps: string[];
+    if (params.step) {
+      if (typeof params.step === 'string') {
+        steps = params.step.split('.');
+      } else {
+        steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    } else {
+      // Use suspendedPaths to detect suspended steps
+      const suspendedStepPaths: string[][] = [];
+
+      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
+        // Check if this step has nested workflow suspension data
+        const stepResult = snapshot?.context?.[stepId];
+        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+          const stepRes = stepResult as any;
+          if (stepRes.status === 'suspended') {
+            const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
+            if (nestedPath && Array.isArray(nestedPath)) {
+              // For nested workflows, combine the parent step ID with the nested path
+              suspendedStepPaths.push([stepId, ...nestedPath]);
+            } else {
+              // For single-level suspension, just use the step ID
+              suspendedStepPaths.push([stepId]);
+            }
+          }
+        }
+      });
+
+      if (suspendedStepPaths.length === 0) {
+        throw new Error('No suspended steps found in this workflow run');
+      }
+
+      if (suspendedStepPaths.length === 1) {
+        // For single suspended step, use the full path
+        steps = suspendedStepPaths[0]!;
+      } else {
+        const pathStrings = suspendedStepPaths.map(path => `[${path.join(', ')}]`);
+        throw new Error(
+          `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+            'Please specify which step to resume using the "step" parameter.',
+        );
+      }
+    }
+
+    // Validate that the step is actually suspended
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
+        `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
       );
     }
+
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
 
     console.dir(
       { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
