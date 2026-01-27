@@ -66,8 +66,6 @@
     "@types/node": "22.19.3",
     "baseline-browser-mapping": "^2.9.12",
     "postcss": "^8.5.3",
-    "prettier": "^3.8.1",
-    "prettier-plugin-tailwindcss": "^0.7.2",
     "tailwind-merge": "^3.0.1",
     "tailwindcss": "^4.0.7",
     "tailwindcss-animate": "^1.0.7",
