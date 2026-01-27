@@ -6,12 +6,13 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   ListTracesArgs,
-  PaginationInfo,
+  ListTracesResponse,
   TracingStorageStrategy,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
@@ -413,7 +414,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
     const { page, perPage } = pagination;
@@ -654,7 +655,11 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       });
 
       const rows = (await result.json()) as any[];
-      const spans = transformRows(rows) as SpanRecord[];
+      // ClickHouse normalizes null to empty string, so normalize back for status computation
+      const spans = (transformRows(rows) as SpanRecord[]).map(span => ({
+        ...span,
+        error: span.error === '' ? null : span.error,
+      }));
 
       return {
         pagination: {
@@ -663,7 +668,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < total,
         },
-        spans,
+        spans: toTraceSpans(spans),
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;
