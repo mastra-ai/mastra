@@ -45,6 +45,7 @@ export type ProcessorArgs = {
     includeState?: boolean;
     includeResumeLabels?: boolean;
   };
+  forEachIndex?: number;
 };
 
 export type ParentWorkflow = {

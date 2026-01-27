@@ -1630,6 +1630,7 @@ export class EventedRun<
       | string
       | string[];
     label?: string;
+    forEachIndex?: number;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -1770,6 +1771,7 @@ export class EventedRun<
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
           resumePath,
+          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
         },
         pubsub: this.mastra.pubsub,
         requestContext,

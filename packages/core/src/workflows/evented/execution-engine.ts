@@ -58,6 +58,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      forEachIndex?: number;
     };
     pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
@@ -101,6 +102,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           initialState: resumeState,
           state: resumeState,
           outputOptions: params.outputOptions,
+          forEachIndex: params.resume.forEachIndex,
         },
       });
     } else if (params.timeTravel) {

@@ -151,6 +151,7 @@ export class StepExecutor extends MastraBase {
                   __workflow_meta: {
                     runId,
                     path: [step.id],
+                    foreachIndex: params.foreachIdx,
                     resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
                   },
                 },
