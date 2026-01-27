@@ -14,15 +14,15 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Milestone:** v1.1 Agent Integration
 **Phase:** 8 - Writer API
-**Plan:** Not started
-**Status:** Phase 7 complete, ready for Phase 8 planning
+**Plan:** 1 of 1
+**Status:** Phase 8 Plan 1 complete
 
 ```
-Progress: [████░░░░░░] 33% (Phase 8 of 9)
-Milestone: v1.1 Agent Integration — Phase 7 completed 2026-01-27
+Progress: [█████░░░░░] 44% (Phase 8 Plan 1 of 9 total phases)
+Milestone: v1.1 Agent Integration — Phase 8 Plan 1 completed 2026-01-27
 ```
 
-**Next action:** `/gsd:discuss-phase 8` or `/gsd:plan-phase 8`
+**Next action:** Continue Phase 8 or move to Phase 9
 
 ## v1.1 Roadmap Summary
 
@@ -60,13 +60,13 @@ Milestone: v1.1 Agent Integration — Phase 7 completed 2026-01-27
 
 ## Performance Metrics
 
-| Metric           | v1.0 Value | v1.1 Target |
-| ---------------- | ---------- | ----------- |
-| Phases completed | 6          | 3           |
-| Plans completed  | 15         | TBD         |
-| Tests ported     | 70         | ~10         |
-| Tests passing    | 193 (85%)  | ~195 (86%) |
-| Tests skipped    | 34         | ~32         |
+| Metric           | v1.0 Value | v1.1 Current |
+| ---------------- | ---------- | ------------ |
+| Phases completed | 6          | 1            |
+| Plans completed  | 15         | 1            |
+| Tests ported     | 70         | 2            |
+| Tests passing    | 193 (85%)  | 195 (86%)    |
+| Tests skipped    | 34         | 32           |
 
 ## Accumulated Context
 
@@ -85,9 +85,15 @@ Milestone: v1.1 Agent Integration — Phase 7 completed 2026-01-27
 - Tripwire chunk detection added in agent step stream consumption (both V2 and V1 paths)
 - Structured output captured via onFinish callback
 
+**Phase 8 Plan 1 Decisions:**
+- Use workflow.events.v2.{runId} channel for writer events (not generic 'workflows' channel)
+- Generate unique callId per method execution using randomUUID for writer tracking
+- Use 'condition' as writer name for evaluateCondition (no step.id available)
+- Use step.id as writer name for execute, resolveSleep, resolveSleepUntil methods
+
 ### Current Blockers
 
-None. Phase 7 complete, ready for Phase 8 planning.
+None. Phase 8 Plan 1 complete.
 
 ### Open Questions
 
@@ -102,7 +108,7 @@ None. All v1.1 features have reference implementations in default runtime.
 
 **v1.1 will address:**
 - ✅ 4 test skips for V2 model limitations — FIXED in Phase 7
-- 2 test skips for writer support (lines 1851, 1938)
+- ✅ 2 test skips for writer support (lines 1851, 1938) — FIXED in Phase 8 Plan 1
 - Multiple test skips for forEachIndex parameter (lines 19119-19492)
 
 ## Session Continuity
@@ -111,19 +117,19 @@ None. All v1.1 features have reference implementations in default runtime.
 
 **Date:** 2026-01-27
 **Work completed:**
-- Executed Phase 7 (V2 Model + TripWire Support)
-- Plan 07-01: V2 model detection, TripWire catching in StepExecutor
-- Plan 07-02: TripWire status propagation, 4 tests unskipped
-- Verified phase goal (5/5 must-haves)
-- 193 tests passing, 34 skipped
+- Executed Phase 8 Plan 1 (Writer API Implementation)
+- Task 1: ToolStream writer instances in all 4 StepExecutor methods
+- Task 2: Unskipped 2 writer tests
+- All 195 evented workflow tests passing
+- 195 tests passing, 32 skipped
 
 **Commits:**
-- cfa65cf: V2 model detection and branching in createStepFromAgent
-- a80df0d: TripWire catching and serialization in StepExecutor
-- b14582255d: TripWire status propagation in EventedExecutionEngine
-- bf70bc180b: Unskip V2 model and TripWire tests
+- 7e93fc8: feat(08-01): implement ToolStream writer in all StepExecutor methods
+- d4086b4: test(08-01): unskip writer API tests
 
-**Next action:** `/gsd:discuss-phase 8` or `/gsd:plan-phase 8`
+**Summary:** .planning/phases/08-writer-api/08-01-SUMMARY.md
+
+**Next action:** Continue Phase 8 or move to Phase 9
 
 ---
 
