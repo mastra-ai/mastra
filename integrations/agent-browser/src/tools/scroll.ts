@@ -1,44 +1,8 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
 import { type BrowserToolError, createError } from '../errors.js';
-
-/**
- * Zod schema for scroll tool input parameters.
- */
-const scrollInputSchema = z.object({
-  direction: z.enum(['up', 'down', 'left', 'right']).describe('Scroll direction'),
-  amount: z
-    .union([z.enum(['page', 'half']), z.number().describe('Pixels to scroll')])
-    .optional()
-    .default('page')
-    .describe('Amount to scroll: "page", "half", or number of pixels'),
-  ref: z.string().optional().describe('Element ref to scroll within (omit for viewport scroll)'),
-});
-
-/**
- * Zod schema for scroll tool output.
- */
-const scrollOutputSchema = z.object({
-  success: z.boolean().describe('Whether the scroll operation succeeded'),
-  position: z
-    .object({
-      x: z.number().describe('Horizontal scroll position in pixels'),
-      y: z.number().describe('Vertical scroll position in pixels'),
-    })
-    .describe('New scroll position after scrolling'),
-});
-
-/**
- * Input type for the scroll tool.
- */
-export type ScrollInput = z.infer<typeof scrollInputSchema>;
-
-/**
- * Output type for the scroll tool.
- */
-export type ScrollOutput = z.infer<typeof scrollOutputSchema>;
+import { scrollInputSchema, scrollOutputSchema, type ScrollOutput } from '../types.js';
 
 /**
  * Creates a scroll tool that scrolls the page viewport or an element.
