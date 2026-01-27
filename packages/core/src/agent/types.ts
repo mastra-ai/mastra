@@ -445,6 +445,9 @@ export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'stream
  * Durable agents wrap a regular Agent with execution engine-specific
  * capabilities (like Inngest's durable execution). They expose the
  * underlying agent and any workflows that need to be registered with Mastra.
+ *
+ * The `stream()` method must return a MastraModelOutput (same as Agent.stream())
+ * to maintain compatibility with the server handlers.
  */
 export interface DurableAgentLike {
   /** Agent ID */
@@ -453,6 +456,11 @@ export interface DurableAgentLike {
   readonly name: string;
   /** The underlying Mastra Agent */
   readonly agent: Agent<any, any, any>;
+  /**
+   * Stream a response using durable execution.
+   * Must return MastraModelOutput to be compatible with Agent.stream().
+   */
+  stream(messages: any, options?: any): Promise<any>;
   /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.
@@ -471,6 +479,7 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     'agent' in obj &&
     obj.agent !== null &&
     typeof obj.agent === 'object' &&
-    typeof obj.agent.id === 'string'
+    typeof obj.agent.id === 'string' &&
+    typeof obj.stream === 'function'
   );
 }

@@ -122,20 +122,20 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
 }
 
 /**
- * Result from InngestAgent.stream()
+ * Extended MastraModelOutput with additional durable execution metadata.
+ * This allows InngestAgent.stream() to return the same type as Agent.stream()
+ * while also providing access to runId and cleanup.
  */
-export interface InngestAgentStreamResult<OUTPUT = undefined> {
-  /** The streaming output */
-  output: MastraModelOutput<OUTPUT>;
-  /** The unique run ID */
+export type DurableMastraModelOutput<OUTPUT = undefined> = MastraModelOutput<OUTPUT> & {
+  /** The unique run ID for this durable execution */
   runId: string;
   /** Thread ID if using memory */
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
-  /** Cleanup function */
+  /** Cleanup function to unsubscribe from pubsub */
   cleanup: () => void;
-}
+};
 
 /**
  * An Inngest-powered durable agent.
@@ -156,11 +156,12 @@ export interface InngestAgent<TOutput = undefined> {
 
   /**
    * Stream a response using Inngest's durable execution.
+   * Returns MastraModelOutput (same as Agent.stream()) with additional durable execution metadata.
    */
   stream(
     messages: MessageListInput,
     options?: InngestAgentStreamOptions<TOutput>,
-  ): Promise<InngestAgentStreamResult<TOutput>>;
+  ): Promise<DurableMastraModelOutput<TOutput>>;
 
   /**
    * Resume a suspended workflow execution.
@@ -177,7 +178,7 @@ export interface InngestAgent<TOutput = undefined> {
       onError?: (error: Error) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<InngestAgentStreamResult<TOutput>>;
+  ): Promise<DurableMastraModelOutput<TOutput>>;
 
   /**
    * Prepare for durable execution without starting it.
@@ -282,7 +283,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return inngest;
     },
 
-    async stream(messages, streamOptions) {
+    async stream(messages, streamOptions): Promise<DurableMastraModelOutput<TOutput>> {
       // 1. Prepare for durable execution
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
@@ -321,17 +322,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         });
       }, 100);
 
-      // 4. Return stream result
-      return {
-        output,
-        runId,
-        threadId,
-        resourceId,
-        cleanup: streamCleanup,
-      };
+      // 4. Return output with additional durable execution metadata
+      // This makes it compatible with Agent.stream() return type while adding extra properties
+      const result = output as DurableMastraModelOutput<TOutput>;
+      result.runId = runId;
+      result.threadId = threadId;
+      result.resourceId = resourceId;
+      result.cleanup = streamCleanup;
+
+      return result;
     },
 
-    async resume(runId, resumeData, resumeOptions) {
+    async resume(runId, resumeData, resumeOptions): Promise<DurableMastraModelOutput<TOutput>> {
       // Re-subscribe to the stream
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
         pubsub,
@@ -368,13 +370,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           });
       }, 100);
 
-      return {
-        output,
-        runId,
-        threadId: resumeOptions?.threadId,
-        resourceId: resumeOptions?.resourceId,
-        cleanup: streamCleanup,
-      };
+      // Return output with additional durable execution metadata
+      const result = output as DurableMastraModelOutput<TOutput>;
+      result.runId = runId;
+      result.threadId = resumeOptions?.threadId;
+      result.resourceId = resumeOptions?.resourceId;
+      result.cleanup = streamCleanup;
+
+      return result;
     },
 
     async prepare(messages, prepareOptions) {
@@ -399,7 +402,26 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
   };
 
-  return inngestAgent;
+  // Use a Proxy to forward any unknown property/method calls to the underlying agent
+  // This ensures the InngestAgent has all Agent methods (getMemory, etc.) while
+  // overriding stream() to use durable execution
+  return new Proxy(inngestAgent, {
+    get(target, prop, receiver) {
+      // First check if the property exists on our InngestAgent object
+      if (prop in target) {
+        return Reflect.get(target, prop, receiver);
+      }
+      // Otherwise, forward to the underlying agent
+      const agentValue = (agent as any)[prop];
+      if (typeof agentValue === 'function') {
+        return agentValue.bind(agent);
+      }
+      return agentValue;
+    },
+    has(target, prop) {
+      return prop in target || prop in agent;
+    },
+  }) as InngestAgent<TOutput>;
 }
 
 // =============================================================================

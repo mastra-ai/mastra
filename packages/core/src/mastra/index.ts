@@ -320,6 +320,9 @@ export class Mastra<
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
+  // Map of agent IDs to their durable wrappers (e.g., InngestAgent)
+  // When a durable agent is registered, the wrapper is stored here so getAgentById can return it
+  #durableAgentWrappers: Map<string, DurableAgentLike> = new Map();
 
   get pubsub() {
     return this.#pubsub;
@@ -689,6 +692,13 @@ export class Mastra<
    * ```
    */
   public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
+    // Check for durable agent wrapper first - if one exists, return it instead of the underlying agent
+    // This ensures calls to agent.stream() go through the durable execution engine (e.g., Inngest)
+    const durableWrapper = this.#durableAgentWrappers.get(String(id));
+    if (durableWrapper) {
+      return durableWrapper as unknown as TAgents[TAgentName];
+    }
+
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
@@ -1268,6 +1278,10 @@ export class Mastra<
       const durableAgent = agent as DurableAgentLike;
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
+
+      // Store the durable wrapper by agent ID (not key) so getAgentById can find it
+      // This ensures calls to agent.stream() go through the durable execution engine
+      this.#durableAgentWrappers.set(durableAgent.id, durableAgent);
 
       // Register the underlying agent (this handles initialization and processor workflows)
       this.addAgent(underlyingAgent, agentKey);
