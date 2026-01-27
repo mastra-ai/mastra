@@ -276,7 +276,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -316,8 +316,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -397,6 +397,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
+        routePrefix: this.prefix,
       };
 
       try {

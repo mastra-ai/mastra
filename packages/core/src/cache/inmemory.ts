@@ -1,4 +1,4 @@
-import TTLCache from '@isaacs/ttlcache';
+import { TTLCache } from '@isaacs/ttlcache';
 import { MastraServerCache } from './base';
 
 export class InMemoryServerCache extends MastraServerCache {
