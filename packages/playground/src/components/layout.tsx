@@ -1,6 +1,6 @@
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
-import { MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider } from '@mastra/playground-ui';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -8,6 +8,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
+          <NavigationCommand />
           <div className="grid grid-cols-[auto_1fr] h-full">
             <MainSidebarProvider>
               <AppSidebar />
