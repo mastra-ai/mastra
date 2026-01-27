@@ -344,12 +344,23 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       const modelInfo = llm.getModel();
       const isV2Model = isSupportedLanguageModel(modelInfo);
 
+      // Track structured output result
+      let structuredResult: any = null;
+
       if (isV2Model) {
         // V2+ model path: use .stream() which returns MastraModelOutput
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           tracingContext,
           requestContext,
+          onFinish: result => {
+            // Capture structured output if available
+            const resultWithObject = result as typeof result & { object?: unknown };
+            if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+              structuredResult = resultWithObject.object;
+            }
+            void (agentOptions as any)?.onFinish?.(result);
+          },
           abortSignal,
         });
 
@@ -364,7 +375,16 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
         });
 
+        // Track tripwire chunk if encountered
+        let tripwireChunk: any = null;
+
         for await (const chunk of modelOutput.fullStream) {
+          // Check for tripwire chunks from agent processors
+          // Cast to any because tripwire is a runtime addition not in the base type
+          if ((chunk as any).type === 'tripwire') {
+            tripwireChunk = chunk;
+            break;
+          }
           if (chunk.type === 'text-delta') {
             await pubsub.publish(`workflow.events.v2.${runId}`, {
               type: 'watch',
@@ -379,6 +399,23 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           runId,
           data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
         });
+
+        // If a tripwire was detected, throw TripWire to abort the workflow step
+        if (tripwireChunk) {
+          throw new TripWire(
+            (tripwireChunk as any).payload?.reason || 'Agent tripwire triggered',
+            {
+              retry: (tripwireChunk as any).payload?.retry,
+              metadata: (tripwireChunk as any).payload?.metadata,
+            },
+            (tripwireChunk as any).payload?.processorId,
+          );
+        }
+
+        // Return structured output if available, otherwise default text
+        if (structuredResult !== null) {
+          return structuredResult as TStepOutput;
+        }
 
         // Get text from the modelOutput
         const text = await modelOutput.text;
@@ -404,7 +441,13 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           tracingContext,
           requestContext,
           onFinish: result => {
+            // Capture structured output if available
+            const resultWithObject = result as typeof result & { object?: unknown };
+            if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+              structuredResult = resultWithObject.object;
+            }
             streamPromise.resolve(result.text);
+            void (agentOptions as any)?.onFinish?.(result);
           },
           abortSignal,
         });
@@ -419,7 +462,16 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
         });
 
+        // Track tripwire chunk if encountered
+        let tripwireChunk: any = null;
+
         for await (const chunk of fullStream) {
+          // Check for tripwire chunks from agent processors
+          // Cast to any because tripwire is a runtime addition not in the base type
+          if ((chunk as any).type === 'tripwire') {
+            tripwireChunk = chunk;
+            break;
+          }
           if (chunk.type === 'text-delta') {
             await pubsub.publish(`workflow.events.v2.${runId}`, {
               type: 'watch',
@@ -434,6 +486,23 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           runId,
           data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
         });
+
+        // If a tripwire was detected, throw TripWire to abort the workflow step
+        if (tripwireChunk) {
+          throw new TripWire(
+            (tripwireChunk as any).payload?.reason || 'Agent tripwire triggered',
+            {
+              retry: (tripwireChunk as any).payload?.retry,
+              metadata: (tripwireChunk as any).payload?.metadata,
+            },
+            (tripwireChunk as any).payload?.processorId,
+          );
+        }
+
+        // Return structured output if available, otherwise default text
+        if (structuredResult !== null) {
+          return structuredResult as TStepOutput;
+        }
 
         return {
           text: await streamPromise.promise,

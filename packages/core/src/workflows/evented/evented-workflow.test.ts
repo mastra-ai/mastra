@@ -12645,7 +12645,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should bubble up tripwire from agent input processor to workflow result - evented runtime does not support tripwire propagation', async () => {
+    it('should bubble up tripwire from agent input processor to workflow result', async () => {
       const tripwireProcessor = {
         id: 'tripwire-processor',
         name: 'Tripwire Processor',
@@ -12738,7 +12738,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     }, 30000);
 
-    it.skip('should handle tripwire from output stream processor in agent within workflow - evented runtime does not support tripwire propagation', async () => {
+    it('should handle tripwire from output stream processor in agent within workflow', async () => {
       // Use processOutputStream instead of processOutputResult since output result tripwires
       // happen after the stream completes and require different handling
       const outputStreamTripwireProcessor = {
@@ -12828,7 +12828,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     }, 30000);
 
-    it.skip('should pass agentOptions when wrapping agent with createStep - evented runtime uses streamLegacy which does not support V2 models', async () => {
+    it('should pass agentOptions when wrapping agent with createStep', async () => {
       const onFinishSpy = vi.fn();
       const onChunkSpy = vi.fn();
       const maxSteps = 5;
@@ -12932,7 +12932,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     }, 10000);
 
-    it.skip('should pass structured output from agent step to next step with correct types - evented runtime uses streamLegacy which does not support V2 models', async () => {
+    it('should pass structured output from agent step to next step with correct types', async () => {
       // Define the structured output schema for the agent
       const articleSchema = z.object({
         title: z.string(),
