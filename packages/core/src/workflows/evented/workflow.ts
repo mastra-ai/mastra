@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -16,7 +17,9 @@ import type { Processor } from '../../processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import type { InferSchemaOutput, SchemaWithValidation } from '../../stream/base/schema';
+import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
@@ -1319,7 +1322,181 @@ export class EventedRun<
     return { runId: this.runId };
   }
 
-  // TODO: stream
+  /**
+   * Starts the workflow execution as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  stream({
+    inputData,
+    requestContext,
+    initialState,
+    closeOnSuspend = true,
+    perStep,
+    outputOptions,
+  }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
+    (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
+      requestContext?: RequestContext;
+      closeOnSuspend?: boolean;
+      perStep?: boolean;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (this.closeStreamAction && this.streamOutput) {
+      return this.streamOutput;
+    }
+
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.start({
+            inputData: inputData as TInput,
+            requestContext,
+            initialState: initialState as TState,
+            perStep,
+            outputOptions,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          if (closeOnSuspend) {
+            self.closeStreamAction?.().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            self.closeStreamAction?.().catch(() => {});
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
+
+  /**
+   * Resumes a suspended workflow as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  resumeStream<TResume>({
+    step,
+    resumeData,
+    requestContext,
+    perStep,
+    outputOptions: _outputOptions,
+  }: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, any, TResume, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResume, any, TEngineType>,
+        ]
+      | string
+      | string[];
+    requestContext?: RequestContext;
+    perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.resume({
+            resumeData,
+            step,
+            requestContext,
+            perStep,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          // Wait a microtask to let any pending events flush through
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          self.closeStreamAction?.().catch(() => {});
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
 
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;

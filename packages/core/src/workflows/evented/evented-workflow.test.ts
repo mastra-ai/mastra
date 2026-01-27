@@ -805,7 +805,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.skip('Streaming', () => {
+  describe('Streaming', () => {
     it('should generate a stream', async () => {
       const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
@@ -828,6 +828,7 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).then(step2).commit();
 
@@ -854,8 +855,6 @@ describe('Workflow', () => {
       watchData = collectedStreamData;
 
       const executionResult = await output.result;
-
-      // console.log('executionResult===', JSON.stringify(executionResult, null, 2));
 
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
@@ -1572,6 +1571,7 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
+        options: { validateInputs: false },
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
@@ -1609,7 +1609,6 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           type: 'workflow-start',
         },
-
         {
           from: 'WORKFLOW',
           payload: {
@@ -1623,12 +1622,10 @@ describe('Workflow', () => {
           payload: {
             id: 'step1',
             payload: {},
-
             startedAt: expect.any(Number),
             status: 'running',
             stepName: 'step1',
           },
-
           runId: 'test-run-id',
           type: 'workflow-step-start',
         },
@@ -1641,12 +1638,10 @@ describe('Workflow', () => {
               result: 'success1',
             },
             payload: {},
-
             startedAt: expect.any(Number),
             status: 'success',
             stepName: 'step1',
           },
-
           runId: 'test-run-id',
           type: 'workflow-step-result',
         },
@@ -1661,7 +1656,6 @@ describe('Workflow', () => {
             status: 'waiting',
             stepName: expect.any(String),
           },
-
           runId: 'test-run-id',
           type: 'workflow-step-waiting',
         },
@@ -1676,7 +1670,6 @@ describe('Workflow', () => {
             payload: {
               result: 'success1',
             },
-
             startedAt: expect.any(Number),
             status: 'success',
             stepName: expect.any(String),
@@ -1695,7 +1688,6 @@ describe('Workflow', () => {
             status: 'running',
             stepName: 'step2',
           },
-
           runId: 'test-run-id',
           type: 'workflow-step-start',
         },
@@ -1710,12 +1702,10 @@ describe('Workflow', () => {
             payload: {
               result: 'success1',
             },
-
             startedAt: expect.any(Number),
             status: 'success',
             stepName: 'step2',
           },
-
           runId: 'test-run-id',
           type: 'workflow-step-result',
         },
@@ -1724,13 +1714,13 @@ describe('Workflow', () => {
           payload: {
             runId: 'test-run-id',
           },
-
           runId: 'test-run-id',
           type: 'workflow-finish',
         },
         {
           from: 'WORKFLOW',
           payload: {
+            workflowStatus: 'success',
             metadata: {},
             output: {
               usage: {
@@ -1741,8 +1731,6 @@ describe('Workflow', () => {
                 totalTokens: 0,
               },
             },
-
-            workflowStatus: 'success',
           },
           runId: 'test-run-id',
           type: 'workflow-finish',
