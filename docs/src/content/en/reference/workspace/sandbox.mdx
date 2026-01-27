@@ -20,7 +20,6 @@ import { LocalSandbox } from '@mastra/core/workspace';
 
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
-  inheritEnv: false,
   env: {
     NODE_ENV: 'development',
   },
@@ -39,16 +38,22 @@ const sandbox = new LocalSandbox({
       defaultValue: "process.cwd()",
     },
     {
-      name: "inheritEnv",
-      type: "boolean",
-      description: "Inherit environment variables from process.env",
+      name: "env",
+      type: "NodeJS.ProcessEnv",
+      description: "Environment variables to set. PATH is always included by default.",
       isOptional: true,
-      defaultValue: "false",
     },
     {
-      name: "env",
-      type: "Record<string, string>",
-      description: "Environment variables to set",
+      name: "isolation",
+      type: "'none' | 'seatbelt' | 'bwrap'",
+      description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
+      isOptional: true,
+      defaultValue: "'none'",
+    },
+    {
+      name: "nativeSandbox",
+      type: "NativeSandboxConfig",
+      description: "Configuration for native sandboxing (network access, read/write paths).",
       isOptional: true,
     },
     {
@@ -186,15 +191,15 @@ interface SandboxInfo {
 
 ## Environment isolation
 
-By default, `LocalSandbox` does not inherit environment variables from `process.env`. This prevents accidental exposure of API keys and secrets.
+By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
 
 ```typescript
-// Secure: sandbox has no access to process.env
+// Default: only PATH is available (commands work, secrets protected)
 const secureSandbox = new LocalSandbox({
   workingDirectory: './workspace',
 });
 
-// Explicit: only pass specific variables
+// Explicit: pass specific variables
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
   env: {
@@ -203,12 +208,42 @@ const sandbox = new LocalSandbox({
   },
 });
 
-// Inherit all (use with caution)
+// Full access (use with caution)
 const devSandbox = new LocalSandbox({
   workingDirectory: './workspace',
-  inheritEnv: true,
+  env: process.env,
 });
 ```
+
+## Native OS sandboxing
+
+`LocalSandbox` supports native OS-level sandboxing for additional security:
+
+- **macOS**: Uses Seatbelt (`sandbox-exec`) for filesystem and network isolation
+- **Linux**: Uses Bubblewrap (`bwrap`) for namespace isolation
+
+```typescript
+// Detect the best available backend for this platform
+const detection = LocalSandbox.detectIsolation();
+console.log(detection);
+// { backend: 'seatbelt', available: true, message: '...' }
+
+// Enable native sandboxing
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  isolation: 'seatbelt', // or 'bwrap' on Linux
+  nativeSandbox: {
+    allowNetwork: false, // Block network access (default)
+    readWritePaths: ['/tmp/extra'], // Additional writable paths
+  },
+});
+```
+
+When isolation is enabled:
+- File writes are restricted to the workspace directory (and configured paths)
+- File reads are allowed everywhere (needed for system binaries)
+- Network access is blocked by default
+- Process isolation prevents affecting the host system
 
 ## Related
 

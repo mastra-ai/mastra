@@ -59,9 +59,13 @@ export const globalWorkspace = new Workspace({
   // Pass env vars explicitly - spread process.env for full access, or specific vars for security
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    isolation: 'seatbelt',
+    isolation: LocalSandbox.detectIsolation().backend,
     env: {
       SOMETHING_ELSE: 'hello',
+    },
+    nativeSandbox: {
+      allowNetwork: true,
+      allowSystemBinaries: true,
     },
   }),
   // Tool configuration - full access for demo/development purposes
