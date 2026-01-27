@@ -26,20 +26,20 @@ describe('Workspace Safety Features', () => {
 
   describe('requireReadBeforeWrite (via tools)', () => {
     // Note: requireReadBeforeWrite is now enforced at the tool level, not workspace level.
-    // This allows direct workspace.writeFile() calls (from users/server) to work without restriction,
+    // This allows direct workspace.filesystem.writeFile() calls (from users/server) to work without restriction,
     // while agent tool calls still enforce the read-before-write requirement.
 
-    it('should allow direct workspace.writeFile() without reading first', async () => {
-      // Direct workspace calls are not restricted by requireReadBeforeWrite
+    it('should allow direct filesystem.writeFile() without reading first', async () => {
+      // Direct filesystem calls are not restricted by requireReadBeforeWrite
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       await workspace.init();
 
-      await workspace.writeFile('/test.txt', 'original');
-      await workspace.writeFile('/test.txt', 'modified'); // Should succeed without reading
+      await workspace.filesystem!.writeFile('/test.txt', 'original');
+      await workspace.filesystem!.writeFile('/test.txt', 'modified'); // Should succeed without reading
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
 
       await workspace.destroy();
@@ -57,7 +57,7 @@ describe('Workspace Safety Features', () => {
       await workspace.init();
 
       // Create file first (direct call - no restriction)
-      await workspace.writeFile('/existing.txt', 'original');
+      await workspace.filesystem!.writeFile('/existing.txt', 'original');
 
       // Create tools
       const tools = createWorkspaceTools(workspace);
@@ -86,7 +86,7 @@ describe('Workspace Safety Features', () => {
       await workspace.init();
 
       // Create file first
-      await workspace.writeFile('/test.txt', 'original');
+      await workspace.filesystem!.writeFile('/test.txt', 'original');
 
       // Create tools
       const tools = createWorkspaceTools(workspace);
@@ -99,7 +99,7 @@ describe('Workspace Safety Features', () => {
       // Now write should succeed
       await writeTool.execute({ path: '/test.txt', content: 'modified' });
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
 
       await workspace.destroy();
@@ -122,7 +122,7 @@ describe('Workspace Safety Features', () => {
       // Should succeed - new file doesn't require reading
       await writeTool.execute({ path: '/new-file.txt', content: 'content' });
 
-      const content = await workspace.readFile('/new-file.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/new-file.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
 
       await workspace.destroy();
@@ -140,7 +140,7 @@ describe('Workspace Safety Features', () => {
       await workspace.init();
 
       // Create file first
-      await workspace.writeFile('/test.txt', 'v1');
+      await workspace.filesystem!.writeFile('/test.txt', 'v1');
 
       const tools = createWorkspaceTools(workspace);
       const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
@@ -157,7 +157,7 @@ describe('Workspace Safety Features', () => {
       await readTool.execute({ path: '/test.txt' });
       await writeTool.execute({ path: '/test.txt', content: 'v3' });
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('v3');
 
       await workspace.destroy();
@@ -171,7 +171,7 @@ describe('Workspace Safety Features', () => {
       await workspace.init();
 
       // Create file first
-      await workspace.writeFile('/test.txt', 'original');
+      await workspace.filesystem!.writeFile('/test.txt', 'original');
 
       const tools = createWorkspaceTools(workspace);
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
@@ -179,7 +179,7 @@ describe('Workspace Safety Features', () => {
       // Should succeed without reading first
       await writeTool.execute({ path: '/test.txt', content: 'modified' });
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
 
       await workspace.destroy();
@@ -197,7 +197,7 @@ describe('Workspace Safety Features', () => {
       await workspace.init();
 
       // Create file first
-      await workspace.writeFile('/test.txt', 'hello world');
+      await workspace.filesystem!.writeFile('/test.txt', 'hello world');
 
       const tools = createWorkspaceTools(workspace);
       const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
@@ -213,7 +213,7 @@ describe('Workspace Safety Features', () => {
       const result = await editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' });
       expect(result.success).toBe(true);
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('goodbye world');
 
       await workspace.destroy();
@@ -233,8 +233,8 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      await expect(workspace.writeFile('/test.txt', 'content')).rejects.toThrow(WorkspaceReadOnlyError);
-      await expect(workspace.writeFile('/test.txt', 'content')).rejects.toThrow('read-only mode');
+      await expect(workspace.filesystem!.writeFile('/test.txt', 'content')).rejects.toThrow(WorkspaceReadOnlyError);
+      await expect(workspace.filesystem!.writeFile('/test.txt', 'content')).rejects.toThrow('read-only mode');
 
       await workspace.destroy();
     });
@@ -250,7 +250,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
 
       await workspace.destroy();
@@ -267,8 +267,8 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      expect(await workspace.exists('/test.txt')).toBe(true);
-      expect(await workspace.exists('/nonexistent.txt')).toBe(false);
+      expect(await workspace.filesystem!.exists('/test.txt')).toBe(true);
+      expect(await workspace.filesystem!.exists('/nonexistent.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -285,7 +285,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const entries = await workspace.readdir('/');
+      const entries = await workspace.filesystem!.readdir('/');
       expect(entries.length).toBe(2);
 
       await workspace.destroy();

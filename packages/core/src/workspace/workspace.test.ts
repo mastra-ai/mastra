@@ -95,7 +95,7 @@ describe('Workspace', () => {
   });
 
   // ===========================================================================
-  // File Operations
+  // File Operations (via filesystem property)
   // ===========================================================================
   describe('file operations', () => {
     it('should read file from filesystem', async () => {
@@ -107,7 +107,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const content = await workspace.readFile('/test.txt');
+      const content = await workspace.filesystem!.readFile('/test.txt');
       expect(content.toString()).toBe('Hello World');
     });
 
@@ -117,7 +117,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      await workspace.writeFile('/test.txt', 'Hello World');
+      await workspace.filesystem!.writeFile('/test.txt', 'Hello World');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello World');
@@ -133,7 +133,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const entries = await workspace.readdir('/dir');
+      const entries = await workspace.filesystem!.readdir('/dir');
       expect(entries).toHaveLength(1);
       expect(entries[0]?.name).toBe('file.txt');
     });
@@ -146,36 +146,20 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      expect(await workspace.exists('/exists.txt')).toBe(true);
-      expect(await workspace.exists('/notexists.txt')).toBe(false);
+      expect(await workspace.filesystem!.exists('/exists.txt')).toBe(true);
+      expect(await workspace.filesystem!.exists('/notexists.txt')).toBe(false);
     });
 
-    it('should update lastAccessedAt on file operations', async () => {
-      const filesystem = new LocalFilesystem({
-        basePath: tempDir,
-      });
-      const workspace = new Workspace({ filesystem });
-
-      const initialAccess = workspace.lastAccessedAt;
-      await new Promise(resolve => setTimeout(resolve, 5));
-
-      await workspace.writeFile('/test.txt', 'content');
-      expect(workspace.lastAccessedAt.getTime()).toBeGreaterThan(initialAccess.getTime());
-    });
-
-    it('should throw FilesystemNotAvailableError when no filesystem', async () => {
+    it('should expose filesystem as undefined when not configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const sandboxOnly = new Workspace({ sandbox });
 
-      await expect(sandboxOnly.readFile('/test.txt')).rejects.toThrow(FilesystemNotAvailableError);
-      await expect(sandboxOnly.writeFile('/test.txt', 'content')).rejects.toThrow(FilesystemNotAvailableError);
-      await expect(sandboxOnly.readdir('/')).rejects.toThrow(FilesystemNotAvailableError);
-      await expect(sandboxOnly.exists('/test.txt')).rejects.toThrow(FilesystemNotAvailableError);
+      expect(sandboxOnly.filesystem).toBeUndefined();
     });
   });
 
   // ===========================================================================
-  // Sandbox Operations
+  // Sandbox Operations (via sandbox property)
   // ===========================================================================
   describe('sandbox operations', () => {
     it('should execute command in sandbox', async () => {
@@ -183,7 +167,7 @@ describe('Workspace', () => {
       const workspace = new Workspace({ sandbox });
 
       await workspace.init();
-      const result = await workspace.executeCommand('echo', ['hello']);
+      const result = await workspace.sandbox!.executeCommand!('echo', ['hello']);
 
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('hello');
@@ -191,11 +175,11 @@ describe('Workspace', () => {
       await workspace.destroy();
     });
 
-    it('should throw SandboxNotAvailableError when no sandbox', async () => {
+    it('should expose sandbox as undefined when not configured', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const fsOnly = new Workspace({ filesystem });
 
-      await expect(fsOnly.executeCommand('cmd')).rejects.toThrow(SandboxNotAvailableError);
+      expect(fsOnly.sandbox).toBeUndefined();
     });
   });
 

@@ -136,7 +136,7 @@ export function createWorkspaceTools(workspace: Workspace) {
           totalLines: z.number().optional().describe('Total number of lines in the file'),
         }),
         execute: async ({ path, encoding, offset, limit, showLineNumbers }) => {
-          const fullContent = await workspace.readFile(path, {
+          const fullContent = await workspace.filesystem!.readFile(path, {
             encoding: (encoding as BufferEncoding) ?? 'utf-8',
           });
           const stat = await workspace.filesystem!.stat(path);
@@ -216,7 +216,7 @@ export function createWorkspaceTools(workspace: Workspace) {
             }
           }
 
-          await workspace.writeFile(path, content, { overwrite });
+          await workspace.filesystem!.writeFile(path, content, { overwrite });
 
           // Clear the read record after successful write (requires a new read to write again)
           if (readTracker) {
@@ -269,7 +269,7 @@ export function createWorkspaceTools(workspace: Workspace) {
             }
 
             // Read the current file content
-            const content = await workspace.readFile(path, { encoding: 'utf-8' });
+            const content = await workspace.filesystem!.readFile(path, { encoding: 'utf-8' });
 
             if (typeof content !== 'string') {
               return {
@@ -284,7 +284,7 @@ export function createWorkspaceTools(workspace: Workspace) {
             const result = replaceString(content, old_string, new_string, replace_all);
 
             // Write the modified content back
-            await workspace.writeFile(path, result.content, { overwrite: true });
+            await workspace.filesystem!.writeFile(path, result.content, { overwrite: true });
 
             // Clear the read record after successful write (requires a new read to write again)
             if (readTracker) {
@@ -650,7 +650,7 @@ Examples:
             },
           });
 
-          const result = await workspace.executeCommand(command, args ?? [], {
+          const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
             timeout: timeout ?? 30000,
             cwd: cwd ?? undefined,
             // Stream stdout/stderr as tool-output chunks for proper UI integration

@@ -15,6 +15,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
+  WorkspaceReadOnlyError,
 } from './errors';
 import type {
   WorkspaceFilesystem,
@@ -118,6 +119,12 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }
 
+  private assertWritable(operation: string): void {
+    if (this.readOnly) {
+      throw new WorkspaceReadOnlyError(operation);
+    }
+  }
+
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     const absolutePath = this.resolvePath(inputPath);
 
@@ -141,6 +148,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
 
     if (options?.overwrite === false) {
@@ -161,6 +169,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
+    this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
     const dir = nodePath.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
@@ -168,6 +177,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
 
     try {
@@ -189,6 +199,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
 
@@ -245,6 +256,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
 
@@ -276,6 +288,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+    this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
 
     try {
@@ -293,6 +306,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
 
     try {

@@ -224,7 +224,7 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       // Read first (required by safety)
-      await workspace.readFile('/existing.txt');
+      await workspace.filesystem!.readFile('/existing.txt');
 
       await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
         path: '/existing.txt',

@@ -25,8 +25,8 @@
  * });
  *
  * await fullWorkspace.init();
- * await fullWorkspace.writeFile('/code/app.py', 'print("Hello!")');
- * const result = await fullWorkspace.executeCommand('python3', ['app.py'], { cwd: '/code' });
+ * await fullWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello!")');
+ * const result = await fullWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
  * ```
  */
 
@@ -34,16 +34,9 @@ import type { MastraVector } from '../vector';
 
 import type { BM25Config } from './bm25';
 import type { WorkspaceToolsConfig } from './constants';
-import {
-  WorkspaceError,
-  FilesystemNotAvailableError,
-  SandboxNotAvailableError,
-  SandboxFeatureNotSupportedError,
-  SearchNotAvailableError,
-  WorkspaceReadOnlyError,
-} from './errors';
-import type { WorkspaceFilesystem, FileContent, FileEntry, ReadOptions, WriteOptions, ListOptions } from './filesystem';
-import type { WorkspaceSandbox, CommandResult, ExecuteCommandOptions } from './sandbox';
+import { WorkspaceError, SearchNotAvailableError } from './errors';
+import type { WorkspaceFilesystem } from './filesystem';
+import type { WorkspaceSandbox } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
 import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
@@ -278,9 +271,6 @@ export class Workspace {
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
-  // Safety-related properties
-  private readonly _readOnly: boolean;
-
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
@@ -290,9 +280,6 @@ export class Workspace {
     this._config = config;
     this._fs = config.filesystem;
     this._sandbox = config.sandbox;
-
-    // Initialize safety features from filesystem provider
-    this._readOnly = config.filesystem?.readOnly ?? false;
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
@@ -368,9 +355,10 @@ export class Workspace {
 
   /**
    * Whether the workspace is in read-only mode.
+   * Reads from the filesystem's readOnly property.
    */
   get readOnly(): boolean {
-    return this._readOnly;
+    return this._fs?.readOnly ?? false;
   }
 
   /**
@@ -379,16 +367,6 @@ export class Workspace {
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
-  }
-
-  /**
-   * Assert that the workspace is writable (not in read-only mode).
-   * @throws {WorkspaceReadOnlyError} if workspace is read-only
-   */
-  private assertWritable(operation: string): void {
-    if (this._readOnly) {
-      throw new WorkspaceReadOnlyError(operation);
-    }
   }
 
   /**
@@ -460,82 +438,6 @@ export class Workspace {
    */
   get canHybrid(): boolean {
     return this._searchEngine?.canHybrid ?? false;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Convenience Methods (delegate to filesystem)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Read a file from the workspace filesystem.
-   * @throws {FilesystemNotAvailableError} if no filesystem is configured
-   */
-  async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-    return this._fs.readFile(path, options);
-  }
-
-  /**
-   * Write a file to the workspace filesystem.
-   * @throws {FilesystemNotAvailableError} if no filesystem is configured
-   * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
-   */
-  async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-
-    // Check readonly mode
-    this.assertWritable('writeFile');
-
-    this.lastAccessedAt = new Date();
-    await this._fs.writeFile(path, content, options);
-  }
-
-  /**
-   * List directory contents.
-   * @throws {FilesystemNotAvailableError} if no filesystem is configured
-   */
-  async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    this.lastAccessedAt = new Date();
-    return this._fs.readdir(path, options);
-  }
-
-  /**
-   * Check if a path exists.
-   * @throws {FilesystemNotAvailableError} if no filesystem is configured
-   */
-  async exists(path: string): Promise<boolean> {
-    if (!this._fs) {
-      throw new FilesystemNotAvailableError();
-    }
-    return this._fs.exists(path);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Convenience Methods (delegate to sandbox)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Execute code in the sandbox.
-   * @throws {SandboxNotAvailableError} if no sandbox is configured
-   * @throws {SandboxFeatureNotSupportedError} if sandbox doesn't support command execution
-   */
-  async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
-    if (!this._sandbox) {
-      throw new SandboxNotAvailableError();
-    }
-    if (!this._sandbox.executeCommand) {
-      throw new SandboxFeatureNotSupportedError('executeCommand');
-    }
-    this.lastAccessedAt = new Date();
-    return this._sandbox.executeCommand(command, args, options);
   }
 
   // ---------------------------------------------------------------------------
