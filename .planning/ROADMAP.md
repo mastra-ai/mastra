@@ -232,27 +232,75 @@ Plans:
 
 **Goal:** Close all remaining test gaps for full parity
 
-**Gap Analysis:** Miscellaneous tests not covered in prior phases
+**Gap Analysis:** 42 actionable tests (48 total minus 6 restart tests out of scope)
 
-**Missing Tests:**
+**Plans:** 4 plans
 
-- Writer functionality (2 tests)
-- Sleep with fn parameter (2 tests)
-- Run count/status tests
-- Storage operations (get/delete workflow run)
-- Snapshot persistence options
-- Agent step options
-- Nested workflow result information
-- Automatic workflow commit
-- Foreach bail functionality
-- Tracing context TypeScript support
-- resourceId preservation
+Plans:
+
+- [ ] 06-01-PLAN.md - Storage and error handling tests (12 tests)
+- [ ] 06-02-PLAN.md - Agent and streaming edge case tests (10 tests)
+- [ ] 06-03-PLAN.md - Schema validation and sleep fn tests (6 tests)
+- [ ] 06-04-PLAN.md - Nested, parallel, and misc tests (12 tests)
+
+**Test Categories:**
+
+Storage & Run Management (7 tests):
+- runCount should exist and equal zero for the first run
+- should get and delete workflow run by id from storage
+- should load serialized error from storage via getWorkflowRunById
+- should return correct status from storage when creating run with existing runId
+- should return only requested fields when fields option is specified
+- should update run status from storage snapshot when run exists in memory map
+- should use shouldPersistSnapshot option
+
+Error Handling (5 tests):
+- should persist error message without stack trace in snapshot
+- should persist MastraError message without stack trace in snapshot
+- should preserve custom error properties when step throws error with extra fields
+- should propagate step error to workflow-level error
+- should preserve error.cause chain in result.error
+
+Agent Step Features (5 tests):
+- should be able to use an agent with v1 model as a step
+- should bubble up tripwire from agent input processor to workflow result
+- should handle tripwire from output stream processor in agent within workflow
+- should pass agentOptions when wrapping agent with createStep
+- should pass structured output from agent step to next step with correct types
+
+Streaming & Writer (6 tests):
+- should continue streaming current run on subsequent stream calls
+- should handle custom event emission using writer
+- should handle writer.custom during resume operations
+- should handle errors from agent.stream() with full error details
+- should preserve error details in streaming workflow
+- should return tripwire status when streaming agent in workflow
+
+Sleep Step Variants (3 tests):
+- should execute a sleep step with fn parameter
+- should execute a sleep until step with fn parameter
+- should handle sleep waiting flow with fn parameter
+
+Nested & Parallel (4 tests):
+- should return workflow run execution result with nested workflow steps information
+- should exclude nested workflow steps when withNestedWorkflows is false
+- should complete parallel workflow when steps do not suspend
+- should properly update snapshot when executing multiple steps in parallel
+
+ResourceId & Misc (6 tests):
+- should persist resourceId when creating workflow runs
+- should preserve resourceId when resuming a suspended workflow
+- should automatically commit uncommitted workflow when registering in mastra instance
+- should bail foreach execution when called in a concurrent batch
+- should only update workflow status to success after all steps have run successfully
+- should resolve dynamic mappings via .map() with custom step id
 
 **Success Criteria:**
 
-1. Port all remaining tests
-2. Full test parity achieved
-3. No skipped tests remain (except intentionally unsupported features)
+1. Port all 40+ remaining tests
+2. At least 80% passing (32+ tests)
+3. Skipped tests documented with reasons
+4. Final test count: 200+ passing
 
 ---
 
@@ -277,11 +325,11 @@ Plans:
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
 | 4     | Suspend/Resume Edge Cases | 26 (11+15skip)| Complete    |
 | 5     | Streaming vNext           | 6 (4+2skip)   | Complete    |
-| 6     | Remaining Parity          | ~43           | Not Started |
+| 6     | Remaining Parity          | ~40           | In Progress |
 
-**Total:** ~43 tests to port (~113 - 52 completed - 18 skipped)
+**Total:** ~40 tests to port in Phase 6
 
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 5 completion_
+_Last updated: 2026-01-27 after Phase 6 planning_
