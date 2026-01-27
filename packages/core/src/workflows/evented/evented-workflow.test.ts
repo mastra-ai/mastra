@@ -15790,7 +15790,15 @@ describe('Workflow', () => {
       expect(startResult.status).toBe('suspended');
       expect(stepAction).toHaveBeenCalledTimes(1);
 
-      // Resume using label instead of step parameter
+      // First test: using invalid label should throw error
+      await expect(
+        run.resume({
+          resumeData: {},
+          label: 'wrong-label',
+        }),
+      ).rejects.toThrow('Resume label "wrong-label" not found');
+
+      // Resume using correct label instead of step parameter
       const resumeResult = await run.resume({
         resumeData: {},
         label: 'test-resume-label',
@@ -15962,6 +15970,452 @@ describe('Workflow', () => {
     it.skip('should handle basic suspend and resume flow that does not close on suspend', async () => {
       // This test requires stream() API with closeOnSuspend option which is not yet implemented
       // in the evented runtime. The evented runtime handles streaming differently via pubsub.
+    });
+
+    it('should handle consecutive nested workflows with suspend/resume', async () => {
+      const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step1Definition = createStep({
+        id: 'step-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step1,
+      });
+
+      const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the second suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step2Definition = createStep({
+        id: 'step-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step2,
+      });
+
+      const subWorkflow1 = createWorkflow({
+        id: 'sub-workflow-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step1Definition)
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 'sub-workflow-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step2Definition)
+        .commit();
+
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow-consecutive-nested-evented',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(subWorkflow1)
+        .then(subWorkflow2)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'main-workflow-consecutive-nested-evented': mainWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await mainWorkflow.createRun();
+
+      const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
+
+      expect(step1).toHaveBeenCalledTimes(1);
+      expect(step2).toHaveBeenCalledTimes(0);
+      expect(initialResult.status).toBe('suspended');
+      expect(initialResult.steps['sub-workflow-1']).toMatchObject({
+        status: 'suspended',
+      });
+
+      const firstResumeResult = await run.resume({
+        step: ['sub-workflow-1', 'step-1'],
+        resumeData: { suspect: 'first-suspect' },
+      });
+
+      expect(step1).toHaveBeenCalledTimes(2);
+      expect(step2).toHaveBeenCalledTimes(1);
+      expect(firstResumeResult.status).toBe('suspended');
+      expect(firstResumeResult.steps['sub-workflow-1']).toMatchObject({
+        status: 'success',
+      });
+      expect(firstResumeResult.steps['sub-workflow-2']).toMatchObject({
+        status: 'suspended',
+      });
+
+      const secondResumeResult = await run.resume({
+        step: 'sub-workflow-2.step-2',
+        resumeData: { suspect: 'second-suspect' },
+      });
+
+      expect(step1).toHaveBeenCalledTimes(2);
+      expect(step2).toHaveBeenCalledTimes(2);
+      expect(secondResumeResult.status).toBe('success');
+      expect(secondResumeResult.steps['sub-workflow-1']).toMatchObject({
+        status: 'success',
+      });
+      expect(secondResumeResult.steps['sub-workflow-2']).toMatchObject({
+        status: 'success',
+      });
+      expect((secondResumeResult as any).result).toEqual({ suspect: 'second-suspect' });
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should be able to resume suspended nested workflow step with only nested workflow step provided', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        const currentValue = inputData.startValue || 0;
+        const newValue = currentValue + 1;
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({ startValue: z.number() }),
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        if (!resumeData) {
+          return await suspend();
+        }
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async ({}) => {
+        return { success: true };
+      });
+      const begin = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
+      const finalStep = createStep({
+        id: 'final',
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow-evented',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: { validateInputs: false },
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: finalStep.outputSchema,
+        options: { validateInputs: false },
+      })
+        .then(startStep)
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+
+      counterWorkflow
+        .then(
+          createStep({
+            id: 'begin-step',
+            inputSchema: counterWorkflow.inputSchema,
+            outputSchema: counterWorkflow.inputSchema,
+            execute: begin,
+          }),
+        )
+        .then(wfA)
+        .then(
+          createStep({
+            id: 'last-step',
+            inputSchema: wfA.outputSchema,
+            outputSchema: z.object({ success: z.boolean() }),
+            execute: last,
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+      expect(begin).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(0);
+      expect(last).toHaveBeenCalledTimes(0);
+      expect(result.steps['nested-workflow-a']).toMatchObject({
+        status: 'suspended',
+      });
+
+      // @ts-expect-error - testing dynamic workflow result
+      expect(result.steps['last-step']).toEqual(undefined);
+
+      const resumedResults = await run.resume({ step: 'nested-workflow-a', resumeData: { newValue: 0 } });
+
+      // @ts-expect-error - testing dynamic workflow result
+      expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
+        finalValue: 26 + 1,
+      });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(2);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(last).toHaveBeenCalledTimes(1);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should have access to the correct input value when resuming in a loop. bug #6669', async () => {
+      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const step1 = createStep({
+        id: 'step-1',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean().default(false),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        resumeSchema: z.object({
+          shouldContinue: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          message: z.string(),
+        }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          let { condition, value } = inputData;
+          const { shouldContinue } = resumeData ?? {};
+
+          if (!shouldContinue) {
+            await suspend({
+              message: `Continue with value ${value}?`,
+            });
+            return { value, condition };
+          }
+
+          await delay(100);
+
+          value = value + 1;
+          condition = value >= 10;
+
+          return {
+            value,
+            condition,
+          };
+        },
+      });
+
+      const step2 = createStep({
+        id: 'step-2',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        execute: async ({ inputData }) => {
+          const { condition, value } = inputData;
+
+          return {
+            value,
+            condition,
+          };
+        },
+      });
+
+      const workflowUntilVar = createWorkflow({
+        id: 'workflow-until-var-evented',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean().default(false),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+      })
+        .dountil(step1, async ({ inputData: { condition } }) => condition)
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'workflow-until-var-evented': workflowUntilVar },
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflowUntilVar.createRun();
+
+      const result = await run.start({
+        inputData: { value: 0, condition: false },
+      });
+
+      if (result.status !== 'suspended') {
+        expect.fail('Workflow should be suspended');
+      }
+
+      const firstResume = await run.resume({ resumeData: { shouldContinue: true } });
+
+      expect(firstResume.steps['step-1'].payload.value).toBe(1);
+
+      const secondResume = await run.resume({ resumeData: { shouldContinue: true } });
+      expect(secondResume.steps['step-1'].payload.value).toBe(2);
+
+      const thirdResume = await run.resume({ resumeData: { shouldContinue: true } });
+
+      expect(thirdResume.steps['step-1'].payload.value).toBe(3);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should handle basic suspend and resume in nested dountil workflow - bug #5650', async () => {
+      let incrementLoopValue = 2;
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async ({ inputData, requestContext, getInitData }) => {
+          const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
+          expect(shouldNotExist).toBeUndefined();
+          const initData = getInitData();
+
+          expect(initData.value).toBe(incrementLoopValue);
+          incrementLoopValue = inputData.value;
+          return { value: inputData.value };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          amountToIncrementBy: z.number(),
+        }),
+        suspendSchema: z.object({
+          optionsToIncrementBy: z.array(z.number()),
+        }),
+        execute: async ({ inputData, resumeData, suspend, requestContext }) => {
+          const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
+          expect(shouldNotExist).toBeUndefined();
+          if (!resumeData?.amountToIncrementBy) {
+            return suspend({ optionsToIncrementBy: [1, 2, 3] });
+          }
+
+          const result = inputData.value + resumeData.amountToIncrementBy;
+
+          return { value: result };
+        },
+      });
+
+      const dowhileWorkflow = createWorkflow({
+        id: 'dowhile-workflow-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .dountil(
+          createWorkflow({
+            id: 'simple-resume-workflow',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            steps: [incrementStep, resumeStep],
+          })
+            .then(incrementStep)
+            .then(resumeStep)
+            .commit(),
+          async ({ inputData }) => {
+            return inputData.value >= 10;
+          },
+        )
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'dowhile-workflow-evented': dowhileWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await dowhileWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 2 } });
+      expect(result.steps['simple-resume-workflow']).toMatchObject({
+        status: 'suspended',
+      });
+
+      const resumeResult = await run.resume({
+        resumeData: { amountToIncrementBy: 2 },
+        step: ['simple-resume-workflow', 'increment'],
+      });
+
+      // After resume with increment of 2, value becomes 4
+      // Since 4 < 10, the loop continues and the nested workflow suspends again
+      expect(resumeResult.steps['simple-resume-workflow']).toMatchObject({
+        status: 'suspended',
+      });
+
+      await mastra.stopEventEngine();
     });
   });
 });
