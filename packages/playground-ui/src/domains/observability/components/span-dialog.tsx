@@ -25,6 +25,8 @@ type SpanDialogProps = {
   computeTraceLink: (traceId: string, spanId?: string) => string;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
+  /** When true, prevents outside clicks from closing (for embedded use) */
+  embedded?: boolean;
 };
 
 export function SpanDialog({
@@ -44,6 +46,7 @@ export function SpanDialog({
   computeTraceLink,
   scorers,
   isLoadingScorers,
+  embedded = false,
 }: SpanDialogProps) {
   return (
     <SideDialog

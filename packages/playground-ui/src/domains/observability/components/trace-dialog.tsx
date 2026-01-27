@@ -47,6 +47,8 @@ type TraceDialogProps = {
   initialScoreId?: string;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
+  /** When true, prevents URL navigation (for embedded use in other pages) */
+  embedded?: boolean;
 };
 
 export function TraceDialog({
@@ -64,6 +66,7 @@ export function TraceDialog({
   initialScoreId,
   scorers,
   isLoadingScorers,
+  embedded = false,
 }: TraceDialogProps) {
   const { Link, navigate } = useLinkComponent();
 
@@ -149,8 +152,9 @@ export function TraceDialog({
   const handleToScoring = () => {
     setSelectedSpanId(hierarchicalSpans[0]?.id);
     setSpanDialogDefaultTab('scores');
+    setDialogIsOpen(true);
 
-    if (traceId) {
+    if (traceId && !embedded) {
       navigate(`${computeTraceLink(traceId, hierarchicalSpans?.[0]?.id)}&tab=scores`);
     }
   };
@@ -158,8 +162,9 @@ export function TraceDialog({
   const handleToLastScore = () => {
     setSelectedSpanId(hierarchicalSpans[0]?.id);
     setSpanDialogDefaultTab('scores');
+    setDialogIsOpen(true);
 
-    if (traceId) {
+    if (traceId && !embedded) {
       navigate(
         `${computeTraceLink(
           traceId,
@@ -232,6 +237,7 @@ export function TraceDialog({
         isOpen={isOpen}
         onClose={onClose}
         level={1}
+        preventCloseOnOutsideClick={embedded && dialogIsOpen && !!selectedSpanId && !combinedView}
       >
         <SideDialog.Top>
           <TextAndIcon>
@@ -369,7 +375,9 @@ export function TraceDialog({
           isLoadingSpanScoresData={isLoadingSpanScoresData}
           isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
           onClose={() => {
-            navigate(computeTraceLink(traceId || ''));
+            if (!embedded) {
+              navigate(computeTraceLink(traceId || ''));
+            }
             setDialogIsOpen(false);
           }}
           onNext={toNextSpan()}
@@ -381,6 +389,7 @@ export function TraceDialog({
           computeTraceLink={computeTraceLink}
           scorers={scorers}
           isLoadingScorers={isLoadingScorers}
+          embedded={embedded}
         />
       )}
     </>

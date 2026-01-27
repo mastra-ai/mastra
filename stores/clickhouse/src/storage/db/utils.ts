@@ -8,6 +8,10 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_SPANS,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_RUNS,
+  TABLE_DATASET_RUN_RESULTS,
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
@@ -23,6 +27,11 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
+  // Dataset tables (placeholder entries for type safety - not yet implemented for ClickHouse)
+  [TABLE_DATASETS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_ITEMS]: `MergeTree()`,
+  [TABLE_DATASET_RUNS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_RUN_RESULTS]: `MergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
 };
 

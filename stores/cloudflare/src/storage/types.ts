@@ -15,6 +15,14 @@ import type {
   TABLE_AGENT_VERSIONS,
   SpanRecord,
   StorageAgentType,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_RUNS,
+  TABLE_DATASET_RUN_RESULTS,
+  Dataset,
+  DatasetItem,
+  DatasetRun,
+  DatasetRunResult,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -111,6 +119,11 @@ export type RecordTypes = {
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
+  // Dataset tables (placeholder entries - not yet implemented for Cloudflare)
+  [TABLE_DATASETS]: Dataset;
+  [TABLE_DATASET_ITEMS]: DatasetItem;
+  [TABLE_DATASET_RUNS]: DatasetRun;
+  [TABLE_DATASET_RUN_RESULTS]: DatasetRunResult;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
 };
 

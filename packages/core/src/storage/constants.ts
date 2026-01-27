@@ -1,3 +1,4 @@
+import { datasetSchema, datasetItemSchema, datasetRunSchema, datasetRunResultSchema } from '../datasets/types';
 import { spanRecordSchema } from './domains/observability/types';
 import { buildStorageSchema } from './types';
 import type { StorageColumn } from './types';
@@ -10,6 +11,10 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
+export const TABLE_DATASET_RUNS = 'mastra_dataset_runs';
+export const TABLE_DATASET_RUN_RESULTS = 'mastra_dataset_run_results';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 
 export type TABLE_NAMES =
@@ -21,6 +26,10 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_ITEMS
+  | typeof TABLE_DATASET_RUNS
+  | typeof TABLE_DATASET_RUN_RESULTS
   | typeof TABLE_AGENT_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
@@ -62,6 +71,11 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
 };
 
 export const SPAN_SCHEMA = buildStorageSchema(spanRecordSchema);
+
+export const DATASET_SCHEMA = buildStorageSchema(datasetSchema);
+export const DATASET_ITEM_SCHEMA = buildStorageSchema(datasetItemSchema);
+export const DATASET_RUN_SCHEMA = buildStorageSchema(datasetRunSchema);
+export const DATASET_RUN_RESULT_SCHEMA = buildStorageSchema(datasetRunResultSchema);
 
 /**
  * @deprecated Use SPAN_SCHEMA instead. This legacy schema is retained only for migration purposes.
@@ -183,5 +197,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_DATASETS]: DATASET_SCHEMA,
+  [TABLE_DATASET_ITEMS]: DATASET_ITEM_SCHEMA,
+  [TABLE_DATASET_RUNS]: DATASET_RUN_SCHEMA,
+  [TABLE_DATASET_RUN_RESULTS]: DATASET_RUN_RESULT_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
 };
