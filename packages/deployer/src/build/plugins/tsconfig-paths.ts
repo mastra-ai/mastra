@@ -127,8 +127,6 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         const moduleName = resolveAlias(request, importer);
         // No tsconfig alias found, so we need to resolve it normally
         if (!moduleName) {
-          let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
-
           const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
           if (!resolved) {
             return null;
@@ -138,9 +136,9 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
           // if so, we need to resolve the request from the importer instead of the root and mark it as external
           if (localResolve) {
             const importerInfo = this.getModuleInfo(importer);
-            importerMeta = importerInfo?.meta || {};
+            const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
 
-            if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
+            if (!request.startsWith('./') && !request.startsWith('../') && importerPluginMeta?.resolved) {
               return {
                 ...resolved,
                 external: !request.startsWith('hono/') && request !== 'hono',
@@ -152,7 +150,6 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
             ...resolved,
             meta: {
               ...(resolved.meta || {}),
-              ...importerMeta,
             },
           };
         }
