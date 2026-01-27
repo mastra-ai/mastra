@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 8 of 8 (Item Selection & Actions)
-Plan: 3 of 6 in phase 8
+Plan: 4 of 6 in phase 8
 Status: In progress
-Last activity: 2026-01-27 — Completed 08-03-PLAN.md (CreateDatasetFromItemsDialog)
+Last activity: 2026-01-27 — Completed 08-04-PLAN.md (Items List Integration)
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 31
+- Total plans completed: 32
 - Average duration: 4 min
-- Total execution time: 1.75 hours
+- Total execution time: 1.82 hours
 
 **By Phase:**
 
@@ -34,10 +34,10 @@ Progress: [█████████░] 92%
 | 05-run-analytics | 1 | 4 min | 4 min |
 | 06-playground-integration | 12 | 48 min | 4 min |
 | 07-csv-import | 5 | 10 min | 2 min |
-| 08-item-selection-actions | 3 | 9 min | 3 min |
+| 08-item-selection-actions | 4 | 13 min | 3.25 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-05 (1 min), 08-01 (3 min), 08-02 (3 min), 08-03 (3 min)
+- Last 5 plans: 08-01 (3 min), 08-02 (3 min), 08-03 (3 min), 08-04 (4 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -93,6 +93,8 @@ Recent decisions affecting current work:
 - useEffect rebuilds entire mapping on headers change (not incremental merge)
 - Sequential item copying with progress - simpler than batch, shows user feedback
 - Disable dialog close during creation - prevents partial state
+- Export action clears selection immediately (no dialog needed)
+- Create Dataset and Delete defer clearing to parent via clearSelectionTrigger
 
 ### Pending Todos
 
@@ -105,5 +107,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 08-03-PLAN.md (CreateDatasetFromItemsDialog)
+Stopped at: Completed 08-04-PLAN.md (Items List Integration)
 Resume file: None
