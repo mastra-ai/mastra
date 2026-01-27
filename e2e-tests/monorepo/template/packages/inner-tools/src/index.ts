@@ -1,5 +1,4 @@
 import { createTool } from '@mastra/core/tools';
-import bcrypt from 'bcrypt';
 import { comparePassword } from '@inner/native-binding-package';
 import { IgetYouAnything } from '@inner/lodash';
 import { hashPassword, getPasswordMessage } from '~/utils/password-utils';
