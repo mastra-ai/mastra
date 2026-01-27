@@ -197,23 +197,34 @@ Foreach Suspend/Resume:
 
 **Goal:** Implement modern streaming API (currently skipped)
 
-**Gap Analysis:** 6 tests in "Streaming (vNext)" describe block skipped
+**Gap Analysis:** 4 tests in "Streaming" describe block skipped, need stream() and resumeStream() methods
+
+**Plans:** 1 plan
+
+Plans:
+
+- [ ] 05-01-PLAN.md - Implement stream() and resumeStream() on EventedRun, unskip 4 streaming tests
 
 **Missing Tests:**
 
-- should continue streaming current run on subsequent stream calls
-- should preserve error details in streaming workflow
-- should handle errors from agent.stream() with full error details
-- should return tripwire status when streaming agent in workflow
-- should handle tripwire from output stream processor in agent within workflow
+- should generate a stream (basic vNext streaming)
+- should generate a stream for a single step when perStep is true
+- should handle basic suspend and resume flow (with vNext streaming)
+- should be able to use an agent as a step (streaming agent)
 
-**Note:** Evented has "Streaming Legacy" working, need vNext API
+**Key Implementation:**
+
+- Add stream() method to EventedRun class that returns WorkflowRunOutput
+- Add resumeStream() method to EventedRun class for streaming resume
+- Use existing watch() for pubsub event subscription
+- WorkflowRunOutput class already exists (reuse as-is)
 
 **Success Criteria:**
 
 1. Unskip the Streaming describe block
-2. Implement vNext streaming API
-3. All streaming tests pass
+2. Implement vNext streaming API (stream() and resumeStream())
+3. At least 3 of 4 streaming tests pass
+4. Tests that can't pass have documented architectural reasons
 
 ---
 
@@ -265,7 +276,7 @@ Foreach Suspend/Resume:
 | 2     | Lifecycle Callbacks       | 15            | Complete    |
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
 | 4     | Suspend/Resume Edge Cases | 26 (11+15skip)| Complete    |
-| 5     | Streaming vNext           | 6             | Not Started |
+| 5     | Streaming vNext           | 4             | Planned     |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
 **Total:** ~49 tests to port (~113 - 47 completed - 17 skipped)
@@ -273,4 +284,4 @@ Foreach Suspend/Resume:
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 4 completion_
+_Last updated: 2026-01-27 after Phase 5 planning_
