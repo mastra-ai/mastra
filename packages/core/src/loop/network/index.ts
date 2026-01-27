@@ -2177,6 +2177,7 @@ export async function networkLoop<OUTPUT = undefined>({
       if (resumeDataToUse) {
         return run.resumeStream({
           resumeData: resumeDataToUse,
+          requestContext,
         }).fullStream;
       }
       return run.stream({
@@ -2191,6 +2192,7 @@ export async function networkLoop<OUTPUT = undefined>({
           isOneOff: false,
           verboseIntrospection: true,
         },
+        requestContext,
       }).fullStream;
     },
   });
