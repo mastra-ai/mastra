@@ -381,50 +381,157 @@ describe('Workspace Safety Features', () => {
       await workspace.destroy();
     });
 
-    it('should set requireApproval on sandbox tools when sandboxApproval is "all"', async () => {
+    it('should default to all tools enabled and no approval required', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({
-          workingDirectory: tempDir,
-          safety: { requireApproval: 'all' },
-        }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        bm25: true,
       });
       await workspace.init();
 
       const tools = createWorkspaceTools(workspace);
 
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
+      // All tools should be enabled by default
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.SEARCH.SEARCH]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
 
-      await workspace.destroy();
-    });
-
-    it('should not set requireApproval when sandboxApproval is "none"', async () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-        sandbox: new LocalSandbox({
-          workingDirectory: tempDir,
-          safety: { requireApproval: 'none' },
-        }),
-      });
-      await workspace.init();
-
-      const tools = createWorkspaceTools(workspace);
-
+      // No approval required by default
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(false);
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].requireApproval).toBe(false);
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
 
       await workspace.destroy();
     });
 
-    it('should default to requiring approval when no safety config', async () => {
+    it('should apply top-level requireApproval to all tools', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          requireApproval: true,
+        },
       });
       await workspace.init();
 
       const tools = createWorkspaceTools(workspace);
 
-      // Default is 'all' - all sandbox tools require approval
+      // All tools should require approval
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(true);
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].requireApproval).toBe(true);
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should apply top-level enabled to all tools', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          enabled: false,
+        },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+
+      // No tools should be present when all disabled
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeUndefined();
+
+      await workspace.destroy();
+    });
+
+    it('should allow per-tool overrides of top-level defaults', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          // Top-level: all tools require approval
+          requireApproval: true,
+          // Override: read_file doesn't require approval
+          [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+            requireApproval: false,
+          },
+          // Override: delete_file is disabled
+          [WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]: {
+            enabled: false,
+          },
+        },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+
+      // read_file should NOT require approval (per-tool override)
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(false);
+
+      // write_file should require approval (top-level default)
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].requireApproval).toBe(true);
+
+      // delete_file should be disabled
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeUndefined();
+
+      // sandbox tool should require approval (top-level default)
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should allow enabling specific tools when top-level is disabled', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          // Top-level: all tools disabled
+          enabled: false,
+          // Override: only read_file and list_files are enabled
+          [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+            enabled: true,
+          },
+          [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: {
+            enabled: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+
+      // Only read_file and list_files should be present
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeDefined();
+
+      // All other tools should be disabled
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeUndefined();
+
+      await workspace.destroy();
+    });
+
+    it('should set requireApproval on sandbox tools via tools config', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            requireApproval: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
 
       await workspace.destroy();

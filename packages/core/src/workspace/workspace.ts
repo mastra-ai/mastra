@@ -33,6 +33,7 @@
 import type { MastraVector } from '../vector';
 
 import type { BM25Config } from './bm25';
+import type { WorkspaceToolsConfig } from './constants';
 import {
   WorkspaceError,
   FilesystemNotAvailableError,
@@ -131,6 +132,38 @@ export interface WorkspaceConfig {
    * ```
    */
   skillsPaths?: SkillsPathsResolver;
+
+  // ---------------------------------------------------------------------------
+  // Tool Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Per-tool configuration for workspace tools.
+   * Controls which tools are enabled and their safety settings.
+   *
+   * This replaces the provider-level `requireApproval` and `requireReadBeforeWrite`
+   * settings, allowing more granular control per tool.
+   *
+   * @example
+   * ```typescript
+   * tools: {
+   *   mastra_workspace_read_file: {
+   *     enabled: true,
+   *     requireApproval: false,
+   *   },
+   *   mastra_workspace_write_file: {
+   *     enabled: true,
+   *     requireApproval: true,
+   *     requireReadBeforeWrite: true,
+   *   },
+   *   mastra_workspace_execute_command: {
+   *     enabled: true,
+   *     requireApproval: true,
+   *   },
+   * }
+   * ```
+   */
+  tools?: WorkspaceToolsConfig;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -350,8 +383,19 @@ export class Workspace {
   }
 
   /**
+   * Get the per-tool configuration for this workspace.
+   * Returns undefined if no tools config was provided.
+   */
+  getToolsConfig(): WorkspaceToolsConfig | undefined {
+    return this._config.tools;
+  }
+
+  /**
    * Get the effective safety configuration for this workspace.
    * Reads safety settings from the configured providers.
+   *
+   * @deprecated Use getToolsConfig() for per-tool settings.
+   * Only `readOnly` should remain at the provider level.
    */
   getSafetyConfig(): {
     readOnly: boolean;
