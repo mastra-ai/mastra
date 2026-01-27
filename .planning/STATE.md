@@ -6,13 +6,13 @@
 ## Current Position
 
 **Phase:** 4 In Progress
-**Plan:** 2/N complete (04-01-auto-resume-error-handling, 04-04-context-preservation)
-**Status:** Plan 04-04 complete - ready for next plan in Phase 4
+**Plan:** 3/N complete (04-01, 04-02, 04-04)
+**Status:** Plan 04-02 complete - resume labels and suspendData implemented
 
 ```
-Progress: [██████░░░░] 58%
+Progress: [██████░░░░] 60%
 Phases:   3/6 complete (Phase 4 in progress)
-Tests:    163/232 passing (70% parity), 9 skipped
+Tests:    167/232 passing (72% parity), 13 skipped
 ```
 
 ## Gap Analysis Summary
@@ -38,14 +38,15 @@ Tests:    163/232 passing (70% parity), 9 skipped
 
 ## Current Focus
 
-Phase 4 Plan 4 complete. Request context preservation verified.
+Phase 4 Plan 2 complete. Resume labels and suspendData access implemented.
 
-**Completed in 04-04:**
-- Request context preservation in main workflow after suspend/resume
-- Request context preservation in nested workflows after suspend/resume
-- Both tests passed without implementation changes (existing serialization works)
+**Completed in 04-02:**
+- Resume by label support: `run.resume({ label: 'approval' })`
+- SuspendData access: step can read `suspendData` context on resume
+- Input preservation: original input preserved in snapshot after resume
+- Skip closeOnSuspend test (evented uses pubsub, not stream API)
 
-**Next action:** Continue with remaining Phase 4 plans (04-02, 04-03, 04-05, 04-06)
+**Next action:** Continue with remaining Phase 4 plans (04-03, 04-05, 04-06)
 
 ## Performance Metrics
 
@@ -74,6 +75,7 @@ Phase 4 Plan 4 complete. Request context preservation verified.
 | Subset schema test shares Mastra   | 4 workflows in single test share one Mastra instance  | Phase 3-01 |
 | Skip multi-suspend parallel test   | Evented runtime stops at first suspend in parallel    | Phase 4-01 |
 | No context impl changes needed     | Existing serialization handles context correctly      | Phase 4-04 |
+| Skip closeOnSuspend test           | Evented runtime uses pubsub not stream API            | Phase 4-02 |
 
 ### Key Files
 
@@ -114,8 +116,8 @@ None.
 ### Last Session
 
 **Date:** 2026-01-27
-**Work completed:** Phase 4 Plan 4 - Request context preservation
-**Stopping point:** Plan 04-04 complete, ready for next plan
+**Work completed:** Phase 4 Plan 2 - Resume labels and suspendData access
+**Stopping point:** Plan 04-02 complete, ready for 04-03, 04-05, 04-06
 
 ### Session History
 
@@ -127,15 +129,16 @@ None.
 | 2026-01-27 | Phase 3-01: Schema validation tests (9 passing, 3 skipped)|
 | 2026-01-27 | Phase 4-01: Auto-resume tests (5 passing, 1 skipped)    |
 | 2026-01-27 | Phase 4-04: Context preservation tests (2 passing)      |
+| 2026-01-27 | Phase 4-02: Resume labels, suspendData (3 passing, 1 skipped)|
 
 ### Resumption Notes
 
-1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 163 tests passing
-2. Plan 04-04 complete - continue with remaining Phase 4 plans
-3. Note: 1 Phase 4 test skipped - evented runtime limitation with parallel suspend
-4. Total skipped: 9 (6 streaming vNext, 3 schema validation related)
+1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 167 tests passing
+2. Plan 04-02 complete - continue with remaining Phase 4 plans (04-03, 04-05, 04-06)
+3. Note: 2 Phase 4 tests skipped - evented runtime limitations (parallel suspend, closeOnSuspend)
+4. Total skipped: 13 (6 streaming vNext, 3 schema validation, 4 Phase 4 tests)
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 4 Plan 4 completion_
+_Last updated: 2026-01-27 after Phase 4 Plan 2 completion_
