@@ -20,6 +20,8 @@ export async function processWorkflowLoop(
     requestContext,
     retryCount = 0,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -33,13 +35,15 @@ export async function processWorkflowLoop(
     stepResult: StepResult<any, any, any, any>;
   },
 ) {
+  // Get current state from stepResult, stepResults or passed state
+  const currentState = (stepResult as any)?.__state ?? stepResults?.__state ?? state ?? {};
+
   const loopCondition = await stepExecutor.evaluateCondition({
     workflowId,
     condition: step.condition,
     runId,
     stepResults,
-    // TODO: implement state
-    state: {},
+    state: currentState,
     emitter: new EventEmitter() as any, // TODO
     requestContext: new RequestContext(), // TODO
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
@@ -66,6 +70,8 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           perStep,
+          state: currentState,
+          outputOptions,
         },
       });
     } else {
@@ -79,6 +85,8 @@ export async function processWorkflowLoop(
           executionPath,
           resumeSteps,
           stepResults,
+          state: currentState,
+          outputOptions,
           prevResult: stepResult,
           resumeData,
           activeSteps,
@@ -106,6 +114,8 @@ export async function processWorkflowLoop(
           requestContext,
           retryCount,
           perStep,
+          state: currentState,
+          outputOptions,
         },
       });
     } else {
@@ -124,6 +134,8 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           perStep,
+          state: currentState,
+          outputOptions,
         },
       });
     }
@@ -144,6 +156,8 @@ export async function processWorkflowForEach(
     parentWorkflow,
     requestContext,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -155,6 +169,8 @@ export async function processWorkflowForEach(
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = stepResults?.__state ?? state ?? {};
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
     step.step.id
   ] as any;
@@ -163,6 +179,7 @@ export async function processWorkflowForEach(
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
   if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
+    // Foreach completed all iterations - advance to next step
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
@@ -179,6 +196,8 @@ export async function processWorkflowForEach(
         activeSteps,
         requestContext,
         perStep,
+        state: currentState,
+        outputOptions,
       },
     });
 
@@ -208,7 +227,18 @@ export async function processWorkflowForEach(
       requestContext,
     });
 
+    // Check if inner step is a nested workflow - only then extract individual items
+    // Regular steps use foreachIdx in step executor for item extraction
+    const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+
     for (let i = 0; i < concurrency; i++) {
+      // For nested workflows, extract individual item since they receive prevResult directly
+      // For regular steps, step executor handles extraction via foreachIdx
+      const targetArray = (prevResult as any)?.output;
+      const iterationPrevResult =
+        isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
+          ? { status: 'success' as const, output: targetArray[i] }
+          : prevResult;
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
         runId,
@@ -220,11 +250,13 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           timeTravel,
-          prevResult,
+          prevResult: iterationPrevResult,
           resumeData,
           activeSteps,
           requestContext,
           perStep,
+          state: currentState,
+          outputOptions,
         },
       });
     }
@@ -246,6 +278,15 @@ export async function processWorkflowForEach(
     requestContext,
   });
 
+  // For nested workflows, extract individual item since they receive prevResult directly
+  // For regular steps, step executor handles extraction via foreachIdx
+  const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+  const targetArray = (prevResult as any)?.output;
+  const iterationPrevResult =
+    isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
+      ? { status: 'success' as const, output: targetArray[idx] }
+      : prevResult;
+
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',
     runId,
@@ -257,11 +298,13 @@ export async function processWorkflowForEach(
       resumeSteps,
       timeTravel,
       stepResults,
-      prevResult,
+      prevResult: iterationPrevResult,
       resumeData,
       activeSteps,
       requestContext,
       perStep,
+      state: currentState,
+      outputOptions,
     },
   });
 }

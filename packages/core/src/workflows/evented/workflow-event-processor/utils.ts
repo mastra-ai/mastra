@@ -29,6 +29,11 @@ export function getNestedWorkflow(
     return parentStep.step as Workflow;
   }
 
+  // Handle foreach - the step is the nested workflow
+  if (parentStep?.type === 'foreach') {
+    return parentStep.step as Workflow;
+  }
+
   return null;
 }
 

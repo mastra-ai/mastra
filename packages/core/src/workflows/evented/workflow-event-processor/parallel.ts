@@ -19,6 +19,8 @@ export async function processWorkflowParallel(
     parentWorkflow,
     requestContext,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -28,6 +30,8 @@ export async function processWorkflowParallel(
     step: Extract<StepFlowEntry, { type: 'parallel' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = stepResults?.__state ?? state ?? {};
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
@@ -58,6 +62,8 @@ export async function processWorkflowParallel(
             activeSteps,
             requestContext,
             perStep,
+            state: currentState,
+            outputOptions,
           },
         });
       }),
@@ -78,6 +84,8 @@ export async function processWorkflowConditional(
     parentWorkflow,
     requestContext,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -89,13 +97,15 @@ export async function processWorkflowConditional(
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = stepResults?.__state ?? state ?? {};
+
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
     step,
     runId,
     stepResults,
-    // TODO: implement state
-    state: {},
+    state: currentState,
     emitter: new EventEmitter() as any, // TODO
     requestContext: new RequestContext(), // TODO
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
@@ -133,6 +143,8 @@ export async function processWorkflowConditional(
         activeSteps,
         requestContext,
         perStep,
+        state: currentState,
+        outputOptions,
       },
     });
   } else {
@@ -158,6 +170,8 @@ export async function processWorkflowConditional(
               activeSteps,
               requestContext,
               perStep,
+              state: currentState,
+              outputOptions,
             },
           });
         } else {
@@ -176,6 +190,8 @@ export async function processWorkflowConditional(
               activeSteps,
               requestContext,
               perStep,
+              state: currentState,
+              outputOptions,
             },
           });
         }

@@ -2301,11 +2301,23 @@ export class Workflow<
     // Get steps if needed
     let steps: Record<string, any> = {};
     if (includeAllFields || fieldsSet.has('steps')) {
+      let rawSteps: Record<string, any>;
       if (withNestedWorkflows) {
-        steps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+        rawSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
       } else {
         const { input, ...stepsOnly } = snapshotState.context || {};
-        steps = stepsOnly;
+        rawSteps = stepsOnly;
+      }
+      // Strip __state from steps (internal implementation detail for state propagation)
+      const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
+      // Also strip __state from each individual step result (only for objects, not arrays)
+      for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
+        if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult)) {
+          const { __state: _stepState, ...cleanStepResult } = stepResult as any;
+          steps[stepId] = cleanStepResult;
+        } else {
+          steps[stepId] = stepResult;
+        }
       }
     }
 

@@ -100,9 +100,9 @@ export class StepExecutor extends MastraBase {
             requestContext,
             inputData,
             state: params.state,
-            setState: async (state: any) => {
-              // TODO
-              params.state = state;
+            setState: async (newState: Record<string, any>) => {
+              // Merge new state with existing state (preserves other keys)
+              Object.assign(params.state, newState);
             },
             retryCount,
             resumeData: params.resumeData,
@@ -149,13 +149,14 @@ export class StepExecutor extends MastraBase {
 
       const endedAt = Date.now();
 
-      let finalResult: StepResult<any, any, any, any>;
+      let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
       if (suspended) {
         finalResult = {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
+          __state: params.state,
         };
 
         if (suspended.payload) {
@@ -168,11 +169,13 @@ export class StepExecutor extends MastraBase {
           status: 'bailed',
           endedAt,
           output: bailed.payload,
+          __state: params.state,
         };
       } else if (nestedWflowStepPaused) {
         finalResult = {
           ...stepInfo,
           status: 'paused',
+          __state: params.state,
         };
       } else {
         finalResult = {
@@ -180,6 +183,7 @@ export class StepExecutor extends MastraBase {
           status: 'success',
           endedAt,
           output: stepOutput,
+          __state: params.state,
         };
       }
 
@@ -326,12 +330,14 @@ export class StepExecutor extends MastraBase {
     input?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
     abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const currentState = params.state ?? stepResults?.__state ?? {};
 
     const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
@@ -353,10 +359,9 @@ export class StepExecutor extends MastraBase {
             mastra: this.mastra!,
             requestContext,
             inputData: params.input,
-            // TODO: implement state
-            state: {},
-            setState: async (_state: any) => {
-              // TODO
+            state: currentState,
+            setState: async (newState: Record<string, any>) => {
+              Object.assign(currentState, newState);
             },
             retryCount,
             resumeData: params.resumeData,
@@ -400,12 +405,14 @@ export class StepExecutor extends MastraBase {
     input?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
     abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const currentState = params.state ?? stepResults?.__state ?? {};
 
     const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
@@ -427,10 +434,9 @@ export class StepExecutor extends MastraBase {
             mastra: this.mastra!,
             requestContext,
             inputData: params.input,
-            // TODO: implement state
-            state: {},
-            setState: async (_state: any) => {
-              // TODO
+            state: currentState,
+            setState: async (newState: Record<string, any>) => {
+              Object.assign(currentState, newState);
             },
             retryCount,
             resumeData: params.resumeData,
