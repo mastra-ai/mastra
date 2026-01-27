@@ -5621,3 +5621,89 @@ describe('Agent - network - output processors', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe('Agent - network - requestContext propagation (issue #12330)', () => {
+  it('should propagate requestContext to tools executed within the network', async () => {
+    const memory = new MockMemory();
+    const capturedRequestContext: { userId?: string; resourceId?: string } = {};
+
+    const contextCaptureTool = createTool({
+      id: 'context-capture-tool-12330',
+      description: 'A tool that captures requestContext values for testing',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }, context) => {
+        capturedRequestContext.userId = context?.requestContext?.get('userId') as string | undefined;
+        capturedRequestContext.resourceId = context?.requestContext?.get('resourceId') as string | undefined;
+        return { result: `Captured for: ${message}` };
+      },
+    });
+
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'context-capture-tool-12330',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ message: 'test' }),
+      selectionReason: 'Testing requestContext propagation',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Tool executed',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'test-agent-12330',
+      name: 'RequestContext Test Agent',
+      instructions: 'Use the context-capture-tool-12330 when asked.',
+      model: mockModel,
+      tools: { 'context-capture-tool-12330': contextCaptureTool },
+      memory,
+    });
+
+    const requestContext = new RequestContext<{ userId: string; resourceId: string }>();
+    requestContext.set('userId', 'network-user-12330');
+    requestContext.set('resourceId', 'network-resource-12330');
+
+    const anStream = await networkAgent.network('Test requestContext propagation', {
+      requestContext,
+      memory: {
+        thread: 'test-thread-12330',
+        resource: 'test-resource-12330',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // consume
+    }
+
+    expect(capturedRequestContext.userId).toBe('network-user-12330');
+    expect(capturedRequestContext.resourceId).toBe('network-resource-12330');
+  });
+});
