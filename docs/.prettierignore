@@ -1,4 +1,0 @@
-**/*.mdx
-.docusaurus
-build
-node_modules

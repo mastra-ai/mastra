@@ -14,9 +14,7 @@ pnpm-workspace.yaml
 **/packages/**/src/client/**
 .mastra/
 .changeset/
-packages/cli/src/commands/init/init.test.ts
 **/integrations/**
-packages/create-mastra/rollup.config.js
 docs/**/*.mdx
 docs/build/**
 explorations/longmemeval/data/**/*.json
