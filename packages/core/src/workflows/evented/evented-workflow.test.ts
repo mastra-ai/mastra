@@ -16906,5 +16906,614 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    // NOTE: The following 6 foreach suspend/resume tests are skipped because the evented runtime
+    // does not implement the `forEachIndex` parameter in its resume() method. The evented runtime's
+    // foreach implementation uses a different event-based execution pattern where:
+    // 1. Foreach iterations are processed through pubsub events with executionPath tracking
+    // 2. Suspend/resume state is tracked differently than the default runtime
+    // 3. The resume() method signature does not include forEachIndex parameter
+    //
+    // These tests document the expected behavior from the default runtime for reference.
+    // Implementing foreach suspend/resume would require:
+    // - Adding forEachIndex parameter to EventedRun.resume()
+    // - Tracking suspended iteration indices in the snapshot
+    // - Modifying loop.ts to handle resume by index
+
+    it.skip('should suspend and resume when running a single item concurrency (default) for loop', async () => {
+      // From workflow.test.ts line 7678
+      // This test verifies that a foreach with default concurrency (1 item at a time)
+      // can suspend and resume each iteration, with resume applying to the current suspended iteration.
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        options: {
+          validateInputs: false,
+        },
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-suspend-single-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-suspend-single-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 0 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11 + 5) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should suspend and resume when running all items concurrency for loop', async () => {
+      // From workflow.test.ts line 7844
+      // This test verifies that a foreach with full concurrency (all items at once)
+      // can suspend iterations that meet the condition and resume them all at once.
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-suspend-all-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-suspend-all-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 22 }, { value: 1 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(5);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should suspend and resume provided index when running all items concurrency for loop', async () => {
+      // From workflow.test.ts line 7930
+      // This test verifies forEachIndex parameter allows resuming specific iteration by index
+      // when multiple iterations are suspended in concurrent execution.
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-index-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-index-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      // Resume index 2 first (third item: 333)
+      // Note: forEachIndex is not implemented in evented runtime
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 } as any);
+      expect(resumedResult.status).toBe('suspended');
+
+      // Resume index 1 (second item: 22)
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 } as any);
+      expect(resumedResult.status).toBe('suspended');
+
+      // Resume index 0 (first item: 1)
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 } as any);
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should suspend and resume provided label when running all items concurrency for loop', async () => {
+      // From workflow.test.ts line 8057
+      // This test verifies that resumeLabel works for foreach iterations,
+      // allowing resume by label instead of index.
+      let rl = 0;
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          const newRl = rl++;
+          return suspend({}, { resumeLabel: `test-label-${newRl}` });
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-label-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-label-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      // Resume using labels in reverse order (2, 1, 0) to test label-based resume
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, label: 'test-label-2' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, label: 'test-label-1' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, label: 'test-label-0' });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should suspend and resume when running a partial item concurrency for loop', async () => {
+      // From workflow.test.ts line 8223
+      // This test verifies suspend/resume with partial concurrency (e.g., 3 items with concurrency 2).
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-partial-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-partial-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 5) + (1000 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should suspend and resume provided index when running a partial item concurrency for loop', async () => {
+      // From workflow.test.ts line 8314
+      // This test verifies forEachIndex works with partial concurrency,
+      // allowing specific iteration resume by index.
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow-foreach-partial-index-evented',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        options: { validateInputs: false },
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'counter-workflow-foreach-partial-index-evented': counterWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      // Resume specific indices with different values
+      // Note: forEachIndex is not implemented in evented runtime
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 } as any);
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 } as any);
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 2 }, forEachIndex: 3 } as any);
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 8 }, forEachIndex: 4 } as any);
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 8 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 3 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 2) + (1000 + 11 + 8) },
+          payload: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
   });
 });
