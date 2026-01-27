@@ -5,28 +5,28 @@
 
 ## Current Position
 
-**Phase:** Not started
-**Plan:** None active
-**Status:** Roadmap created, ready for phase planning
+**Phase:** 2 In Progress
+**Plan:** 1/1 complete (02-lifecycle-callbacks)
+**Status:** Phase 2 Plan 01 completed - 15 callback context tests ported
 
 ```
-Progress: [░░░░░░░░░░] 0%
-Phases:   0/6 complete
-Tests:    119/232 passing (51% parity)
+Progress: [███░░░░░░░] 28%
+Phases:   1.5/6 complete
+Tests:    146/232 passing (63% parity)
 ```
 
 ## Gap Analysis Summary
 
 **Current evented runtime state:**
 
-- 119 tests passing in evented-workflow.test.ts
+- 146 tests passing in evented-workflow.test.ts
 - 6 tests skipped (streaming vNext)
-- 119 tests in default that don't exist in evented
+- ~86 tests in default that don't exist in evented
 
 **Major gaps identified:**
 
-1. State object (12 tests) - `state` parameter not implemented
-2. Lifecycle callbacks (16 tests) - onFinish/onError callbacks
+1. State object (12 tests) - COMPLETE (Phase 1)
+2. Lifecycle callbacks (16 tests) - 15 COMPLETE (Phase 2 Plan 01)
 3. Schema defaults (12 tests) - Default value handling
 4. Suspend/resume edge cases (18 tests) - Parallel, labels, nested
 5. Streaming vNext (6 tests) - Modern streaming API
@@ -38,28 +38,33 @@ Tests:    119/232 passing (51% parity)
 
 ## Current Focus
 
-Ready to begin Phase 1: State Object Support
+Phase 2 Plan 01 complete. Check if more lifecycle callback tests remain, then proceed to Phase 3.
 
-**Next action:** `/gsd-plan-phase 1`
+**Next action:** Verify Phase 2 completeness or create 02-02-PLAN.md for remaining tests
 
 ## Performance Metrics
 
 | Metric           | Value |
 | ---------------- | ----- |
-| Phases completed | 0     |
-| Plans completed  | 0     |
-| Tests to port    | ~113  |
-| Session count    | 1     |
+| Phases completed | 1.5   |
+| Plans completed  | 3     |
+| Tests ported     | 27    |
+| Tests to port    | ~86   |
+| Session count    | 3     |
 
 ## Accumulated Context
 
 ### Key Decisions
 
-| Decision                           | Rationale                                             | Phase   |
-| ---------------------------------- | ----------------------------------------------------- | ------- |
-| Test parity as success metric      | Objective, verifiable measure of feature completeness | Init    |
-| Restart excluded from scope        | Intentional design decision in evented runtime        | Init    |
-| 6 phases based on feature clusters | Natural grouping from test gap analysis               | Roadmap |
+| Decision                           | Rationale                                             | Phase      |
+| ---------------------------------- | ----------------------------------------------------- | ---------- |
+| Test parity as success metric      | Objective, verifiable measure of feature completeness | Init       |
+| Restart excluded from scope        | Intentional design decision in evented runtime        | Init       |
+| 6 phases based on feature clusters | Natural grouping from test gap analysis               | Roadmap    |
+| State in stepResults.__state       | Allows state to persist across event boundaries       | Phase 1    |
+| Nested workflow via component      | Detect both EventedWorkflow and Workflow types        | Phase 1    |
+| Item extract only for workflows    | Step executor handles regular steps via foreachIdx    | Phase 1    |
+| resourceId via execute() params    | Pass from Run.start() through execute to callbacks    | Phase 2-01 |
 
 ### Key Files
 
@@ -68,6 +73,7 @@ Ready to begin Phase 1: State Object Support
 | `packages/core/src/workflows/evented/workflow.ts`                       | Main EventedWorkflow class        |
 | `packages/core/src/workflows/evented/workflow-event-processor/index.ts` | Event processing                  |
 | `packages/core/src/workflows/evented/step-executor.ts`                  | Step execution                    |
+| `packages/core/src/workflows/evented/execution-engine.ts`               | Evented execution engine          |
 | `packages/core/src/workflows/workflow.test.ts`                          | Default runtime tests (reference) |
 | `packages/core/src/workflows/evented/evented-workflow.test.ts`          | Evented tests (target)            |
 
@@ -76,7 +82,7 @@ Ready to begin Phase 1: State Object Support
 From evented runtime source:
 
 - `// TODO: Pass proper tracing context when evented workflows support tracing`
-- `// TODO: implement state` (in step executor)
+- `// TODO: implement state` (in step executor) - MAY BE STALE after Phase 1
 - `// TODO: support stream` (for vNext streaming)
 
 ### Blockers
@@ -87,8 +93,8 @@ None.
 
 | Phase              | Needs Research? | Reason                             |
 | ------------------ | --------------- | ---------------------------------- |
-| 1 - State Object   | NO              | Clear pattern from default runtime |
-| 2 - Lifecycle      | NO              | Standard callback pattern          |
+| 1 - State Object   | NO              | COMPLETE                           |
+| 2 - Lifecycle      | NO              | Plan 01 COMPLETE                   |
 | 3 - Schema         | NO              | Zod integration patterns clear     |
 | 4 - Suspend/Resume | MAYBE           | Edge cases need investigation      |
 | 5 - Streaming      | YES             | vNext API needs understanding      |
@@ -98,18 +104,25 @@ None.
 
 ### Last Session
 
-**Date:** 2026-01-26
-**Work completed:** Gap analysis and roadmap creation
-**Stopping point:** Ready for phase planning
+**Date:** 2026-01-27
+**Work completed:** Phase 2 Plan 01 - 15 callback context tests ported, resourceId bug fixed
+**Stopping point:** Completed 02-01-PLAN.md
+
+### Session History
+
+| Date       | Work Completed                                          |
+| ---------- | ------------------------------------------------------- |
+| 2026-01-26 | Gap analysis and roadmap creation                       |
+| 2026-01-27 | Phase 1: State Object Support (12 tests passing)        |
+| 2026-01-27 | Phase 2-01: Callback context tests (15 tests passing)   |
 
 ### Resumption Notes
 
-1. Run `pnpm test` in packages/core to verify current test state
-2. Review the 119 missing tests in `/tmp/default-tests.txt` vs `/tmp/evented-tests.txt`
-3. Start with `/gsd-plan-phase 1` for State Object Support
-4. Each phase: port tests from default → fix failures → verify parity
+1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 146 tests passing
+2. Check if Phase 2 has more plans or is complete
+3. If complete, proceed to Phase 3: Schema Defaults
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-26 after gap analysis_
+_Last updated: 2026-01-27 after Phase 2 Plan 01 completion_
