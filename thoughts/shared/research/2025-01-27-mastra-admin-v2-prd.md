@@ -260,13 +260,13 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
 
 ### Phase 1: Foundation [P0] - 2-3 days
 
-**Goal**: Basic data model and storage working
+**Goal**: Basic data model, storage, and project discovery working
 
 **Tasks**:
 1. Create `@mastra/admin` package with:
    - MastraAdmin class (central orchestrator)
    - Entity types (Team, Project, Deployment, Build)
-   - Provider interfaces (AdminStorage, FileStorage, ProjectSource)
+   - Provider interfaces (AdminStorage, FileStorage, ProjectSourceProvider)
    - RBAC core implementation
 
 2. Create `@mastra/admin-pg` package with:
@@ -274,10 +274,21 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
    - Domain methods for all entities
    - Defensive JSONB deserialization (Array.isArray checks)
 
+3. Create `@mastra/source-local` package with:
+   - `LocalProjectSource` implementing `ProjectSourceProvider`
+   - `DirectoryScanner` for walking configured base paths
+   - `MastraProjectDetector` for identifying valid Mastra projects
+   - `getProjectPath()` that **copies source to targetDir** (critical - don't return source path directly)
+   - Configuration: `basePaths`, `include/exclude`, `maxDepth`
+   - Optional `ProjectWatcher` for dev mode file watching
+
 **Verification**:
 - [ ] Can create team, project, deployment via direct class calls
 - [ ] JSONB columns handle null/empty gracefully
 - [ ] Migrations run successfully
+- [ ] `source.listProjects()` discovers Mastra projects in configured directories
+- [ ] `source.getProjectPath(project, targetDir)` copies project to target directory
+- [ ] Detector correctly identifies projects with `@mastra/core` dependency
 
 ### Phase 2: Build System [P0] - 3-4 days
 
@@ -295,7 +306,7 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
    - JSONL format for ingestion worker compatibility
 
 3. Create `@mastra/runner-local`:
-   - `ProjectBuilder` - copies source to temp dir, installs deps, runs `mastra build`
+   - `ProjectBuilder` - **uses `source.getProjectPath(project, buildDir)`** to copy source to temp dir, installs deps, runs `mastra build`
    - `ProcessManager` - spawns/stops server processes
    - `PortAllocator` - manages ports 4100-4199
    - **Sets env vars when starting server**:
@@ -306,6 +317,7 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
 4. BuildOrchestrator with queue recovery:
    - In-memory queue with DB-backed recovery
    - Query `status='queued'` on startup
+   - **Injects `ProjectSourceProvider` from MastraAdmin config**
 
 **Verification**:
 - [ ] Build completes successfully
@@ -313,6 +325,7 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
 - [ ] Spans written to `observability/spans/` (FileExporter activated)
 - [ ] Logs written to `observability/logs/` (pino file target activated)
 - [ ] Restart recovery re-queues pending builds
+- [ ] Build uses copied project (not source directory)
 
 ### Phase 3: API & Routing [P0] - 2-3 days
 
@@ -322,6 +335,7 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
 1. Create `@mastra/admin-server` HTTP routes:
    - Teams CRUD
    - Projects CRUD (with slug auto-generation)
+   - **GET /api/sources/projects** - list available projects from `ProjectSourceProvider`
    - Deployments CRUD + deploy/stop actions
    - Builds list + logs
 
@@ -368,6 +382,7 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
 **Tasks**:
 1. Create `@mastra/admin-ui`:
    - Team/Project/Deployment management pages
+   - **Project creation with source selector** (calls `/api/sources/projects` to list available projects from `source-local`)
    - Build logs viewer with WebSocket
    - Observability dashboard (spans/logs)
 
@@ -376,7 +391,8 @@ Team (1) ─────┬───── (N) Project (1) ─────┬─
    - Verify loading/error states
 
 **Verification**:
-- [ ] Complete flow: Create team → Create project → Deploy → View logs
+- [ ] Complete flow: Create team → **Select project from source** → Create project → Deploy → View logs
+- [ ] Project selector shows discovered Mastra projects
 - [ ] Observability data displays correctly
 - [ ] UI handles errors gracefully
 
@@ -502,7 +518,158 @@ async startServer(build: Build, deployment: Deployment, port: number): Promise<C
 }
 ```
 
-### 4. Build Directory Structure
+### 4. @mastra/source-local Package
+
+**Location**: `sources/local/`
+**Implements in Phase**: Phase 1 (Foundation) - needed before builds can work
+
+The source-local package discovers and provides access to Mastra projects on the local filesystem.
+
+#### ProjectSourceProvider Interface (defined in @mastra/admin)
+
+```typescript
+interface ProjectSourceProvider {
+  readonly type: 'local' | 'github' | string;
+
+  // List available projects from configured directories
+  listProjects(teamId: string): Promise<ProjectSource[]>;
+
+  // Get a specific project by ID
+  getProject(projectId: string): Promise<ProjectSource>;
+
+  // Validate that a project source is accessible
+  validateAccess(source: ProjectSource): Promise<boolean>;
+
+  // Get local path - MUST copy to targetDir if provided
+  getProjectPath(source: ProjectSource, targetDir?: string): Promise<string>;
+
+  // Optional: Watch for file changes (dev mode)
+  watchChanges?(source: ProjectSource, callback: (event: ChangeEvent) => void): () => void;
+}
+
+interface ProjectSource {
+  id: string;
+  name: string;
+  type: 'local' | 'github' | string;
+  path: string;
+  defaultBranch?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+#### Key Classes
+
+**LocalProjectSource** - Main provider implementation:
+- Scans configured `basePaths` for Mastra projects
+- Caches discovered projects (30s TTL)
+- Copies projects to temp directory for builds
+- Optional file watching for dev mode
+
+**DirectoryScanner** - Finds Mastra projects:
+- Walks directories up to `maxDepth`
+- Excludes `node_modules`, `.git`, `dist`, etc.
+- Uses `MastraProjectDetector` to identify valid projects
+
+**MastraProjectDetector** - Identifies Mastra projects:
+- Checks for `@mastra/core` in dependencies
+- Detects package manager (npm, pnpm, yarn, bun)
+- Finds mastra config files
+- Extracts project metadata
+
+#### Configuration
+
+```typescript
+interface LocalProjectSourceConfig {
+  basePaths: string[];           // Directories to scan (required)
+  include?: string[];            // Glob patterns to include (default: ['*'])
+  exclude?: string[];            // Patterns to exclude (default: ['node_modules', '.git', ...])
+  maxDepth?: number;             // Scan depth (default: 2)
+  watchChanges?: boolean;        // Enable file watching (default: false)
+  watchDebounceMs?: number;      // Debounce interval (default: 300)
+}
+```
+
+#### When It's Used
+
+1. **Project Creation UI**: User selects from discovered projects
+   ```typescript
+   // Admin UI calls this to show available projects
+   const projects = await source.listProjects(teamId);
+   ```
+
+2. **Build Trigger**: Runner gets project path for building
+   ```typescript
+   // Runner calls this to copy project to temp dir
+   const buildDir = `/tmp/mastra/builds/${buildId}`;
+   const projectPath = await source.getProjectPath(project, buildDir);
+   // projectPath === buildDir (project copied there)
+   ```
+
+3. **Validation**: Before creating project record
+   ```typescript
+   const isValid = await source.validateAccess(projectSource);
+   ```
+
+#### Critical: getProjectPath MUST Copy
+
+**This was a bug in Attempt 1** - `getProjectPath()` returned the source path directly.
+
+Correct implementation:
+```typescript
+async getProjectPath(source: ProjectSource, targetDir?: string): Promise<string> {
+  // If no targetDir, return source path (for listing/validation only)
+  if (!targetDir) {
+    return source.path;
+  }
+
+  // MUST copy source to target directory for builds
+  await copyDirectory(source.path, targetDir, {
+    exclude: ['node_modules', '.git', 'dist', '.next', '.mastra'],
+  });
+
+  return targetDir;
+}
+```
+
+**Why copying is required**:
+- Fresh `node_modules` install per build
+- Isolated build artifacts (`.mastra/` directory)
+- Separate observability directory per deployment
+- Supports concurrent builds of same project
+- No pollution of source directory
+
+#### Package Structure
+
+```
+sources/local/
+├── src/
+│   ├── index.ts              # Main export
+│   ├── provider.ts           # LocalProjectSource class
+│   ├── scanner.ts            # DirectoryScanner
+│   ├── detector.ts           # MastraProjectDetector
+│   ├── watcher.ts            # ProjectWatcher (optional dev mode)
+│   ├── types.ts              # LocalProjectSourceConfig, etc.
+│   └── utils.ts              # copyDirectory, resolvePath, etc.
+├── package.json
+└── tsconfig.json
+```
+
+#### Integration with Admin
+
+```typescript
+// In MastraAdmin configuration
+const admin = new MastraAdmin({
+  storage: new PostgresAdminStorage(DATABASE_URL),
+  source: new LocalProjectSource({
+    basePaths: [process.env.PROJECTS_DIR || '../'],
+    watchChanges: process.env.NODE_ENV === 'development',
+  }),
+  runner: new LocalRunner(),
+  router: new LocalRouter(),
+});
+```
+
+### 5. Build Directory Structure
 
 ```
 {os.tmpdir()}/mastra/builds/{buildId}/
