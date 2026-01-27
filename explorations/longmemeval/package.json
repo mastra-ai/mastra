@@ -11,7 +11,7 @@
     "find-failed": "tsx scripts/find-failed.ts",
     "clean-failed": "tsx scripts/find-failed.ts --delete",
     "generate-wm-templates": "tsx scripts/generate-wm-templates.ts",
-    "prepare": "tsx src/cli.ts prepare",
+    "prep": "tsx src/cli.ts prepare",
     "bench": "tsx src/cli.ts run",
     "deterministic-ids": "tsx src/cli.ts deterministic-ids",
     "results": "tsx src/cli.ts results",
