@@ -56,10 +56,10 @@ export const globalWorkspace = new Workspace({
     basePath: PROJECT_ROOT,
   }),
   // Enable sandbox for command execution
-  // inheritEnv: true allows access to PATH and other system env vars
+  // Pass env vars explicitly - spread process.env for full access, or specific vars for security
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
+    env: { ...process.env }, // Full env access for development
   }),
   // Tool configuration - full access for demo/development purposes
   // No approval required, no read-before-write enforcement

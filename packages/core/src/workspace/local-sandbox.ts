@@ -98,16 +98,22 @@ export interface LocalSandboxOptions {
   id?: string;
   /** Working directory for command execution */
   workingDirectory?: string;
-  /** Environment variables to set */
-  env?: Record<string, string>;
   /**
-   * Whether to inherit the host's environment variables.
-   * When true, process.env is included in the execution environment.
-   * When false (default), only explicitly set env variables are available.
-   * This is more secure as it prevents leaking sensitive environment variables.
-   * @default false
+   * Environment variables to set for command execution.
+   * By default, no host environment variables are inherited.
+   * Pass specific variables you need (e.g., PATH, HOME) or spread process.env
+   * if you want all host variables.
+   *
+   * @example
+   * ```typescript
+   * // Minimal - only what you need
+   * env: { PATH: process.env.PATH, NODE_ENV: 'production' }
+   *
+   * // Full host environment (less secure)
+   * env: { ...process.env }
+   * ```
    */
-  inheritEnv?: boolean;
+  env?: Record<string, string>;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
@@ -160,7 +166,6 @@ export class LocalSandbox implements WorkspaceSandbox {
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
   private readonly env: Record<string, string>;
-  private readonly _inheritEnv: boolean;
   private readonly timeout: number;
   private readonly _isolation: IsolationBackend;
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
@@ -172,13 +177,6 @@ export class LocalSandbox implements WorkspaceSandbox {
    */
   get workingDirectory(): string {
     return this._workingDirectory;
-  }
-
-  /**
-   * Whether the sandbox inherits the host's environment variables.
-   */
-  get inheritEnv(): boolean {
-    return this._inheritEnv;
   }
 
   /**
@@ -208,7 +206,6 @@ export class LocalSandbox implements WorkspaceSandbox {
     this.id = options.id ?? this.generateId();
     this._workingDirectory = options.workingDirectory ?? process.cwd();
     this.env = options.env ?? {};
-    this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
     this.safety = options.safety;
     this._nativeSandboxConfig = options.nativeSandbox ?? {};
@@ -228,12 +225,9 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   /**
    * Build the environment object for execution.
-   * Conditionally includes process.env based on inheritEnv setting.
+   * Merges the sandbox's configured env with any additional env from the command.
    */
   private buildEnv(additionalEnv?: Record<string, string>): Record<string, string> {
-    if (this._inheritEnv) {
-      return { ...process.env, ...this.env, ...additionalEnv } as Record<string, string>;
-    }
     return { ...this.env, ...additionalEnv };
   }
 

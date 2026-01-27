@@ -14,8 +14,8 @@ describe('LocalSandbox', () => {
   beforeEach(async () => {
     // Create a unique temp directory for each test
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-sandbox-test-'));
-    // Use inheritEnv: true for tests so PATH and other essential vars are available
-    sandbox = new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true });
+    // Pass process.env so PATH and other essential vars are available for tests
+    sandbox = new LocalSandbox({ workingDirectory: tempDir, env: { ...process.env } });
   });
 
   afterEach(async () => {
@@ -199,7 +199,7 @@ describe('LocalSandbox', () => {
   describe('working directory', () => {
     it('should create working directory on start', async () => {
       const newDir = path.join(tempDir, 'new-sandbox-dir');
-      const newSandbox = new LocalSandbox({ workingDirectory: newDir, inheritEnv: true });
+      const newSandbox = new LocalSandbox({ workingDirectory: newDir, env: { ...process.env } });
 
       await newSandbox.start();
 
@@ -227,11 +227,10 @@ describe('LocalSandbox', () => {
   // Environment Variables
   // ===========================================================================
   describe('environment variables', () => {
-    it('should inherit configured env vars', async () => {
+    it('should use configured env vars', async () => {
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
-        env: { CONFIGURED_VAR: 'configured-value' },
-        inheritEnv: true,
+        env: { PATH: process.env.PATH!, CONFIGURED_VAR: 'configured-value' },
       });
 
       await envSandbox.start();
@@ -247,8 +246,7 @@ describe('LocalSandbox', () => {
     it('should override configured env with execution env', async () => {
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
-        env: { OVERRIDE_VAR: 'original' },
-        inheritEnv: true,
+        env: { PATH: process.env.PATH!, OVERRIDE_VAR: 'original' },
       });
 
       await envSandbox.start();
@@ -263,12 +261,7 @@ describe('LocalSandbox', () => {
       await envSandbox.destroy();
     });
 
-    it('should default to inheritEnv: false', () => {
-      const defaultSandbox = new LocalSandbox({ workingDirectory: tempDir });
-      expect(defaultSandbox.inheritEnv).toBe(false);
-    });
-
-    it('should not inherit process.env when inheritEnv: false', async () => {
+    it('should not inherit process.env by default', async () => {
       // Set a test env var in the current process
       const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
       process.env[testVarName] = 'should-not-be-inherited';
@@ -276,8 +269,7 @@ describe('LocalSandbox', () => {
       try {
         const isolatedSandbox = new LocalSandbox({
           workingDirectory: tempDir,
-          inheritEnv: false,
-          // Provide PATH so commands can be found
+          // Provide PATH so commands can be found, but not the test var
           env: { PATH: process.env.PATH! },
         });
 
@@ -295,25 +287,25 @@ describe('LocalSandbox', () => {
       }
     });
 
-    it('should inherit process.env when inheritEnv: true', async () => {
+    it('should include process.env when explicitly spread', async () => {
       // Set a test env var in the current process
       const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
-      process.env[testVarName] = 'should-be-inherited';
+      process.env[testVarName] = 'should-be-included';
 
       try {
-        const inheritingSandbox = new LocalSandbox({
+        const fullEnvSandbox = new LocalSandbox({
           workingDirectory: tempDir,
-          inheritEnv: true,
+          env: { ...process.env },
         });
 
-        await inheritingSandbox.start();
+        await fullEnvSandbox.start();
 
-        const result = await inheritingSandbox.executeCommand('printenv', [testVarName]);
+        const result = await fullEnvSandbox.executeCommand('printenv', [testVarName]);
 
         expect(result.success).toBe(true);
-        expect(result.stdout.trim()).toBe('should-be-inherited');
+        expect(result.stdout.trim()).toBe('should-be-included');
 
-        await inheritingSandbox.destroy();
+        await fullEnvSandbox.destroy();
       } finally {
         delete process.env[testVarName];
       }
@@ -395,7 +387,7 @@ describe('LocalSandbox', () => {
       const sandboxedSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: detection.backend,
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       expect(sandboxedSandbox.isolation).toBe(detection.backend);
@@ -441,7 +433,7 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -472,7 +464,7 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -492,7 +484,7 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -520,7 +512,7 @@ describe('LocalSandbox', () => {
       const seatbeltSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'seatbelt',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await seatbeltSandbox.start();
@@ -558,7 +550,7 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await bwrapSandbox.start();
@@ -578,7 +570,7 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        inheritEnv: true,
+        env: { ...process.env },
       });
 
       await bwrapSandbox.start();
@@ -606,7 +598,7 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        inheritEnv: true,
+        env: { ...process.env },
         nativeSandbox: {
           allowNetwork: false, // Default, but explicit for test clarity
         },
@@ -634,7 +626,7 @@ describe('LocalSandbox', () => {
       const bwrapSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         isolation: 'bwrap',
-        inheritEnv: true,
+        env: { ...process.env },
         nativeSandbox: {
           allowNetwork: true,
         },
