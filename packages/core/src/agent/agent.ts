@@ -3300,10 +3300,10 @@ export class Agent<
     return this.resumeNetwork({ approved: false }, options);
   }
   // Overload 1: Typed RequestContext support
-  async generate<OUTPUT = TOutput>(
+  async generate<OUTPUT = TOutput, TRequestContext extends Record<string, any> | unknown = unknown>(
     messages: MessageListInput,
     options?: Omit<AgentExecutionOptions<OUTPUT>, 'requestContext'> & {
-      requestContext?: RequestContext<any>;
+      requestContext?: RequestContext<TRequestContext>;
     },
   ): Promise<FullOutput<OUTPUT>>;
   // Overload 2: Default (backward compatible)
@@ -3403,10 +3403,10 @@ export class Agent<
   }
 
   // Overload 1: Typed RequestContext support
-  async stream<OUTPUT = TOutput>(
+  async stream<OUTPUT = TOutput, TRequestContext extends Record<string, any> | unknown = unknown>(
     messages: MessageListInput,
     streamOptions?: Omit<AgentStreamOptions<OUTPUT>, 'requestContext'> & {
-      requestContext?: RequestContext<any>;
+      requestContext?: RequestContext<TRequestContext>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
   // Overload 2: Structured output
