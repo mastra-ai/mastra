@@ -15,6 +15,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Infrastructure** - BrowserToolset foundation with lifecycle management and navigation ✓
 - [x] **Phase 2: Core Actions** - Snapshot and interaction tools (click, type, scroll) ✓
 - [x] **Phase 3: Screenshot** - Visual capture tool for debugging and verification ✓
+- [ ] **Phase 4: Navigate Error Consistency** - Unify navigate error handling with BrowserToolError (GAP CLOSURE)
+- [ ] **Phase 5: Schema Consolidation** - Remove duplicate schemas, single source of truth (GAP CLOSURE)
+- [ ] **Phase 6: Browser Lifecycle Locking** - Fix race condition in concurrent getBrowser calls (GAP CLOSURE)
 
 ## Phase Details
 
@@ -64,6 +67,50 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md - Screenshot tool with viewport, full-page, and element capture
 
+### Phase 4: Navigate Error Consistency
+**Goal**: Navigate tool errors use unified BrowserToolError format
+**Depends on**: Phase 3
+**Gap Closure**: Audit finding - navigate.ts uses legacy BrowserError instead of BrowserToolError
+**Success Criteria** (what must be TRUE):
+  1. Navigate tool imports BrowserToolError from errors.ts
+  2. Navigate tool uses createError() factory for all error responses
+  3. Navigate errors include code, recoveryHint, and canRetry fields
+  4. Error response structure matches other 5 tools
+**Plans**: 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md - Update navigate error handling
+
+### Phase 5: Schema Consolidation
+**Goal**: Single source of truth for all Zod schemas in types.ts
+**Depends on**: Phase 4
+**Gap Closure**: Audit finding - 5 tools have duplicate local + types.ts schemas
+**Success Criteria** (what must be TRUE):
+  1. snapshot.ts imports schemas from types.ts (no local definitions)
+  2. click.ts imports schemas from types.ts (no local definitions)
+  3. type.ts imports schemas from types.ts (no local definitions)
+  4. scroll.ts imports schemas from types.ts (no local definitions)
+  5. screenshot.ts imports schemas from types.ts (no local definitions)
+  6. All schema exports from types.ts remain intact
+**Plans**: 1 plan
+
+Plans:
+- [ ] 05-01-PLAN.md - Consolidate schemas to types.ts
+
+### Phase 6: Browser Lifecycle Locking
+**Goal**: Concurrent getBrowser() calls share single browser instance
+**Depends on**: Phase 5
+**Gap Closure**: Audit finding - race condition when multiple tools call getBrowser() simultaneously
+**Success Criteria** (what must be TRUE):
+  1. getBrowser() uses promise-based lock to prevent concurrent launches
+  2. Second concurrent call awaits first launch (not starts new one)
+  3. All tools share same browser instance even when called in parallel
+  4. No orphaned browser processes on concurrent execution
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md - Add browser launch locking
+
 ## Requirement Coverage
 
 | REQ ID | Description | Phase | Status |
@@ -84,13 +131,16 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 2/2 | ✓ Complete | 2026-01-26 |
 | 2. Core Actions | 3/3 | ✓ Complete | 2026-01-26 |
 | 3. Screenshot | 1/1 | ✓ Complete | 2026-01-26 |
+| 4. Navigate Error Consistency | 0/1 | Pending | — |
+| 5. Schema Consolidation | 0/1 | Pending | — |
+| 6. Browser Lifecycle Locking | 0/1 | Pending | — |
 
 ---
 
@@ -101,3 +151,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 *Phase 2 completed: 2026-01-26*
 *Phase 3 planned: 2026-01-26*
 *Phase 3 completed: 2026-01-26*
+*Gap closure phases 4-6 added: 2026-01-26*
