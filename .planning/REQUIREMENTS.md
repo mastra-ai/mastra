@@ -9,10 +9,10 @@ Requirements for agent integration and foreach control parity.
 
 ### Agent Integration
 
-- [ ] **AGENT-01**: Agent steps support V2+ models via specificationVersion branching
-- [ ] **AGENT-02**: Agent steps use .stream() for V2+ models instead of .streamLegacy()
-- [ ] **AGENT-03**: TripWire errors caught and serialized with explicit type markers
-- [ ] **AGENT-04**: TripWire status propagates from agent to workflow result
+- [x] **AGENT-01**: Agent steps support V2+ models via specificationVersion branching
+- [x] **AGENT-02**: Agent steps use .stream() for V2+ models instead of .streamLegacy()
+- [x] **AGENT-03**: TripWire errors caught and serialized with explicit type markers
+- [x] **AGENT-04**: TripWire status propagates from agent to workflow result
 - [ ] **AGENT-05**: Writer API exposed in step context as ToolStream instance
 - [ ] **AGENT-06**: Writer .write() method emits custom chunks during step execution
 - [ ] **AGENT-07**: Writer .custom() method emits typed custom events
@@ -48,10 +48,10 @@ Explicitly excluded from v1.1.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AGENT-01 | Phase 7 | Pending |
-| AGENT-02 | Phase 7 | Pending |
-| AGENT-03 | Phase 7 | Pending |
-| AGENT-04 | Phase 7 | Pending |
+| AGENT-01 | Phase 7 | Complete |
+| AGENT-02 | Phase 7 | Complete |
+| AGENT-03 | Phase 7 | Complete |
+| AGENT-04 | Phase 7 | Complete |
 | AGENT-05 | Phase 8 | Pending |
 | AGENT-06 | Phase 8 | Pending |
 | AGENT-07 | Phase 8 | Pending |
@@ -71,4 +71,4 @@ Explicitly excluded from v1.1.
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after roadmap creation*
+*Last updated: 2026-01-27 after Phase 7 completion*

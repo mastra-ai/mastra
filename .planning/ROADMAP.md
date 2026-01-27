@@ -87,8 +87,8 @@ Agent steps support modern AI SDK features (V2 models with structured output), T
 **Plans:** 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — V2 model detection and TripWire catching
-- [ ] 07-02-PLAN.md — TripWire status propagation and test verification
+- [x] 07-01-PLAN.md — V2 model detection and TripWire catching
+- [x] 07-02-PLAN.md — TripWire status propagation and test verification
 
 #### Phase 8: Writer API
 
@@ -142,6 +142,6 @@ Phases execute in numeric order: 7 → 8 → 9
 | 4. Suspend/Resume | v1.0 | 6/6 | Complete | 2026-01-27 |
 | 5. Streaming vNext | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 6. Remaining Parity | v1.0 | 4/4 | Complete | 2026-01-27 |
-| 7. V2 Model + TripWire | v1.1 | 0/2 | Planned | - |
+| 7. V2 Model + TripWire | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 8. Writer API | v1.1 | 0/TBD | Not started | - |
 | 9. Foreach Index | v1.1 | 0/TBD | Not started | - |
