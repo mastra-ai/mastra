@@ -1,6 +1,13 @@
 import type { ChildProcess } from 'node:child_process';
-import type { LogStreamCallback } from '@mastra/admin';
-import type { ObservabilityWriter } from '@mastra/observability-writer';
+
+/**
+ * Extended log stream callback with ID and stream type.
+ */
+export type ExtendedLogStreamCallback = (
+  line: string,
+  id?: string,
+  stream?: 'stdout' | 'stderr',
+) => void;
 
 /**
  * Package manager types supported by the runner.
@@ -53,16 +60,23 @@ export interface LocalProcessRunnerConfig {
   logRetentionLines?: number;
 
   /**
-   * Base directory for build artifacts.
-   * Each build gets its own subdirectory: {buildBaseDir}/builds/{buildId}
-   * @default os.tmpdir()/mastra (e.g., /tmp/mastra on Linux)
+   * Working directory for build artifacts.
+   * @default '.mastra/builds'
    */
-  buildBaseDir?: string;
+  buildDir?: string;
 
   /**
    * Environment variables to inject into all builds.
    */
   globalEnvVars?: Record<string, string>;
+
+  /**
+   * Admin server traces endpoint URL.
+   * When set, the runner automatically injects MASTRA_CLOUD_ACCESS_TOKEN
+   * and MASTRA_CLOUD_AI_TRACES_ENDPOINT into deployed servers.
+   * @example 'http://localhost:3001/api/spans/publish'
+   */
+  tracesEndpoint?: string;
 }
 
 /**
@@ -73,8 +87,6 @@ export interface TrackedProcess {
   serverId: string;
   /** Deployment ID */
   deploymentId: string;
-  /** Project ID */
-  projectId: string;
   /** Node.js child process */
   process: ChildProcess;
   /** Allocated port */
@@ -83,8 +95,6 @@ export interface TrackedProcess {
   startedAt: Date;
   /** Log collector reference */
   logCollector: LogCollector;
-  /** Observability writer for persisting logs (optional) */
-  observabilityWriter?: ObservabilityWriter;
 }
 
 /**
@@ -102,19 +112,41 @@ export interface BuildContext {
 }
 
 /**
+ * Structured log entry for pagination.
+ */
+export interface StructuredLogEntry {
+  id: string;
+  timestamp: string;
+  line: string;
+  stream: 'stdout' | 'stderr';
+}
+
+/**
+ * Result from paginated log query.
+ */
+export interface PaginatedLogsResult {
+  entries: StructuredLogEntry[];
+  hasMore: boolean;
+  oldestCursor: string | null;
+  newestCursor: string | null;
+}
+
+/**
  * Log collector interface.
  */
 export interface LogCollector {
   /** Append a log line */
-  append(line: string): void;
+  append(line: string, stream?: 'stdout' | 'stderr'): void;
   /** Get all logs */
   getAll(): string;
   /** Get tail of logs */
   getTail(lines: number): string;
   /** Get logs since timestamp */
   getSince(since: Date): string;
-  /** Stream logs with callback */
-  stream(callback: LogStreamCallback): () => void;
+  /** Stream logs with callback (receives line, id, and stream) */
+  stream(callback: ExtendedLogStreamCallback): () => void;
+  /** Get paginated logs */
+  getPaginated(limit?: number, beforeCursor?: string): PaginatedLogsResult;
   /** Clear all logs */
   clear(): void;
 }

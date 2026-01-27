@@ -58,7 +58,6 @@ export const QUERY_TRACES_ROUTE: AdminServerRoute = {
     const perPage = limit ?? 20;
 
     // Call listTraces with filter and pagination
-    // The provider may return { traces, total } or { traces, pagination: { total } }
     const result = await queryProvider.listTraces(
       {
         projectId,
@@ -163,13 +162,13 @@ export const QUERY_LOGS_ROUTE: AdminServerRoute = {
         data: [],
         total: 0,
         page: page ?? 1,
-        perPage: limit ?? 20,
+        perPage: limit ?? 100,
         hasMore: false,
       };
     }
 
     const pageNum = page ?? 1;
-    const perPage = limit ?? 20;
+    const perPage = limit ?? 100;
 
     const result = await queryProvider.listLogs(
       {
@@ -188,6 +187,7 @@ export const QUERY_LOGS_ROUTE: AdminServerRoute = {
       {
         limit: perPage,
         offset: (pageNum - 1) * perPage,
+        sortOrder: 'desc', // Newest first for reverse infinite scroll
       },
     );
 

@@ -32,10 +32,36 @@ export interface RunOptions {
 export type LogStreamCallback = (log: string) => void;
 
 /**
+ * Structured log entry for pagination.
+ */
+export interface StructuredLogEntry {
+  id: string;
+  timestamp: string;
+  line: string;
+  stream: 'stdout' | 'stderr';
+}
+
+/**
+ * Result from paginated log query.
+ */
+export interface PaginatedLogsResult {
+  entries: StructuredLogEntry[];
+  hasMore: boolean;
+  oldestCursor: string | null;
+  newestCursor: string | null;
+}
+
+/**
  * Server log callback for real-time log streaming.
  * Called when a running server outputs to stdout/stderr.
+ * Note: id is optional for backwards compatibility.
  */
-export type ServerLogCallback = (serverId: string, line: string, stream: 'stdout' | 'stderr') => void;
+export type ServerLogCallback = (
+  serverId: string,
+  line: string,
+  stream: 'stdout' | 'stderr',
+  id?: string | undefined,
+) => void;
 
 /**
  * Abstract interface for running Mastra projects.
@@ -117,6 +143,19 @@ export interface ProjectRunner {
    * @returns Log content
    */
   getLogs(server: RunningServer, options?: { tail?: number; since?: Date }): Promise<string>;
+
+  /**
+   * Get paginated logs from a running server.
+   * Used for reverse-chronological infinite scroll.
+   *
+   * @param server - The server
+   * @param options - Pagination options
+   * @returns Paginated log entries in chronological order
+   */
+  getLogsPaginated?(
+    server: RunningServer,
+    options?: { limit?: number; before?: string },
+  ): Promise<PaginatedLogsResult>;
 
   /**
    * Stream logs from a running server.

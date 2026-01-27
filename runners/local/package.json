@@ -32,8 +32,6 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/deployer": "workspace:*",
-    "@mastra/observability-writer": "workspace:*",
     "get-port": "^7.1.0",
     "pidusage": "^3.0.2",
     "tree-kill": "^1.2.2"
@@ -43,6 +41,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/admin": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/observability-writer": "workspace:*",
     "@types/node": "22.13.17",
     "@types/pidusage": "^2.0.5",
     "@vitest/coverage-v8": "catalog:",
@@ -54,7 +53,8 @@
   },
   "peerDependencies": {
     "@mastra/admin": ">=1.0.0-0 <2.0.0-0",
-    "@mastra/core": ">=0.1.0-0 <1.0.0-0"
+    "@mastra/core": ">=0.1.0-0 <1.0.0-0",
+    "@mastra/observability-writer": ">=0.0.1"
   },
   "homepage": "https://mastra.ai",
   "repository": {

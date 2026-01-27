@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useCreateProject } from '@/hooks/projects/use-create-project';
-import { useSources } from '@/hooks/sources/use-sources';
 import { SourceType, type ProjectSource } from '@/types/api';
-import { Loader2 } from 'lucide-react';
+import { SourcePicker } from '@/components/projects/source-picker';
 
 function generateSlug(name: string): string {
   return name
@@ -22,7 +21,6 @@ export function NewProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const createProject = useCreateProject();
-  const { data: sources, isLoading: sourcesLoading } = useSources(teamId!);
 
   // Auto-populate name and slug from selected source
   useEffect(() => {
@@ -62,39 +60,11 @@ export function NewProjectPage() {
       {error && <div className="mb-4 p-3 bg-red-500/10 text-red-500 rounded-md text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="source" className="block text-sm text-neutral6 mb-1">
-            Select Project
-          </label>
-          {sourcesLoading ? (
-            <div className="flex items-center gap-2 text-neutral6 py-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading available projects...
-            </div>
-          ) : sources && sources.length > 0 ? (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {sources.map(source => (
-                <button
-                  key={source.id}
-                  type="button"
-                  onClick={() => setSelectedSource(source)}
-                  className={`w-full text-left px-3 py-2 rounded-md border transition-colors ${
-                    selectedSource?.id === source.id
-                      ? 'border-accent1 bg-accent1/10 text-neutral9'
-                      : 'border-border bg-surface3 text-neutral9 hover:border-neutral6'
-                  }`}
-                >
-                  <div className="font-medium">{source.name}</div>
-                  <div className="text-xs text-neutral6 truncate">{source.path}</div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-neutral6 py-2 text-sm">
-              No projects found. Make sure your Mastra projects are in the configured source directory.
-            </div>
-          )}
-        </div>
+        <SourcePicker
+          teamId={teamId!}
+          selectedSourceId={selectedSource?.id}
+          onSelect={setSelectedSource}
+        />
 
         {selectedSource && (
           <>

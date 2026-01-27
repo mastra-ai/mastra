@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS mastra_admin_traces (
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(start_time)
 ORDER BY (project_id, deployment_id, start_time, trace_id)
-TTL start_time + INTERVAL 90 DAY
+TTL toDateTime(start_time) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 `;
 
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS mastra_admin_spans (
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(start_time)
 ORDER BY (project_id, deployment_id, trace_id, span_id)
-TTL start_time + INTERVAL 90 DAY
+TTL toDateTime(start_time) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 `;
 
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS mastra_admin_logs (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, deployment_id, timestamp, id)
-TTL timestamp + INTERVAL 30 DAY
+TTL toDateTime(timestamp) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 `;
 
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS mastra_admin_metrics (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, deployment_id, name, timestamp, id)
-TTL timestamp + INTERVAL 90 DAY
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 `;
 
@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS mastra_admin_scores (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, deployment_id, name, timestamp, id)
-TTL timestamp + INTERVAL 90 DAY
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 `;
 

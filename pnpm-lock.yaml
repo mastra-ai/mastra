@@ -3983,12 +3983,6 @@ importers:
 
   runners/local:
     dependencies:
-      '@mastra/deployer':
-        specifier: workspace:*
-        version: link:../../packages/deployer
-      '@mastra/observability-writer':
-        specifier: workspace:*
-        version: link:../../observability/writer
       get-port:
         specifier: ^7.1.0
         version: 7.1.0
@@ -4011,6 +4005,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/observability-writer':
+        specifier: workspace:*
+        version: link:../../observability/writer
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17

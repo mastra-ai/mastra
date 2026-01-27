@@ -16,11 +16,12 @@ export const LIST_SOURCES_ROUTE: AdminServerRoute = {
   tags: ['Sources'],
   handler: async params => {
     const { admin, userId } = params;
-    const { teamId, type, page, limit } = params as AdminServerContext & {
+    const { teamId, type, page, perPage, search } = params as AdminServerContext & {
       teamId: string;
       type?: string;
       page?: number;
-      limit?: number;
+      perPage?: number;
+      search?: string;
     };
 
     // Verify team access
@@ -36,7 +37,7 @@ export const LIST_SOURCES_ROUTE: AdminServerRoute = {
         data: [],
         total: 0,
         page: page ?? 1,
-        perPage: limit ?? 20,
+        perPage: perPage ?? 20,
         hasMore: false,
       };
     }
@@ -45,19 +46,27 @@ export const LIST_SOURCES_ROUTE: AdminServerRoute = {
     const allSources = await sourceProvider.listProjects(teamId);
 
     // Filter by type if specified
-    const filteredSources = type ? allSources.filter(s => s.type === type) : allSources;
+    let filteredSources = type ? allSources.filter(s => s.type === type) : allSources;
+
+    // Filter by search if specified
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredSources = filteredSources.filter(
+        s => s.name.toLowerCase().includes(searchLower) || s.path.toLowerCase().includes(searchLower),
+      );
+    }
 
     // Apply pagination
     const pageNum = page ?? 1;
-    const perPage = limit ?? 20;
-    const start = (pageNum - 1) * perPage;
-    const paginatedSources = filteredSources.slice(start, start + perPage);
+    const pageSize = perPage ?? 20;
+    const start = (pageNum - 1) * pageSize;
+    const paginatedSources = filteredSources.slice(start, start + pageSize);
 
     return {
       data: paginatedSources,
       total: filteredSources.length,
       page: pageNum,
-      perPage,
+      perPage: pageSize,
       hasMore: start + paginatedSources.length < filteredSources.length,
     };
   },

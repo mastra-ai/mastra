@@ -151,7 +151,13 @@ export class AdminServer {
     });
 
     // Auth middleware (validates tokens, sets user and userId)
-    this.app.use(`${basePath}/*`, createAuthMiddleware(this.admin));
+    // Note: /spans/publish uses custom token auth (deployment ID as token)
+    this.app.use(
+      `${basePath}/*`,
+      createAuthMiddleware(this.admin, {
+        publicPaths: ['/spans/publish'],
+      }),
+    );
 
     // RBAC middleware (resolves team context, sets permissions)
     this.app.use(`${basePath}/*`, createRBACMiddleware(this.admin));
@@ -207,6 +213,17 @@ export class AdminServer {
 
     this.app[method](path, async c => {
       try {
+        // Extract access token for routes that need custom auth
+        let accessToken: string | undefined;
+        if (route.requiresAuth === false) {
+          const authHeader = c.req.header('Authorization');
+          if (authHeader?.startsWith('Bearer ')) {
+            accessToken = authHeader.substring(7);
+          } else if (authHeader) {
+            accessToken = authHeader;
+          }
+        }
+
         // Build context from middleware-set variables
         const context: AdminServerContext = {
           admin: this.admin,
@@ -217,6 +234,7 @@ export class AdminServer {
           permissions: c.get('permissions') ?? [],
           abortSignal: c.get('abortSignal'),
           logger: serverLogger,
+          accessToken,
         };
 
         // Parse and validate params
@@ -358,8 +376,8 @@ export class AdminServer {
           // Wire up runner server log callback to broadcast via WebSocket
           const runner = this.admin.getRunner();
           if (runner?.setOnServerLog) {
-            runner.setOnServerLog((serverId, line, stream) => {
-              this.serverLogStreamer?.broadcastLog(serverId, line, stream);
+            runner.setOnServerLog((serverId: string, line: string, stream: 'stdout' | 'stderr', id?: string) => {
+              this.serverLogStreamer?.broadcastLog(serverId, line, stream, id);
             });
             console.info('Server log streaming enabled via WebSocket');
           }

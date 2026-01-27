@@ -4,6 +4,15 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
+import type {
+  TraceQueryFilter,
+  SpanQueryFilter,
+  LogQueryFilter,
+  MetricQueryFilter,
+  ScoreQueryFilter,
+  QueryPagination,
+  MetricAggregation,
+} from '@mastra/admin';
 
 import { TABLE_NAMES } from '../schema/index.js';
 import { runMigrations, checkSchemaStatus } from '../schema/migrations.js';
@@ -27,8 +36,8 @@ import type {
 /**
  * Default pagination values
  */
-const DEFAULT_PAGE = 0;
-const DEFAULT_PER_PAGE = 50;
+const DEFAULT_LIMIT = 50;
+const DEFAULT_OFFSET = 0;
 
 /**
  * ClickHouseQueryProvider provides read access to observability data.
@@ -77,10 +86,20 @@ export class ClickHouseQueryProvider {
   /**
    * List traces with filtering and pagination.
    */
-  async listTraces(options: TraceQueryOptions = {}): Promise<{ traces: Trace[]; pagination: PaginationInfo }> {
+  async listTraces(
+    filter: TraceQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ traces: Trace[]; total: number }> {
+    // Convert filter to internal options format
+    const options: TraceQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      status: filter.status,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildTraceConditions(options);
-    const page = options.pagination?.page ?? DEFAULT_PAGE;
-    const perPage = options.pagination?.perPage ?? DEFAULT_PER_PAGE;
+    const limit = pagination?.limit ?? DEFAULT_LIMIT;
+    const offset = pagination?.offset ?? DEFAULT_OFFSET;
 
     // Get total count
     const countQuery = `
@@ -94,7 +113,7 @@ export class ClickHouseQueryProvider {
       format: 'JSONEachRow',
     });
     const countRows = await countResult.json<{ total: number }>();
-    const total = countRows[0]?.total ?? 0;
+    const total = Number(countRows[0]?.total ?? 0);
 
     // Get paginated results
     const query = `
@@ -107,7 +126,7 @@ export class ClickHouseQueryProvider {
 
     const result = await this.client.query({
       query,
-      query_params: { ...params, limit: perPage, offset: page * perPage },
+      query_params: { ...params, limit, offset },
       format: 'JSONEachRow',
     });
 
@@ -116,12 +135,7 @@ export class ClickHouseQueryProvider {
 
     return {
       traces,
-      pagination: {
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      },
+      total,
     };
   }
 
@@ -153,10 +167,22 @@ export class ClickHouseQueryProvider {
   /**
    * List spans with filtering and pagination.
    */
-  async listSpans(options: SpanQueryOptions = {}): Promise<{ spans: Span[]; pagination: PaginationInfo }> {
+  async listSpans(
+    filter: SpanQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ spans: Span[]; total: number }> {
+    // Convert filter to internal options format
+    const options: SpanQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      traceId: filter.traceId,
+      parentSpanId: filter.parentSpanId ?? undefined,
+      kind: filter.kind,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildSpanConditions(options);
-    const page = options.pagination?.page ?? DEFAULT_PAGE;
-    const perPage = options.pagination?.perPage ?? DEFAULT_PER_PAGE;
+    const limit = pagination?.limit ?? DEFAULT_LIMIT;
+    const offset = pagination?.offset ?? DEFAULT_OFFSET;
 
     // Get total count
     const countQuery = `
@@ -170,7 +196,7 @@ export class ClickHouseQueryProvider {
       format: 'JSONEachRow',
     });
     const countRows = await countResult.json<{ total: number }>();
-    const total = countRows[0]?.total ?? 0;
+    const total = Number(countRows[0]?.total ?? 0);
 
     // Get paginated results
     const query = `
@@ -183,7 +209,7 @@ export class ClickHouseQueryProvider {
 
     const result = await this.client.query({
       query,
-      query_params: { ...params, limit: perPage, offset: page * perPage },
+      query_params: { ...params, limit, offset },
       format: 'JSONEachRow',
     });
 
@@ -192,12 +218,7 @@ export class ClickHouseQueryProvider {
 
     return {
       spans,
-      pagination: {
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      },
+      total,
     };
   }
 
@@ -258,10 +279,22 @@ export class ClickHouseQueryProvider {
   /**
    * List logs with filtering and pagination.
    */
-  async listLogs(options: LogQueryOptions = {}): Promise<{ logs: Log[]; pagination: PaginationInfo }> {
+  async listLogs(
+    filter: LogQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ logs: Log[]; total: number }> {
+    // Convert filter to internal options format
+    const options: LogQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      traceId: filter.traceId,
+      level: Array.isArray(filter.level) ? filter.level[0] : filter.level,
+      message: filter.messageContains,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildLogConditions(options);
-    const page = options.pagination?.page ?? DEFAULT_PAGE;
-    const perPage = options.pagination?.perPage ?? DEFAULT_PER_PAGE;
+    const limit = pagination?.limit ?? DEFAULT_LIMIT;
+    const offset = pagination?.offset ?? DEFAULT_OFFSET;
 
     // Get total count
     const countQuery = `
@@ -275,20 +308,21 @@ export class ClickHouseQueryProvider {
       format: 'JSONEachRow',
     });
     const countRows = await countResult.json<{ total: number }>();
-    const total = countRows[0]?.total ?? 0;
+    const total = Number(countRows[0]?.total ?? 0);
 
-    // Get paginated results
+    // Get paginated results - ordered DESC (newest first) for reverse infinite scroll
+    const sortOrder = pagination?.sortOrder ?? 'desc';
     const query = `
       SELECT *
       FROM ${TABLE_NAMES.LOGS}
       ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
-      ORDER BY timestamp DESC
+      ORDER BY timestamp ${sortOrder === 'asc' ? 'ASC' : 'DESC'}
       LIMIT {limit:UInt32} OFFSET {offset:UInt32}
     `;
 
     const result = await this.client.query({
       query,
-      query_params: { ...params, limit: perPage, offset: page * perPage },
+      query_params: { ...params, limit, offset },
       format: 'JSONEachRow',
     });
 
@@ -297,12 +331,7 @@ export class ClickHouseQueryProvider {
 
     return {
       logs,
-      pagination: {
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      },
+      total,
     };
   }
 
@@ -310,14 +339,18 @@ export class ClickHouseQueryProvider {
    * Search logs with a query string.
    */
   async searchLogs(
-    searchQuery: string,
-    options: LogQueryOptions = {},
-  ): Promise<{ logs: Log[]; pagination: PaginationInfo }> {
-    // Use message contains for search
-    return this.listLogs({
-      ...options,
-      message: searchQuery,
-    });
+    query: string,
+    filter: LogQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ logs: Log[]; total: number }> {
+    // Use messageContains for search
+    return this.listLogs(
+      {
+        ...filter,
+        messageContains: query,
+      },
+      pagination,
+    );
   }
 
   // ============================================================
@@ -327,10 +360,21 @@ export class ClickHouseQueryProvider {
   /**
    * List metrics with filtering and pagination.
    */
-  async listMetrics(options: MetricQueryOptions = {}): Promise<{ metrics: Metric[]; pagination: PaginationInfo }> {
+  async listMetrics(
+    filter: MetricQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ metrics: Metric[]; total: number }> {
+    // Convert filter to internal options format
+    const options: MetricQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      name: filter.name,
+      type: filter.type,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildMetricConditions(options);
-    const page = options.pagination?.page ?? DEFAULT_PAGE;
-    const perPage = options.pagination?.perPage ?? DEFAULT_PER_PAGE;
+    const limit = pagination?.limit ?? DEFAULT_LIMIT;
+    const offset = pagination?.offset ?? DEFAULT_OFFSET;
 
     // Get total count
     const countQuery = `
@@ -344,7 +388,7 @@ export class ClickHouseQueryProvider {
       format: 'JSONEachRow',
     });
     const countRows = await countResult.json<{ total: number }>();
-    const total = countRows[0]?.total ?? 0;
+    const total = Number(countRows[0]?.total ?? 0);
 
     // Get paginated results
     const query = `
@@ -357,7 +401,7 @@ export class ClickHouseQueryProvider {
 
     const result = await this.client.query({
       query,
-      query_params: { ...params, limit: perPage, offset: page * perPage },
+      query_params: { ...params, limit, offset },
       format: 'JSONEachRow',
     });
 
@@ -366,12 +410,7 @@ export class ClickHouseQueryProvider {
 
     return {
       metrics,
-      pagination: {
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      },
+      total,
     };
   }
 
@@ -379,24 +418,20 @@ export class ClickHouseQueryProvider {
    * Aggregate metrics by name with statistics.
    */
   async aggregateMetrics(
-    options: MetricQueryOptions = {},
-    groupBy: string[] = ['name'],
-  ): Promise<
-    {
-      name: string;
-      count: number;
-      sum: number;
-      avg: number;
-      min: number;
-      max: number;
-      p50: number;
-      p90: number;
-      p99: number;
-    }[]
-  > {
+    filter: MetricQueryFilter,
+    groupBy?: string[],
+  ): Promise<MetricAggregation[]> {
+    // Convert filter to internal options format
+    const options: MetricQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      name: filter.name,
+      type: filter.type,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildMetricConditions(options);
 
-    const groupByClause = groupBy.length > 0 ? groupBy.join(', ') : 'name';
+    const groupByClause = groupBy && groupBy.length > 0 ? groupBy.join(', ') : 'name';
 
     const query = `
       SELECT
@@ -440,14 +475,19 @@ export class ClickHouseQueryProvider {
    * Get metric time series data.
    */
   async getMetricTimeSeries(
-    metricName: string,
-    options: MetricQueryOptions = {},
-    intervalMs: number = 60000,
+    name: string,
+    filter: MetricQueryFilter,
+    intervalMs: number,
   ): Promise<{ timestamp: Date; value: number }[]> {
-    const { conditions, params } = this.buildMetricConditions({
-      ...options,
-      name: metricName,
-    });
+    // Convert filter to internal options format with name
+    const options: MetricQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      name,
+      type: filter.type,
+      timeRange: filter.timeRange,
+    };
+    const { conditions, params } = this.buildMetricConditions(options);
 
     const intervalSeconds = Math.max(1, Math.floor(intervalMs / 1000));
 
@@ -481,10 +521,23 @@ export class ClickHouseQueryProvider {
   /**
    * List scores with filtering and pagination.
    */
-  async listScores(options: ScoreQueryOptions = {}): Promise<{ scores: Score[]; pagination: PaginationInfo }> {
+  async listScores(
+    filter: ScoreQueryFilter,
+    pagination?: QueryPagination,
+  ): Promise<{ scores: Score[]; total: number }> {
+    // Convert filter to internal options format
+    const options: ScoreQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      traceId: filter.traceId,
+      name: filter.name,
+      minValue: filter.minValue,
+      maxValue: filter.maxValue,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildScoreConditions(options);
-    const page = options.pagination?.page ?? DEFAULT_PAGE;
-    const perPage = options.pagination?.perPage ?? DEFAULT_PER_PAGE;
+    const limit = pagination?.limit ?? DEFAULT_LIMIT;
+    const offset = pagination?.offset ?? DEFAULT_OFFSET;
 
     // Get total count
     const countQuery = `
@@ -498,7 +551,7 @@ export class ClickHouseQueryProvider {
       format: 'JSONEachRow',
     });
     const countRows = await countResult.json<{ total: number }>();
-    const total = countRows[0]?.total ?? 0;
+    const total = Number(countRows[0]?.total ?? 0);
 
     // Get paginated results
     const query = `
@@ -511,7 +564,7 @@ export class ClickHouseQueryProvider {
 
     const result = await this.client.query({
       query,
-      query_params: { ...params, limit: perPage, offset: page * perPage },
+      query_params: { ...params, limit, offset },
       format: 'JSONEachRow',
     });
 
@@ -520,12 +573,7 @@ export class ClickHouseQueryProvider {
 
     return {
       scores,
-      pagination: {
-        total,
-        page,
-        perPage,
-        hasMore: (page + 1) * perPage < total,
-      },
+      total,
     };
   }
 
@@ -533,12 +581,22 @@ export class ClickHouseQueryProvider {
    * Aggregate scores by name.
    */
   async aggregateScores(
-    options: ScoreQueryOptions = {},
-    groupBy: string[] = ['name'],
+    filter: ScoreQueryFilter,
+    groupBy?: string[],
   ): Promise<{ name: string; avg: number; count: number }[]> {
+    // Convert filter to internal options format
+    const options: ScoreQueryOptions = {
+      projectId: filter.projectId,
+      deploymentId: filter.deploymentId,
+      traceId: filter.traceId,
+      name: filter.name,
+      minValue: filter.minValue,
+      maxValue: filter.maxValue,
+      timeRange: filter.timeRange,
+    };
     const { conditions, params } = this.buildScoreConditions(options);
 
-    const groupByClause = groupBy.length > 0 ? groupBy.join(', ') : 'name';
+    const groupByClause = groupBy && groupBy.length > 0 ? groupBy.join(', ') : 'name';
 
     const query = `
       SELECT

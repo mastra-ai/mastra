@@ -172,15 +172,15 @@ export class AdminClient {
   // Sources
   // ============================================================
   sources = {
-    list: async (teamId: string) => {
+    list: async (teamId: string, params?: { search?: string; type?: 'local' | 'github'; page?: number; perPage?: number }) => {
       const result = await this.request<{
         data: ProjectSource[];
         total: number;
         page: number;
         perPage: number;
         hasMore: boolean;
-      }>('GET', `/teams/${teamId}/sources`);
-      return result.data;
+      }>('GET', `/teams/${teamId}/sources`, { params });
+      return result;
     },
 
     get: (sourceId: string) => this.request<ProjectSource>('GET', `/sources/${sourceId}`),
@@ -280,6 +280,15 @@ export class AdminClient {
 
     getLogs: (serverId: string, params?: { limit?: number; since?: string }) =>
       this.request<{ logs: string[] }>('GET', `/servers/${serverId}/logs`, { params }),
+
+    getLogsPaginated: (serverId: string, params?: { limit?: number; before?: string }) =>
+      this.request<{
+        serverId: string;
+        entries: Array<{ id: string; timestamp: string; line: string; stream: 'stdout' | 'stderr' }>;
+        hasMore: boolean;
+        oldestCursor: string | null;
+        newestCursor: string | null;
+      }>('GET', `/servers/${serverId}/logs/paginated`, { params }),
 
     getMetrics: (serverId: string) => this.request<ServerMetrics>('GET', `/servers/${serverId}/metrics`),
   };

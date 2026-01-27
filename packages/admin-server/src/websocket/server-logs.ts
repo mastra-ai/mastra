@@ -63,11 +63,12 @@ export class ServerLogStreamer {
   /**
    * Broadcast a server log line.
    */
-  broadcastLog(serverId: string, line: string, stream: 'stdout' | 'stderr' = 'stdout'): void {
+  broadcastLog(serverId: string, line: string, stream: 'stdout' | 'stderr' = 'stdout', id?: string): void {
     this.wsServer.broadcast(`server:${serverId}`, {
       type: 'server:log',
       payload: {
         serverId,
+        id: id ?? `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         line,
         timestamp: new Date().toISOString(),
         stream,

@@ -11,6 +11,7 @@ overrides:
   '@mastra/source-local': link:../../sources/local
   '@mastra/runner-local': link:../../runners/local
   '@mastra/router-local': link:../../routers/local
+  '@mastra/observability-clickhouse': link:../../observability/clickhouse
   '@mastra/observability-file-local': link:../../observability/file-local
 
 importers:
@@ -26,6 +27,9 @@ importers:
       '@mastra/admin-server':
         specifier: link:../../packages/admin-server
         version: link:../../packages/admin-server
+      '@mastra/observability-clickhouse':
+        specifier: link:../../observability/clickhouse
+        version: link:../../observability/clickhouse
       '@mastra/observability-file-local':
         specifier: link:../../observability/file-local
         version: link:../../observability/file-local

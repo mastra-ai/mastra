@@ -134,7 +134,8 @@ function test4_VerifyEntryStructure(): boolean {
 
   // Check for proper order of sections
   const adminConfigIndex = content.indexOf('ADMIN_CONFIG');
-  const fileExporterIndex = content.indexOf('FileExporter');
+  // Check for FileExporter INSTANTIATION (not class definition which comes earlier in bundle)
+  const fileExporterInstanceIndex = content.indexOf('new FileExporter');
   const storageInitIndex = content.indexOf('[Admin] Storage initialized');
   const serverStartIndex = content.indexOf('createNodeServer');
 
@@ -143,14 +144,14 @@ function test4_VerifyEntryStructure(): boolean {
     return false;
   }
 
-  if (fileExporterIndex === -1) {
-    report('Entry Structure', false, 'FileExporter not found');
+  if (fileExporterInstanceIndex === -1) {
+    report('Entry Structure', false, 'FileExporter instantiation not found');
     return false;
   }
 
-  // FileExporter should come after ADMIN_CONFIG
-  if (fileExporterIndex < adminConfigIndex) {
-    report('Entry Structure', false, 'FileExporter appears before ADMIN_CONFIG');
+  // FileExporter INSTANTIATION should come after ADMIN_CONFIG (class definition comes before, which is fine)
+  if (fileExporterInstanceIndex < adminConfigIndex) {
+    report('Entry Structure', false, 'FileExporter instantiation appears before ADMIN_CONFIG');
     return false;
   }
 

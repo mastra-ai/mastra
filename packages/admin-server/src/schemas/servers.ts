@@ -64,6 +64,18 @@ export const serverMetricsResponseSchema = z.object({
 export type ServerMetricsResponse = z.infer<typeof serverMetricsResponseSchema>;
 
 /**
+ * Structured log entry schema.
+ */
+export const logEntrySchema = z.object({
+  id: z.string(),
+  timestamp: z.string(),
+  line: z.string(),
+  stream: z.enum(['stdout', 'stderr']),
+});
+
+export type LogEntry = z.infer<typeof logEntrySchema>;
+
+/**
  * Server logs response schema (for non-streaming).
  */
 export const serverLogsResponseSchema = z.object({
@@ -75,12 +87,28 @@ export const serverLogsResponseSchema = z.object({
 export type ServerLogsResponse = z.infer<typeof serverLogsResponseSchema>;
 
 /**
+ * Paginated server logs response schema.
+ */
+export const paginatedServerLogsResponseSchema = z.object({
+  serverId: z.string().uuid(),
+  entries: z.array(logEntrySchema),
+  hasMore: z.boolean(),
+  oldestCursor: z.string().nullable(),
+  newestCursor: z.string().nullable(),
+});
+
+export type PaginatedServerLogsResponse = z.infer<typeof paginatedServerLogsResponseSchema>;
+
+/**
  * Get server logs query params.
  */
 export const getServerLogsQuerySchema = z.object({
   stream: z.coerce.boolean().optional().default(false),
   tail: z.coerce.number().int().positive().optional().default(100),
   since: z.coerce.date().optional(),
+  // New cursor-based pagination params
+  limit: z.coerce.number().int().positive().max(500).optional().default(100),
+  before: z.string().optional(), // Cursor: get entries before this ID (older)
 });
 
 export type GetServerLogsQuery = z.infer<typeof getServerLogsQuerySchema>;

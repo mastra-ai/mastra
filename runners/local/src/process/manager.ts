@@ -1,6 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
 import treeKill from 'tree-kill';
-import type { ObservabilityWriter } from '@mastra/observability-writer';
 import type { TrackedProcess, LogCollector } from '../types';
 
 // tree-kill types
@@ -18,33 +17,23 @@ export class ProcessManager {
   track(
     serverId: string,
     deploymentId: string,
-    projectId: string,
     process: ChildProcess,
     port: number,
     logCollector: LogCollector,
-    observabilityWriter?: ObservabilityWriter,
   ): void {
     const tracked: TrackedProcess = {
       serverId,
       deploymentId,
-      projectId,
       process,
       port,
       startedAt: new Date(),
       logCollector,
-      observabilityWriter,
     };
 
     this.processes.set(serverId, tracked);
 
     // Clean up on exit
     process.on('exit', () => {
-      // Shutdown observability writer if present
-      if (tracked.observabilityWriter) {
-        tracked.observabilityWriter.shutdown().catch(() => {
-          // Ignore shutdown errors on exit
-        });
-      }
       this.processes.delete(serverId);
     });
   }
@@ -75,15 +64,6 @@ export class ProcessManager {
     const tracked = this.processes.get(serverId);
     if (!tracked) {
       return;
-    }
-
-    // Shutdown observability writer first to flush any buffered logs
-    if (tracked.observabilityWriter) {
-      try {
-        await tracked.observabilityWriter.shutdown();
-      } catch {
-        // Ignore shutdown errors
-      }
     }
 
     const pid = tracked.process.pid;

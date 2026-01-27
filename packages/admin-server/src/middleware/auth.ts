@@ -56,10 +56,18 @@ function extractDefaultToken(c: Context): string | null {
  * Check if a path matches a pattern (supports :param placeholders).
  */
 function pathMatchesPattern(path: string, pattern: string): boolean {
+  // Normalize paths (remove trailing slashes for comparison)
+  const normalizedPath = path.replace(/\/+$/, '') || '/';
+  const normalizedPattern = pattern.replace(/\/+$/, '') || '/';
+
   // Convert pattern to regex (handles :param placeholders)
-  const regexPattern = pattern.replace(/:[^/]+/g, '[^/]+');
+  // Escape special regex characters except for :param placeholders
+  const regexPattern = normalizedPattern
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
+    .replace(/:[^/]+/g, '[^/]+'); // Then handle :param
+
   const regex = new RegExp(`^${regexPattern}$`);
-  return regex.test(path);
+  return regex.test(normalizedPath);
 }
 
 /**
@@ -85,7 +93,10 @@ function isPublicPath(path: string, publicPaths: string[]): boolean {
  * ```
  */
 export function createAuthMiddleware(admin: MastraAdmin, config?: AuthMiddlewareConfig) {
-  const publicPaths = config?.publicPaths ?? DEFAULT_PUBLIC_PATHS;
+  // Merge custom public paths with defaults
+  const publicPaths = config?.publicPaths
+    ? [...DEFAULT_PUBLIC_PATHS, ...config.publicPaths]
+    : DEFAULT_PUBLIC_PATHS;
   const extractToken = config?.extractToken ?? extractDefaultToken;
 
   return async (c: Context, next: Next) => {
@@ -96,7 +107,20 @@ export function createAuthMiddleware(admin: MastraAdmin, config?: AuthMiddleware
     const relativePath = path.startsWith(basePath) ? path.substring(basePath.length) : path;
 
     // Check if path is public (skip auth)
-    if (isPublicPath(relativePath, publicPaths) || isPublicPath(path, publicPaths)) {
+    const isPublic = isPublicPath(relativePath, publicPaths) || isPublicPath(path, publicPaths);
+
+    // Debug logging for spans endpoint
+    if (relativePath.includes('spans')) {
+      console.log('[Auth] Checking path:', {
+        path,
+        relativePath,
+        basePath,
+        isPublic,
+        publicPaths,
+      });
+    }
+
+    if (isPublic) {
       return next();
     }
 

@@ -25,5 +25,8 @@ export * from './servers';
 // Observability schemas
 export * from './observability';
 
+// Spans schemas
+export * from './spans';
+
 // Admin schemas
 export * from './admin';

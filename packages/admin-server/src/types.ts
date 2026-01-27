@@ -267,6 +267,12 @@ export interface AdminServerContext {
    * Logger instance.
    */
   logger: AdminLogger;
+
+  /**
+   * Raw access token from Authorization header (for routes with custom auth).
+   * Available when route has requiresAuth: false but still needs token access.
+   */
+  accessToken?: string;
 }
 
 /**

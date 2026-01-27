@@ -20,6 +20,7 @@ import { LocalEdgeRouter } from '@mastra/router-local';
 import { LocalFileStorage } from '@mastra/observability-file-local';
 import { ClickHouseQueryProvider, IngestionWorker } from '@mastra/observability-clickhouse';
 import { resolve } from 'path';
+import { tmpdir } from 'node:os';
 
 // Configuration
 const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
@@ -94,7 +95,9 @@ async function main() {
     maxConcurrentBuilds: 3,
     defaultBuildTimeoutMs: 600000,
     logRetentionLines: 10000,
-    buildDir: resolve(process.cwd(), '.mastra/builds'),
+    // Automatically inject observability env vars into deployed servers
+    // This enables CloudExporter to send spans to the admin server
+    tracesEndpoint: `http://localhost:${PORT}/api/spans/publish`,
   });
 
   // Initialize router with reverse-proxy strategy and custom domain
@@ -110,17 +113,18 @@ async function main() {
     logRoutes: true,
   });
 
+  const tmpDir = resolve(tmpdir(), '.mastra');
   // Initialize file storage for build logs
   console.log('[5] Initializing local file storage for build logs...');
   const buildLogStorage = new LocalFileStorage({
-    baseDir: resolve(process.cwd(), '.mastra/build-logs'),
+    baseDir: tmpDir,
     atomicWrites: true,
   });
 
   // Initialize file storage for observability (server logs, traces, metrics)
   console.log('[5a] Initializing local file storage for observability...');
   const observabilityStorage = new LocalFileStorage({
-    baseDir: resolve(process.cwd(), '.mastra/observability'),
+    baseDir: tmpDir,
     atomicWrites: true,
   });
 
@@ -265,6 +269,11 @@ async function main() {
   } else {
     console.log(`For clean URLs, run: sudo PROXY_PORT=80 pnpm dev:server`);
   }
+  console.log();
+
+  console.log('Span Collection:');
+  console.log(`  Endpoint: http://localhost:${PORT}/api/spans/publish`);
+  console.log('  Deployed servers auto-configured with MASTRA_CLOUD_* env vars');
   console.log();
 
   if (ENABLE_CLICKHOUSE) {
