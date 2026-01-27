@@ -22,8 +22,8 @@ import StepItem from "@site/src/components/StepItem";
 </div>
 
 - Node.js `v20.0` 以降がインストールされていること
-- 対応する[モデルプロバイダー](/models)の API キー
-- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
+- 対応する[モデルプロバイダー](/models/v0)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/v0/getting-started/installation)を参照）
 
 <div id="how-rag-works">
   ## RAG の仕組み
@@ -74,7 +74,7 @@ RAG がどのように動作するか、そして各コンポーネントをど�
 
 追加の依存関係をインストールする
 
-[インストールガイド](/docs/getting-started/installation)の手順を実行した後、以下の追加依存関係をインストールします:
+[インストールガイド](/docs/v0/getting-started/installation)の手順を実行した後、以下の追加依存関係をインストールします:
 
 ```bash copy
 npm install @mastra/rag@latest ai@^4.0.0
@@ -92,7 +92,7 @@ Mastra は現在 AI SDK の v5 をサポートしていません（[サポート
 
 ここでは RAG 対応のリサーチアシスタントを作成します。エージェントは以下を使用します:
 
-- 論文内の関連コンテンツを見つけるために、ベクターストア上でセマンティック検索を行う [Vector Query Tool](/reference/tools/vector-query-tool)
+- 論文内の関連コンテンツを見つけるために、ベクターストア上でセマンティック検索を行う [Vector Query Tool](/reference/v0/tools/vector-query-tool)
 - クエリの理解と応答生成のための GPT-4o-mini
 - 論文の分析方法、取得したコンテンツの効果的な活用、制約の明示を指示するカスタムインストラクション
 
@@ -402,7 +402,7 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
 
 より高度な RAG 手法の例を見てみましょう:
 
-- メタデータで結果を絞り込む [Filter RAG](/examples/rag/usage/filter-rag)
-- 情報密度を最適化する [Cleanup RAG](/examples/rag/usage/cleanup-rag)
-- ワークフローで複雑な推論クエリに対応する [Chain of Thought RAG](/examples/rag/usage/cot-rag)
-- 結果の関連性を高める [Rerank RAG](/examples/rag/usage/cleanup-rag)
+- メタデータで結果を絞り込む [Filter RAG](/examples/v0/rag/usage/filter-rag)
+- 情報密度を最適化する [Cleanup RAG](/examples/v0/rag/usage/cleanup-rag)
+- ワークフローで複雑な推論クエリに対応する [Chain of Thought RAG](/examples/v0/rag/usage/cot-rag)
+- 結果の関連性を高める [Rerank RAG](/examples/v0/rag/usage/cleanup-rag)

@@ -80,7 +80,7 @@ const agent = new Agent({
   ### ストレージ構成
 </div>
 
-Semantic recall は、メッセージとその埋め込みを保存するために、[ストレージとベクターデータベース](/reference/memory/memory-class)に依存します。
+Semantic recall は、メッセージとその埋め込みを保存するために、[ストレージとベクターデータベース](/reference/v0/memory/memory-class)に依存します。
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -103,17 +103,17 @@ const agent = new Agent({
 
 **ストレージ／ベクターのコード例**:
 
-* [LibSQL](/docs/memory/storage/memory-with-libsql)
-* [MongoDB](/docs/memory/storage/memory-with-mongodb)
-* [Postgres](/docs/memory/storage/memory-with-pg)
-* [Upstash](/docs/memory/storage/memory-with-upstash)
+* [LibSQL](/docs/v0/memory/storage/memory-with-libsql)
+* [MongoDB](/docs/v0/memory/storage/memory-with-mongodb)
+* [Postgres](/docs/v0/memory/storage/memory-with-pg)
+* [Upstash](/docs/v0/memory/storage/memory-with-upstash)
 
 
 <div id="embedder-configuration">
   ### 埋め込みモデルの設定
 </div>
 
-Semantic recall は、メッセージをベクトル化するために[埋め込みモデル](/reference/memory/memory-class)に依存します。Mastra は、`provider/model` という文字列を用いるモデルルーター経由で埋め込みモデルを扱えるほか、AI SDK と互換性のある任意の[埋め込みモデル](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)も利用できます。
+Semantic recall は、メッセージをベクトル化するために[埋め込みモデル](/reference/v0/memory/memory-class)に依存します。Mastra は、`provider/model` という文字列を用いるモデルルーター経由で埋め込みモデルを扱えるほか、AI SDK と互換性のある任意の[埋め込みモデル](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)も利用できます。
 
 <div id="using-the-model-router-recommended">
   #### モデルルーターの使用（推奨）
@@ -223,7 +223,7 @@ const agent = new Agent({
 });
 ```
 
-インデックスの設定オプションやパフォーマンス調整の詳細については、[PgVector 設定ガイド](/reference/vectors/pg#index-configuration-guide)をご覧ください。
+インデックスの設定オプションやパフォーマンス調整の詳細については、[PgVector 設定ガイド](/reference/v0/vectors/pg#index-configuration-guide)をご覧ください。
 
 
 <div id="disabling">

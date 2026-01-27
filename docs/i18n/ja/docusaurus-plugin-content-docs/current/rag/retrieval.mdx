@@ -76,7 +76,7 @@ console.log(results);
 ];
 ```
 
-基本的なリトリーバル手法の使い方については、[Retrieve Results](/examples/rag/query/retrieve-results) の例をご覧ください。
+基本的なリトリーバル手法の使い方については、[Retrieve Results](/examples/v0/rag/query/retrieve-results) の例をご覧ください。
 
 
 <div id="advanced-retrieval-options">
@@ -89,7 +89,7 @@ console.log(results);
 
 メタデータフィールドに基づいて結果をフィルターし、検索範囲を絞り込みます。これは、異なるソースや時期、特定の属性を持つドキュメントがある場合に有用です。Mastra は、サポートされているすべてのベクトルストアで機能する、MongoDB 風の統一クエリ構文を提供します。
 
-利用可能な演算子や構文の詳細は、[メタデータフィルタ リファレンス](/reference/rag/metadata-filters)を参照してください。
+利用可能な演算子や構文の詳細は、[メタデータフィルタ リファレンス](/reference/v0/rag/metadata-filters)を参照してください。
 
 基本的なフィルタリングの例:
 
@@ -157,7 +157,7 @@ const results = await pgVector.query({
 * 複数の条件を組み合わせて精密に検索
 * ドキュメント属性（例：言語、著者）でフィルタリング
 
-メタデータフィルタリングの使用例は、[Hybrid Vector Search](/examples/rag/query/hybrid-vector-search) を参照してください。
+メタデータフィルタリングの使用例は、[Hybrid Vector Search](/examples/v0/rag/query/hybrid-vector-search) を参照してください。
 
 
 <div id="vector-query-tool">
@@ -278,7 +278,7 @@ await pineconeQueryTool.execute({
 });
 ```
 
-詳細な設定オプションや高度な活用方法については、[Vector Query Tool リファレンス](/reference/tools/vector-query-tool)を参照してください。
+詳細な設定オプションや高度な活用方法については、[Vector Query Tool リファレンス](/reference/v0/tools/vector-query-tool)を参照してください。
 
 
 <div id="vector-store-prompts">
@@ -531,7 +531,7 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 
 再ランキング後の結果は、ベクトルの類似度と意味的な理解を組み合わせて、検索の精度を高めます。
 
-再ランキングの詳細は、[rerank()](/reference/rag/rerankWithScorer) メソッドを参照してください。
+再ランキングの詳細は、[rerank()](/reference/v0/rag/rerankWithScorer) メソッドを参照してください。
 
 再ランキングの使い方の例は、examples セクションの「Re-ranking Results」を参照してください。
 
@@ -559,6 +559,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-グラフベースのリトリーバルの詳細については、[GraphRAG](/reference/rag/graph-rag) クラスと [createGraphQueryTool()](/reference/tools/graph-rag-tool) 関数を参照してください。
+グラフベースのリトリーバルの詳細については、[GraphRAG](/reference/v0/rag/graph-rag) クラスと [createGraphQueryTool()](/reference/v0/tools/graph-rag-tool) 関数を参照してください。
 
-グラフベースのリトリーバル手法の利用例については、[Graph-based Retrieval](/examples/rag/usage/graph-rag) の例を参照してください。
+グラフベースのリトリーバル手法の利用例については、[Graph-based Retrieval](/examples/v0/rag/usage/graph-rag) の例を参照してください。

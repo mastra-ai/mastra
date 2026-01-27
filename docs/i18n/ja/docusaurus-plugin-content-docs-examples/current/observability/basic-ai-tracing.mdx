@@ -61,10 +61,10 @@ export const mastra = new Mastra({
 
 このデフォルト構成には自動的に以下が含まれます:
 
-* **[DefaultExporter](/docs/observability/ai-tracing/exporters/default)** - トレースをストレージに永続化します
-* **[CloudExporter](/docs/observability/ai-tracing/exporters/cloud)** - Mastra Cloud に送信します（トークンが設定されている場合）
-* **[SensitiveDataFilter](/docs/observability/ai-tracing/processors/sensitive-data-filter)** - 機密フィールドをマスキングします
-* **[100% sampling](/docs/observability/ai-tracing/overview#always-sample)** - すべてのトレースを収集します
+* **[DefaultExporter](/docs/v0/observability/ai-tracing/exporters/default)** - トレースをストレージに永続化します
+* **[CloudExporter](/docs/v0/observability/ai-tracing/exporters/cloud)** - Mastra Cloud に送信します（トークンが設定されている場合）
+* **[SensitiveDataFilter](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter)** - 機密フィールドをマスキングします
+* **[100% sampling](/docs/v0/observability/ai-tracing/overview#always-sample)** - すべてのトレースを収集します
 
 
 <div id="3-create-an-agent-with-automatic-tracing">
@@ -173,15 +173,15 @@ const result = await agent.generate("What time is it?", {
   ### ドキュメント
 </div>
 
-- [AI トレーシング概要](/docs/observability/ai-tracing/overview) - トレーシングの完全ガイド
-- [機密データフィルター](/docs/observability/ai-tracing/processors/sensitive-data-filter) - 機密情報のマスキング
-- [構成パターン](/docs/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - ベストプラクティス
+- [AI トレーシング概要](/docs/v0/observability/ai-tracing/overview) - トレーシングの完全ガイド
+- [機密データフィルター](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter) - 機密情報のマスキング
+- [構成パターン](/docs/v0/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - ベストプラクティス
 
 <div id="reference">
   ### 参考
 </div>
 
-- [設定](/reference/observability/ai-tracing/configuration) - ObservabilityConfig API
-- [エクスポーター](/reference/observability/ai-tracing/exporters/default-exporter) - DefaultExporter の詳細
-- [スパンの種類](/reference/observability/ai-tracing/span) - スパンのインターフェースとメソッド
-- [AITracing クラス](/reference/observability/ai-tracing/) - トレーシングのコアクラス
+- [設定](/reference/v0/observability/ai-tracing/configuration) - ObservabilityConfig API
+- [エクスポーター](/reference/v0/observability/ai-tracing/exporters/default-exporter) - DefaultExporter の詳細
+- [スパンの種類](/reference/v0/observability/ai-tracing/span) - スパンのインターフェースとメソッド
+- [AITracing クラス](/reference/v0/observability/ai-tracing/) - トレーシングのコアクラス

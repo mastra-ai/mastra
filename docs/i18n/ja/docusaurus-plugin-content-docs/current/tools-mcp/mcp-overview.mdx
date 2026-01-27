@@ -56,7 +56,7 @@ export const testMcpClient = new MCPClient({
 });
 ```
 
-> すべての設定オプションの一覧は [MCPClient](/reference/tools/mcp-client) を参照してください。
+> すべての設定オプションの一覧は [MCPClient](/reference/v0/tools/mcp-client) を参照してください。
 
 
 <div id="using-mcpclient-with-an-agent">
@@ -85,7 +85,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> すべての設定オプションについては、[Agent Class](/reference/agents/agent) を参照してください。
+> すべての設定オプションについては、[Agent Class](/reference/v0/agents/agent) を参照してください。
 
 
 <div id="configuring-mcpserver">
@@ -111,7 +111,7 @@ export const testMcpServer = new MCPServer({
 });
 ```
 
-> すべての設定オプションの一覧については、[MCPServer](/reference/tools/mcp-server) を参照してください。
+> すべての設定オプションの一覧については、[MCPServer](/reference/v0/tools/mcp-server) を参照してください。
 
 
 <div id="registering-an-mcpserver">
@@ -151,7 +151,7 @@ export const mastra = new Mastra({
 
 `.getTools()` メソッドを使って、設定済みのすべての MCP サーバーからツールを取得します。これは、設定（API キーなど）がユーザーやリクエスト間で固定されており一貫している場合に適しています。エージェントを定義する際に一度だけ呼び出し、その結果を `tools` プロパティに渡します。
 
-> 詳細は [getTools()](/reference/tools/mcp-client#gettools) を参照してください。
+> 詳細は [getTools()](/reference/v0/tools/mcp-client#gettools) を参照してください。
 
 ```typescript {8} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -204,7 +204,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-> 詳細は [getToolsets()](/reference/tools/mcp-client#gettoolsets) をご覧ください。
+> 詳細は [getToolsets()](/reference/v0/tools/mcp-client#gettoolsets) をご覧ください。
 
 
 <div id="connecting-to-an-mcp-registry">
@@ -384,6 +384,6 @@ MCP サーバーはレジストリを介して検出できます。`MCPClient` �
   ## 関連項目
 </div>
 
-- [ツールの使用](/docs/agents/using-tools)
-- [MCPClient](/reference/tools/mcp-client)
-- [MCPServer](/reference/tools/mcp-server)
+- [ツールの使用](/docs/v0/agents/using-tools)
+- [MCPClient](/reference/v0/tools/mcp-client)
+- [MCPServer](/reference/v0/tools/mcp-server)

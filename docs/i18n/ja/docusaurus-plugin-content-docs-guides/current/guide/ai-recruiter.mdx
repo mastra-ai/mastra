@@ -20,8 +20,8 @@ import StepItem from "@site/src/components/StepItem";
 </div>
 
 - Node.js `v20.0` 以降がインストールされていること
-- サポート対象の[モデルプロバイダー](/models)の API キー
-- 既存の Mastra プロジェクト（新規プロジェクトをセットアップする場合は[インストールガイド](/docs/getting-started/installation)に従ってください）
+- サポート対象の[モデルプロバイダー](/models/v0)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトをセットアップする場合は[インストールガイド](/docs/v0/getting-started/installation)に従ってください）
 
 <div id="building-the-workflow">
   ## ワークフローの構築
@@ -209,7 +209,7 @@ import StepItem from "@site/src/components/StepItem";
   ## ワークフローのテスト
 </div>
 
-開発サーバーを起動して、Mastraの[playground](/docs/getting-started/studio)内でワークフローをテストできます。
+開発サーバーを起動して、Mastraの[playground](/docs/v0/getting-started/studio)内でワークフローをテストできます。
 
 ```bash copy
 mastra dev
@@ -223,7 +223,7 @@ mastra dev
 
 履歴書のテキストを入力したら、**Run** ボタンを押してください。ワークフローの各ステップの出力を含むステータスボックス（`GatherCandidateInfo` と `AskAboutSpecialty`）が 2 つ表示されるはずです。
 
-[`.createRunAsync()`](/reference/workflows/workflow-methods/create-run) と [`.start()`](/reference/workflows/run-methods/start) を呼び出して、プログラムからワークフローをテストすることもできます。新しいファイル `src/test-workflow.ts` を作成し、次のコードを追加します。
+[`.createRunAsync()`](/reference/v0/workflows/workflow-methods/create-run) と [`.start()`](/reference/v0/workflows/run-methods/start) を呼び出して、プログラムからワークフローをテストすることもできます。新しいファイル `src/test-workflow.ts` を作成し、次のコードを追加します。
 
 ```ts copy title="src/test-workflow.ts"
 import { mastra } from "./mastra";

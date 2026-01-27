@@ -10,7 +10,7 @@ import GithubLink from "@site/src/components/GithubLink";
   # インタラクティブストーリージェネレーター
 </div>
 
-以下のコードスニペットは、Next.js を使用し、Mastra を別バックエンドとして統合したインタラクティブなストーリー生成アプリでの Text-to-Speech（TTS）機能の実装例です。この例では、Mastra の client-js SDK を用いて Mastra のバックエンドへ接続する方法を示します。Next.js との統合の詳細は、[Integrate with Next.js](/docs/frameworks/web-frameworks/next-js) をご参照ください。
+以下のコードスニペットは、Next.js を使用し、Mastra を別バックエンドとして統合したインタラクティブなストーリー生成アプリでの Text-to-Speech（TTS）機能の実装例です。この例では、Mastra の client-js SDK を用いて Mastra のバックエンドへ接続する方法を示します。Next.js との統合の詳細は、[Integrate with Next.js](/docs/v0/frameworks/web-frameworks/next-js) をご参照ください。
 
 <div id="creating-an-agent-with-tts-capabilities">
   ## TTS 機能を備えたエージェントの作成
@@ -63,7 +63,7 @@ export const mastra = new Mastra({
   ## フロントエンドから Mastra に接続する
 </div>
 
-ここでは Mastra Client SDK を使って Mastra サーバーとやり取りします。Mastra Client SDK の詳細は[ドキュメント](/docs/server-db/mastra-client)をご覧ください。
+ここでは Mastra Client SDK を使って Mastra サーバーとやり取りします。Mastra Client SDK の詳細は[ドキュメント](/docs/v0/server-db/mastra-client)をご覧ください。
 
 ```typescript title="src/app/page.tsx"
 import { MastraClient } from "@mastra/client-js";

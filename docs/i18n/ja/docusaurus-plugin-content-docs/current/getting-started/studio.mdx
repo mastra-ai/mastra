@@ -70,7 +70,7 @@ Studio UI は、エージェント、ワークフロー、ツールをテスト�
   ### エージェント
 </div>
 
-エージェントと直接チャットし、[models](/models) を動的に切り替えたり、temperature や top-p などの設定を調整して、出力への影響を確かめられます。
+エージェントと直接チャットし、[models](/models/v0) を動的に切り替えたり、temperature や top-p などの設定を調整して、出力への影響を確かめられます。
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
 
@@ -120,7 +120,7 @@ Scorers タブでは、エージェントのスコアラーが実行した結果
   ## REST API
 </div>
 
-ローカル開発サーバーは完全な REST API ルートを公開しており、開発中にエージェント、ワークフロー、ツールとプログラムでやり取りできます。ローカル開発サーバーは [本番サーバー](/docs/server-db/production-server) とまったく同じ API ルートを使用しているため、Mastra サーバーをデプロイする予定がある場合に特に有用です。これにより、本番と同等の環境で開発・テストできます。
+ローカル開発サーバーは完全な REST API ルートを公開しており、開発中にエージェント、ワークフロー、ツールとプログラムでやり取りできます。ローカル開発サーバーは [本番サーバー](/docs/v0/server-db/production-server) とまったく同じ API ルートを使用しているため、Mastra サーバーをデプロイする予定がある場合に特に有用です。これにより、本番と同等の環境で開発・テストできます。
 
 http://localhost:4111/openapi.json で OpenAPI 仕様の全エンドポイントを確認できます。各エンドポイントのリクエストおよびレスポンスのスキーマが記載されています。
 
@@ -156,7 +156,7 @@ export const mastra = new Mastra({
   ### ローカル HTTPS
 </div>
 
-Mastra は、[`--https`](/reference/cli/mastra#--https) フラグによるローカル環境での HTTPS 開発をサポートしており、プロジェクト用の証明書を自動的に作成・管理します。`mastra dev --https` を実行すると、localhost（または設定済みのホスト）向けの秘密鍵と証明書が生成されます。証明書を独自に管理したい場合は、サーバー設定で任意の鍵と証明書ファイルを指定できます。
+Mastra は、[`--https`](/reference/v0/cli/mastra#--https) フラグによるローカル環境での HTTPS 開発をサポートしており、プロジェクト用の証明書を自動的に作成・管理します。`mastra dev --https` を実行すると、localhost（または設定済みのホスト）向けの秘密鍵と証明書が生成されます。証明書を独自に管理したい場合は、サーバー設定で任意の鍵と証明書ファイルを指定できます。
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -177,5 +177,5 @@ export const mastra = new Mastra({
   ## 次のステップ
 </div>
 
-- Mastra が推奨する[プロジェクト構成](/docs/getting-started/project-structure)について学びましょう。
-- お好みのフロントエンドフレームワークと Mastra を連携しましょう—[Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)。
+- Mastra が推奨する[プロジェクト構成](/docs/v0/getting-started/project-structure)について学びましょう。
+- お好みのフロントエンドフレームワークと Mastra を連携しましょう—[Next.js](/docs/v0/frameworks/web-frameworks/next-js)、[React](/docs/v0/frameworks/web-frameworks/vite-react)、または [Astro](/docs/v0/frameworks/web-frameworks/astro)。

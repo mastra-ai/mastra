@@ -51,7 +51,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra は 600 以上のモデルに対応しています。[完全な一覧](/models)から選択してください。
+Mastra は 600 以上のモデルに対応しています。[完全な一覧](/models/v0)から選択してください。
 
 :::
 
@@ -171,7 +171,7 @@ instructions: {
 }
 ```
 
-> 詳細は[Agent リファレンス ドキュメント](/reference/agents/agent)をご覧ください。
+> 詳細は[Agent リファレンス ドキュメント](/reference/v0/agents/agent)をご覧ください。
 
 
 <div id="registering-an-agent">
@@ -205,7 +205,7 @@ const testAgent = mastra.getAgent("testAgent");
 
 `mastra.getAgent()` は、Mastra インスタンスの設定（logger、telemetry、storage、登録済みのエージェント、ベクトルストア）にアクセスできるため、直接インポートするよりも推奨されます。
 
-詳しくは [Calling agents](/examples/agents/calling-agents) をご覧ください。
+詳しくは [Calling agents](/examples/v0/agents/calling-agents) をご覧ください。
 
 :::
 
@@ -280,7 +280,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> 詳しくは [.generate()](/reference/agents/generate) または [.stream()](/reference/streaming/agents/stream) を参照してください。
+> 詳しくは [.generate()](/reference/v0/agents/generate) または [.stream()](/reference/v0/streaming/agents/stream) を参照してください。
 
 <div id="structured-output">
   ## 構造化出力
@@ -494,14 +494,14 @@ export const testAgent = new Agent({
 });
 ```
 
-> 詳しくは、[Runtime Context](/docs/server-db/runtime-context)をご覧ください。
+> 詳しくは、[Runtime Context](/docs/v0/server-db/runtime-context)をご覧ください。
 
 
 <div id="testing-with-mastra-playground">
   ## Mastra Playground でのテスト
 </div>
 
-Mastra の [Playground](/docs/getting-started/studio) を使って、さまざまなメッセージでエージェントをテストし、ツールの呼び出しと応答を確認し、エージェントの動作をデバッグします。
+Mastra の [Playground](/docs/v0/getting-started/studio) を使って、さまざまなメッセージでエージェントをテストし、ツールの呼び出しと応答を確認し、エージェントの動作をデバッグします。
 
 <div id="related">
   ## 関連項目
@@ -509,5 +509,5 @@ Mastra の [Playground](/docs/getting-started/studio) を使って、さまざ�
 
 - [ツールの使用](./using-tools)
 - [エージェントメモリ](./agent-memory)
-- [ランタイムコンテキスト](/examples/agents/runtime-context)
-- [エージェントの呼び出し](/examples/agents/calling-agents)
+- [ランタイムコンテキスト](/examples/v0/agents/runtime-context)
+- [エージェントの呼び出し](/examples/v0/agents/calling-agents)

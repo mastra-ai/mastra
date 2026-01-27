@@ -46,16 +46,16 @@ const voice = new OpenAIVoice();
 
 Mastra は幅広いテキスト読み上げ（Text-to-Speech）プロバイダーをサポートしており、それぞれ独自の機能や声のバリエーションを提供します。用途に最も適したプロバイダーをお選びください：
 
-* [**OpenAI**](/reference/voice/openai/) - 自然なイントネーションと表現の高品質な音声
-* [**Azure**](/reference/voice/azure/) - 多彩な音声と言語に対応する Microsoft の音声サービス
-* [**ElevenLabs**](/reference/voice/elevenlabs/) - 感情表現と緻密な制御が可能な超リアルな音声
-* [**PlayAI**](/reference/voice/playai/) - 多様なスタイルの自然な音声に特化
-* [**Google**](/reference/voice/google/) - 多言語対応の Google の音声合成
-* [**Cloudflare**](/reference/voice/cloudflare/) - 低レイテンシー用途向けのエッジ最適化音声合成
-* [**Deepgram**](/reference/voice/deepgram/) - 高精度な AI 駆動の音声技術
-* [**Speechify**](/reference/voice/speechify/) - 読み上げの可読性とアクセシビリティに最適化されたテキスト読み上げ
-* [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
-* [**Murf**](/reference/voice/murf/) - パラメーターをカスタマイズ可能なスタジオ品質のボイスオーバー
+* [**OpenAI**](/reference/v0/voice/openai/) - 自然なイントネーションと表現の高品質な音声
+* [**Azure**](/reference/v0/voice/azure/) - 多彩な音声と言語に対応する Microsoft の音声サービス
+* [**ElevenLabs**](/reference/v0/voice/elevenlabs/) - 感情表現と緻密な制御が可能な超リアルな音声
+* [**PlayAI**](/reference/v0/voice/playai/) - 多様なスタイルの自然な音声に特化
+* [**Google**](/reference/v0/voice/google/) - 多言語対応の Google の音声合成
+* [**Cloudflare**](/reference/v0/voice/cloudflare/) - 低レイテンシー用途向けのエッジ最適化音声合成
+* [**Deepgram**](/reference/v0/voice/deepgram/) - 高精度な AI 駆動の音声技術
+* [**Speechify**](/reference/v0/voice/speechify/) - 読み上げの可読性とアクセシビリティに最適化されたテキスト読み上げ
+* [**Sarvam**](/reference/v0/voice/sarvam/) - インド系言語とアクセントに特化
+* [**Murf**](/reference/v0/voice/murf/) - パラメーターをカスタマイズ可能なスタジオ品質のボイスオーバー
 
 各プロバイダーは、必要に応じてインストールできる個別のパッケージとして提供されています：
 
@@ -97,4 +97,4 @@ const readableStream = await voice.speak(text, {
 });
 ```
 
-エージェントでTTSを利用する方法は、[Adding Voice to Agents](/docs/agents/adding-voice) のドキュメントをご覧ください。
+エージェントでTTSを利用する方法は、[Adding Voice to Agents](/docs/v0/agents/adding-voice) のドキュメントをご覧ください。

@@ -106,7 +106,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> サーバーミドルウェアの使い方は、[Middleware](/docs/server-db/middleware) をご覧ください。
+> サーバーミドルウェアの使い方は、[Middleware](/docs/v0/server-db/middleware) をご覧ください。
 
 
 <div id="accessing-values-with-agents">
@@ -144,7 +144,7 @@ export const weatherAgent = new Agent({
 
 `runtimeContext` は、`agents`、`workflows`、`scorers`、`inputProcessors`、`outputProcessors` といった他のオプションと併用できます。
 
-> 設定オプションの一覧は [Agent](/reference/agents/agent) を参照してください。
+> 設定オプションの一覧は [Agent](/reference/v0/agents/agent) を参照してください。
 
 
 <div id="accessing-values-from-workflow-steps">
@@ -171,7 +171,7 @@ const stepOne = createStep({
 });
 ```
 
-> 設定オプションの一覧は [createStep()](/reference/workflows/step) を参照してください。
+> 設定オプションの一覧は [createStep()](/reference/v0/workflows/step) を参照してください。
 
 
 <div id="accessing-values-with-tools">
@@ -198,15 +198,15 @@ export const weatherTool = createTool({
 });
 ```
 
-> すべての設定オプションについては、[createTool()](/reference/tools/create-tool) を参照してください。
+> すべての設定オプションについては、[createTool()](/reference/v0/tools/create-tool) を参照してください。
 
 
 <div id="related">
   ## 関連項目
 </div>
 
-- [ランタイムコンテキストの例](/examples/agents/runtime-context)
-- [エージェントのランタイムコンテキスト](/docs/agents/overview#using-runtimecontext)
+- [ランタイムコンテキストの例](/examples/v0/agents/runtime-context)
+- [エージェントのランタイムコンテキスト](/docs/v0/agents/overview#using-runtimecontext)
 - [ワークフローのランタイムコンテキスト](../workflows/overview#using-runtimecontext)
 - [ツールのランタイムコンテキスト](../tools-mcp/overview#using-runtimecontext)
-- [サーバーのミドルウェアにおけるランタイムコンテキスト](/docs/server-db/middleware)
+- [サーバーのミドルウェアにおけるランタイムコンテキスト](/docs/v0/server-db/middleware)

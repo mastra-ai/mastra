@@ -71,7 +71,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> 詳細は、[ワークフローの一時停止と再開の例](/examples/workflows_legacy/suspend-and-resume)をご覧ください。
+> 詳細は、[ワークフローの一時停止と再開の例](/examples/v0/workflows_legacy/suspend-and-resume)をご覧ください。
 
 
 <div id="identifying-suspended-steps">
@@ -249,7 +249,7 @@ const resumedResult = await run.resume({
 });
 ```
 
-> 詳細は [Runtime Context](/docs/server-db/runtime-context) をご覧ください。
+> 詳細は [Runtime Context](/docs/v0/server-db/runtime-context) をご覧ください。
 
 
 <div id="resuming-nested-workflows">
@@ -308,7 +308,7 @@ Workflows は、一定時間の遅延や外部イベントを待つために実�
 
 **利用可能なメソッド:**
 
-- [`.sleep()`](/reference/workflows/workflow-methods/sleep): 指定したミリ秒数だけ一時停止する
-- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil): 特定の日付まで一時停止する
-- [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): 外部イベントを受信するまで一時停止する
-- [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent): 待機中のワークフローを再開するイベントを送信する
+- [`.sleep()`](/reference/v0/workflows/workflow-methods/sleep): 指定したミリ秒数だけ一時停止する
+- [`.sleepUntil()`](/reference/v0/workflows/workflow-methods/sleepUntil): 特定の日付まで一時停止する
+- [`.waitForEvent()`](/reference/v0/workflows/workflow-methods/waitForEvent): 外部イベントを受信するまで一時停止する
+- [`.sendEvent()`](/reference/v0/workflows/workflow-methods/sendEvent): 待機中のワークフローを再開するイベントを送信する

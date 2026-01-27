@@ -21,7 +21,7 @@ description: "Mastra のレガシー ワークフローにおける制御フロ�
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-詳細は、[Parallel Steps](/examples/workflows_legacy/parallel-steps) の例をご覧ください。
+詳細は、[Parallel Steps](/examples/v0/workflows_legacy/parallel-steps) の例をご覧ください。
 
 
 <div id="sequential-execution">
@@ -34,7 +34,7 @@ myWorkflow.step(fetchUserData).step(fetchOrderData);
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-詳細は、[Sequential Steps](/examples/workflows_legacy/sequential-steps) のサンプルをご参照ください。
+詳細は、[Sequential Steps](/examples/v0/workflows_legacy/sequential-steps) のサンプルをご参照ください。
 
 
 <div id="branching-and-merging-paths">
@@ -61,7 +61,7 @@ myWorkflow
 * なお、stepA は別途 stepC もトリガーし、その結果 stepE に進みます。
 * また、stepD と stepE の両方が完了すると、stepF がトリガーされます。
 
-詳細は [Branching Paths](/examples/workflows_legacy/branching-paths) の例をご覧ください。
+詳細は [Branching Paths](/examples/v0/workflows_legacy/branching-paths) の例をご覧ください。
 
 
 <div id="merging-multiple-branches">

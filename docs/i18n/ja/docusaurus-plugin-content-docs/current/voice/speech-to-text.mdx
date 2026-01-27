@@ -41,13 +41,13 @@ const voice = new OpenAIVoice();
 
 Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれに固有の機能と強みがあります。
 
-* [**OpenAI**](/reference/voice/openai/) - Whisper モデルによる高精度な文字起こし
-* [**Azure**](/reference/voice/azure/) - 企業向けの高い信頼性を備えた Microsoft の音声認識
-* [**ElevenLabs**](/reference/voice/elevenlabs/) - 多言語対応の高度な音声認識
-* [**Google**](/reference/voice/google/) - 幅広い言語をサポートする Google の音声認識
-* [**Cloudflare**](/reference/voice/cloudflare/) - 低レイテンシ用途向けのエッジ最適化音声認識
-* [**Deepgram**](/reference/voice/deepgram/) - 多様なアクセントに高精度で対応する AI 搭載の音声認識
-* [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
+* [**OpenAI**](/reference/v0/voice/openai/) - Whisper モデルによる高精度な文字起こし
+* [**Azure**](/reference/v0/voice/azure/) - 企業向けの高い信頼性を備えた Microsoft の音声認識
+* [**ElevenLabs**](/reference/v0/voice/elevenlabs/) - 多言語対応の高度な音声認識
+* [**Google**](/reference/v0/voice/google/) - 幅広い言語をサポートする Google の音声認識
+* [**Cloudflare**](/reference/v0/voice/cloudflare/) - 低レイテンシ用途向けのエッジ最適化音声認識
+* [**Deepgram**](/reference/v0/voice/deepgram/) - 多様なアクセントに高精度で対応する AI 搭載の音声認識
+* [**Sarvam**](/reference/v0/voice/sarvam/) - インド系言語とアクセントに特化
 
 各プロバイダーは、必要に応じてインストールできる個別パッケージとして提供されています。
 
@@ -93,4 +93,4 @@ const { text } = await agent.generate(
 console.log(`レコメンデーション: ${text}`);
 ```
 
-エージェントでの STT の使い方は、[Adding Voice to Agents](/docs/agents/adding-voice) のドキュメントをご覧ください。
+エージェントでの STT の使い方は、[Adding Voice to Agents](/docs/v0/agents/adding-voice) のドキュメントをご覧ください。
