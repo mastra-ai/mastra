@@ -18,8 +18,7 @@
 
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
-import { createDynamicToolSet } from '@mastra/core/tools/dynamic';
+import { ToolSearchProcessor } from '@mastra/core/processors';
 
 import {
   calculatorAdd,
@@ -35,9 +34,9 @@ import {
   cookingTool,
 } from '../tools/index.js';
 
-// Create the dynamic tool set with all searchable tools
+// Create the tool search processor with all searchable tools
 // These tools are NOT loaded by default - they must be searched and loaded
-export const { searchTool, loadTool, getLoadedTools, registry } = createDynamicToolSet({
+const toolSearchProcessor = new ToolSearchProcessor({
   tools: {
     // Calculator tools
     calculator_add: calculatorAdd,
@@ -62,11 +61,13 @@ export const { searchTool, loadTool, getLoadedTools, registry } = createDynamicT
 /**
  * The Dynamic Tools Agent
  *
- * This agent only has search_tools and load_tool available initially.
- * It must discover and load other tools as needed.
+ * This agent uses the ToolSearchProcessor to dynamically discover and load tools on demand.
+ * The processor injects search_tools and load_tool, and handles tool loading automatically.
  *
- * The tools function dynamically includes any tools that have been loaded
- * for the current thread, making them available on subsequent turns.
+ * This approach is simpler than the previous pattern:
+ * - No need for a tools function
+ * - No need to manually get loaded tools
+ * - Processor handles everything via inputProcessors
  */
 export const dynamicToolsAgent = new Agent({
   id: 'dynamic-tools-agent',
@@ -99,22 +100,5 @@ You: "I've found and loaded a calculator tool. Let me add those numbers for you 
 
 Be proactive about searching for tools when you don't have the capability the user needs.`,
   model: openai('gpt-4o-mini'),
-  tools: async ({ requestContext }) => {
-    // Get the threadId from requestContext (set by the agent framework)
-    // Use type assertion because the requestContext generic type is unknown
-    const threadId = (requestContext as { get(key: string): unknown }).get(MASTRA_THREAD_ID_KEY) as
-      | string
-      | undefined;
-
-    // Get any tools that have been loaded for this thread
-    const loadedTools = await getLoadedTools({ threadId });
-
-    return {
-      // Always available: search and load tools
-      search_tools: searchTool,
-      load_tool: loadTool,
-      // Dynamically loaded tools for this thread
-      ...loadedTools,
-    };
-  },
+  inputProcessors: [toolSearchProcessor],
 });

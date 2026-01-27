@@ -10,7 +10,7 @@ import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProce
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Export Dynamic Tools Agent
-export { dynamicToolsAgent, getLoadedTools } from './dynamic-tools-agent.js';
+export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 
 const memory = new Memory();
 

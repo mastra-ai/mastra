@@ -9,7 +9,7 @@
  * 3. Using loaded tools in subsequent turns
  */
 
-import { dynamicToolsAgent, getLoadedTools } from './mastra/agents/dynamic-tools-agent.js';
+import { dynamicToolsAgent } from './mastra/agents/dynamic-tools-agent.js';
 
 async function main() {
   const threadId = `test-thread-${Date.now()}`;
@@ -30,10 +30,6 @@ async function main() {
 
   console.log('Agent response:', response1.text);
   console.log('\nTools used:', response1.toolCalls?.map(tc => tc.name) || 'none');
-
-  // Check what tools are now loaded
-  const loadedAfterStep1 = await getLoadedTools({ threadId });
-  console.log('\nLoaded tools after step 1:', Object.keys(loadedAfterStep1));
 
   // Step 2: Follow up - the tool should now be loaded
   console.log('\n--- Step 2: Follow-up request (tool should be loaded) ---\n');
@@ -59,14 +55,11 @@ async function main() {
   console.log('Agent response:', response3.text);
   console.log('\nTools used:', response3.toolCalls?.map(tc => tc.name) || 'none');
 
-  // Final loaded tools
-  const finalLoaded = await getLoadedTools({ threadId });
-  console.log('\n--- Final loaded tools ---');
-  console.log(Object.keys(finalLoaded));
-
   console.log('\n' + '='.repeat(60));
   console.log('Test complete!');
   console.log('='.repeat(60));
+  console.log('\nNote: The ToolSearchProcessor handles tool loading automatically.');
+  console.log('Tools remain loaded within the thread and are available across turns.');
 }
 
 main().catch(console.error);
