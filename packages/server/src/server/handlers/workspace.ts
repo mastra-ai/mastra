@@ -126,6 +126,9 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           canHybrid: boolean;
           hasSkills: boolean;
         };
+        safety: {
+          readOnly: boolean;
+        };
       }> = [];
 
       const seenIds = new Set<string>();
@@ -146,6 +149,9 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
             canVector: globalWorkspace.canVector,
             canHybrid: globalWorkspace.canHybrid,
             hasSkills: !!globalWorkspace.skills,
+          },
+          safety: {
+            readOnly: globalWorkspace.readOnly,
           },
         });
       }
@@ -172,6 +178,9 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
                   canVector: agentWorkspace.canVector,
                   canHybrid: agentWorkspace.canHybrid,
                   hasSkills: !!agentWorkspace.skills,
+                },
+                safety: {
+                  readOnly: agentWorkspace.readOnly,
                 },
               });
             }
@@ -259,6 +268,9 @@ export const WORKSPACE_INFO_ROUTE = createRoute({
           canHybrid: workspace.canHybrid,
           hasSkills: !!workspace.skills,
         },
+        safety: {
+          readOnly: workspace.readOnly,
+        },
       };
     } catch (error) {
       return handleError(error, 'Error getting workspace info');
@@ -331,6 +343,10 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.fs) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+      }
+
+      if (workspace.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
       const decodedPath = decodeURIComponent(path);
@@ -420,6 +436,10 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
+      if (workspace.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
+      }
+
       const decodedPath = decodeURIComponent(path);
 
       // Check if path exists (unless force is true)
@@ -465,6 +485,10 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.fs) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+      }
+
+      if (workspace.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
       const decodedPath = decodeURIComponent(path);

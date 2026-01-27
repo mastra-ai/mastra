@@ -1,6 +1,7 @@
 // Workspace hooks - filesystem and search
 export {
   type WorkspaceCapabilities,
+  type WorkspaceSafety,
   type WorkspaceInfo,
   type WorkspaceItem,
   type WorkspacesListResponse,
@@ -24,7 +25,6 @@ export {
   useCreateWorkspaceDirectory,
   useSearchWorkspace,
   useIndexWorkspaceContent,
-  useUnindexWorkspaceContent,
 } from './use-workspace';
 
 // Skills hooks and types
