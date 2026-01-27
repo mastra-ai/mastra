@@ -19,7 +19,7 @@ export class AISDKV4InputStream extends MastraModelInput {
     controller: ReadableStreamDefaultController<ChunkType>;
   }) {
     // ReadableStream throws TS errors, if imported not imported. What an annoying thing.
-    //@ts-expect-error
+    // @ts-expect-error - ReadableStream async iteration
     for await (const chunk of stream) {
       const transformedChunk = convertFullStreamChunkToMastra(chunk, { runId });
       if (transformedChunk) {

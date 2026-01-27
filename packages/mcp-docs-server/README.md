@@ -35,7 +35,7 @@ Windows
 ```
 
 This will make all Mastra documentation tools available in your Cursor workspace.
-Note that the MCP server wont be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
+Note that the MCP server won't be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
 
 ### In Windsurf
 
