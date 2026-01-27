@@ -228,15 +228,15 @@ Plans:
 | Phase | Name                      | Tests to Port | Status      |
 | ----- | ------------------------- | ------------- | ----------- |
 | 1     | State Object Support      | 12            | Complete    |
-| 2     | Lifecycle Callbacks       | 15            | Planned     |
+| 2     | Lifecycle Callbacks       | 15            | Complete    |
 | 3     | Schema Validation         | 12            | Not Started |
 | 4     | Suspend/Resume Edge Cases | 24            | Not Started |
 | 5     | Streaming vNext           | 6             | Not Started |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
-**Total:** ~101 tests to port (113 - 12 completed)
+**Total:** ~86 tests to port (113 - 27 completed)
 
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 2 planning_
+_Last updated: 2026-01-27 after Phase 2 completion_
