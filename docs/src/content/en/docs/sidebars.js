@@ -357,6 +357,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/composite-auth',
+              label: 'Composite Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/custom-auth-provider',
               label: 'Custom Auth Provider',
             },
