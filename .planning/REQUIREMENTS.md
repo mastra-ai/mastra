@@ -255,7 +255,7 @@ All operations must have sensible timeouts.
 | REQ-05 | Phase 2 | Complete |
 | REQ-06 | Phase 2 | Complete |
 | REQ-08 | Phase 2 | Complete |
-| REQ-07 | Phase 3 | Pending |
+| REQ-07 | Phase 3 | Complete |
 
 ---
 
