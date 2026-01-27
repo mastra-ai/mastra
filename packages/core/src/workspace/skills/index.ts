@@ -2,7 +2,7 @@
  * Skills Module
  *
  * Provides types, schemas, and implementation for Skills following the Agent Skills specification.
- * Skills are SKILL.md files discovered from workspace skillsPaths.
+ * Skills are SKILL.md files discovered from workspace skills paths.
  *
  * @see https://github.com/anthropics/skills
  */
@@ -21,8 +21,8 @@ export type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
-  SkillsPathsResolver,
-  SkillsPathsContext,
+  SkillsResolver,
+  SkillsContext,
 } from './types';
 
 // =============================================================================

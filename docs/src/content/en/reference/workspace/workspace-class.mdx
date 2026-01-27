@@ -92,7 +92,7 @@ await workspace.init();
       isOptional: true,
     },
     {
-      name: "skillsPaths",
+      name: "skills",
       type: "string[]",
       description: "Paths where SKILL.md files are located",
       isOptional: true,
@@ -344,7 +344,7 @@ A workspace provides tools to agents based on what is configured:
 
 **Search** - When BM25 or vector search is configured, agents receive tools for searching and indexing workspace content.
 
-**Skills** - When `skillsPaths` is configured, the workspace provides access to SKILL.md files for skill discovery and activation.
+**Skills** - When `skills` is configured, the workspace provides access to SKILL.md files for skill discovery and activation.
 
 ## Related
 
