@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ItemsList } from './items-list';
 import { RunHistory } from './run-history';
 import { CSVImportDialog } from '../csv-import';
+import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Icon } from '@/ds/icons/Icon';
 import { Play, Database, Pencil, Trash2 } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 export interface DatasetDetailProps {
   datasetId: string;
@@ -20,6 +24,7 @@ export interface DatasetDetailProps {
   onEditItem?: (item: DatasetItem) => void;
   onDeleteItem?: (itemId: string) => void;
   runTriggerSlot?: React.ReactNode;
+  onNavigateToDataset?: (datasetId: string) => void;
 }
 
 type TabValue = 'items' | 'runs';
@@ -33,16 +38,61 @@ export function DatasetDetail({
   onEditItem,
   onDeleteItem,
   runTriggerSlot,
+  onNavigateToDataset,
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [itemsForCreate, setItemsForCreate] = useState<DatasetItem[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
+  const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
   const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
+  const { deleteItems } = useDatasetMutations();
 
   const items = itemsData?.items ?? [];
   const runs = runsData?.runs ?? [];
+
+  // Handler for Create Dataset action from selection
+  const handleCreateDatasetClick = (selectedItems: DatasetItem[]) => {
+    setItemsForCreate(selectedItems);
+    setCreateDialogOpen(true);
+  };
+
+  // Handler for bulk delete action from selection
+  const handleBulkDeleteClick = (itemIds: string[]) => {
+    setItemIdsToDelete(itemIds);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm bulk delete
+  const handleBulkDeleteConfirm = async () => {
+    await deleteItems.mutateAsync({ datasetId, itemIds: itemIdsToDelete });
+    toast.success(`Deleted ${itemIdsToDelete.length} items`);
+    setDeleteDialogOpen(false);
+    setItemIdsToDelete([]);
+    setClearSelectionTrigger(prev => prev + 1);
+  };
+
+  // Success callback for create dataset dialog
+  const handleCreateSuccess = (newDatasetId: string) => {
+    setCreateDialogOpen(false);
+    setItemsForCreate([]);
+    setClearSelectionTrigger(prev => prev + 1);
+    onNavigateToDataset?.(newDatasetId);
+  };
+
+  // Clear selection when create dialog closes (even without success)
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setCreateDialogOpen(open);
+    if (!open) {
+      setItemsForCreate([]);
+      setClearSelectionTrigger(prev => prev + 1);
+    }
+  };
 
   // Format version date for display
   const formatVersion = (version: Date | string | undefined): string => {
@@ -125,6 +175,10 @@ export function DatasetDetail({
               onEditItem={onEditItem}
               onDeleteItem={onDeleteItem}
               onImportClick={() => setImportDialogOpen(true)}
+              onBulkDeleteClick={handleBulkDeleteClick}
+              onCreateDatasetClick={handleCreateDatasetClick}
+              datasetName={dataset?.name}
+              clearSelectionTrigger={clearSelectionTrigger}
             />
           </TabContent>
 
@@ -144,6 +198,33 @@ export function DatasetDetail({
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
       />
+
+      {/* Create Dataset From Items Dialog */}
+      <CreateDatasetFromItemsDialog
+        open={createDialogOpen}
+        onOpenChange={handleCreateDialogOpenChange}
+        items={itemsForCreate}
+        onSuccess={handleCreateSuccess}
+      />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete Items</AlertDialog.Title>
+            <AlertDialog.Description>
+              Are you sure you want to delete {itemIdsToDelete.length} item
+              {itemIdsToDelete.length !== 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleBulkDeleteConfirm}>
+              {deleteItems.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </div>
   );
 }
