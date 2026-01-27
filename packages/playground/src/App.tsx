@@ -163,7 +163,7 @@ const routes = [
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
