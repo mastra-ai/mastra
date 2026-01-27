@@ -322,6 +322,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },
@@ -349,6 +354,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/auth0',
               label: 'Auth0',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/custom-auth-provider',
+              label: 'Custom Auth Provider',
             },
           ],
         },
