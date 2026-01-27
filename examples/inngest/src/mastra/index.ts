@@ -8,6 +8,8 @@ import { parallelCityComparisonWorkflow } from './workflows/inngest-parallel-wor
 import { defaultParallelCityComparisonWorkflow } from './workflows/default-parallel-workflow';
 import { planningAgent } from './agents/planning-agent';
 import { tripComparisonAgent } from './agents/trip-comparison-agent';
+import { researchAgent } from './agents/research-agent';
+import { fileManagerAgent } from './agents/file-manager-agent';
 import { LibSQLStore } from '@mastra/libsql';
 
 const storage = new LibSQLStore({
@@ -41,6 +43,9 @@ export const mastra = new Mastra({
   agents: {
     planningAgent,
     tripComparisonAgent,
+    // Durable agents - workflows auto-registered
+    researchAgent,
+    fileManagerAgent,
   },
   storage,
   observability,
