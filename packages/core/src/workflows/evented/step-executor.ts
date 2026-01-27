@@ -1,4 +1,5 @@
 import EventEmitter from 'node:events';
+import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -223,6 +224,18 @@ export class StepExecutor extends MastraBase {
         status: 'failed',
         endedAt,
         error: errorInstance,
+        // Preserve TripWire data as plain object for proper serialization
+        // Important: Check `error` not `errorInstance` because getErrorFromUnknown
+        // converts the error and loses the prototype chain
+        tripwire:
+          error instanceof TripWire
+            ? {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+                processorId: error.processorId,
+              }
+            : undefined,
       };
     }
   }
