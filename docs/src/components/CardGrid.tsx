@@ -21,7 +21,7 @@ export function CardGridItem({
   return (
     <Link
       to={href}
-      className={cn(styles.cardGridItem, 'rounded-[10px]! shadow-none!')}
+      className={cn(styles.cardGridItem, "rounded-[10px]! shadow-none!")}
     >
       {logo && (
         <div className="mb-3">
