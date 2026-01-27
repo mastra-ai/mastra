@@ -37,8 +37,8 @@
  * });
  *
  * await workspace.init();
- * await workspace.writeFile('/hello.txt', 'Hello World!');
- * const result = await workspace.executeCommand('cat', ['/hello.txt']);
+ * await workspace.filesystem?.writeFile('/hello.txt', 'Hello World!');
+ * const result = await workspace.sandbox?.executeCommand?.('cat', ['/hello.txt']);
  * ```
  *
  * @packageDocumentation
@@ -152,6 +152,18 @@ export {
 } from './constants';
 
 // =============================================================================
+// PROVIDER INTERFACE - Lifecycle
+// =============================================================================
+
+/**
+ * Shared lifecycle interface for workspace providers.
+ * Both filesystem and sandbox providers extend this interface.
+ *
+ * @public
+ */
+export type { Lifecycle, ProviderStatus } from './lifecycle';
+
+// =============================================================================
 // PROVIDER INTERFACE - Filesystem
 // =============================================================================
 
@@ -166,6 +178,7 @@ export type {
   FileContent,
   FileStat,
   FileEntry,
+  FilesystemInfo,
   ReadOptions,
   WriteOptions,
   ListOptions,
@@ -183,14 +196,7 @@ export type {
  *
  * @public
  */
-export type {
-  WorkspaceSandbox,
-  ExecutionResult,
-  CommandResult,
-  ExecuteCommandOptions,
-  SandboxStatus,
-  SandboxInfo,
-} from './sandbox';
+export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 
 /**
  * Native sandbox types for OS-level isolation.

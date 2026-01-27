@@ -548,7 +548,7 @@ export class Workspace {
         await this._fs.init();
       }
 
-      if (this._sandbox) {
+      if (this._sandbox?.start) {
         await this._sandbox.start();
       }
 
@@ -571,7 +571,7 @@ export class Workspace {
     this._status = 'destroying';
 
     try {
-      if (this._sandbox) {
+      if (this._sandbox?.destroy) {
         await this._sandbox.destroy();
       }
 
@@ -609,11 +609,11 @@ export class Workspace {
     }
 
     if (this._sandbox) {
-      const sandboxInfo = await this._sandbox.getInfo();
+      const sandboxInfo = await this._sandbox.getInfo?.();
       info.sandbox = {
         provider: this._sandbox.provider,
-        status: sandboxInfo.status,
-        resources: sandboxInfo.resources,
+        status: sandboxInfo?.status ?? this._sandbox.status,
+        resources: sandboxInfo?.resources,
       };
     }
 

@@ -24,6 +24,8 @@
  * ```
  */
 
+import type { Lifecycle, ProviderStatus } from './lifecycle';
+
 // =============================================================================
 // Core Types
 // =============================================================================
@@ -85,8 +87,16 @@ export interface ExecuteCommandOptions {
  *
  * Sandboxes provide isolated environments for running untrusted code.
  * They may have their own filesystem that's separate from the workspace FS.
+ *
+ * Lifecycle methods (from Lifecycle interface) are all optional:
+ * - init(): One-time setup (provision templates, install deps)
+ * - start(): Begin operation (spin up instance)
+ * - stop(): Pause operation (pause instance)
+ * - destroy(): Clean up resources (terminate instance)
+ * - isReady(): Check if ready for operations
+ * - getInfo(): Get status and metadata
  */
-export interface WorkspaceSandbox {
+export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
   /** Unique identifier for this sandbox instance */
   readonly id: string;
 
@@ -97,7 +107,7 @@ export interface WorkspaceSandbox {
   readonly provider: string;
 
   /** Current status */
-  readonly status: SandboxStatus;
+  readonly status: ProviderStatus;
 
   // ---------------------------------------------------------------------------
   // Command Execution
@@ -110,49 +120,17 @@ export interface WorkspaceSandbox {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  // ---------------------------------------------------------------------------
-  // Lifecycle
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Start/initialize the sandbox.
-   * For cloud providers, this typically spins up a sandbox instance.
-   */
-  start(): Promise<void>;
-
-  /**
-   * Stop the sandbox, keeping state for potential restart.
-   */
-  stop?(): Promise<void>;
-
-  /**
-   * Destroy the sandbox and clean up all resources.
-   */
-  destroy(): Promise<void>;
-
-  /**
-   * Check if the sandbox is ready for commands.
-   */
-  isReady(): Promise<boolean>;
-
-  /**
-   * Get sandbox information/metadata.
-   */
-  getInfo(): Promise<SandboxInfo>;
 }
 
 // =============================================================================
-// Sandbox Status & Info
+// Sandbox Info
 // =============================================================================
-
-export type SandboxStatus = 'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'destroyed';
 
 export interface SandboxInfo {
   id: string;
   name: string;
   provider: string;
-  status: SandboxStatus;
+  status: ProviderStatus;
   /** When the sandbox was created */
   createdAt: Date;
   /** When the sandbox was last used */

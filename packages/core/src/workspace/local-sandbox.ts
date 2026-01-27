@@ -15,9 +15,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 
+import type { ProviderStatus } from './lifecycle';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { WorkspaceSandbox, SandboxStatus, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
+import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
@@ -152,7 +153,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
-  private _status: SandboxStatus = 'stopped';
+  private _status: ProviderStatus = 'stopped';
   private readonly _workingDirectory: string;
   private readonly env: NodeJS.ProcessEnv;
   private readonly timeout: number;
@@ -224,7 +225,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
-  get status(): SandboxStatus {
+  get status(): ProviderStatus {
     return this._status;
   }
 
