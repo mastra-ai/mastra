@@ -250,11 +250,11 @@ All operations must have sensible timeouts.
 | REQ-02 | Phase 1 | Complete |
 | REQ-09 | Phase 1 | Complete |
 | REQ-10 | Phase 1 | Complete |
-| REQ-03 | Phase 2 | Pending |
-| REQ-04 | Phase 2 | Pending |
-| REQ-05 | Phase 2 | Pending |
-| REQ-06 | Phase 2 | Pending |
-| REQ-08 | Phase 2 | Pending |
+| REQ-03 | Phase 2 | Complete |
+| REQ-04 | Phase 2 | Complete |
+| REQ-05 | Phase 2 | Complete |
+| REQ-06 | Phase 2 | Complete |
+| REQ-08 | Phase 2 | Complete |
 | REQ-07 | Phase 3 | Pending |
 
 ---

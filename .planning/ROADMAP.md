@@ -13,7 +13,7 @@ This roadmap delivers a browser toolset integration for Mastra agents in three p
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure** - BrowserToolset foundation with lifecycle management and navigation ✓
-- [ ] **Phase 2: Core Actions** - Snapshot and interaction tools (click, type, scroll)
+- [x] **Phase 2: Core Actions** - Snapshot and interaction tools (click, type, scroll) ✓
 - [ ] **Phase 3: Screenshot** - Visual capture tool for debugging and verification
 
 ## Phase Details
@@ -47,9 +47,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md - Error handling foundation and snapshot tool
-- [ ] 02-02-PLAN.md - Click and type interaction tools
-- [ ] 02-03-PLAN.md - Scroll tool and toolset registration
+- [x] 02-01-PLAN.md - Error handling foundation and snapshot tool
+- [x] 02-02-PLAN.md - Click and type interaction tools
+- [x] 02-03-PLAN.md - Scroll tool and toolset registration
 
 ### Phase 3: Screenshot
 **Goal**: Agents can capture visual screenshots for debugging and verification
@@ -72,11 +72,11 @@ Plans:
 | REQ-02 | Navigate Tool | Phase 1 | Complete |
 | REQ-09 | Resource Cleanup | Phase 1 | Complete |
 | REQ-10 | Timeout Management | Phase 1 | Complete |
-| REQ-03 | Snapshot Tool | Phase 2 | Pending |
-| REQ-04 | Click Tool | Phase 2 | Pending |
-| REQ-05 | Type Tool | Phase 2 | Pending |
-| REQ-06 | Scroll Tool | Phase 2 | Pending |
-| REQ-08 | Error Handling | Phase 2 | Pending |
+| REQ-03 | Snapshot Tool | Phase 2 | Complete |
+| REQ-04 | Click Tool | Phase 2 | Complete |
+| REQ-05 | Type Tool | Phase 2 | Complete |
+| REQ-06 | Scroll Tool | Phase 2 | Complete |
+| REQ-08 | Error Handling | Phase 2 | Complete |
 | REQ-07 | Screenshot Tool | Phase 3 | Pending |
 
 **Coverage:** 10/10 requirements mapped
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 2/2 | ✓ Complete | 2026-01-26 |
-| 2. Core Actions | 0/3 | Planned | - |
+| 2. Core Actions | 3/3 | ✓ Complete | 2026-01-26 |
 | 3. Screenshot | 0/TBD | Not started | - |
 
 ---
@@ -98,3 +98,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 *Phase 1 planned: 2026-01-26*
 *Phase 1 completed: 2026-01-26*
 *Phase 2 planned: 2026-01-26*
+*Phase 2 completed: 2026-01-26*
