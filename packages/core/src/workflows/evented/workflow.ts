@@ -6,6 +6,7 @@ import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
@@ -333,60 +334,111 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       abortSignal,
       abort,
     }) => {
-      // TODO: support stream
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-      // TODO: should use regular .stream()
-      const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-        ...(agentOptions ?? {}),
-        tracingContext,
-        requestContext,
-        onFinish: result => {
-          streamPromise.resolve(result.text);
-        },
-        abortSignal,
-      });
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
       const toolData = {
         name: params.name,
         args: inputData,
       };
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-      });
-      for await (const chunk of fullStream) {
-        if (chunk.type === 'text-delta') {
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-          });
-        }
-      }
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-      });
+      // Detect model version to choose streaming method
+      const llm = await params.getLLM({ requestContext });
+      const modelInfo = llm.getModel();
+      const isV2Model = isSupportedLanguageModel(modelInfo);
 
-      return {
-        text: await streamPromise.promise,
-      } as TStepOutput;
+      if (isV2Model) {
+        // V2+ model path: use .stream() which returns MastraModelOutput
+        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          tracingContext,
+          requestContext,
+          abortSignal,
+        });
+
+        if (abortSignal.aborted) {
+          return abort() as TStepOutput;
+        }
+
+        // Publish stream events from fullStream
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
+        });
+
+        for await (const chunk of modelOutput.fullStream) {
+          if (chunk.type === 'text-delta') {
+            await pubsub.publish(`workflow.events.v2.${runId}`, {
+              type: 'watch',
+              runId,
+              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.payload.text },
+            });
+          }
+        }
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
+        });
+
+        // Get text from the modelOutput
+        const text = await modelOutput.text;
+
+        return {
+          text,
+        } as TStepOutput;
+      } else {
+        // V1 model path: use .streamLegacy() for backwards compatibility
+        let streamPromise = {} as {
+          promise: Promise<string>;
+          resolve: (value: string) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+
+        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          tracingContext,
+          requestContext,
+          onFinish: result => {
+            streamPromise.resolve(result.text);
+          },
+          abortSignal,
+        });
+
+        if (abortSignal.aborted) {
+          return abort() as TStepOutput;
+        }
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
+        });
+
+        for await (const chunk of fullStream) {
+          if (chunk.type === 'text-delta') {
+            await pubsub.publish(`workflow.events.v2.${runId}`, {
+              type: 'watch',
+              runId,
+              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
+            });
+          }
+        }
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
+        });
+
+        return {
+          text: await streamPromise.promise,
+        } as TStepOutput;
+      }
     },
     component: params.component,
   };
