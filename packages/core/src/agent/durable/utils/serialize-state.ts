@@ -90,10 +90,11 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
 }
 
 /**
- * Serialize an array of model configs into a model list
+ * Serialize an array of model configs into a model list.
+ * Filters out disabled models since they shouldn't be included in durable execution.
  */
 export function serializeModelList(models: AgentModelManagerConfig[]): SerializableModelListEntry[] {
-  return models.map(serializeModelListEntry);
+  return models.filter(m => m.enabled !== false).map(serializeModelListEntry);
 }
 
 /**

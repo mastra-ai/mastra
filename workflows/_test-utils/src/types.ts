@@ -62,7 +62,10 @@ export type DurableAgentTestDomain =
   | 'toolConcurrency'
   | 'toolSuspension'
   | 'uiMessage'
-  | 'usage';
+  | 'usage'
+  // Model fallback domains
+  | 'modelFallback'
+  | 'modelFallbackRuntime';
 
 /**
  * Configuration for creating a DurableAgent test suite

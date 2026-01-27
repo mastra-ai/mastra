@@ -145,13 +145,12 @@ describe('DurableAgent Model Fallback', () => {
 
       const result = await agent.prepare('Hello');
 
-      // Only enabled models should be in the list
+      // Disabled models are filtered out at serialization time
       expect(result.workflowInput.modelList).toBeDefined();
-      // Note: modelList preserves all models, filtering happens at execution time
-      expect(result.workflowInput.modelList).toHaveLength(3);
-      expect(result.workflowInput.modelList![0]!.enabled).toBe(false);
+      expect(result.workflowInput.modelList).toHaveLength(2);
+      // Only enabled models (model2 and model3) should be in the list
+      expect(result.workflowInput.modelList![0]!.enabled).toBe(true);
       expect(result.workflowInput.modelList![1]!.enabled).toBe(true);
-      expect(result.workflowInput.modelList![2]!.enabled).toBe(true);
     });
 
     it('should preserve maxRetries in model list', async () => {

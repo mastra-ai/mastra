@@ -182,3 +182,56 @@ export function createErrorModel(errorMessage: string): LanguageModelV2 {
 export function createSimpleMockModel(): LanguageModelV2 {
   return createTextStreamModel('Hello');
 }
+
+/**
+ * Create a mock model that emits an error chunk (for fallback testing)
+ * Unlike createErrorModel which throws, this returns a stream with an error chunk.
+ */
+export function createFailingChunkModel(errorMessage: string = 'Model execution failed'): LanguageModelV2 {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'error', error: new Error(errorMessage) },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  }) as LanguageModelV2;
+}
+
+/**
+ * Create a flaky mock model that fails N times then succeeds
+ * Useful for testing retry logic before fallback
+ */
+export function createFlakyModel(failCount: number, successText: string = 'Success after retries'): LanguageModelV2 {
+  let attempts = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      attempts++;
+      if (attempts <= failCount) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'error', error: new Error(`Attempt ${attempts} failed`) },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: successText },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  }) as LanguageModelV2;
+}

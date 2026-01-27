@@ -9,6 +9,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import type { AgentModelManagerConfig } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -214,7 +215,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     model,
     // Store model list instances for fallback support (enables testing with mock models)
     modelList: modelList
-      ? modelList.map(entry => ({
+      ? modelList.map((entry: AgentModelManagerConfig) => ({
           id: entry.id,
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,

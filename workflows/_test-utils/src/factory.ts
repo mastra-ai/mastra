@@ -33,6 +33,9 @@ import {
   createToolSuspensionTests,
   createUIMessageTests,
   createUsageTests,
+  // Model fallback test creators
+  createModelFallbackTests,
+  createModelFallbackRuntimeTests,
 } from './domains';
 
 const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
@@ -192,6 +195,16 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
 
     if (!skip.usage) {
       createUsageTests(context);
+    }
+
+    // Model fallback tests
+    if (!skip.modelFallback) {
+      createModelFallbackTests(context);
+    }
+
+    // Model fallback runtime tests (DurableAgent only - requires registry)
+    if (!skip.modelFallbackRuntime) {
+      createModelFallbackRuntimeTests(context);
     }
   });
 }

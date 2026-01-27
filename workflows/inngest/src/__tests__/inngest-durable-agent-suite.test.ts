@@ -81,5 +81,7 @@ createDurableAgentTestSuite({
     pubsub: true,
     // DurableAgent-specific tests (runRegistry, lazy init) - not available in InngestAgent
     advancedDurableOnly: true,
+    // Model fallback runtime tests require mock model instances in registry (not serializable for Inngest)
+    modelFallbackRuntime: true,
   },
 });
