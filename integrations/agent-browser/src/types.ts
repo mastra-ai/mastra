@@ -88,11 +88,17 @@ export const snapshotInputSchema = z.object({
  * Zod schema for the snapshot tool output.
  *
  * Returns a formatted accessibility tree with element refs.
+ * Supports both success (tree/elementCount/truncated) and error (code/message/recoveryHint) cases.
  */
 export const snapshotOutputSchema = z.object({
-  tree: z.string().describe('Formatted accessibility tree with refs'),
-  elementCount: z.number().describe('Number of interactive elements found'),
-  truncated: z.boolean().describe('Whether output was truncated due to maxElements'),
+  success: z.boolean().optional().describe('Whether the snapshot succeeded'),
+  tree: z.string().optional().describe('Formatted accessibility tree with refs'),
+  elementCount: z.number().optional().describe('Number of interactive elements found'),
+  truncated: z.boolean().optional().describe('Whether output was truncated due to maxElements'),
+  code: z.string().optional().describe('Error code if snapshot failed'),
+  message: z.string().optional().describe('Error message if snapshot failed'),
+  recoveryHint: z.string().optional().describe('Recovery hint for the agent'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
 });
 
 /**
@@ -125,9 +131,16 @@ export const clickInputSchema = z.object({
 
 /**
  * Zod schema for the click tool output.
+ * Supports both success and error cases.
  */
 export const clickOutputSchema = z.object({
   success: z.boolean().describe('Whether the click succeeded'),
+  url: z.string().optional().describe('Current page URL after click'),
+  hint: z.string().optional().describe('Hint for next action'),
+  code: z.string().optional().describe('Error code if click failed'),
+  message: z.string().optional().describe('Error message if click failed'),
+  recoveryHint: z.string().optional().describe('Recovery hint for the agent'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
 });
 
 /**
@@ -163,10 +176,16 @@ export const typeInputSchema = z.object({
  * Zod schema for the type tool output.
  *
  * Returns success status and the current field value after typing.
+ * Supports both success and error cases.
  */
 export const typeOutputSchema = z.object({
   success: z.boolean().describe('Whether the type operation succeeded'),
   value: z.string().optional().describe('Current field value after typing'),
+  url: z.string().optional().describe('Current page URL'),
+  hint: z.string().optional().describe('Hint for next action'),
+  code: z.string().optional().describe('Error code if type failed'),
+  message: z.string().optional().describe('Error message if type failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
 });
 
 /**
@@ -202,6 +221,7 @@ export const scrollInputSchema = z.object({
  * Zod schema for the scroll tool output.
  *
  * Returns success status and the new scroll position.
+ * Supports both success and error cases.
  */
 export const scrollOutputSchema = z.object({
   success: z.boolean().describe('Whether the scroll operation succeeded'),
@@ -210,7 +230,12 @@ export const scrollOutputSchema = z.object({
       x: z.number().describe('Horizontal scroll position in pixels'),
       y: z.number().describe('Vertical scroll position in pixels'),
     })
+    .optional()
     .describe('New scroll position after scrolling'),
+  code: z.string().optional().describe('Error code if scroll failed'),
+  message: z.string().optional().describe('Error message if scroll failed'),
+  recoveryHint: z.string().optional().describe('Recovery hint for the agent'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
 });
 
 /**
@@ -259,10 +284,14 @@ export const screenshotInputSchema = z.object({
 /**
  * Zod schema for the screenshot tool output.
  *
- * Returns base64 image data with metadata for multimodal consumption.
+ * Screenshots are saved to disk and a path is returned to avoid context bloat.
+ * Supports both success and error cases.
  */
 export const screenshotOutputSchema = z.object({
-  base64: z.string().describe('Base64-encoded image data'),
+  success: z.boolean().describe('Whether the screenshot was captured successfully'),
+  message: z.string().describe('Description of the captured screenshot'),
+  path: z.string().optional().describe('File path where the screenshot was saved'),
+  publicPath: z.string().optional().describe('Public URL path for viewing the screenshot'),
   mimeType: z.enum(['image/png', 'image/jpeg']).describe('Image MIME type'),
   dimensions: z
     .object({
@@ -274,10 +303,11 @@ export const screenshotOutputSchema = z.object({
   timestamp: z.string().describe('ISO timestamp when screenshot was captured'),
   url: z.string().describe('Page URL at capture time'),
   title: z.string().describe('Page title at capture time'),
-  warning: z
-    .string()
-    .optional()
-    .describe('Warning message if image dimensions exceed recommended limits'),
+  warning: z.string().optional().describe('Warning message if image dimensions exceed recommended limits'),
+  // Error fields for failure cases
+  code: z.string().optional().describe('Error code if screenshot failed'),
+  recoveryHint: z.string().optional().describe('Recovery hint for the agent'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
 });
 
 /**
