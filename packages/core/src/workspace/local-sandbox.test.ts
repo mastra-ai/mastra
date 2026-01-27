@@ -500,6 +500,85 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox.destroy();
     });
 
+    it('should block file writes outside workspace', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+      });
+
+      await seatbeltSandbox.start();
+
+      // Try to write to user's home directory (not in allowed paths)
+      // Note: /tmp and /var/folders are allowed for temp files, so we test elsewhere
+      const homeDir = os.homedir();
+      const blockedPath = path.join(homeDir, `.seatbelt-block-test-${Date.now()}.txt`);
+      const result = await seatbeltSandbox.executeCommand('sh', ['-c', `echo "blocked" > "${blockedPath}"`]);
+
+      // Should fail due to sandbox restrictions
+      expect(result.success).toBe(false);
+      expect(result.stderr).toContain('Operation not permitted');
+
+      // Clean up just in case (shouldn't exist)
+      await fs.unlink(blockedPath).catch(() => {});
+
+      await seatbeltSandbox.destroy();
+    });
+
+    it('should block network access by default', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          allowNetwork: false, // Default, but explicit for test clarity
+        },
+      });
+
+      await seatbeltSandbox.start();
+
+      // Try to make a network request - should fail
+      const result = await seatbeltSandbox.executeCommand('curl', ['-s', '--max-time', '2', 'http://httpbin.org/get']);
+
+      // Should fail due to network isolation
+      expect(result.success).toBe(false);
+
+      await seatbeltSandbox.destroy();
+    });
+
+    it('should allow network access when configured', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          allowNetwork: true,
+        },
+      });
+
+      await seatbeltSandbox.start();
+
+      // DNS lookup should work with network enabled
+      const result = await seatbeltSandbox.executeCommand('sh', [
+        '-c',
+        'python3 -c "import socket; socket.gethostbyname(\'localhost\')" && echo "ok"',
+      ]);
+
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('ok');
+
+      await seatbeltSandbox.destroy();
+    });
+
     it('should clean up seatbelt profile on destroy', async () => {
       if (os.platform() !== 'darwin') {
         return;

@@ -53,13 +53,47 @@ const sandbox = new LocalSandbox({
     {
       name: "nativeSandbox",
       type: "NativeSandboxConfig",
-      description: "Configuration for native sandboxing (network access, read/write paths).",
+      description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### NativeSandboxConfig
+
+Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'` or `'bwrap'`).
+
+<PropertiesTable
+  content={[
+    {
+      name: "allowNetwork",
+      type: "boolean",
+      description: "Allow network access from sandboxed commands.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "readOnlyPaths",
+      type: "string[]",
+      description: "Additional paths to allow read-only access (system paths are always readable).",
       isOptional: true,
     },
     {
-      name: "safety",
-      type: "SandboxSafetyOptions",
-      description: "Safety configuration for sandbox operations",
+      name: "readWritePaths",
+      type: "string[]",
+      description: "Additional paths to allow read-write access beyond the workspace directory.",
+      isOptional: true,
+    },
+    {
+      name: "seatbeltProfile",
+      type: "string",
+      description: "Custom seatbelt profile content (macOS only). Overrides auto-generated profile.",
+      isOptional: true,
+    },
+    {
+      name: "bwrapArgs",
+      type: "string[]",
+      description: "Additional arguments to pass to bwrap (Linux only).",
       isOptional: true,
     },
   ]}
