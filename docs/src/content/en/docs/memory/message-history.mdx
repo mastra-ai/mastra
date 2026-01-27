@@ -90,7 +90,7 @@ await agent.stream("Hello", {
 
 There are two ways to use this history:
 
-- **Automatic inclusion** - By default, the last 10 messages are included with each request. Adjust this with the `lastMessages` option This is the simplest approach for maintaining conversational context.
+- **Automatic inclusion** - By default, the last 10 messages are included with each request. Adjust this with the `lastMessages` option. This is the simplest approach for maintaining conversational context.
 - [**Querying threads and messages**](#querying) - Query threads and messages directly for more control over what gets included, or to render conversation history in your UI.
 
 ## Querying
@@ -196,7 +196,7 @@ First, install `@mastra/ai-sdk`:
 npm install @mastra/ai-sdk@latest
 ```
 
-Use the `toAISdkV5Messages` utility to convert messages before returning them to the client, for example from an [Next.js API route](/guides/getting-started/next-js):
+Use the `toAISdkV5Messages` utility to convert messages before returning them to the client, for example from a [Next.js API route](/guides/getting-started/next-js):
 
 ```typescript
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
