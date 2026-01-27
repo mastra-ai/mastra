@@ -1,7 +1,7 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
@@ -30,21 +30,34 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
   const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
+  const filteredData = useMemo(
+    () => projectData.filter(agent => agent.name.toLowerCase().includes(search.toLowerCase())),
+    [projectData, search],
+  );
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const agent = filteredData[index];
+      if (agent) {
+        navigate(paths.agentLink(agent.id));
+      }
+    },
+  });
 
   const table = useReactTable({
-    data: projectData,
+    data: filteredData,
     columns: columns as ColumnDef<AgentTableData>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
+  if (projectData.length === 0 && !isLoading) {
     return <EmptyAgentsTable onCreateClick={onCreateClick} />;
   }
-
-  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div>
@@ -66,8 +79,12 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
                 ))}
               </Thead>
               <Tbody>
-                {filteredRows.map(row => (
-                  <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+                {rows.map((row, index) => (
+                  <Row
+                    key={row.id}
+                    isActive={index === activeIndex}
+                    onClick={() => navigate(paths.agentLink(row.original.id))}
+                  >
                     {row.getVisibleCells().map(cell => (
                       <React.Fragment key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
