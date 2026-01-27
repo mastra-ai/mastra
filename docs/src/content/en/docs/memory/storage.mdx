@@ -266,7 +266,8 @@ Other providers like PostgreSQL (self-hosted), MongoDB, and libSQL have signific
 The recommended approach is to use an input processor that uploads large attachments to external storage and replaces them with URL references before the message is persisted. This works with any file storage service—S3, Cloudflare R2, Google Cloud Storage, [Convex file storage](https://docs.convex.dev/file-storage), or your own server.
 
 ```typescript title="src/mastra/processors/attachment-uploader.ts"
-import type { Processor, MastraDBMessage } from "@mastra/core";
+import type { Processor } from "@mastra/core/processors";
+import type { MastraDBMessage } from "@mastra/core/memory";
 
 export class AttachmentUploader implements Processor {
   id = "attachment-uploader";
