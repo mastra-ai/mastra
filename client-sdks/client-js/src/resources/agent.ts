@@ -220,7 +220,7 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
@@ -232,13 +232,10 @@ export class Agent extends BaseResource {
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
-    const response: GenerateReturn<any, any, any> = await this.request(
-      `/api/agents/${this.agentId}/generate-legacy`,
-      {
-        method: 'POST',
-        body: processedParams,
-      },
-    );
+    const response: GenerateReturn<any, any, any> = await this.request(`/api/agents/${this.agentId}/generate-legacy`, {
+      method: 'POST',
+      body: processedParams,
+    });
 
     if (response.finishReason === 'tool-calls') {
       const toolCalls = (
@@ -284,8 +281,9 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-expect-error - recursive call with updated messages type
-          return this.generate({
+          // Recursive call to generateLegacy with updated messages
+          // Using type assertion to handle the complex overload types
+          return (this.generateLegacy as any)({
             ...params,
             messages: updatedMessages,
           });
