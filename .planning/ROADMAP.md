@@ -63,7 +63,7 @@ Plans:
 
 Plans:
 
-- [ ] 02-01-PLAN.md - Port 15 callback context tests and fix resourceId bug
+- [x] 02-01-PLAN.md - Port 15 callback context tests and fix resourceId bug
 
 **Missing Tests:**
 
@@ -102,7 +102,7 @@ Plans:
 
 Plans:
 
-- [ ] 03-01-PLAN.md - Port 12 schema validation tests and fix any validation gaps
+- [x] 03-01-PLAN.md - Port 12 schema validation tests and fix any validation gaps
 
 **Missing Tests:**
 
@@ -130,38 +130,66 @@ Plans:
 
 **Goal:** Handle all suspend/resume scenarios including parallel, labels, and nested edge cases
 
-**Gap Analysis:** ~18 tests for suspend/resume edge cases not covered
+**Gap Analysis:** 26 tests for suspend/resume edge cases not covered
+
+**Plans:** 6 plans
+
+Plans:
+
+- [ ] 04-01-PLAN.md - Auto-resume and error handling (6 tests)
+- [ ] 04-02-PLAN.md - Resume labels and suspendData (4 tests)
+- [ ] 04-03-PLAN.md - Parallel/branch suspend (4 tests)
+- [ ] 04-04-PLAN.md - Context preservation (2 tests)
+- [ ] 04-05-PLAN.md - Nested workflow edge cases (4 tests)
+- [ ] 04-06-PLAN.md - Foreach suspend/resume (6 tests)
 
 **Missing Tests:**
 
-- should handle basic suspend and resume flow that does not close on suspend
-- should handle basic suspend and resume flow using resumeLabel
+Auto-resume & Error Handling:
 - should auto-resume simple suspended step without specifying step parameter
-- should handle multiple suspend/resume cycles in parallel workflow
-- should remain suspended when only one of multiple parallel suspended steps is resumed
-- should handle consecutive nested workflows with suspend/resume
-- should be able to resume suspended nested workflow step with only nested workflow step provided
-- should not execute incorrect branches after resuming from suspended nested workflow
-- should maintain correct step status after resuming in branching workflows
-- should have access to the correct input value when resuming in a loop
-- should handle basic suspend and resume in nested dountil workflow
-- should preserve input property from snapshot context after resume
-- should preserve request context in nested workflows after suspend/resume
-- should have access to requestContext from before suspension during workflow resume
-- should provide access to suspendData in workflow step on resume
-- should handle missing suspendData gracefully
 - should throw error when multiple steps are suspended and no step specified
 - should throw error when you try to resume a workflow that is not suspended
 - should throw error when you try to resume a workflow step that is not suspended
 - should support both explicit step resume and auto-resume (backwards compatibility)
-- Foreach suspend/resume tests (6 tests)
+- should handle missing suspendData gracefully
+
+Resume Labels & SuspendData:
+- should handle basic suspend and resume flow using resumeLabel
+- should provide access to suspendData in workflow step on resume
+- should handle basic suspend and resume flow that does not close on suspend
+- should preserve input property from snapshot context after resume
+
+Parallel/Branch:
+- should remain suspended when only one of multiple parallel suspended steps is resumed
+- should handle multiple suspend/resume cycles in parallel workflow
+- should maintain correct step status after resuming in branching workflows
+- should not execute incorrect branches after resuming from suspended nested workflow
+
+Context Preservation:
+- should preserve request context in nested workflows after suspend/resume
+- should have access to requestContext from before suspension during workflow resume
+
+Nested Workflow Edge Cases:
+- should handle consecutive nested workflows with suspend/resume
+- should be able to resume suspended nested workflow step with only nested workflow step provided
+- should have access to the correct input value when resuming in a loop
+- should handle basic suspend and resume in nested dountil workflow
+
+Foreach Suspend/Resume:
+- should suspend and resume when running a single item concurrency (default) for loop
+- should suspend and resume when running all items concurrency for loop
+- should suspend and resume provided index when running all items concurrency for loop
+- should suspend and resume provided label when running all items concurrency for loop
+- should suspend and resume when running a partial item concurrency for loop
+- should suspend and resume provided index when running a partial item concurrency for loop
 
 **Success Criteria:**
 
-1. Port all suspend/resume edge case tests
+1. Port all 26 suspend/resume edge case tests
 2. Parallel suspend scenarios work correctly
 3. Resume labels function properly
 4. Nested workflow suspend/resume propagates correctly
+5. Foreach suspend/resume works at iteration level
 
 ---
 
@@ -236,7 +264,7 @@ Plans:
 | 1     | State Object Support      | 12            | Complete    |
 | 2     | Lifecycle Callbacks       | 15            | Complete    |
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
-| 4     | Suspend/Resume Edge Cases | 24            | Not Started |
+| 4     | Suspend/Resume Edge Cases | 26            | Planned     |
 | 5     | Streaming vNext           | 6             | Not Started |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
@@ -245,4 +273,4 @@ Plans:
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 2 completion_
+_Last updated: 2026-01-27 after Phase 4 planning_
