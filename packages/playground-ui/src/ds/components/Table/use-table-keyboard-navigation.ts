@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export interface UseTableKeyboardNavigationOptions {
   /** Number of items in the list */
@@ -9,6 +9,8 @@ export interface UseTableKeyboardNavigationOptions {
   wrap?: boolean;
   /** Callback when Enter pressed on active row */
   onSelect?: (index: number) => void;
+  /** When true, registers keyboard handlers globally on the document */
+  global?: boolean;
 }
 
 export interface UseTableKeyboardNavigationReturn {
@@ -16,8 +18,8 @@ export interface UseTableKeyboardNavigationReturn {
   activeIndex: number;
   /** Set active index programmatically */
   setActiveIndex: React.Dispatch<React.SetStateAction<number>>;
-  /** Returns props to spread on the Tbody element */
-  getKeyboardProps: () => { onKeyDown: (e: React.KeyboardEvent) => void; tabIndex: number };
+  /** Returns props to spread on the Tbody element. Returns null when global is true. */
+  getKeyboardProps: () => { onKeyDown: (e: React.KeyboardEvent) => void; tabIndex: number } | null;
 }
 
 export function useTableKeyboardNavigation({
@@ -25,11 +27,12 @@ export function useTableKeyboardNavigation({
   initialIndex = -1,
   wrap = false,
   onSelect,
+  global = false,
 }: UseTableKeyboardNavigationOptions): UseTableKeyboardNavigationReturn {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: KeyboardEvent | React.KeyboardEvent) => {
       // No-op for empty list
       if (itemCount === 0) return;
 
@@ -78,9 +81,20 @@ export function useTableKeyboardNavigation({
     [itemCount, wrap, activeIndex, onSelect],
   );
 
+  // Register global keyboard handlers when global option is enabled
+  useEffect(() => {
+    if (!global) return;
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [global, handleKeyDown]);
+
   const getKeyboardProps = useCallback(() => {
-    return { onKeyDown: handleKeyDown, tabIndex: 0 };
-  }, [handleKeyDown]);
+    if (global) return null;
+    return { onKeyDown: handleKeyDown as (e: React.KeyboardEvent) => void, tabIndex: 0 };
+  }, [global, handleKeyDown]);
 
   return {
     activeIndex,
