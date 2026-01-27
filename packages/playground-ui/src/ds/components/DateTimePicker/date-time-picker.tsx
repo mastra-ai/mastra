@@ -203,6 +203,7 @@ export const DateTimePickerContent = ({
       }}
     >
       <InputField
+        name="date-time-input"
         type="text"
         value={dateInputValue}
         onChange={handleInputChange}
@@ -266,7 +267,7 @@ type DefaultButtonProps = {
 export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
   ({ value, placeholder, className, ...props }, ref) => {
     return (
-      <Button ref={ref} className={cn('justify-start', className)} variant="light" size="lg" {...props}>
+      <Button ref={ref} className={cn('justify-start min-w-[12.5rem]', className)} variant="light" size="lg" {...props}>
         <CalendarIcon className="h-4 w-4" />
         {value ? (
           <span className="text-white">{format(value, 'PP p')}</span>

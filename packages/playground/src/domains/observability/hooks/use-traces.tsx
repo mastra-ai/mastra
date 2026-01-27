@@ -54,7 +54,7 @@ export const useTraces = ({ filters }: TracesFilters) => {
       return data.pages.flatMap(page => page);
     },
     retry: false,
-    refetchInterval: 3000,
+    refetchInterval: 10000,
   });
 
   useEffect(() => {

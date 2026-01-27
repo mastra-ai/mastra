@@ -14,6 +14,9 @@ import {
   DividerIcon,
   WorkflowCombobox,
   Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from '@mastra/playground-ui';
 
 export function WorkflowHeader({
@@ -45,15 +48,29 @@ export function WorkflowHeader({
           {runId && (
             <>
               <DividerIcon />
-              <Badge variant="default">Run: {runId}</Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="default">#{runId.slice(0, 8)}</Badge>
+                </TooltipTrigger>
+                <TooltipContent>{`Workflow Run ID: ${runId}`}</TooltipContent>
+              </Tooltip>
+
+              <DividerIcon />
             </>
           )}
 
-          <DividerIcon />
+          <div className="flex items-center gap-1">
+            <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
+            <Button as={Link} to={`/observability?entity=${workflowName}`}>
+              Workflow
+            </Button>
 
-          <Button as={Link} to={`/observability?entity=${workflowName}`}>
-            Traces
-          </Button>
+            {runId && (
+              <Button as={Link} to={`/observability?runId=${runId}`}>
+                Run
+              </Button>
+            )}
+          </div>
         </HeaderGroup>
 
         <HeaderAction>

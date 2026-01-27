@@ -47,6 +47,7 @@ export function TemplatesTools({
   return (
     <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-8 bg-surface2 py-8', className)}>
       <SearchField
+        name="template-search"
         label="Search templates"
         value={searchTerm}
         onChange={e => onSearchChange?.(e.target.value)}
