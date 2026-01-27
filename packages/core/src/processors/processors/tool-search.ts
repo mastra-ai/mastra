@@ -5,10 +5,18 @@ import type { Tool } from '../../tools';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
 /**
- * Thread-scoped state management for loaded tools.
- * Maps threadId -> Set of loaded tool names
+ * Thread state with timestamp for TTL management
  */
-const threadLoadedTools = new Map<string, Set<string>>();
+interface ThreadState {
+  tools: Set<string>;
+  lastAccessed: number;
+}
+
+/**
+ * Thread-scoped state management for loaded tools with TTL support.
+ * Maps threadId -> ThreadState (tools + timestamp)
+ */
+const threadLoadedTools = new Map<string, ThreadState>();
 
 /**
  * Configuration options for ToolSearchProcessor
@@ -36,6 +44,14 @@ export interface ToolSearchProcessorOptions {
      */
     minScore?: number;
   };
+
+  /**
+   * Time-to-live for thread state in milliseconds.
+   * After this duration of inactivity, thread state will be eligible for cleanup.
+   * Set to 0 to disable TTL cleanup.
+   * @default 3600000 (1 hour)
+   */
+  ttl?: number;
 }
 
 /**
@@ -88,6 +104,7 @@ function tokenize(text: string): string[] {
  *     // ... 100+ tools
  *   },
  *   search: { topK: 5, minScore: 0 },
+ *   ttl: 3600000, // 1 hour (default)
  * });
  *
  * const agent = new Agent({
@@ -105,6 +122,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private allTools: Record<string, Tool<any, any>>;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private toolEntries: ToolEntry[] = [];
+  private ttl: number;
 
   // BM25 parameters
   private readonly k1 = 1.5; // Term frequency saturation
@@ -116,9 +134,15 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
     };
+    this.ttl = options.ttl ?? 3600000; // Default: 1 hour
 
     // Index all tools for BM25 search
     this.indexTools();
+
+    // Start periodic cleanup if TTL is enabled
+    if (this.ttl > 0) {
+      this.scheduleCleanup();
+    }
   }
 
   /**
@@ -130,12 +154,18 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   /**
    * Get the set of loaded tool names for the current thread.
+   * Updates the lastAccessed timestamp for TTL management.
    */
   private getLoadedToolNames(threadId: string): Set<string> {
     if (!threadLoadedTools.has(threadId)) {
-      threadLoadedTools.set(threadId, new Set());
+      threadLoadedTools.set(threadId, {
+        tools: new Set(),
+        lastAccessed: Date.now(),
+      });
     }
-    return threadLoadedTools.get(threadId)!;
+    const state = threadLoadedTools.get(threadId)!;
+    state.lastAccessed = Date.now(); // Update timestamp on access
+    return state.tools;
   }
 
   /**
@@ -169,6 +199,79 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    */
   public static clearAllState(): void {
     threadLoadedTools.clear();
+  }
+
+  /**
+   * Clean up stale thread state based on TTL.
+   * Removes threads that haven't been accessed within the TTL period.
+   *
+   * @returns Number of threads cleaned up
+   */
+  private cleanupStaleState(): number {
+    if (this.ttl <= 0) return 0; // TTL disabled
+
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [threadId, state] of threadLoadedTools.entries()) {
+      if (now - state.lastAccessed > this.ttl) {
+        threadLoadedTools.delete(threadId);
+        cleanedCount++;
+      }
+    }
+
+    return cleanedCount;
+  }
+
+  /**
+   * Schedule periodic cleanup of stale thread state.
+   * Runs cleanup every TTL/2 milliseconds to prevent unbounded memory growth.
+   */
+  private scheduleCleanup(): void {
+    // Clean up at half the TTL interval
+    const cleanupInterval = Math.max(this.ttl / 2, 60000); // Minimum 1 minute
+
+    // Use setInterval but don't block process exit
+    const intervalId = setInterval(() => {
+      this.cleanupStaleState();
+    }, cleanupInterval);
+
+    // Allow process to exit even if interval is active
+    if (intervalId.unref) {
+      intervalId.unref();
+    }
+  }
+
+  /**
+   * Get statistics about current thread state (useful for monitoring).
+   *
+   * @returns Object with thread count and oldest access time
+   */
+  public getStateStats(): { threadCount: number; oldestAccessTime: number | null } {
+    if (threadLoadedTools.size === 0) {
+      return { threadCount: 0, oldestAccessTime: null };
+    }
+
+    let oldest = Date.now();
+    for (const state of threadLoadedTools.values()) {
+      if (state.lastAccessed < oldest) {
+        oldest = state.lastAccessed;
+      }
+    }
+
+    return {
+      threadCount: threadLoadedTools.size,
+      oldestAccessTime: oldest,
+    };
+  }
+
+  /**
+   * Manually trigger cleanup of stale state (useful for testing and monitoring).
+   *
+   * @returns Number of threads cleaned up
+   */
+  public cleanupNow(): number {
+    return this.cleanupStaleState();
   }
 
   /**

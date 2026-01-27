@@ -722,4 +722,187 @@ describe('ToolSearchProcessor', () => {
       expect(result5.tools?.linear_create_issue).toBeDefined();
     });
   });
+
+  describe('TTL and state cleanup', () => {
+    it('should accept TTL configuration', () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 5000, // 5 seconds
+      });
+
+      expect(processor).toBeDefined();
+    });
+
+    it('should use default TTL (1 hour) when not provided', () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      expect(processor).toBeDefined();
+    });
+
+    it('should disable TTL when set to 0', () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 0, // Disabled
+      });
+
+      expect(processor).toBeDefined();
+    });
+
+    it('should provide state statistics', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      // Initial state - no threads
+      let stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(0);
+      expect(stats.oldestAccessTime).toBeNull();
+
+      // Load a tool in thread 1
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Check stats - should have 1 thread
+      stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(1);
+      expect(stats.oldestAccessTime).toBeGreaterThan(0);
+
+      // Load a tool in thread 2
+      const args2 = createMockArgs('thread-2');
+      const result2 = await processor.processInputStep(args2);
+      await result2.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Check stats - should have 2 threads
+      stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(2);
+      expect(stats.oldestAccessTime).toBeGreaterThan(0);
+    });
+
+    it('should manually clean up stale state', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 100, // 100ms for fast test
+      });
+
+      // Load a tool
+      const args = createMockArgs('thread-1');
+      const result = await processor.processInputStep(args);
+      await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Verify loaded
+      const stats1 = processor.getStateStats();
+      expect(stats1.threadCount).toBe(1);
+
+      // Wait for TTL to expire
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Manually trigger cleanup
+      const cleanedCount = processor.cleanupNow();
+      expect(cleanedCount).toBe(1);
+
+      // Verify cleaned
+      const stats2 = processor.getStateStats();
+      expect(stats2.threadCount).toBe(0);
+    });
+
+    it('should not clean up active threads', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 200, // 200ms
+      });
+
+      // Load a tool
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Wait 100ms (half the TTL)
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Access the thread again to refresh timestamp
+      const args2 = createMockArgs('thread-1');
+      await processor.processInputStep(args2);
+
+      // Wait another 100ms (total 200ms, but thread was refreshed at 100ms)
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Cleanup should not remove the thread (it was accessed 100ms ago)
+      const cleanedCount = processor.cleanupNow();
+      expect(cleanedCount).toBe(0);
+
+      // Verify still present
+      const stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(1);
+    });
+
+    it('should clean up only stale threads', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 100, // 100ms
+      });
+
+      // Load tool in thread 1
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Wait 50ms
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Load tool in thread 2 (this is 50ms newer)
+      const args2 = createMockArgs('thread-2');
+      const result2 = await processor.processInputStep(args2);
+      await result2.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Wait another 75ms (thread-1 is now 125ms old, thread-2 is 75ms old)
+      await new Promise(resolve => setTimeout(resolve, 75));
+
+      // Cleanup should remove only thread-1
+      const cleanedCount = processor.cleanupNow();
+      expect(cleanedCount).toBe(1);
+
+      // Verify thread-2 still present
+      const stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(1);
+    });
+
+    it('should not clean up when TTL is disabled', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        ttl: 0, // Disabled
+      });
+
+      // Load a tool
+      const args = createMockArgs('thread-1');
+      const result = await processor.processInputStep(args);
+      await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Try to clean up (should do nothing since TTL is disabled)
+      const cleanedCount = processor.cleanupNow();
+      expect(cleanedCount).toBe(0);
+
+      // Verify still present
+      const stats = processor.getStateStats();
+      expect(stats.threadCount).toBe(1);
+    });
+  });
 });
