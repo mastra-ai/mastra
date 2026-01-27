@@ -71,26 +71,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAST-01 | — | Pending |
-| CAST-02 | — | Pending |
-| CAST-03 | — | Pending |
-| CAST-04 | — | Pending |
-| CAST-05 | — | Pending |
-| XPORT-01 | — | Pending |
-| XPORT-02 | — | Pending |
-| XPORT-03 | — | Pending |
-| XPORT-04 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| UI-05 | — | Pending |
+| CAST-01 | Phase 7 | Pending |
+| CAST-02 | Phase 7 | Pending |
+| CAST-03 | Phase 7 | Pending |
+| CAST-04 | Phase 7 | Pending |
+| CAST-05 | Phase 7 | Pending |
+| XPORT-01 | Phase 8 | Pending |
+| XPORT-02 | Phase 8 | Pending |
+| XPORT-03 | Phase 8 | Pending |
+| XPORT-04 | Phase 8 | Pending |
+| UI-01 | Phase 9 | Pending |
+| UI-02 | Phase 9 | Pending |
+| UI-03 | Phase 9 | Pending |
+| UI-04 | Phase 9 | Pending |
+| UI-05 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14 (pending roadmap)
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after initial definition*
+*Last updated: 2026-01-27 after roadmap creation*

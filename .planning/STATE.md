@@ -4,17 +4,17 @@
 
 See: .planning/PROJECT.md (updated 2026-01-27)
 
-**Core value:** Agents can browse and interact with real websites to gather information that requires JavaScript rendering or user interaction.
-**Current focus:** v1.0 complete — ready for next milestone
+**Core value:** Users can watch browser agents work in real-time from within Mastra Studio
+**Current focus:** v1.1 Browser Live View - Phase 7 (Screencast API)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Researching
-Last activity: 2026-01-27 — Milestone v1.1 started
+Phase: 7 of 9 (Screencast API)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-27 — Roadmap created for v1.1 milestone
 
-Progress: [                    ] 0% (researching)
+Progress: [##########          ] 60% (6/10 v1.0 phases + 0/3 v1.1 phases)
 
 ## Performance Metrics
 
@@ -35,11 +35,20 @@ Progress: [                    ] 0% (researching)
 | 05-schema-consolidation | 2 | 12 min | 6 min |
 | 06-browser-lifecycle-locking | 1 | 3 min | 3 min |
 
+**v1.1 Milestone:**
+- Phases: 3 (7, 8, 9)
+- Plans: TBD (pending phase planning)
+
 ## Accumulated Context
 
 ### Decisions
 
 All v1.0 decisions documented in PROJECT.md Key Decisions table.
+
+v1.1-relevant decisions from research:
+- WebSocket over SSE for bidirectional capability (future input injection)
+- useRef pattern for frame display to avoid virtual DOM thrashing
+- CDP frame ack required to prevent memory exhaustion
 
 ### Pending Todos
 
@@ -47,16 +56,17 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- Hono WebSocket adapter: Need to verify runtime-specific configuration (Bun vs Node) during Phase 8 planning
 
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: v1.0 milestone complete
+Stopped at: v1.1 roadmap created, ready to plan Phase 7
 Resume file: None
 
 ## Milestone History
 
 - v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans)
+- v1.1: IN PROGRESS (3 phases planned)
 
-Next: `/gsd:new-milestone` to start v1.1 or v2.0
+Next: `/gsd:plan-phase 7`
