@@ -979,6 +979,9 @@ importers:
       agent-browser:
         specifier: ^0.8.0
         version: 0.8.0
+      typed-emitter:
+        specifier: ^2.1.0
+        version: 2.1.0
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76

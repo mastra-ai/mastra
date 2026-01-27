@@ -27,7 +27,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "^0.8.0"
+    "agent-browser": "^0.8.0",
+    "typed-emitter": "^2.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
