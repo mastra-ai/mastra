@@ -2,7 +2,7 @@
  * WorkspaceSkills - Skills implementation.
  *
  * Provides discovery, search, and CRUD operations for skills stored
- * in skillsPaths. All operations are async.
+ * in skills paths. All operations are async.
  *
  * Supports two modes:
  * - With WorkspaceFilesystem: Full CRUD operations (create/update/delete)
@@ -24,8 +24,8 @@ import type {
   UpdateSkillInput,
   WorkspaceSkills,
   SkillSource,
-  SkillsPathsResolver,
-  SkillsPathsContext,
+  SkillsResolver,
+  SkillsContext,
 } from './types';
 
 // =============================================================================
@@ -77,7 +77,7 @@ export interface WorkspaceSkillsImplConfig {
    * Paths to scan for skills.
    * Can be a static array or a function that returns paths based on context.
    */
-  skillsPaths: SkillsPathsResolver;
+  skills: SkillsResolver;
   /** Search engine for skill search (optional) */
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
@@ -93,7 +93,7 @@ export interface WorkspaceSkillsImplConfig {
  */
 export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #source: SkillSourceInterface;
-  readonly #skillsPathsResolver: SkillsPathsResolver;
+  readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
   readonly #isWritable: boolean;
@@ -110,12 +110,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Timestamp of last skills discovery (for staleness check) */
   #lastDiscoveryTime = 0;
 
-  /** Currently resolved skillsPaths (used to detect changes) */
+  /** Currently resolved skills paths (used to detect changes) */
   #resolvedPaths: string[] = [];
 
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
-    this.#skillsPathsResolver = config.skillsPaths;
+    this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
     this.#isWritable = isWritableSource(this.#source);
@@ -174,7 +174,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     await this.#discoverSkills();
   }
 
-  async maybeRefresh(context?: SkillsPathsContext): Promise<void> {
+  async maybeRefresh(context?: SkillsContext): Promise<void> {
     // Ensure initial discovery is complete
     await this.#ensureInitialized();
 
@@ -190,7 +190,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       return;
     }
 
-    // Check if any skillsPath has been modified since last discovery
+    // Check if any skills path has been modified since last discovery
     const isStale = await this.#isSkillsPathStale();
     if (isStale) {
       await this.refresh();
@@ -198,13 +198,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Resolve skillsPaths from the resolver (static array or function).
+   * Resolve skills paths from the resolver (static array or function).
    */
-  async #resolvePaths(context?: SkillsPathsContext): Promise<string[]> {
-    if (Array.isArray(this.#skillsPathsResolver)) {
-      return this.#skillsPathsResolver;
+  async #resolvePaths(context?: SkillsContext): Promise<string[]> {
+    if (Array.isArray(this.#skillsResolver)) {
+      return this.#skillsResolver;
     }
-    return this.#skillsPathsResolver(context ?? {});
+    return this.#skillsResolver(context ?? {});
   }
 
   /**
@@ -586,7 +586,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Discover skills from all skillsPaths.
+   * Discover skills from all skills paths.
    * Uses currently resolved paths (must be set before calling).
    */
   async #discoverSkills(): Promise<void> {
@@ -639,7 +639,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Check if any skillsPath directory has been modified since last discovery.
+   * Check if any skills path directory has been modified since last discovery.
    * Compares directory mtime to lastDiscoveryTime.
    */
   async #isSkillsPathStale(): Promise<boolean> {

@@ -76,8 +76,8 @@ describe('Workspace', () => {
       expect(workspace.name).toBe('Custom Workspace');
     });
 
-    it('should throw when neither filesystem nor sandbox nor skillsPaths provided', () => {
-      expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem, sandbox, or skillsPaths');
+    it('should throw when neither filesystem nor sandbox nor skills provided', () => {
+      expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem, sandbox, or skills');
     });
 
     it('should auto-initialize when autoInit is true', async () => {
@@ -284,7 +284,7 @@ Line 3 conclusion`;
   // Skills
   // ===========================================================================
   describe('skills', () => {
-    it('should return undefined when no skillsPaths configured', () => {
+    it('should return undefined when no skills configured', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
       expect(workspace.skills).toBeUndefined();
@@ -294,7 +294,7 @@ Line 3 conclusion`;
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // Skills should be available via LocalSkillSource (read-only)
@@ -302,17 +302,17 @@ Line 3 conclusion`;
       expect(workspace.skills?.isWritable).toBe(false);
     });
 
-    it('should return undefined when no skillsPaths configured', () => {
+    it('should return undefined when no skills configured', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should return skills instance when skillsPaths and filesystem configured', () => {
+    it('should return skills instance when skills and filesystem configured', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
       expect(workspace.skills).toBeDefined();
     });
@@ -321,7 +321,7 @@ Line 3 conclusion`;
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const skills1 = workspace.skills;

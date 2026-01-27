@@ -225,7 +225,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.list();
@@ -240,7 +240,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.list();
@@ -256,7 +256,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.list();
@@ -267,7 +267,7 @@ describe('WorkspaceSkillsImpl', () => {
       });
     });
 
-    it('should discover skills from multiple skillsPaths', async () => {
+    it('should discover skills from multiple paths', async () => {
       const filesystem = createMockFilesystem({
         '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
         '/custom-skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -275,7 +275,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills', '/custom-skills'],
+        skills: ['/skills', '/custom-skills'],
       });
 
       const result = await skills.list();
@@ -288,7 +288,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.get('non-existent');
@@ -302,7 +302,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.get('test-skill');
@@ -323,7 +323,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.get('test-skill');
@@ -338,7 +338,7 @@ describe('WorkspaceSkillsImpl', () => {
       const filesystem = createMockFilesystem({});
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.has('non-existent');
@@ -352,7 +352,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.has('test-skill');
@@ -368,7 +368,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // Initial discovery
@@ -398,7 +398,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const results = await skills.search('API');
@@ -415,7 +415,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
         searchEngine,
       });
 
@@ -435,7 +435,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const results = await skills.search('skill', { skillNames: ['test-skill'] });
@@ -451,7 +451,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const results = await skills.search('test', { topK: 2 });
@@ -465,7 +465,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const newSkill = await skills.create({
@@ -491,7 +491,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(
@@ -510,7 +510,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await skills.create({
@@ -539,7 +539,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const updated = await skills.update('test-skill', {
@@ -559,7 +559,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const updated = await skills.update('test-skill', {
@@ -574,7 +574,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(
@@ -593,7 +593,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       expect(await skills.has('test-skill')).toBe(true);
@@ -609,7 +609,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(skills.delete('non-existent')).rejects.toThrow('not found');
@@ -625,7 +625,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const content = await skills.getReference('test-skill', 'doc.md');
@@ -639,7 +639,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const content = await skills.getReference('test-skill', 'non-existent.md');
@@ -651,7 +651,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const content = await skills.getReference('non-existent', 'doc.md');
@@ -668,7 +668,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const content = await skills.getScript('test-skill', 'run.sh');
@@ -686,7 +686,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const content = await skills.getAsset('test-skill', 'logo.png');
@@ -706,7 +706,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const refs = await skills.listReferences('test-skill');
@@ -722,7 +722,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const refs = await skills.listReferences('test-skill');
@@ -740,7 +740,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const scripts = await skills.listScripts('test-skill');
@@ -759,7 +759,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const assets = await skills.listAssets('test-skill');
@@ -776,7 +776,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
         validateOnLoad: true,
       });
 
@@ -792,7 +792,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
         validateOnLoad: false,
       });
 
@@ -807,7 +807,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
         validateOnLoad: true,
       });
 
@@ -825,7 +825,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const skill = await skills.get('test-skill');
@@ -839,7 +839,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/node_modules/@company/skills'],
+        skills: ['/node_modules/@company/skills'],
       });
 
       const skill = await skills.get('test-skill');
@@ -853,7 +853,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/.mastra/skills'],
+        skills: ['/.mastra/skills'],
       });
 
       const skill = await skills.get('test-skill');
@@ -869,7 +869,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // Call list() concurrently
@@ -903,7 +903,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // First call initializes
@@ -934,7 +934,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // First call initializes
@@ -968,7 +968,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // Initial discovery
@@ -1084,7 +1084,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       expect(skills.isWritable).toBe(true);
@@ -1097,7 +1097,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       expect(skills.isWritable).toBe(false);
@@ -1111,7 +1111,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const result = await skills.list();
@@ -1128,7 +1128,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const skill = await skills.get('test-skill');
@@ -1145,7 +1145,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       const results = await skills.search('API');
@@ -1158,7 +1158,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(
@@ -1176,7 +1176,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(
@@ -1193,7 +1193,7 @@ Instructions for the new skill.`;
 
       const skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       await expect(skills.delete('test-skill')).rejects.toThrow('read-only');
@@ -1205,7 +1205,7 @@ Instructions for the new skill.`;
       // Use new 'source' config instead of deprecated 'filesystem'
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ['/skills'],
+        skills: ['/skills'],
       });
 
       // Create should work
@@ -1230,7 +1230,7 @@ Instructions for the new skill.`;
     });
   });
 
-  describe('dynamic skillsPaths', () => {
+  describe('dynamic skills paths', () => {
     const BASIC_SKILL_MD = `---
 name: basic-skill
 description: A basic skill
@@ -1251,14 +1251,14 @@ description: A premium skill
 Premium instructions.
 `;
 
-    it('should accept a function as skillsPaths', async () => {
+    it('should accept a function for skills config', async () => {
       const filesystem = createMockFilesystem({
         '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
       });
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: () => ['/skills/basic'],
+        skills: () => ['/skills/basic'],
       });
 
       const result = await skills.list();
@@ -1266,14 +1266,14 @@ Premium instructions.
       expect(result[0]?.name).toBe('basic-skill');
     });
 
-    it('should accept an async function as skillsPaths', async () => {
+    it('should accept an async function for skills config', async () => {
       const filesystem = createMockFilesystem({
         '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
       });
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: async () => {
+        skills: async () => {
           // Simulate async operation (e.g., fetching config)
           await new Promise(resolve => setTimeout(resolve, 10));
           return ['/skills/basic'];
@@ -1285,7 +1285,7 @@ Premium instructions.
       expect(result[0]?.name).toBe('basic-skill');
     });
 
-    it('should pass context to skillsPaths function', async () => {
+    it('should pass context to skills function', async () => {
       const filesystem = createMockFilesystem({
         '/skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
         '/skills/premium/premium-skill/SKILL.md': PREMIUM_SKILL_MD,
@@ -1295,7 +1295,7 @@ Premium instructions.
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ctx => {
+        skills: ctx => {
           capturedContext = ctx;
           return ['/skills/basic'];
         },
@@ -1329,7 +1329,7 @@ Premium instructions.
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: ctx => {
+        skills: ctx => {
           const tier = (ctx.requestContext as ReturnType<typeof createMockRequestContext>)?.get?.('userTier');
           if (tier === 'premium') {
             return ['/skills/basic', '/skills/premium'];
@@ -1364,7 +1364,7 @@ Premium instructions.
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: () => [currentPath],
+        skills: () => [currentPath],
       });
 
       // Initial list
@@ -1398,7 +1398,7 @@ Premium instructions.
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: pathsResolver,
+        skills: pathsResolver,
       });
 
       // Initial list
@@ -1423,7 +1423,7 @@ Premium instructions.
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skillsPaths: () => [],
+        skills: () => [],
       });
 
       const result = await skills.list();
@@ -1441,7 +1441,7 @@ Premium instructions.
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
         // Return paths in different order but same content
-        skillsPaths: () => {
+        skills: () => {
           callCount++;
           return callCount % 2 === 0 ? ['/skills/b', '/skills/a'] : ['/skills/a', '/skills/b'];
         },

@@ -218,7 +218,7 @@ export interface Config<
   /**
    * Global workspace for file storage, skills, and code execution.
    * Agents inherit this workspace unless they have their own configured.
-   * Skills are accessed via workspace.skills when skillsPaths is configured.
+   * Skills are accessed via workspace.skills when skills is configured.
    */
   workspace?: Workspace;
 

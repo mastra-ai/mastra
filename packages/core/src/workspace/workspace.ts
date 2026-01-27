@@ -39,7 +39,7 @@ import type { WorkspaceFilesystem } from './filesystem';
 import type { WorkspaceSandbox } from './sandbox';
 import { SearchEngine } from './search-engine';
 import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
-import type { WorkspaceSkills, SkillsPathsResolver } from './skills';
+import type { WorkspaceSkills, SkillsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceStatus } from './types';
 
@@ -108,12 +108,12 @@ export interface WorkspaceConfig {
    *
    * @example Static paths
    * ```typescript
-   * skillsPaths: ['/skills', '/node_modules/@myorg/skills']
+   * skills: ['/skills', '/node_modules/@myorg/skills']
    * ```
    *
    * @example Dynamic paths
    * ```typescript
-   * skillsPaths: (ctx) => {
+   * skills: (ctx) => {
    *   const tier = ctx.requestContext?.get('userTier');
    *   return tier === 'premium'
    *     ? ['/skills/basic', '/skills/premium']
@@ -121,7 +121,7 @@ export interface WorkspaceConfig {
    * }
    * ```
    */
-  skillsPaths?: SkillsPathsResolver;
+  skills?: SkillsResolver;
 
   // ---------------------------------------------------------------------------
   // Tool Configuration
@@ -301,11 +301,10 @@ export class Workspace {
     }
 
     // Validate at least one provider is given
-    // Note: skillsPaths alone is also valid - uses LocalSkillSource for read-only skills
-    const hasSkillsPaths =
-      config.skillsPaths !== undefined && (typeof config.skillsPaths === 'function' || config.skillsPaths.length > 0);
-    if (!this._fs && !this._sandbox && !hasSkillsPaths) {
-      throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skillsPaths', 'NO_PROVIDERS');
+    // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
+    const hasSkills = config.skills !== undefined && (typeof config.skills === 'function' || config.skills.length > 0);
+    if (!this._fs && !this._sandbox && !hasSkills) {
+      throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
 
     // Auto-initialize if requested
@@ -346,14 +345,6 @@ export class Workspace {
   }
 
   /**
-   * The configured skillsPaths resolver (if any).
-   * Can be a static array or a function for dynamic paths.
-   */
-  get skillsPaths(): SkillsPathsResolver | undefined {
-    return this._config.skillsPaths;
-  }
-
-  /**
    * Get the per-tool configuration for this workspace.
    * Returns undefined if no tools config was provided.
    */
@@ -363,9 +354,9 @@ export class Workspace {
 
   /**
    * Access skills stored in this workspace.
-   * Skills are SKILL.md files discovered from the configured skillsPaths.
+   * Skills are SKILL.md files discovered from the configured skillPaths.
    *
-   * Returns undefined if no skillsPaths are configured.
+   * Returns undefined if no skillPaths are configured.
    *
    * When filesystem is available, skills support full CRUD operations.
    * Without filesystem, skills are loaded read-only via LocalSkillSource.
@@ -383,11 +374,11 @@ export class Workspace {
    * ```
    */
   get skills(): WorkspaceSkills | undefined {
-    // Skills require skillsPaths
-    const hasSkillsPaths =
-      this._config.skillsPaths !== undefined &&
-      (typeof this._config.skillsPaths === 'function' || this._config.skillsPaths.length > 0);
-    if (!hasSkillsPaths) {
+    // Skills require skills config
+    const hasSkills =
+      this._config.skills !== undefined &&
+      (typeof this._config.skills === 'function' || this._config.skills.length > 0);
+    if (!hasSkills) {
       return undefined;
     }
 
@@ -398,7 +389,7 @@ export class Workspace {
 
       this._skills = new WorkspaceSkillsImpl({
         source,
-        skillsPaths: this._config.skillsPaths!,
+        skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
       });

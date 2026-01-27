@@ -685,7 +685,7 @@ Follow these instructions for the test skill.
   const filesystem = new LocalFilesystem({ basePath: tempDir });
   const workspace = new Workspace({
     filesystem,
-    skillsPaths: ['/skills'],
+    skills: ['/skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
     autoInit: true,
   });

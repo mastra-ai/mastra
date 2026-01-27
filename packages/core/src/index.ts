@@ -43,6 +43,13 @@ export {
   LocalSandbox,
   type LocalFilesystemOptions,
   type LocalSandboxOptions,
+  // Native sandbox utilities
+  detectIsolation,
+  isIsolationAvailable,
+  getRecommendedIsolation,
+  type IsolationBackend,
+  type NativeSandboxConfig,
+  type SandboxDetectionResult,
   // Workspace tools for agent integration
   createWorkspaceTools,
 } from './workspace';

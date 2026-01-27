@@ -125,7 +125,13 @@ export {
  *
  * @public
  */
-export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
+export {
+  SandboxError,
+  SandboxExecutionError,
+  SandboxTimeoutError,
+  SandboxNotReadyError,
+  IsolationUnavailableError,
+} from './sandbox';
 
 // =============================================================================
 // PUBLIC API - Tool Creation
@@ -192,6 +198,15 @@ export type {
  */
 export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 
+/**
+ * Native sandbox types for OS-level isolation.
+ * Used with LocalSandbox's `isolation` option.
+ *
+ * @public
+ */
+export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './native-sandbox';
+export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from './native-sandbox';
+
 // =============================================================================
 // PROVIDER INTERFACE - Skills
 // =============================================================================
@@ -212,8 +227,8 @@ export type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
-  SkillsPathsResolver,
-  SkillsPathsContext,
+  SkillsResolver,
+  SkillsContext,
 } from './skills';
 
 // =============================================================================

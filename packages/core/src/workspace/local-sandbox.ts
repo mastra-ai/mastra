@@ -3,6 +3,10 @@
  *
  * A sandbox implementation that executes commands on the local machine.
  * This is the default sandbox for development and local agents.
+ *
+ * Supports optional native OS sandboxing:
+ * - macOS: Uses seatbelt (sandbox-exec) for filesystem and network isolation
+ * - Linux: Uses bubblewrap (bwrap) for namespace isolation
  */
 
 import * as childProcess from 'node:child_process';
@@ -10,9 +14,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
+
 import type { ProviderStatus } from './lifecycle';
+import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
+import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
-import { SandboxNotReadyError } from './sandbox';
+import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
 
@@ -85,18 +92,41 @@ export interface LocalSandboxOptions {
   id?: string;
   /** Working directory for command execution */
   workingDirectory?: string;
-  /** Environment variables to set */
-  env?: Record<string, string>;
   /**
-   * Whether to inherit the host's environment variables.
-   * When true, process.env is included in the execution environment.
-   * When false (default), only explicitly set env variables are available.
-   * This is more secure as it prevents leaking sensitive environment variables.
-   * @default false
+   * Environment variables to set for command execution.
+   * PATH is included by default unless overridden (needed for finding executables).
+   * Other host environment variables are not inherited unless explicitly passed.
+   *
+   * @example
+   * ```typescript
+   * // Default - only PATH is available
+   * env: undefined
+   *
+   * // Add specific variables
+   * env: { NODE_ENV: 'production', HOME: process.env.HOME }
+   *
+   * // Full host environment (less secure)
+   * env: process.env
+   * ```
    */
-  inheritEnv?: boolean;
+  env?: NodeJS.ProcessEnv;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
+  /**
+   * Isolation backend for sandboxed execution.
+   * - 'none': No sandboxing (direct execution on host) - default
+   * - 'seatbelt': macOS sandbox-exec (built-in on macOS)
+   * - 'bwrap': Linux bubblewrap (requires installation)
+   *
+   * Use `LocalSandbox.detectIsolation()` to get the recommended backend.
+   * @default 'none'
+   */
+  isolation?: IsolationBackend;
+  /**
+   * Configuration for native sandboxing.
+   * Only used when isolation is 'seatbelt' or 'bwrap'.
+   */
+  nativeSandbox?: NativeSandboxConfig;
 }
 
 /**
@@ -125,9 +155,12 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   private _status: ProviderStatus = 'stopped';
   private readonly _workingDirectory: string;
-  private readonly env: Record<string, string>;
-  private readonly _inheritEnv: boolean;
+  private readonly env: NodeJS.ProcessEnv;
   private readonly timeout: number;
+  private readonly _isolation: IsolationBackend;
+  private readonly _nativeSandboxConfig: NativeSandboxConfig;
+  private _seatbeltProfile?: string;
+  private _seatbeltProfilePath?: string;
 
   /**
    * The working directory where commands are executed.
@@ -137,18 +170,42 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   /**
-   * Whether the sandbox inherits the host's environment variables.
+   * The isolation backend being used.
    */
-  get inheritEnv(): boolean {
-    return this._inheritEnv;
+  get isolation(): IsolationBackend {
+    return this._isolation;
+  }
+
+  /**
+   * Detect the best available isolation backend for this platform.
+   * Returns detection result with backend recommendation and availability.
+   *
+   * @example
+   * ```typescript
+   * const result = LocalSandbox.detectIsolation();
+   * const sandbox = new LocalSandbox({
+   *   isolation: result.available ? result.backend : 'none',
+   * });
+   * ```
+   */
+  static detectIsolation() {
+    return detectIsolation();
   }
 
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
     this._workingDirectory = options.workingDirectory ?? process.cwd();
     this.env = options.env ?? {};
-    this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
+    this._nativeSandboxConfig = options.nativeSandbox ?? {};
+
+    // Validate and set isolation backend
+    const requestedIsolation = options.isolation ?? 'none';
+    if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
+      const detection = detectIsolation();
+      throw new IsolationUnavailableError(requestedIsolation, detection.message);
+    }
+    this._isolation = requestedIsolation;
   }
 
   private generateId(): string {
@@ -157,13 +214,15 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   /**
    * Build the environment object for execution.
-   * Conditionally includes process.env based on inheritEnv setting.
+   * Always includes PATH by default (needed for finding executables).
+   * Merges the sandbox's configured env with any additional env from the command.
    */
-  private buildEnv(additionalEnv?: Record<string, string>): Record<string, string> {
-    if (this._inheritEnv) {
-      return { ...process.env, ...this.env, ...additionalEnv } as Record<string, string>;
-    }
-    return { ...this.env, ...additionalEnv };
+  private buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    return {
+      PATH: process.env.PATH, // Always include PATH for finding executables
+      ...this.env,
+      ...additionalEnv,
+    };
   }
 
   get status(): ProviderStatus {
@@ -175,6 +234,18 @@ export class LocalSandbox implements WorkspaceSandbox {
 
     try {
       await fs.mkdir(this.workingDirectory, { recursive: true });
+
+      // Set up seatbelt profile for macOS sandboxing
+      if (this._isolation === 'seatbelt') {
+        this._seatbeltProfile =
+          this._nativeSandboxConfig.seatbeltProfile ??
+          generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+
+        // Write profile to file for debugging/inspection purposes
+        this._seatbeltProfilePath = path.join(this.workingDirectory, '.sandbox.sb');
+        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+      }
+
       this._status = 'running';
     } catch (error) {
       this._status = 'error';
@@ -187,6 +258,17 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   async destroy(): Promise<void> {
+    // Clean up seatbelt profile if it exists
+    if (this._seatbeltProfilePath) {
+      try {
+        await fs.unlink(this._seatbeltProfilePath);
+      } catch {
+        // Ignore errors if file doesn't exist
+      }
+      this._seatbeltProfilePath = undefined;
+      this._seatbeltProfile = undefined;
+    }
+
     await this.stop();
   }
 
@@ -209,8 +291,33 @@ export class LocalSandbox implements WorkspaceSandbox {
         workingDirectory: this.workingDirectory,
         platform: os.platform(),
         nodeVersion: process.version,
+        isolation: this._isolation,
+        isolationConfig:
+          this._isolation !== 'none'
+            ? {
+                allowNetwork: this._nativeSandboxConfig.allowNetwork ?? false,
+                readOnlyPaths: this._nativeSandboxConfig.readOnlyPaths,
+                readWritePaths: this._nativeSandboxConfig.readWritePaths,
+              }
+            : undefined,
       },
     };
+  }
+
+  /**
+   * Wrap a command with the configured isolation backend.
+   */
+  private wrapCommandForIsolation(command: string, args: string[]): { command: string; args: string[] } {
+    if (this._isolation === 'none') {
+      return { command, args };
+    }
+
+    return wrapCommand(command, args, {
+      backend: this._isolation,
+      workspacePath: this.workingDirectory,
+      seatbeltProfile: this._seatbeltProfile,
+      config: this._nativeSandboxConfig,
+    });
   }
 
   async executeCommand(
@@ -226,10 +333,13 @@ export class LocalSandbox implements WorkspaceSandbox {
     const timeout = options.timeout ?? this.timeout;
     const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
 
+    // Wrap command with isolation backend if configured
+    const wrapped = this.wrapCommandForIsolation(command, args);
+
     // Use streaming execution when callbacks are provided
     if (options.onStdout || options.onStderr) {
       try {
-        const result = await execWithStreaming(command, args, {
+        const result = await execWithStreaming(wrapped.command, wrapped.args, {
           cwd,
           timeout,
           env: this.buildEnv(options.env),
@@ -257,7 +367,7 @@ export class LocalSandbox implements WorkspaceSandbox {
 
     // Use execFile for non-streaming (simpler, better error handling)
     try {
-      const { stdout, stderr } = await execFile(command, args, {
+      const { stdout, stderr } = await execFile(wrapped.command, wrapped.args, {
         cwd,
         timeout,
         env: this.buildEnv(options.env),

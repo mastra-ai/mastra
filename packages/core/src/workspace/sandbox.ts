@@ -62,7 +62,7 @@ export interface ExecuteCommandOptions {
   /** Timeout in milliseconds */
   timeout?: number;
   /** Environment variables */
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   /** Working directory */
   cwd?: string;
   /** Stream output instead of buffering */
@@ -191,5 +191,15 @@ export class SandboxNotReadyError extends SandboxError {
   constructor(idOrStatus: string) {
     super(`Sandbox is not ready: ${idOrStatus}`, 'NOT_READY', { id: idOrStatus });
     this.name = 'SandboxNotReadyError';
+  }
+}
+
+export class IsolationUnavailableError extends SandboxError {
+  constructor(
+    public readonly backend: string,
+    public readonly reason: string,
+  ) {
+    super(`Isolation backend '${backend}' is not available: ${reason}`, 'ISOLATION_UNAVAILABLE', { backend, reason });
+    this.name = 'IsolationUnavailableError';
   }
 }
