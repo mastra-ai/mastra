@@ -2310,30 +2310,29 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]
         `);
 
-        // TODO: responseFormat disabled in favor of json schema in system prompt
-        // expect(mockModels?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-        //   {
-        //     "schema": {
-        //       "$schema": "http://json-schema.org/draft-07/schema#",
-        //       "additionalProperties": false,
-        //       "properties": {
-        //         "result": {
-        //           "enum": [
-        //             "sunny",
-        //             "rainy",
-        //             "snowy",
-        //           ],
-        //           "type": "string",
-        //         },
-        //       },
-        //       "required": [
-        //         "result",
-        //       ],
-        //       "type": "object",
-        //     },
-        //     "type": "json",
-        //   }
-        // `);
+        expect(mockModels?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          {
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "result": {
+                  "enum": [
+                    "sunny",
+                    "rainy",
+                    "snowy",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "result",
+              ],
+              "type": "object",
+            },
+            "type": "json",
+          }
+        `);
       });
 
       it('should not stream incorrect values', async () => {
