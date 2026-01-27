@@ -14,15 +14,15 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Milestone:** v1.1 Agent Integration
 **Phase:** 9 - Foreach Index Resume
-**Plan:** Not started
-**Status:** Phase 8 complete, ready for Phase 9 planning
+**Plan:** 1 of 1 (partially complete)
+**Status:** Phase 9 in progress - forEachIndex parameter infrastructure complete, iteration logic needs debugging
 
 ```
-Progress: [██████░░░░] 67% (Phase 9 of 9)
-Milestone: v1.1 Agent Integration — Phase 8 completed 2026-01-27
+Progress: [████████░░] 89% (Phase 9 of 9)
+Milestone: v1.1 Agent Integration — Phase 9 Plan 1 partially complete 2026-01-27
 ```
 
-**Next action:** `/gsd:discuss-phase 9` or `/gsd:plan-phase 9`
+**Next action:** Debug foreach iteration resume event flow to complete Phase 9
 
 ## v1.1 Roadmap Summary
 
@@ -62,8 +62,8 @@ Milestone: v1.1 Agent Integration — Phase 8 completed 2026-01-27
 
 | Metric           | v1.0 Value | v1.1 Current |
 | ---------------- | ---------- | ------------ |
-| Phases completed | 6          | 2            |
-| Plans completed  | 15         | 3            |
+| Phases completed | 6          | 2.5 (partial)|
+| Plans completed  | 15         | 3 (partial)  |
 | Tests ported     | 70         | 6            |
 | Tests passing    | 193 (85%)  | 195 (86%)    |
 | Tests skipped    | 34         | 32           |
@@ -91,9 +91,19 @@ Milestone: v1.1 Agent Integration — Phase 8 completed 2026-01-27
 - Use 'condition' as writer name for evaluateCondition (no step.id available)
 - Use step.id as writer name for execute, resolveSleep, resolveSleepUntil methods
 
+**Phase 9 Plan 1 Decisions:**
+- Use foreachIndex (no capital E) in __workflow_meta to match default runtime convention
+- Use forEachIndex (capital E) in API/parameter names for consistency with user-facing resume() API
+- Thread forEachIndex through processWorkflowStart to reach processWorkflowForEach
+- Handle forEachIndex resume at foreach orchestration level by publishing targeted iteration events
+
 ### Current Blockers
 
-None. Phase 8 complete, ready for Phase 9 planning.
+**Phase 9 Plan 1 - Foreach iteration resume logic:**
+- forEachIndex parameter infrastructure complete (FOREACH-01 ✅, FOREACH-03 ✅)
+- FOREACH-02 (target specific iteration) partially complete - logic implemented but tests timeout
+- Event flow for resuming suspended foreach iterations needs debugging
+- 6 foreach suspend/resume tests remain skipped pending fix
 
 ### Open Questions
 
@@ -109,7 +119,7 @@ None. All v1.1 features have reference implementations in default runtime.
 **v1.1 will address:**
 - ✅ 4 test skips for V2 model limitations — FIXED in Phase 7
 - ✅ 2 test skips for writer support (lines 1851, 1938) — FIXED in Phase 8 Plan 1
-- Multiple test skips for forEachIndex parameter (lines 19119-19492)
+- 🚧 6 test skips for forEachIndex parameter (lines 18925-19417) — PARTIAL in Phase 9 Plan 1 (infrastructure complete, iteration logic needs debugging)
 
 ## Session Continuity
 
@@ -117,21 +127,22 @@ None. All v1.1 features have reference implementations in default runtime.
 
 **Date:** 2026-01-27
 **Work completed:**
-- Executed Phase 8 Plan 1 (Writer API Implementation)
-- Task 1: ToolStream writer instances in all 4 StepExecutor methods
-- Task 2: Unskipped 2 writer tests
-- All 195 evented workflow tests passing
-- 195 tests passing, 32 skipped
+- Executed Phase 9 Plan 1 (Foreach Index Resume Implementation)
+- Task 1: forEachIndex parameter threading through evented runtime
+- Task 2: Foreach iteration skip logic implementation
+- FOREACH-01 and FOREACH-03 requirements complete
+- FOREACH-02 partially complete (needs debugging)
+- 195 tests passing, 32 skipped (6 foreach tests remain skipped)
 
 **Commits:**
-- 7e93fc8: feat(08-01): implement ToolStream writer in all StepExecutor methods
-- d4086b4: test(08-01): unskip writer API tests
+- 6565bcd: feat(09-01): add forEachIndex parameter threading through evented runtime
+- 4cf50af: feat(09-01): implement foreach iteration skip logic for forEachIndex resume
 
-**Summary:** .planning/phases/08-writer-api/08-01-SUMMARY.md
+**Summary:** .planning/phases/09-foreach-index-resume/09-01-SUMMARY.md
 
-**Next action:** `/gsd:discuss-phase 9` or `/gsd:plan-phase 9`
+**Next action:** Debug foreach iteration resume event flow and unskip tests when working
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 8 completion_
+_Last updated: 2026-01-27 after Phase 9 Plan 1 (partial)_
