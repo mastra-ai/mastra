@@ -7,7 +7,7 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
 
 export interface ItemsListProps {
   items: DatasetItem[];
@@ -15,6 +15,7 @@ export interface ItemsListProps {
   onAddClick: () => void;
   onEditItem?: (item: DatasetItem) => void;
   onDeleteItem?: (itemId: string) => void;
+  onImportClick?: () => void;
 }
 
 /**
@@ -38,7 +39,7 @@ function formatDate(date: Date | string): string {
   });
 }
 
-export function ItemsList({ items, isLoading, onAddClick, onEditItem, onDeleteItem }: ItemsListProps) {
+export function ItemsList({ items, isLoading, onAddClick, onEditItem, onDeleteItem, onImportClick }: ItemsListProps) {
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
 
   if (isLoading) {
@@ -46,7 +47,7 @@ export function ItemsList({ items, isLoading, onAddClick, onEditItem, onDeleteIt
   }
 
   if (items.length === 0) {
-    return <EmptyItemsList onAddClick={onAddClick} />;
+    return <EmptyItemsList onAddClick={onAddClick} onImportClick={onImportClick} />;
   }
 
   const handleDeleteConfirm = () => {
@@ -58,8 +59,16 @@ export function ItemsList({ items, isLoading, onAddClick, onEditItem, onDeleteIt
 
   return (
     <div className="flex flex-col h-full">
-      {/* Add Item button above table */}
-      <div className="flex justify-end px-4 py-2">
+      {/* Action buttons above table */}
+      <div className="flex justify-end px-4 py-2 gap-2">
+        {onImportClick && (
+          <Button variant="outline" size="sm" onClick={onImportClick}>
+            <Icon>
+              <Upload />
+            </Icon>
+            Import CSV
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={onAddClick}>
           <Icon>
             <Plus />
@@ -174,9 +183,10 @@ function ItemsListSkeleton() {
 
 interface EmptyItemsListProps {
   onAddClick: () => void;
+  onImportClick?: () => void;
 }
 
-function EmptyItemsList({ onAddClick }: EmptyItemsListProps) {
+function EmptyItemsList({ onAddClick, onImportClick }: EmptyItemsListProps) {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
@@ -184,12 +194,22 @@ function EmptyItemsList({ onAddClick }: EmptyItemsListProps) {
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in evaluation runs."
         actionSlot={
-          <Button size="lg" variant="primary" onClick={onAddClick}>
-            <Icon>
-              <Plus />
-            </Icon>
-            Add Item
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button size="lg" variant="primary" onClick={onAddClick}>
+              <Icon>
+                <Plus />
+              </Icon>
+              Add Item
+            </Button>
+            {onImportClick && (
+              <Button size="lg" variant="outline" onClick={onImportClick}>
+                <Icon>
+                  <Upload />
+                </Icon>
+                Import CSV
+              </Button>
+            )}
+          </div>
         }
       />
     </div>
