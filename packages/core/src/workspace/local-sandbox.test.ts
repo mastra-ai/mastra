@@ -1,9 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
+import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
 import { SandboxNotReadyError } from './sandbox';
 
 describe('LocalSandbox', () => {
@@ -316,6 +317,345 @@ describe('LocalSandbox', () => {
       } finally {
         delete process.env[testVarName];
       }
+    });
+  });
+
+  // ===========================================================================
+  // Native Sandboxing - Detection
+  // ===========================================================================
+  describe('native sandboxing detection', () => {
+    it('should have static detectIsolation method', () => {
+      const result = LocalSandbox.detectIsolation();
+
+      expect(result).toHaveProperty('backend');
+      expect(result).toHaveProperty('available');
+      expect(result).toHaveProperty('message');
+    });
+
+    it('should detect seatbelt on macOS', () => {
+      if (os.platform() !== 'darwin') {
+        return; // Skip on non-macOS
+      }
+
+      const result = detectIsolation();
+      expect(result.backend).toBe('seatbelt');
+      // sandbox-exec is built-in on macOS
+      expect(result.available).toBe(true);
+    });
+
+    it('should detect bwrap availability on Linux', () => {
+      if (os.platform() !== 'linux') {
+        return; // Skip on non-Linux
+      }
+
+      const result = detectIsolation();
+      expect(result.backend).toBe('bwrap');
+      // bwrap may or may not be installed
+      expect(typeof result.available).toBe('boolean');
+    });
+
+    it('should return none on Windows', () => {
+      if (os.platform() !== 'win32') {
+        return; // Skip on non-Windows
+      }
+
+      const result = detectIsolation();
+      expect(result.backend).toBe('none');
+      expect(result.available).toBe(false);
+    });
+
+    it('should correctly report isIsolationAvailable', () => {
+      expect(isIsolationAvailable('none')).toBe(true);
+
+      if (os.platform() === 'darwin') {
+        expect(isIsolationAvailable('seatbelt')).toBe(true);
+        expect(isIsolationAvailable('bwrap')).toBe(false);
+      } else if (os.platform() === 'linux') {
+        expect(isIsolationAvailable('seatbelt')).toBe(false);
+        // bwrap may or may not be installed
+      }
+    });
+  });
+
+  // ===========================================================================
+  // Native Sandboxing - Configuration
+  // ===========================================================================
+  describe('native sandboxing configuration', () => {
+    it('should default to isolation: none', () => {
+      const defaultSandbox = new LocalSandbox();
+      expect(defaultSandbox.isolation).toBe('none');
+    });
+
+    it('should accept isolation option', async () => {
+      const detection = detectIsolation();
+      if (!detection.available) {
+        return; // Skip if no native sandboxing available
+      }
+
+      const sandboxedSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: detection.backend,
+        inheritEnv: true,
+      });
+
+      expect(sandboxedSandbox.isolation).toBe(detection.backend);
+      await sandboxedSandbox.destroy();
+    });
+
+    it('should fall back to none when unavailable backend requested', () => {
+      // Request an unavailable backend
+      const unavailableBackend = os.platform() === 'darwin' ? 'bwrap' : 'seatbelt';
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const fallbackSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: unavailableBackend as 'seatbelt' | 'bwrap',
+      });
+
+      expect(fallbackSandbox.isolation).toBe('none');
+      expect(warnSpy).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should include isolation in getInfo', async () => {
+      await sandbox.start();
+      const info = await sandbox.getInfo();
+
+      expect(info.metadata?.isolation).toBe('none');
+    });
+  });
+
+  // ===========================================================================
+  // Native Sandboxing - Seatbelt (macOS only)
+  // ===========================================================================
+  describe('seatbelt isolation (macOS)', () => {
+    beforeEach(async () => {
+      if (os.platform() !== 'darwin' || !isSeatbeltAvailable()) {
+        return;
+      }
+    });
+
+    it('should create seatbelt profile on start', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        inheritEnv: true,
+      });
+
+      await seatbeltSandbox.start();
+
+      // Check that profile file was created
+      const profilePath = path.join(tempDir, '.sandbox.sb');
+      const profileExists = await fs
+        .access(profilePath)
+        .then(() => true)
+        .catch(() => false);
+      expect(profileExists).toBe(true);
+
+      // Check profile content
+      const profileContent = await fs.readFile(profilePath, 'utf-8');
+      expect(profileContent).toContain('(version 1)');
+      expect(profileContent).toContain('(deny default');
+      expect(profileContent).toContain('(allow file-read*)');
+      expect(profileContent).toContain('(allow file-write* (subpath');
+
+      await seatbeltSandbox.destroy();
+    });
+
+    it('should execute commands in seatbelt sandbox', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        inheritEnv: true,
+      });
+
+      await seatbeltSandbox.start();
+
+      const result = await seatbeltSandbox.executeCommand('echo', ['Hello from sandbox']);
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('Hello from sandbox');
+
+      await seatbeltSandbox.destroy();
+    });
+
+    it('should allow file operations within workspace', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        inheritEnv: true,
+      });
+
+      await seatbeltSandbox.start();
+
+      // Write a file inside the workspace
+      const result = await seatbeltSandbox.executeCommand('sh', [
+        '-c',
+        `echo "test content" > "${tempDir}/sandbox-test.txt"`,
+      ]);
+      expect(result.success).toBe(true);
+
+      // Read it back
+      const readResult = await seatbeltSandbox.executeCommand('cat', [`${tempDir}/sandbox-test.txt`]);
+      expect(readResult.success).toBe(true);
+      expect(readResult.stdout.trim()).toBe('test content');
+
+      await seatbeltSandbox.destroy();
+    });
+
+    it('should clean up seatbelt profile on destroy', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        inheritEnv: true,
+      });
+
+      await seatbeltSandbox.start();
+      const profilePath = path.join(tempDir, '.sandbox.sb');
+
+      // Profile should exist
+      expect(
+        await fs
+          .access(profilePath)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(true);
+
+      await seatbeltSandbox.destroy();
+
+      // Profile should be cleaned up
+      expect(
+        await fs
+          .access(profilePath)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Native Sandboxing - Bubblewrap (Linux only)
+  // ===========================================================================
+  describe('bwrap isolation (Linux)', () => {
+    it('should execute commands in bwrap sandbox', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        inheritEnv: true,
+      });
+
+      await bwrapSandbox.start();
+
+      const result = await bwrapSandbox.executeCommand('echo', ['Hello from bwrap']);
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('Hello from bwrap');
+
+      await bwrapSandbox.destroy();
+    });
+
+    it('should allow file operations within workspace', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        inheritEnv: true,
+      });
+
+      await bwrapSandbox.start();
+
+      // Write a file inside the workspace using Node.js
+      const writeResult = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('fs').writeFileSync('${tempDir}/bwrap-test.txt', 'bwrap content')`,
+      ]);
+      expect(writeResult.success).toBe(true);
+
+      // Read it back
+      const readResult = await bwrapSandbox.executeCommand('cat', [`${tempDir}/bwrap-test.txt`]);
+      expect(readResult.success).toBe(true);
+      expect(readResult.stdout.trim()).toBe('bwrap content');
+
+      await bwrapSandbox.destroy();
+    });
+
+    it('should isolate network by default', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        inheritEnv: true,
+        nativeSandbox: {
+          allowNetwork: false, // Default, but explicit for test clarity
+        },
+      });
+
+      await bwrapSandbox.start();
+
+      // This should fail due to network isolation
+      const result = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('http').get('http://httpbin.org/get', (res) => process.exit(0)).on('error', () => process.exit(1))`,
+      ]);
+
+      // Should fail (network unreachable)
+      expect(result.success).toBe(false);
+
+      await bwrapSandbox.destroy();
+    });
+
+    it('should allow network when configured', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        inheritEnv: true,
+        nativeSandbox: {
+          allowNetwork: true,
+        },
+      });
+
+      await bwrapSandbox.start();
+
+      // This should work with network enabled
+      // Use a simple DNS lookup as it's faster than HTTP
+      const result = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('dns').lookup('localhost', (err) => process.exit(err ? 1 : 0))`,
+      ]);
+
+      expect(result.success).toBe(true);
+
+      await bwrapSandbox.destroy();
     });
   });
 });
