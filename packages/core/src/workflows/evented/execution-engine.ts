@@ -42,12 +42,14 @@ export class EventedExecutionEngine extends ExecutionEngine {
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async execute<TInput, TOutput>(params: {
+  async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    initialState?: TState;
     restart?: RestartExecutionParams;
     timeTravel?: TimeTravelExecutionParams;
     resume?: {
@@ -64,6 +66,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
     format?: 'legacy' | 'vnext' | undefined;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
     perStep?: boolean;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
@@ -74,6 +80,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (params.resume) {
       const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
       const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
+      // Extract state from stepResults.__state or use initialState
+      const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
 
       await pubsub.publish('workflows', {
         type: 'workflow.resume',
@@ -89,6 +97,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
           perStep: params.perStep,
+          initialState: resumeState,
+          state: resumeState,
+          outputOptions: params.outputOptions,
         },
       });
     } else if (params.timeTravel) {
@@ -120,6 +131,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
           perStep: params.perStep,
+          initialState: params.initialState,
+          outputOptions: params.outputOptions,
         },
       });
     }
@@ -151,35 +164,57 @@ export class EventedExecutionEngine extends ExecutionEngine {
       });
     });
 
+    // Extract state from resultData (stored in stepResults.__state)
+    const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};
+
+    // Strip __state from stepResults at top level
+    const { __state: _removedState, ...stepResultsWithoutTopLevelState } = resultData.stepResults ?? {};
+
+    // Strip __state from each individual step result (only for objects, not arrays)
+    const cleanStepResults: Record<string, any> = {};
+    for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
+      if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult)) {
+        const { __state: _stepState, ...cleanStepResult } = stepResult as any;
+        cleanStepResults[stepId] = cleanStepResult;
+      } else {
+        cleanStepResults[stepId] = stepResult;
+      }
+    }
+
     // Build the callback argument with proper typing for invokeLifecycleCallbacks
     let callbackArg: {
       status: WorkflowRunStatus;
       result?: any;
       error?: any;
       steps: Record<string, StepResult<any, any, any, any>>;
+      state?: Record<string, any>;
     };
 
     if (resultData.prevResult.status === 'failed') {
       callbackArg = {
         status: 'failed',
         error: resultData.prevResult.error,
-        steps: resultData.stepResults,
+        steps: cleanStepResults,
+        state: finalState,
       };
     } else if (resultData.prevResult.status === 'suspended') {
       callbackArg = {
         status: 'suspended',
-        steps: resultData.stepResults,
+        steps: cleanStepResults,
+        state: finalState,
       };
     } else if (resultData.prevResult.status === 'paused' || params.perStep) {
       callbackArg = {
         status: 'paused',
-        steps: resultData.stepResults,
+        steps: cleanStepResults,
+        state: finalState,
       };
     } else {
       callbackArg = {
         status: resultData.prevResult.status,
         result: resultData.prevResult?.output,
-        steps: resultData.stepResults,
+        steps: cleanStepResults,
+        state: finalState,
       };
     }
 
@@ -193,14 +228,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
         tripwire: undefined,
         runId: params.runId,
         workflowId: params.workflowId,
-        resourceId: undefined,
+        resourceId: params.resourceId,
         input: params.input,
         requestContext: params.requestContext,
-        state: {},
+        state: finalState,
       });
     }
 
     // Build the final result with any additional fields needed for the return type
+    // Exclude state from result unless outputOptions.includeState is true
     let result: TOutput;
     if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
@@ -211,12 +247,34 @@ export class EventedExecutionEngine extends ExecutionEngine {
           return null;
         })
         .filter(Boolean);
+      // Don't spread callbackArg directly to avoid including state
       result = {
-        ...callbackArg,
+        status: callbackArg.status,
+        steps: callbackArg.steps,
         suspended: suspendedSteps,
       } as TOutput;
+    } else if (resultData.prevResult.status === 'failed') {
+      result = {
+        status: callbackArg.status,
+        error: callbackArg.error,
+        steps: callbackArg.steps,
+      } as TOutput;
+    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+      result = {
+        status: 'paused',
+        steps: callbackArg.steps,
+      } as TOutput;
     } else {
-      result = callbackArg as TOutput;
+      result = {
+        status: callbackArg.status,
+        result: callbackArg.result,
+        steps: callbackArg.steps,
+      } as TOutput;
+    }
+
+    // Include state in result only if outputOptions.includeState is true
+    if (params.outputOptions?.includeState) {
+      (result as any).state = finalState;
     }
 
     return result;

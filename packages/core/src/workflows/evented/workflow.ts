@@ -1167,11 +1167,16 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    outputOptions,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -1218,6 +1223,7 @@ export class EventedRun<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
@@ -1227,6 +1233,7 @@ export class EventedRun<
       requestContext,
       abortController: this.abortController,
       perStep,
+      outputOptions,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -1389,6 +1396,9 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
+    // Extract state from snapshot - could be in context.__state or in value
+    const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
+
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1396,6 +1406,7 @@ export class EventedRun<
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input as TInput,
+        initialState: resumeState as TState,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
