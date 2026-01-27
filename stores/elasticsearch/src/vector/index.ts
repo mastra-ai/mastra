@@ -31,7 +31,7 @@ const REVERSE_METRIC_MAPPING = {
 
 type ElasticSearchVectorParams = QueryVectorParams<ElasticSearchVectorFilter>;
 
-type ElasticSearchAuth = { apiKey: string } | { username: string; password: string } | { bearer: string };
+export type ElasticSearchAuth = { apiKey: string } | { username: string; password: string } | { bearer: string };
 
 export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter> {
   private client: ElasticSearchClient;
