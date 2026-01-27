@@ -105,10 +105,10 @@ Plans:
   4. Writer events stream to workflow consumers via pub/sub transport
   5. Writer events maintain correct sequence ordering during step execution
 
-**Plans:** TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 08-01: TBD during planning
+- [ ] 08-01-PLAN.md — Implement ToolStream writer in StepExecutor and verify tests
 
 #### Phase 9: Foreach Index Resume
 
@@ -143,5 +143,5 @@ Phases execute in numeric order: 7 → 8 → 9
 | 5. Streaming vNext | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 6. Remaining Parity | v1.0 | 4/4 | Complete | 2026-01-27 |
 | 7. V2 Model + TripWire | v1.1 | 2/2 | Complete | 2026-01-27 |
-| 8. Writer API | v1.1 | 0/TBD | Not started | - |
+| 8. Writer API | v1.1 | 0/1 | Not started | - |
 | 9. Foreach Index | v1.1 | 0/TBD | Not started | - |
