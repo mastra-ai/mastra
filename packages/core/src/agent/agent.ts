@@ -1067,51 +1067,62 @@ export class Agent<
    * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
    * ```
    */
-  public getLLM({
+  public async getLLM({
     requestContext = new RequestContext(),
     model,
   }: {
     requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig>;
-  } = {}): MastraLLM | Promise<MastraLLM> {
-    // If model is provided, resolve it; otherwise use the agent's model
-    const modelToUse = this.getModel({ modelConfig: model, requestContext });
+  } = {}): Promise<MastraLLM> {
+    // Resolve model config to ModelFallbacks (always returns array now)
+    const modelFallbacks = model
+      ? await this.resolveModelFallbacks(model, requestContext)
+      : await this.resolveModelFallbacks(this.model, requestContext);
 
-    return resolveMaybePromise(modelToUse, resolvedModel => {
-      let llm: MastraLLM | Promise<MastraLLM>;
-      if (isSupportedLanguageModel(resolvedModel)) {
-        const modelsPromise =
-          (Array.isArray(this.model) || typeof this.model === 'function') && !model
-            ? this.prepareModels(requestContext)
-            : this.prepareModels(requestContext, resolvedModel);
+    // Get first enabled model to check if it's supported
+    const firstEnabledModel = modelFallbacks.find(m => m.enabled);
+    if (!firstEnabledModel) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_LLM_NO_ENABLED_MODELS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: this.name },
+        text: `[Agent:${this.name}] - No enabled models found in model list`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
 
-        llm = modelsPromise.then(models => {
-          const enabledModels = models.filter(model => model.enabled);
-          return new MastraLLMVNext({
-            models: enabledModels,
-            mastra: this.#mastra,
-            options: { tracingPolicy: this.#options?.tracingPolicy },
-          });
-        });
-      } else {
-        llm = new MastraLLMV1({
-          model: resolvedModel,
-          mastra: this.#mastra,
-          options: { tracingPolicy: this.#options?.tracingPolicy },
-        });
-      }
+    const resolvedModel = await this.resolveModelConfig(firstEnabledModel.model, requestContext);
 
-      return resolveMaybePromise(llm, resolvedLLM => {
-        // Apply stored primitives if available
-        if (this.#primitives) {
-          resolvedLLM.__registerPrimitives(this.#primitives);
-        }
-        if (this.#mastra) {
-          resolvedLLM.__registerMastra(this.#mastra);
-        }
-        return resolvedLLM;
-      }) as MastraLLM;
-    });
+    let llm: MastraLLM;
+    if (isSupportedLanguageModel(resolvedModel)) {
+      // Prepare all models from the fallbacks
+      const models = await this.prepareModels(requestContext, modelFallbacks);
+      const enabledModels = models.filter(model => model.enabled);
+
+      llm = new MastraLLMVNext({
+        models: enabledModels,
+        mastra: this.#mastra,
+        options: { tracingPolicy: this.#options?.tracingPolicy },
+      });
+    } else {
+      llm = new MastraLLMV1({
+        model: resolvedModel,
+        mastra: this.#mastra,
+        options: { tracingPolicy: this.#options?.tracingPolicy },
+      });
+    }
+
+    // Apply stored primitives if available
+    if (this.#primitives) {
+      llm.__registerPrimitives(this.#primitives);
+    }
+    if (this.#mastra) {
+      llm.__registerMastra(this.#mastra);
+    }
+    return llm;
   }
 
   /**
@@ -1163,12 +1174,16 @@ export class Agent<
    * Resolves model configuration that may be a dynamic function returning a single model or array of models.
    * Supports DynamicArgument for both MastraModelConfig and ModelWithRetries[].
    * Normalizes ModelWithRetries[] to ModelFallbacks by filling in defaults.
+   *
+   * Internal simplification: Always returns ModelFallbacks array, even for single models.
+   * This eliminates conditional Array.isArray() checks throughout the codebase.
+   *
    * @internal
    */
   private async resolveModelFallbacks(
     modelConfig: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks,
     requestContext: RequestContext,
-  ): Promise<MastraModelConfig | ModelFallbacks> {
+  ): Promise<ModelFallbacks> {
     // If it's a dynamic function, resolve it
     if (typeof modelConfig === 'function') {
       const resolved = await modelConfig({ requestContext, mastra: this.#mastra });
@@ -1196,8 +1211,15 @@ export class Agent<
         })) as ModelFallbacks;
       }
 
-      // Function returned single model
-      return resolved;
+      // Function returned single model - wrap in array
+      return [
+        {
+          id: randomUUID(),
+          model: resolved,
+          maxRetries: this.maxRetries,
+          enabled: true,
+        },
+      ] as ModelFallbacks;
     }
 
     // Already resolved - if it's a static array, check if already normalized
@@ -1230,8 +1252,15 @@ export class Agent<
       })) as ModelFallbacks;
     }
 
-    // Static single model config
-    return modelConfig;
+    // Static single model config - wrap in array
+    return [
+      {
+        id: randomUUID(),
+        model: modelConfig,
+        maxRetries: this.maxRetries,
+        enabled: true,
+      },
+    ] as ModelFallbacks;
   }
 
   /**
@@ -1247,52 +1276,31 @@ export class Agent<
    * });
    * ```
    */
-  public getModel({
+  public async getModel({
     requestContext = new RequestContext(),
     modelConfig = this.model,
-  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
-    | MastraLanguageModel
-    | MastraLegacyLanguageModel
-    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
-    // Use resolveModelFallbacks to handle functions and normalization
-    const maybeResolved = this.resolveModelFallbacks(modelConfig, requestContext);
+  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}): Promise<
+    MastraLanguageModel | MastraLegacyLanguageModel
+  > {
+    // Resolve to array (always returns ModelFallbacks now)
+    const resolved = await this.resolveModelFallbacks(modelConfig, requestContext);
 
-    return resolveMaybePromise(maybeResolved, resolved => {
-      if (!Array.isArray(resolved)) {
-        return this.resolveModelConfig(resolved, requestContext);
-      }
+    // Find first enabled model
+    const enabledModel = resolved.find(entry => entry.enabled);
+    if (!enabledModel) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: this.name },
+        text: `[Agent:${this.name}] - No enabled models found in model list`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
 
-      // Array case - find first enabled model
-      if (resolved.length === 0) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { agentName: this.name },
-          text: `[Agent:${this.name}] - Empty model list provided`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
-
-      // Find first enabled model
-      const enabledModel = resolved.find(entry => entry.enabled);
-      if (!enabledModel) {
-        const mastraError = new MastraError({
-          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { agentName: this.name },
-          text: `[Agent:${this.name}] - No enabled models found in model list`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
-
-      return this.resolveModelConfig(enabledModel.model, requestContext);
-    }) as MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    return this.resolveModelConfig(enabledModel.model, requestContext);
   }
 
   /**
@@ -1310,20 +1318,19 @@ export class Agent<
   public async getModelList(
     requestContext: RequestContext = new RequestContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
-    // Handle dynamic functions that might return arrays
+    // Handle dynamic functions - always return prepared models for functions
+    // (functions that return arrays should expose model lists, even if single-element)
     if (typeof this.model === 'function') {
       const resolved = await this.resolveModelFallbacks(this.model, requestContext);
-      // If the function returned an array, prepare and return it
-      if (Array.isArray(resolved)) {
-        return this.prepareModels(requestContext, resolved);
-      }
-      // Function returned a single model
-      return null;
+      return this.prepareModels(requestContext, resolved);
     }
 
+    // Backward compatibility: Return null for static single-model agents
     if (!Array.isArray(this.model)) {
       return null;
     }
+
+    // Static array configuration
     return this.prepareModels(requestContext);
   }
 
@@ -2785,57 +2792,19 @@ export class Agent<
    */
   private async prepareModels(
     requestContext: RequestContext,
-    model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
+    model?: ModelFallbacks,
   ): Promise<Array<AgentModelManagerConfig>> {
-    // Resolve dynamic model functions first
+    // Resolve dynamic functions if needed
+    let modelArray: ModelFallbacks;
     if (typeof this.model === 'function' && !model) {
-      const resolved = await this.resolveModelFallbacks(this.model, requestContext);
-      return this.prepareModels(requestContext, resolved as DynamicArgument<MastraLanguageModel> | ModelFallbacks);
+      modelArray = await this.resolveModelFallbacks(this.model, requestContext);
+    } else if (model) {
+      modelArray = model;
+    } else {
+      modelArray = await this.resolveModelFallbacks(this.model, requestContext);
     }
 
-    if ((model && !Array.isArray(model)) || (!model && !Array.isArray(this.model))) {
-      const modelToUse = model ?? this.model;
-      const resolvedModel = await this.resolveModelConfig(
-        modelToUse as DynamicArgument<MastraModelConfig>,
-        requestContext,
-      );
-
-      if (!isSupportedLanguageModel(resolvedModel)) {
-        const mastraError = new MastraError({
-          id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
-
-      // Extract headers from ModelRouterLanguageModel if available
-      let headers: Record<string, string> | undefined;
-      if (resolvedModel instanceof ModelRouterLanguageModel) {
-        headers = (resolvedModel as any).config?.headers;
-      }
-
-      return [
-        {
-          id: 'main',
-          model: resolvedModel,
-          maxRetries: this.maxRetries ?? 0,
-          enabled: true,
-          headers,
-        },
-      ];
-    }
-
-    // At this point, either model param or this.model is an array (functions and single models handled above).
-    // TypeScript sees them as potentially ModelWithRetries[] | ModelFallbacks, but at runtime arrays are
-    // always normalized to ModelFallbacks. The cast asserts this runtime invariant.
-    const modelArray = (model ?? this.model) as ModelFallbacks;
+    // Process array (single models are now single-element arrays)
     const models = await Promise.all(
       modelArray.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
