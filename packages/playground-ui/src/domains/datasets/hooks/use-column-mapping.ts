@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
  * Field types for column mapping in CSV import.
@@ -28,6 +28,15 @@ export function useColumnMapping(headers: string[]) {
       return acc;
     }, {}),
   );
+
+  // Rebuild mapping when headers change (handles async CSV parsing)
+  useEffect(() => {
+    const newMapping: ColumnMapping = {};
+    for (const header of headers) {
+      newMapping[header] = 'ignore';
+    }
+    setMapping(newMapping);
+  }, [headers]);
 
   // Update a single column's field type
   const setColumnField = useCallback((column: string, field: FieldType) => {
