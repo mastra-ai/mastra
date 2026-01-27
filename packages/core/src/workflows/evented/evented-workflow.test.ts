@@ -1756,6 +1756,411 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it.skip('should continue streaming current run on subsequent stream calls - evented runtime pubsub differs from default', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await promptEvalWorkflow.createRun();
+
+      // This test validates that calling stream() multiple times on same run
+      // continues the existing stream rather than starting a new one.
+      // Evented runtime uses pubsub which has different semantics.
+      const streamResult = await run.stream({ inputData: { input: 'test' } });
+      const result = await streamResult.result;
+
+      expect(result.status).toBe('suspended');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should handle custom event emission using writer - evented runtime does not expose writer in step context', async () => {
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            userInput: inputData.input,
+          };
+        },
+      });
+
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        execute: async ({ suspend, writer, inputData, resumeData }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              input: resumeData?.userInput || inputData.userInput,
+            },
+          });
+
+          if (!resumeData) {
+            await suspend({});
+          }
+
+          return { modelOutput: 'test output' };
+        },
+      });
+
+      const resumableWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent],
+      });
+
+      resumableWorkflow.then(getUserInput).then(promptAgent).commit();
+
+      const mastra = new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': resumableWorkflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await resumableWorkflow.createRun();
+
+      let streamResult = run.stream({ inputData: { input: 'test input for stream' } });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for stream',
+            },
+          });
+        }
+      }
+
+      let result = await streamResult.result;
+
+      const resumeData = { userInput: 'test input for resumption' };
+      streamResult = run.resumeStream({ resumeData, step: promptAgent });
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for resumption',
+            },
+          });
+        }
+      }
+
+      result = await streamResult.result;
+      if (!result) {
+        expect.fail('Resume result is not set');
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should handle writer.custom during resume operations - evented runtime does not expose writer in step context', async () => {
+      let customEvents: StreamEvent[] = [];
+
+      const stepWithWriter = createStep({
+        id: 'step-with-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+        suspendSchema: z.object({ suspendValue: z.number() }),
+        resumeSchema: z.object({ resumeValue: z.number() }),
+        execute: async ({ inputData, resumeData, writer, suspend }) => {
+          if (!resumeData?.resumeValue) {
+            // First run - emit custom event and suspend
+            await writer?.custom({
+              type: 'suspend-event',
+              data: { message: 'About to suspend', value: inputData.value },
+            });
+
+            await suspend({ suspendValue: inputData.value });
+            return { value: inputData.value, success: false };
+          } else {
+            // Resume - emit custom event to test that writer works on resume
+            await writer?.custom({
+              type: 'resume-event',
+              data: {
+                message: 'Successfully resumed',
+                originalValue: inputData.value,
+                resumeValue: resumeData.resumeValue,
+              },
+            });
+
+            return { value: resumeData.resumeValue, success: true };
+          }
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-resume-writer',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number(), success: z.boolean() }),
+      });
+
+      testWorkflow.then(stepWithWriter).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-writer': testWorkflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Create run and start workflow
+      const run = await testWorkflow.createRun();
+
+      // Use streaming to capture custom events
+      let streamResult = run.stream({ inputData: { value: 42 } });
+
+      // Collect all events from the stream - custom events come through directly
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `suspend-event` is custom
+        if (event.type === 'suspend-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const firstResult = await streamResult.result;
+      expect(firstResult.status).toBe('suspended');
+
+      // Check that suspend event was emitted
+      expect(customEvents).toHaveLength(1);
+      expect(customEvents[0].type).toBe('suspend-event');
+
+      // Reset events for resume test
+      customEvents = [];
+
+      // Resume the workflow using streaming
+      streamResult = run.resumeStream({
+        resumeData: { resumeValue: 99 },
+        step: stepWithWriter,
+      });
+
+      for await (const event of streamResult.fullStream) {
+        //@ts-expect-error `resume-event` is custom
+        if (event.type === 'resume-event') {
+          customEvents.push(event);
+        }
+      }
+
+      const resumeResult = await streamResult.result;
+      expect(resumeResult.status).toBe('success');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should handle errors from agent.stream() with full error details', async () => {
+      // Simulate an APICallError-like error from AI SDK
+      const apiError = new Error('Service Unavailable');
+      (apiError as any).statusCode = 503;
+      (apiError as any).responseHeaders = { 'retry-after': '60' };
+      (apiError as any).requestId = 'req_abc123';
+      (apiError as any).isRetryable = true;
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => {
+          throw apiError;
+        },
+      });
+
+      const agent = new Agent({
+        name: 'test-agent',
+        model: mockModel,
+        instructions: 'Test agent',
+      });
+
+      const agentStep = createStep({
+        id: 'agent-step',
+        execute: async () => {
+          const result = await agent.stream('test input', {
+            maxRetries: 0,
+          });
+
+          await result.consumeStream();
+
+          // Throw the error from agent.stream if it exists
+          if (result.error) {
+            throw result.error;
+          }
+
+          return { success: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'agent-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+        steps: [agentStep],
+      });
+
+      workflow.then(agentStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'agent-error-workflow': workflow },
+        agents: { 'test-agent': agent },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Evented runtime may return Error instance (not serialized like default runtime)
+        expect(result.error).toBeDefined();
+
+        expect((result.error as any).message).toBe('Service Unavailable');
+        // Verify API error properties are preserved
+        expect((result.error as any).statusCode).toBe(503);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).requestId).toBe('req_abc123');
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve error details in streaming workflow', async () => {
+      const customErrorProps = {
+        statusCode: 429,
+        responseHeaders: {
+          'x-ratelimit-reset': '1234567890',
+          'retry-after': '30',
+        },
+      };
+      const testError = new Error('Rate limit exceeded');
+      (testError as any).statusCode = customErrorProps.statusCode;
+      (testError as any).responseHeaders = customErrorProps.responseHeaders;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'streaming-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'streaming-error-workflow': workflow },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const streamOutput = run.stream({ inputData: {} });
+      const result = await streamOutput.result;
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Evented runtime may return Error instance (not serialized like default runtime)
+        expect(result.error).toBeDefined();
+
+        expect((result.error as any).message).toBe('Rate limit exceeded');
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual(customErrorProps.responseHeaders);
+      }
+
+      await mastra.stopEventEngine();
+    });
   });
 
   describe('Basic Workflow Execution', () => {
@@ -4678,6 +5083,320 @@ describe('Workflow', () => {
       expect(error.cause.message).toContain('Rate limit exceeded');
       expect(error.cause.statusCode).toBe(429);
       expect(error.cause.code).toBe('rate_limit_exceeded');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should persist error message without stack trace in snapshot - evented runtime snapshots show running status for failed workflows', async () => {
+      const mockStorage = new MockStore();
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      const errorMessage = 'Test error: step execution failed.';
+      const thrownError = new Error(errorMessage);
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw thrownError;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+        workflows: { 'test-workflow': workflow },
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      // In evented workflows, errors are serialized objects
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect((failedStepResult.error as any).message).toBe(errorMessage);
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should persist MastraError message without stack trace in snapshot - evented runtime snapshots show running status for failed workflows', async () => {
+      const mockStorage = new MockStore();
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      const errorMessage = 'Step execution failed.';
+      const thrownError = new MastraError({
+        id: 'VALIDATION_ERROR',
+        domain: 'MASTRA_WORKFLOW',
+        category: 'USER',
+        text: errorMessage,
+        details: { field: 'test' },
+      });
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw thrownError;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+        workflows: { 'test-workflow': workflow },
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect((failedStepResult.error as any).message).toBe(errorMessage);
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve custom error properties when step throws error with extra fields', async () => {
+      // Create an error with custom properties (like AIAPICallError from AI SDK)
+      const customError = new Error('API rate limit exceeded');
+      (customError as any).statusCode = 429;
+      (customError as any).responseHeaders = { 'retry-after': '60' };
+      (customError as any).isRetryable = true;
+
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw customError;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error should be hydrated back to Error instance in evented runtime
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error?.message).toBe('API rate limit exceeded');
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+
+      // Also check step-level error
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      if (step1Result?.status === 'failed') {
+        // Step error in evented runtime is serialized object
+        expect((step1Result.error as any).message).toBe('API rate limit exceeded');
+        expect((step1Result.error as any).statusCode).toBe(429);
+        expect((step1Result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((step1Result.error as any).isRetryable).toBe(true);
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should propagate step error to workflow-level error', async () => {
+      // Test that when a step fails, the error is accessible both at step level and workflow level
+      const testError = new Error('Step failed with details');
+      (testError as any).code = 'STEP_FAILURE';
+      (testError as any).details = { reason: 'test failure' };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-propagation-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'error-propagation-workflow': workflow },
+        storage: testStorage,
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Workflow-level error - in evented runtime, hydrated back to Error instance
+      if (result.status === 'failed') {
+        expect(result.error).toBeDefined();
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error?.message).toBe('Step failed with details');
+        expect((result.error as any).code).toBe('STEP_FAILURE');
+        expect((result.error as any).details).toEqual({ reason: 'test failure' });
+      }
+
+      // Step-level error
+      const stepResult = result.steps?.['failing-step'];
+      expect(stepResult?.status).toBe('failed');
+      if (stepResult?.status === 'failed') {
+        expect((stepResult.error as any).message).toBe('Step failed with details');
+        expect((stepResult.error as any).code).toBe('STEP_FAILURE');
+        expect((stepResult.error as any).details).toEqual({ reason: 'test failure' });
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve error.cause chain in result.error', async () => {
+      // Create a nested error chain (common with API errors that wrap underlying causes)
+      const rootCauseMessage = 'Network connection refused';
+      const rootCause = new Error(rootCauseMessage);
+
+      const intermediateMessage = 'HTTP request failed';
+      const intermediateCause = new Error(intermediateMessage, { cause: rootCause });
+
+      const topLevelMessage = 'API call failed';
+      const topLevelError = new Error(topLevelMessage, { cause: intermediateCause });
+      // Add custom properties typical of API errors
+      (topLevelError as any).statusCode = 500;
+      (topLevelError as any).isRetryable = true;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw topLevelError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'cause-chain-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'cause-chain-workflow': workflow },
+        storage: testStorage,
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Workflow-level error should be hydrated back to Error instance
+        expect(result.error).toBeDefined();
+        expect(result.error).toBeInstanceOf(Error);
+
+        // Verify the top-level error properties are preserved
+        expect(result.error?.message).toBe(topLevelMessage);
+        expect((result.error as any).statusCode).toBe(500);
+        expect((result.error as any).isRetryable).toBe(true);
+
+        // Verify the full error.cause chain is preserved
+        expect((result.error as any).cause).toBeDefined();
+        expect((result.error as any).cause.message).toBe(intermediateMessage);
+
+        // Verify nested cause (intermediate error's cause)
+        expect((result.error as any).cause.cause).toBeDefined();
+        expect((result.error as any).cause.cause.message).toBe(rootCauseMessage);
+      }
 
       await mastra.stopEventEngine();
     });
@@ -10501,6 +11220,465 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('runCount should exist and equal zero for the first run', async () => {
+      const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
+        return { count: runCount };
+      });
+      const mockExecWithRetryCount = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
+      });
+      const step = createStep({
+        id: 'step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExec,
+      });
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExecWithRetryCount,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      })
+        .then(step)
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(mockExec).toHaveBeenCalledTimes(1);
+      expect(mockExecWithRetryCount).toHaveBeenCalledTimes(1);
+      expect(mockExecWithRetryCount).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should get and delete workflow run by id from storage', async () => {
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Create a few runs
+      const run1 = await workflow.createRun();
+      await run1.start({ inputData: {} });
+
+      const { runs, total } = await workflow.listWorkflowRuns();
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+      expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
+      expect(runs[0]?.workflowName).toBe('test-workflow');
+      expect(runs[0]?.snapshot).toBeDefined();
+
+      const workflowRun = await workflow.getWorkflowRunById(run1.runId);
+      expect(workflowRun?.runId).toBe(run1.runId);
+      expect(workflowRun?.workflowName).toBe('test-workflow');
+      // getWorkflowRunById now returns WorkflowState with processed execution state
+      expect(workflowRun?.status).toBe('success');
+      expect(workflowRun?.steps).toBeDefined();
+
+      await workflow.deleteWorkflowRunById(run1.runId);
+      const deleted = await workflow.getWorkflowRunById(run1.runId);
+      expect(deleted).toBeNull();
+
+      const { runs: afterDeleteRuns, total: afterDeleteTotal } = await workflow.listWorkflowRuns();
+      expect(afterDeleteTotal).toBe(0);
+      expect(afterDeleteRuns).toHaveLength(0);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should load serialized error from storage via getWorkflowRunById', async () => {
+      // This test verifies the full round-trip: error is serialized to storage,
+      // and when loaded via getWorkflowRunById, it's a plain object (not Error instance)
+      const mockStorage = new MockStore();
+
+      const errorMessage = 'Test error for storage round-trip';
+      const thrownError = new Error(errorMessage);
+      (thrownError as any).statusCode = 500;
+      (thrownError as any).errorCode = 'INTERNAL_ERROR';
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw thrownError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'storage-roundtrip-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+        workflows: { 'storage-roundtrip-workflow': workflow },
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Now load the workflow run from storage
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const workflowRun = await workflowsStore!.getWorkflowRunById({
+        runId: run.runId,
+        workflowName: 'storage-roundtrip-workflow',
+      });
+
+      expect(workflowRun).toBeDefined();
+      expect(workflowRun?.snapshot).toBeDefined();
+
+      const snapshot = workflowRun?.snapshot as any;
+      expect(snapshot.status).toBe('failed');
+
+      // The error in storage should be serialized (plain object, not Error instance)
+      // because storage serializes via JSON
+      const storedStepResult = snapshot.context?.['failing-step'];
+      expect(storedStepResult).toBeDefined();
+      expect(storedStepResult.status).toBe('failed');
+
+      // Verify the stored error contains the serialized properties
+      const storedError = storedStepResult.error;
+      expect(storedError).toBeDefined();
+
+      // The stored error should be a plain object with message and custom properties
+      // (Error instances don't survive JSON serialization without toJSON)
+      expect(storedError.message).toBe(errorMessage);
+      expect(storedError.name).toBe('Error');
+      expect(storedError.statusCode).toBe(500);
+      expect(storedError.errorCode).toBe('INTERNAL_ERROR');
+
+      // Stack should NOT be in the serialized output (per serializeStack: false)
+      expect(storedError.stack).toBeUndefined();
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should return correct status from storage when creating run with existing runId from different workflow instance - evented runtime does not check storage status on createRun', async () => {
+      const suspendStepAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          return suspend({ message: 'Workflow suspended' });
+        })
+        .mockImplementationOnce(() => {
+          return { result: 'completed' };
+        });
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ resumeMessage: z.string() }),
+      });
+
+      const workflow1 = createWorkflow({
+        id: 'test-resume-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-resume-workflow': workflow1 },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Start workflow and cause it to suspend
+      const run1 = await workflow1.createRun({ runId: 'test-run-id-123' });
+      const result = await run1.start({ inputData: { input: 'test' } });
+
+      expect(result.status).toBe('suspended');
+      expect(result.steps.suspendStep.status).toBe('suspended');
+
+      // Simulate a different workflow instance (e.g., different API request)
+      // This is the scenario: first API call starts workflow and causes suspend,
+      // second API call needs to continue the same workflow
+      const workflow2 = createWorkflow({
+        id: 'test-resume-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      workflow2.__registerMastra(mastra);
+
+      // Create run with the same runId from different workflow instance
+      // Before fix: would return run with 'pending' status
+      // After fix: returns run with correct 'suspended' status from storage
+      const run2 = await workflow2.createRun({ runId: 'test-run-id-123' });
+
+      // The run status should reflect the actual state from storage, not default to 'pending'
+      // This allows the user to check run.workflowRunStatus === 'suspended' and then resume
+      expect(run2.workflowRunStatus).toBe('suspended');
+
+      // Verify we can actually resume the workflow from the different instance
+      // This proves the fix works: different API request can resume a suspended workflow
+      const resumeResult = await run2.resume({
+        resumeData: { resumeMessage: 'resumed from different instance' },
+        step: 'suspendStep',
+      });
+
+      expect(resumeResult.status).toBe('success');
+      expect(suspendStepAction).toHaveBeenCalledTimes(2); // Once for suspend, once for resume
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should return only requested fields when fields option is specified - times out in evented runtime', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ value: 'result1' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'fields-filter-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { workflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      // Request only status field
+      const statusOnly = await workflow.getWorkflowRunById(run.runId, { fields: ['status'] });
+      expect(statusOnly?.status).toBe('success');
+      expect(statusOnly?.steps).toBeUndefined(); // steps not requested, should be omitted
+      expect(statusOnly?.result).toBeUndefined();
+      expect(statusOnly?.payload).toBeUndefined();
+
+      // Request status and steps
+      const withSteps = await workflow.getWorkflowRunById(run.runId, { fields: ['status', 'steps'] });
+      expect(withSteps?.status).toBe('success');
+      expect(withSteps?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(withSteps?.result).toBeUndefined();
+
+      // Request all fields (no fields option)
+      const allFields = await workflow.getWorkflowRunById(run.runId);
+      expect(allFields?.status).toBe('success');
+      expect(allFields?.steps).toMatchObject({
+        step1: { status: 'success', output: { value: 'result1' } },
+      });
+      expect(allFields?.result).toBeDefined();
+      expect(allFields?.runId).toBe(run.runId);
+      expect(allFields?.workflowName).toBe('fields-filter-workflow');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should update run status from storage snapshot when run exists in memory map - evented runtime does not update status from storage on createRun', async () => {
+      const suspendStepAction = vi.fn().mockImplementation(async ({ suspend }) => {
+        return suspend({ message: 'Workflow suspended' });
+      });
+
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: suspendStepAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-prove-issue-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-prove-issue-workflow': workflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const runId = 'test-prove-issue-run-id';
+
+      // Step 1: Create a run and start it, causing it to suspend
+      // This stores the run in memory map AND persists suspended status to storage
+      const run1 = await workflow.createRun({ runId });
+      const result = await run1.start({ inputData: { input: 'test' } });
+
+      expect(result.status).toBe('suspended');
+
+      // Step 2: Manually verify storage has the suspended status
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const storageSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'test-prove-issue-workflow',
+        runId,
+      });
+      expect(storageSnapshot?.status).toBe('suspended'); // Storage has correct status
+
+      // Step 3: Simulate stale status in memory - manually set run status to 'pending'
+      // This simulates what happens when the run exists in memory with stale status
+      // (e.g., from a previous request where status wasn't updated, or when Run status
+      // isn't automatically updated during execution)
+      run1.workflowRunStatus = 'pending' as any; // Force stale status in memory
+
+      // Verify the run in memory now has stale status
+      expect(run1.workflowRunStatus).toBe('pending');
+
+      // Step 4: Call createRun again with the same runId
+      // createRun checks the in-memory run-map first, then looks up storage
+      // It should update the run's status from storage to reflect the actual state
+      const run2 = await workflow.createRun({ runId });
+
+      // Verify run2 is the same instance from memory map
+      expect(run2).toBe(run1); // Same instance from memory map
+
+      // The run status should be updated from storage, not remain stale in memory
+      expect(run2.workflowRunStatus).toBe('suspended');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should use shouldPersistSnapshot option - evented runtime persists all snapshots regardless of option', async () => {
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const resumeStep = createStep({
+        id: 'resume-step',
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData) {
+            return suspend({});
+          }
+          return { completed: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        resumeSchema: z.object({ resume: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended' },
+      });
+      workflow.then(step1).then(step2).then(resumeStep).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          'test-workflow': workflow,
+        },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Create a few runs
+      const run1 = await workflow.createRun();
+      await run1.start({ inputData: {} });
+
+      const { runs, total } = await workflow.listWorkflowRuns();
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+
+      await run1.resume({ resumeData: { resume: 'resume' }, step: 'resume-step' });
+
+      const { runs: afterResumeRuns, total: afterResumeTotal } = await workflow.listWorkflowRuns();
+      expect(afterResumeTotal).toBe(1);
+      expect(afterResumeRuns).toHaveLength(1);
+      expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
+      expect(afterResumeRuns[0]?.workflowName).toBe('test-workflow');
+      expect(afterResumeRuns[0]?.snapshot).toBeDefined();
+      expect((afterResumeRuns[0]?.snapshot as any).status).toBe('suspended');
+
+      await mastra.stopEventEngine();
+    });
   });
 
   describe('Agent as step', () => {
@@ -11050,6 +12228,556 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('should be able to use an agent with v1 model as a step', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-1',
+        name: 'test-agent-1',
+        instructions: 'test agent instructions"',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const agent2 = new Agent({
+        id: 'test-agent-2',
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep1)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+      });
+
+      expect(result.steps['test-agent-1']).toEqual({
+        status: 'success',
+        output: { text: 'Paris' },
+        payload: {
+          prompt: 'Capital of France, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['test-agent-2']).toEqual({
+        status: 'success',
+        output: { text: 'London' },
+        payload: {
+          prompt: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should bubble up tripwire from agent input processor to workflow result - evented runtime does not support tripwire propagation', async () => {
+      const tripwireProcessor = {
+        id: 'tripwire-processor',
+        name: 'Tripwire Processor',
+        processInput: async ({ messages, abort }: any) => {
+          // Check for blocked content
+          const hasBlockedContent = messages.some((msg: any) =>
+            msg.content?.parts?.some((part: any) => part.type === 'text' && part.text?.includes('blocked')),
+          );
+
+          if (hasBlockedContent) {
+            abort('Content blocked by policy', { retry: true, metadata: { severity: 'high' } });
+          }
+          return messages;
+        },
+      };
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-delta', id: '1', delta: 'Response' });
+              controller.enqueue({ type: 'text-end', id: '1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'tripwire-test-agent',
+        name: 'Tripwire Test Agent',
+        instructions: 'You are helpful',
+        model: mockModel,
+        inputProcessors: [tripwireProcessor],
+      });
+
+      const workflow = createWorkflow({
+        id: 'agent-tripwire-workflow',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+      });
+
+      const mastra = new Mastra({
+        workflows: { 'agent-tripwire-workflow': workflow },
+        agents: { 'tripwire-test-agent': agent },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const agentStep = createStep(agent);
+
+      workflow.then(agentStep).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { prompt: 'This message contains blocked content' },
+      });
+
+      // Workflow should return tripwire status
+      expect(result.status).toBe('tripwire');
+      if (result.status === 'tripwire') {
+        expect(result.tripwire.reason).toBe('Content blocked by policy');
+        expect(result.tripwire.retry).toBe(true);
+        expect(result.tripwire.metadata).toEqual({ severity: 'high' });
+        expect(result.tripwire.processorId).toBe('tripwire-processor');
+      }
+
+      await mastra.stopEventEngine();
+    }, 30000);
+
+    it.skip('should handle tripwire from output stream processor in agent within workflow - evented runtime does not support tripwire propagation', async () => {
+      // Use processOutputStream instead of processOutputResult since output result tripwires
+      // happen after the stream completes and require different handling
+      const outputStreamTripwireProcessor = {
+        id: 'output-stream-tripwire-processor',
+        name: 'Output Stream Tripwire Processor',
+        processOutputStream: async ({ part, abort }: any) => {
+          // Check if the text delta contains inappropriate content
+          if (part?.type === 'text-delta' && part?.payload?.text?.includes('inappropriate')) {
+            abort('Output contains inappropriate content', { retry: true });
+          }
+          return part;
+        },
+      };
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-delta', id: '1', delta: 'This is inappropriate content' });
+              controller.enqueue({ type: 'text-end', id: '1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'output-tripwire-agent',
+        name: 'Output Tripwire Agent',
+        instructions: 'You are helpful',
+        model: mockModel,
+        outputProcessors: [outputStreamTripwireProcessor],
+      });
+
+      const workflow = createWorkflow({
+        id: 'output-tripwire-workflow',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+      });
+
+      const mastra = new Mastra({
+        workflows: { 'output-tripwire-workflow': workflow },
+        agents: { 'output-tripwire-agent': agent },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const agentStep = createStep(agent);
+
+      workflow.then(agentStep).commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { prompt: 'Tell me something' },
+      });
+
+      // Workflow should return tripwire status
+      expect(result.status).toBe('tripwire');
+      if (result.status === 'tripwire') {
+        expect(result.tripwire.reason).toBe('Output contains inappropriate content');
+        expect(result.tripwire.retry).toBe(true);
+        expect(result.tripwire.processorId).toBe('output-stream-tripwire-processor');
+      }
+
+      await mastra.stopEventEngine();
+    }, 30000);
+
+    it.skip('should pass agentOptions when wrapping agent with createStep - evented runtime uses streamLegacy which does not support V2 models', async () => {
+      const onFinishSpy = vi.fn();
+      const onChunkSpy = vi.fn();
+      const maxSteps = 5;
+
+      // Spy to capture what's passed to the model
+      const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        // Verify instructions were overridden in the messages
+        const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        expect(systemMessage?.content).toContain('overridden instructions');
+        expect(systemMessage?.content).not.toContain('original instructions');
+
+        // Verify temperature was passed through
+        expect(temperature).toBe(0.7);
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
+              {
+                type: 'finish',
+                id: '2',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const agent = new Agent({
+        id: 'test-agent-with-options-v2',
+        name: 'test-agent-with-options-v2',
+        instructions: 'original instructions',
+        model: new MockLanguageModelV2({
+          doStream: doStreamSpy,
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-agent-options-v2',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow-agent-options-v2': workflow },
+        agents: { 'test-agent-with-options-v2': agent },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Create step with multiple agent options to verify they're all passed through
+      const agentStep = createStep(agent, {
+        maxSteps,
+        onFinish: onFinishSpy,
+        onChunk: onChunkSpy,
+        instructions: 'overridden instructions',
+        modelSettings: {
+          temperature: 0.7,
+        },
+      });
+
+      workflow
+        .map({ prompt: { value: 'test', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      if (result.status === 'failed') {
+        console.log('Agent options test failed:', result.error);
+      }
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'Response' });
+      }
+
+      expect(doStreamSpy).toHaveBeenCalled();
+      expect(onFinishSpy).toHaveBeenCalled();
+      expect(onChunkSpy).toHaveBeenCalled();
+
+      await mastra.stopEventEngine();
+    }, 10000);
+
+    it.skip('should pass structured output from agent step to next step with correct types - evented runtime uses streamLegacy which does not support V2 models', async () => {
+      // Define the structured output schema for the agent
+      const articleSchema = z.object({
+        title: z.string(),
+        summary: z.string(),
+        tags: z.array(z.string()),
+      });
+
+      const articleJson = JSON.stringify({
+        title: 'Test Article',
+        summary: 'This is a test summary',
+        tags: ['test', 'article'],
+      });
+
+      // Mock agent using V2 model that properly supports structured output
+      const agent = new Agent({
+        id: 'article-generator',
+        name: 'Article Generator',
+        instructions: 'Generate an article with title, summary, and tags',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: articleJson }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: articleJson });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                });
+                controller.close();
+              },
+            }),
+          }),
+        }),
+      });
+
+      // Create agent step WITH structuredOutput schema
+      const agentStep = createStep(agent, {
+        structuredOutput: {
+          schema: articleSchema,
+        },
+      });
+
+      // This step receives the structured output from the agent directly
+      const processArticleStep = createStep({
+        id: 'process-article',
+        description: 'Process the generated article',
+        inputSchema: articleSchema,
+        outputSchema: z.object({
+          processed: z.boolean(),
+          tagCount: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          // inputData should have title, summary, tags - not just text
+          return {
+            processed: true,
+            tagCount: inputData.tags.length,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'article-workflow',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
+        steps: [agentStep, processArticleStep],
+      });
+
+      const mastra = new Mastra({
+        workflows: { 'article-workflow': workflow },
+        agents: { 'article-generator': agent },
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      // Chain directly - no map needed if outputSchema matches inputSchema
+      workflow.then(agentStep).then(processArticleStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: { prompt: 'Generate an article about testing' },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({
+          processed: true,
+          tagCount: 2,
+        });
+
+        // Verify the agent step output contains structured data
+        expect(result.steps[agentStep.id]).toMatchObject({
+          status: 'success',
+          output: {
+            title: 'Test Article',
+            summary: 'This is a test summary',
+            tags: ['test', 'article'],
+          },
+        });
+
+        // Verify the processor step received the structured data correctly
+        expect(result.steps['process-article']).toMatchObject({
+          status: 'success',
+          output: {
+            processed: true,
+            tagCount: 2,
+          },
+        });
+      }
+
+      await mastra.stopEventEngine();
+    }, 30000);
   });
 
   describe('Nested workflows', () => {

@@ -795,6 +795,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
+        // Cast to Workflow since we know this is a nested workflow at this point
+        const nestedWorkflow = step.step as any;
         const timeTravelParams = createTimeTravelExecutionParams({
           steps: timeTravel.steps.slice(1),
           inputData: timeTravel.inputData,
@@ -802,11 +804,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           context: (timeTravel.nestedStepResults?.[step.step.id] ?? {}) as any,
           nestedStepsContext: (timeTravel.nestedStepResults ?? {}) as any,
           snapshot,
-          graph: step.step.buildExecutionGraph(),
+          graph: nestedWorkflow.buildExecutionGraph(),
           perStep,
         });
 
-        const nestedPrevStep = getStep(step.step, timeTravelParams.executionPath);
+        const nestedPrevStep = getStep(nestedWorkflow, timeTravelParams.executionPath);
         const nestedPrevResult = timeTravelParams.stepResults[nestedPrevStep?.id ?? 'input'];
 
         await this.mastra.pubsub.publish('workflows', {
