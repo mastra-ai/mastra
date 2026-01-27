@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { PaginationInfo } from '../../types';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
@@ -16,11 +15,12 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   ListTracesArgs,
+  ListTracesResponse,
   SpanRecord,
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
-import { listTracesArgsSchema, TraceStatus } from './types';
+import { listTracesArgsSchema, toTraceSpans, TraceStatus } from './types';
 
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
@@ -203,7 +203,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
 
@@ -251,7 +251,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const paged = matchingRootSpans.slice(start, end);
 
     return {
-      spans: paged,
+      spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore: end < total },
     };
   }
