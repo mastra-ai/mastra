@@ -133,10 +133,35 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
-   * Custom JSON serialization method
-   * Converts the internal Map to a plain object for proper JSON serialization
+   * Custom JSON serialization method.
+   * Converts the internal Map to a plain object for proper JSON serialization.
+   * Non-serializable values (e.g., RPC proxies, functions, circular references)
+   * are skipped to prevent serialization errors when storing to database.
    */
   public toJSON(): Record<string, any> {
-    return Object.fromEntries(this.registry);
+    const result: Record<string, any> = {};
+    for (const [key, value] of this.registry.entries()) {
+      if (this.isSerializable(value)) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Check if a value can be safely serialized to JSON.
+   */
+  private isSerializable(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'function') return false;
+    if (typeof value === 'symbol') return false;
+    if (typeof value !== 'object') return true;
+
+    try {
+      JSON.stringify(value);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
