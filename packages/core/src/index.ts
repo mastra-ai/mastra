@@ -36,7 +36,7 @@ export {
   type ExecutionResult,
   type CommandResult,
   type ExecuteCommandOptions,
-  type SandboxStatus,
+  type ProviderStatus,
   type SandboxInfo,
   // Built-in providers
   LocalFilesystem,

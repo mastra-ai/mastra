@@ -10,7 +10,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
-import type { WorkspaceSandbox, SandboxStatus, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
+import type { ProviderStatus } from './lifecycle';
+import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { SandboxNotReadyError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
@@ -122,7 +123,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
-  private _status: SandboxStatus = 'stopped';
+  private _status: ProviderStatus = 'stopped';
   private readonly _workingDirectory: string;
   private readonly env: Record<string, string>;
   private readonly _inheritEnv: boolean;
@@ -165,7 +166,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     return { ...this.env, ...additionalEnv };
   }
 
-  get status(): SandboxStatus {
+  get status(): ProviderStatus {
     return this._status;
   }
 
