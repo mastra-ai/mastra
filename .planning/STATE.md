@@ -5,32 +5,32 @@
 
 ## Current Position
 
-**Phase:** 4 In Progress
-**Plan:** 5/N complete (04-01, 04-02, 04-03, 04-04, 04-05)
-**Status:** Plan 04-05 complete - nested workflow edge cases documented
+**Phase:** 4 COMPLETE
+**Plan:** 6/6 complete (04-01 through 04-06)
+**Status:** Phase 4 complete - all suspend/resume edge cases ported
 
 ```
-Progress: [██████░░░░] 65%
-Phases:   3/6 complete (Phase 4 in progress)
-Tests:    168/232 passing (72% parity), 20 skipped
+Progress: [███████░░░] 70%
+Phases:   4/6 complete (Phase 4 done)
+Tests:    167/232 passing (72% parity), 23 skipped
 ```
 
 ## Gap Analysis Summary
 
 **Current evented runtime state:**
 
-- 168 tests passing in evented-workflow.test.ts
-- 20 tests skipped (6 streaming vNext + 3 schema validation + 11 Phase 4 limitations)
-- ~74 tests in default that don't exist in evented
+- 167 tests passing in evented-workflow.test.ts
+- 23 tests skipped (6 streaming vNext + 3 schema validation + 14 Phase 4 limitations)
+- ~56 tests in default that don't exist in evented
 
 **Major gaps identified:**
 
 1. State object (12 tests) - COMPLETE (Phase 1)
 2. Lifecycle callbacks (15 tests) - COMPLETE (Phase 2)
 3. Schema defaults (12 tests) - COMPLETE (Phase 3, 9 passing + 3 skipped)
-4. Suspend/resume edge cases (18 tests) - IN PROGRESS (8 passing + 8 skipped)
+4. Suspend/resume edge cases (22 tests) - COMPLETE (Phase 4, 8 passing + 14 skipped)
 5. Streaming vNext (6 tests) - Modern streaming API
-6. Miscellaneous (43 tests) - Various edge cases
+6. Miscellaneous (~37 tests) - Various edge cases
 
 **Intentionally out of scope:**
 
@@ -38,25 +38,24 @@ Tests:    168/232 passing (72% parity), 20 skipped
 
 ## Current Focus
 
-Phase 4 Plan 5 complete. Nested workflow edge cases documented.
+Phase 4 complete. All 6 plans executed.
 
-**Completed in 04-05:**
-- Ported 4 nested workflow edge case tests from default runtime
-- 1 test passes: consecutive nested workflows with suspend/resume
-- 3 tests skipped: nested-only resume, loop input tracking, nested dountil
-- Documented evented runtime architectural differences for nested workflows
+**Completed in 04-06:**
+- Ported 6 foreach suspend/resume tests from default runtime
+- All 6 tests skipped - evented runtime lacks forEachIndex parameter
+- Documented implementation requirements for future reference
 
-**Next action:** Continue with remaining Phase 4 plan (04-06)
+**Next action:** Continue with Phase 5 (Streaming vNext) or Phase 6 (Remaining Tests)
 
 ## Performance Metrics
 
 | Metric           | Value |
 | ---------------- | ----- |
-| Phases completed | 3     |
-| Plans completed  | 8     |
-| Tests ported     | 51 (47 + 4 new) |
-| Tests to port    | ~62   |
-| Session count    | 8     |
+| Phases completed | 4     |
+| Plans completed  | 9     |
+| Tests ported     | 57 (51 + 6 new) |
+| Tests to port    | ~56   |
+| Session count    | 9     |
 
 ## Accumulated Context
 
@@ -78,6 +77,7 @@ Phase 4 Plan 5 complete. Nested workflow edge cases documented.
 | Skip closeOnSuspend test           | Evented runtime uses pubsub not stream API            | Phase 4-02 |
 | Skip 4 parallel/branch tests       | Evented runtime architecture differs fundamentally    | Phase 4-03 |
 | Skip 3 nested workflow tests       | Evented requires full path, different loop handling   | Phase 4-05 |
+| Skip 6 foreach suspend/resume tests| Evented runtime lacks forEachIndex parameter          | Phase 4-06 |
 
 ### Key Files
 
@@ -109,7 +109,7 @@ None.
 | 1 - State Object   | NO              | COMPLETE                           |
 | 2 - Lifecycle      | NO              | COMPLETE                           |
 | 3 - Schema         | NO              | COMPLETE                           |
-| 4 - Suspend/Resume | NO              | Plans 1-5 done, 1 remaining        |
+| 4 - Suspend/Resume | NO              | COMPLETE                           |
 | 5 - Streaming      | YES             | vNext API needs understanding      |
 | 6 - Remaining      | NO              | Miscellaneous, case by case        |
 
@@ -118,8 +118,8 @@ None.
 ### Last Session
 
 **Date:** 2026-01-27
-**Work completed:** Phase 4 Plan 5 - Nested workflow edge cases
-**Stopping point:** Plan 04-05 complete, ready for 04-06
+**Work completed:** Phase 4 Plan 6 - Foreach suspend/resume edge cases
+**Stopping point:** Phase 4 complete, ready for Phase 5 or 6
 
 ### Session History
 
@@ -134,15 +134,16 @@ None.
 | 2026-01-27 | Phase 4-02: Resume labels, suspendData (3 passing, 1 skipped)|
 | 2026-01-27 | Phase 4-03: Parallel/branch suspend (0 passing, 4 skipped)|
 | 2026-01-27 | Phase 4-05: Nested workflow edge cases (1 passing, 3 skipped)|
+| 2026-01-27 | Phase 4-06: Foreach suspend/resume (0 passing, 6 skipped)|
 
 ### Resumption Notes
 
-1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 168 tests passing
-2. Plan 04-05 complete - continue with remaining Phase 4 plan (04-06)
-3. Note: 11 Phase 4 tests skipped - evented runtime limitations
-4. Total skipped: 20 (6 streaming vNext, 3 schema validation, 11 Phase 4 limitations)
+1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 167 tests passing
+2. Phase 4 complete - 22 tests ported (8 passing + 14 skipped)
+3. Total skipped: 23 (6 streaming vNext, 3 schema validation, 14 Phase 4 limitations)
+4. Next: Phase 5 (Streaming vNext) or Phase 6 (Remaining Tests)
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 4 Plan 5 completion_
+_Last updated: 2026-01-27 after Phase 4 Plan 6 completion_
