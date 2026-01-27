@@ -8,17 +8,35 @@
 See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Core value:** Test parity with default runtime
-**Current focus:** v1.1 Agent Integration — Defining requirements
+**Current focus:** v1.1 Agent Integration — Phase 7: V2 Model + TripWire Support
 
 ## Current Position
 
-**Phase:** Not started (defining requirements)
-**Status:** Defining requirements for v1.1
+**Milestone:** v1.1 Agent Integration
+**Phase:** 7 - V2 Model + TripWire Support
+**Plan:** Not started
+**Status:** Roadmap created, ready for planning
 
 ```
-Progress: [░░░░░░░░░░] 0%
-Milestone: v1.1 Agent Integration — STARTED 2026-01-27
+Progress: [░░░░░░░░░░] 0% (Phase 7 of 9)
+Milestone: v1.1 Agent Integration — Roadmap defined 2026-01-27
 ```
+
+**Next action:** `/gsd:plan-phase 7`
+
+## v1.1 Roadmap Summary
+
+**Phases:** 3 (Phases 7-9)
+**Requirements:** 10 total
+  - Agent Integration: 7 requirements (AGENT-01 through AGENT-07)
+  - Foreach Control: 3 requirements (FOREACH-01 through FOREACH-03)
+
+**Phase structure:**
+- Phase 7: V2 Model + TripWire Support (4 requirements, coupled features)
+- Phase 8: Writer API (3 requirements, independent feature)
+- Phase 9: Foreach Index Resume (3 requirements, independent feature)
+
+**Coverage:** 10/10 requirements mapped (100%)
 
 ## Milestone v1.0 Summary
 
@@ -40,42 +58,60 @@ Milestone: v1.1 Agent Integration — STARTED 2026-01-27
 - `.planning/milestones/v1-REQUIREMENTS.md`
 - `.planning/milestones/v1-MILESTONE-AUDIT.md`
 
-## Next Milestone Options
-
-**v1.1 — Enhanced Agent Integration:**
-- V2 model support for agent steps
-- TripWire propagation from agents
-- Writer API exposure in step context
-
-**v1.2 — Foreach Improvements:**
-- forEachIndex parameter for resume
-- Bail function for concurrent iteration
-
-**v2.0 — Architecture Evolution:**
-- Parallel suspend handling
-- Branch execution for all matching conditions
-- Time travel replay
-
 ## Performance Metrics
 
-| Metric           | v1.0 Value |
-| ---------------- | ---------- |
-| Phases completed | 6          |
-| Plans completed  | 15         |
-| Tests ported     | 70         |
-| Tests passing    | 189 (83.3%)|
-| Tests skipped    | 38         |
-| Duration         | 2 days     |
+| Metric           | v1.0 Value | v1.1 Target |
+| ---------------- | ---------- | ----------- |
+| Phases completed | 6          | 3           |
+| Plans completed  | 15         | TBD         |
+| Tests ported     | 70         | ~10         |
+| Tests passing    | 189 (83.3%)| ~195 (86%) |
+| Tests skipped    | 38         | ~32         |
+
+## Accumulated Context
+
+### Decisions
+
+**v1.1 Phase Structure:**
+- Phase 7 couples V2 model + TripWire (both modify stream consumption loop)
+- Phase 8 Writer API independent (touches most files but isolated changes)
+- Phase 9 Foreach index independent (smallest feature, polish work)
+
+**Rationale:** Research identified V2/TripWire coupling—both features modify the stream parsing logic, and tripwire chunks only appear in V2 model streams via output processor support. Testing V2 tripwire requires both features working together.
+
+### Current Blockers
+
+None. Research complete, roadmap defined, ready for Phase 7 planning.
+
+### Open Questions
+
+None. All v1.1 features have reference implementations in default runtime.
+
+### Technical Debt
+
+**Inherited from v1.0:**
+- 38 skipped tests with documented architectural differences
+- console.dir debug logging in workflow.ts:1429-1432
+- Pre-existing TypeScript errors in workflow-event-processor/index.ts
+
+**v1.1 will address:**
+- 4 test skips for V2 model limitations (lines 12831, 12935)
+- 2 test skips for writer support (lines 1851, 1938)
+- Multiple test skips for forEachIndex parameter (lines 19119-19492)
 
 ## Session Continuity
 
 ### Last Session
 
 **Date:** 2026-01-27
-**Work completed:** v1.1 milestone started
-**Next action:** Define requirements, create roadmap
+**Work completed:**
+- v1.1 requirements defined (10 requirements)
+- Research completed (HIGH confidence)
+- Roadmap created (3 phases, 100% coverage)
+
+**Next action:** `/gsd:plan-phase 7` to decompose Phase 7 into executable plans
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after v1.1 milestone start_
+_Last updated: 2026-01-27 after v1.1 roadmap creation_

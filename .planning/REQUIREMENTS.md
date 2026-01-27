@@ -48,22 +48,27 @@ Explicitly excluded from v1.1.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AGENT-01 | TBD | Pending |
-| AGENT-02 | TBD | Pending |
-| AGENT-03 | TBD | Pending |
-| AGENT-04 | TBD | Pending |
-| AGENT-05 | TBD | Pending |
-| AGENT-06 | TBD | Pending |
-| AGENT-07 | TBD | Pending |
-| FOREACH-01 | TBD | Pending |
-| FOREACH-02 | TBD | Pending |
-| FOREACH-03 | TBD | Pending |
+| AGENT-01 | Phase 7 | Pending |
+| AGENT-02 | Phase 7 | Pending |
+| AGENT-03 | Phase 7 | Pending |
+| AGENT-04 | Phase 7 | Pending |
+| AGENT-05 | Phase 8 | Pending |
+| AGENT-06 | Phase 8 | Pending |
+| AGENT-07 | Phase 8 | Pending |
+| FOREACH-01 | Phase 9 | Pending |
+| FOREACH-02 | Phase 9 | Pending |
+| FOREACH-03 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10
+- Mapped to phases: 10 (100%)
+- Unmapped: 0
+
+**Phase breakdown:**
+- Phase 7 (V2 Model + TripWire): 4 requirements
+- Phase 8 (Writer API): 3 requirements
+- Phase 9 (Foreach Index Resume): 3 requirements
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after initial definition*
+*Last updated: 2026-01-27 after roadmap creation*
