@@ -662,7 +662,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // If no threadIds but resourceId is provided, get all threads for the resource
       if (effectiveThreadIds.length === 0 && hasResourceId) {
-        const resourceThreads = await this.listThreadsByResourceId({ resourceId: resourceId! });
+        const resourceThreads = await this.listThreads({ filter: { resourceId: resourceId! } });
         effectiveThreadIds = resourceThreads.threads.map(t => t.id);
       }
 

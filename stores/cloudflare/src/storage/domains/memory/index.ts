@@ -819,7 +819,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     // If no threadIds provided but resourceId is, fetch all threads for the resource
     let effectiveThreadIds = threadIds;
     if (effectiveThreadIds.length === 0 && hasResourceId) {
-      const resourceThreads = await this.listThreadsByResourceId({ resourceId: resourceId! });
+      const resourceThreads = await this.listThreads({ filter: { resourceId: resourceId! } });
       effectiveThreadIds = resourceThreads.threads.map(t => t.id);
       if (effectiveThreadIds.length === 0) {
         // No threads for this resource, return empty with pagination info

@@ -36,6 +36,9 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   });
   const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
 
+  // Debug: log OM status
+  console.log('[AgentMemory] OM Status:', { omStatus, isOMEnabled, agentId, threadId });
+
   // Get memory search hook
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
     agentId: agentId || '',
