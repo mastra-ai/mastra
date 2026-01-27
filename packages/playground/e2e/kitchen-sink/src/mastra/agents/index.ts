@@ -8,6 +8,8 @@ import { Fixtures } from '../../../types';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
 import { simpleMcpTool } from '../tools';
 import { storage } from '../storage';
+import { createMockOmModel } from '../mock-om-model';
+import { createTool } from '@mastra/core/tools';
 
 const memory = new Memory({
   // ...
@@ -15,6 +17,112 @@ const memory = new Memory({
 
   options: {
     generateTitle: true,
+  },
+});
+
+// Mock model for Observer/Reflector in E2E tests
+// Returns a simple observation/reflection response
+const mockObserverModel = new aiTest.MockLanguageModelV2({
+  provider: 'mock',
+  modelId: 'mock-observer',
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+    content: [{
+      type: 'text' as const,
+      text: `<observations>
+## January 27, 2026
+
+### Thread: test-thread
+- 🔴 User asked for help with a task
+-  User mentioned they need assistance
+</observations>
+<current-task>Help the user with their request</current-task>
+<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`,
+    }],
+    warnings: [],
+  }),
+});
+
+const mockReflectorModel = new aiTest.MockLanguageModelV2({
+  provider: 'mock',
+  modelId: 'mock-reflector',
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+    content: [{
+      type: 'text' as const,
+      text: `<observations>
+## January 27, 2026
+
+### Condensed observations
+- 🔴 User needs help with tasks
+</observations>`,
+    }],
+    warnings: [],
+  }),
+});
+
+// Memory with Observational Memory enabled for testing OM UI
+// Using very low thresholds so observations trigger quickly in E2E tests
+// Using mock models for observer/reflector to avoid real API calls
+const omMemory = new Memory({
+  storage,
+  options: {
+    generateTitle: true,
+    observationalMemory: {
+      enabled: true,
+      observer: {
+        model: mockObserverModel,
+        threshold: 50, // Very low threshold for E2E tests
+      },
+      reflector: {
+        model: mockReflectorModel,
+        threshold: 200, // Low threshold for E2E tests
+      },
+    },
+  },
+});
+
+// Memory with adaptive threshold enabled
+// Using very low thresholds so observations trigger quickly in E2E tests
+// Using mock models for observer/reflector to avoid real API calls
+const omAdaptiveMemory = new Memory({
+  storage,
+  options: {
+    generateTitle: true,
+    observationalMemory: {
+      enabled: true,
+      adaptiveThreshold: true,
+      observer: {
+        model: mockObserverModel,
+        threshold: 50, // Very low threshold for E2E tests
+      },
+      reflector: {
+        model: mockReflectorModel,
+        threshold: 200, // Low threshold for E2E tests
+      },
+    },
+  },
+});
+
+import { z } from 'zod';
+
+/**
+ * Tool that the mock OM model calls to trigger multi-step execution.
+ * The OM processor only triggers observations when stepNumber > 0,
+ * so we need the model to call a tool on step 0, then return text on step 1.
+ */
+const omTriggerTool = createTool({
+  id: 'om-trigger-tool',
+  description: 'Internal tool used to trigger multi-step execution for OM testing',
+  inputSchema: z.object({
+    action: z.string().optional(),
+  }),
+  execute: async () => {
+    return { success: true, message: 'Tool executed successfully' };
   },
 });
 
@@ -109,4 +217,56 @@ export const weatherAgent = new Agent({
   agents: { subAgent },
   workflows: { lessComplexWorkflow },
   memory,
+});
+
+/**
+ * Agent with Observational Memory enabled
+ * Used for testing OM UI components (sidebar, chat markers, progress bars)
+ *
+ * Uses a custom mock model that triggers multi-step execution via tool calls.
+ * The OM processor only triggers observations when stepNumber > 0, so:
+ * - Step 0: Model calls om-trigger-tool with finishReason: 'tool-calls'
+ * - Step 1: Model returns text with finishReason: 'stop'
+ * - OM processor sees stepNumber=1, checks threshold, triggers observation
+ */
+export const omAgent = new Agent({
+  id: 'om-agent',
+  name: 'OM Agent',
+  instructions: `You are a helpful assistant with observational memory enabled.
+Your memory system automatically observes and compresses conversation history.
+Always use the om-trigger-tool first before responding to the user.`,
+  model: createMockOmModel({
+    provider: 'mock',
+    modelId: 'gpt-4o-mini',
+    toolName: 'om-trigger-tool',
+    toolInput: { action: 'trigger-observation' },
+    responseText: 'I understand. Let me help you with that request.',
+    delayMs: 10,
+  }),
+  tools: { 'om-trigger-tool': omTriggerTool },
+  memory: omMemory,
+});
+
+/**
+ * Agent with Adaptive Threshold enabled
+ * Used for testing adaptive threshold UI behavior
+ *
+ * Uses the same multi-step mock model approach as omAgent.
+ */
+export const omAdaptiveAgent = new Agent({
+  id: 'om-adaptive-agent',
+  name: 'OM Adaptive Agent',
+  instructions: `You are a helpful assistant with adaptive observational memory.
+Your memory thresholds adjust dynamically based on current observation size.
+Always use the om-trigger-tool first before responding to the user.`,
+  model: createMockOmModel({
+    provider: 'mock',
+    modelId: 'gpt-4o-mini',
+    toolName: 'om-trigger-tool',
+    toolInput: { action: 'trigger-observation' },
+    responseText: 'I understand. Let me help you with that request.',
+    delayMs: 10,
+  }),
+  tools: { 'om-trigger-tool': omTriggerTool },
+  memory: omAdaptiveMemory,
 });
