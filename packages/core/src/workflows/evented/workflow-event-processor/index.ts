@@ -1213,6 +1213,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths[suspendedStep.id] = executionPath;
       }
 
+      // Extract resume labels from suspend payload metadata
+      const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
+        prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
+
       // Persist state to snapshot context before suspending
       // We use a special '__state' key to store state at the context level
       await workflowsStore?.updateWorkflowResults({
@@ -1230,6 +1234,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           status: 'suspended',
           result: prevResult,
           suspendedPaths,
+          resumeLabels,
         },
       });
 

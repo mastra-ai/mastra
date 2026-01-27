@@ -394,6 +394,7 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
 /**

@@ -8,7 +8,7 @@ import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
-import type { InnerOutput, LoopConditionFunction, Step } from '../step';
+import type { InnerOutput, LoopConditionFunction, Step, SuspendOptions } from '../step';
 import type { StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
@@ -109,7 +109,7 @@ export class StepExecutor extends MastraBase {
             suspendData: suspendDataToUse,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
-            suspend: async (suspendPayload: unknown): Promise<InnerOutput> => {
+            suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
               const { suspendData, validationError } = await validateStepSuspendData({
                 suspendData: suspendPayload,
                 step,
@@ -118,7 +118,29 @@ export class StepExecutor extends MastraBase {
               if (validationError) {
                 throw validationError;
               }
-              suspended = { payload: { ...suspendData, __workflow_meta: { runId, path: [step.id] } } };
+              // Build resume labels if provided
+              const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+              if (suspendOptions?.resumeLabel) {
+                const labels = Array.isArray(suspendOptions.resumeLabel)
+                  ? suspendOptions.resumeLabel
+                  : [suspendOptions.resumeLabel];
+                for (const label of labels) {
+                  resumeLabels[label] = {
+                    stepId: step.id,
+                    foreachIndex: params.foreachIdx,
+                  };
+                }
+              }
+              suspended = {
+                payload: {
+                  ...suspendData,
+                  __workflow_meta: {
+                    runId,
+                    path: [step.id],
+                    resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
+                  },
+                },
+              };
             },
             bail: (result: any): InnerOutput => {
               bailed = { payload: result };

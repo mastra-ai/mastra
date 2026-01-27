@@ -1331,6 +1331,7 @@ export class EventedRun<
         ]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -1351,13 +1352,27 @@ export class EventedRun<
       throw new Error('This workflow run was not suspended');
     }
 
+    // Resolve label to step path if provided
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+
+    // Validate label exists if provided
+    if (params.label && !snapshotResumeLabel) {
+      const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
+      throw new Error(
+        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
+      );
+    }
+
+    // Label takes precedence over step param
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
-    if (params.step) {
-      if (typeof params.step === 'string') {
-        steps = params.step.split('.');
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
       } else {
-        steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
           typeof step === 'string' ? step : step?.id,
         );
       }
