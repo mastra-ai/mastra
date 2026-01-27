@@ -98,8 +98,24 @@ export const mastraResourcesTable = defineTable(buildTableFromSchema(TABLE_SCHEM
 /**
  * Workflow snapshots table - stores workflow execution state
  * Schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT]
+ *
+ * Note: The `id` field is added explicitly for Convex's by_record_id index.
+ * The core schema uses (workflow_name, run_id) as a composite key, but Convex
+ * requires a single-column index. The id value is generated at runtime as
+ * `${workflow_name}-${run_id}` by the Convex storage adapter's normalizeRecord().
+ *
+ * Fields are defined explicitly (not using buildTableFromSchema) because TypeScript's
+ * type inference doesn't work well with spread operators in Convex's defineTable.
  */
-export const mastraWorkflowSnapshotsTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT]))
+export const mastraWorkflowSnapshotsTable = defineTable({
+  id: v.optional(v.string()), // Synthetic ID for Convex index, generated at runtime
+  workflow_name: v.string(),
+  run_id: v.string(),
+  resourceId: v.optional(v.string()),
+  snapshot: v.any(),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
   .index('by_record_id', ['id'])
   .index('by_workflow_run', ['workflow_name', 'run_id'])
   .index('by_workflow', ['workflow_name'])
