@@ -2,16 +2,20 @@ import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptio
 import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod/v3';
 import type { TracingPolicy } from '../../observability';
+import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../../schema/schema';
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 
-export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
-  ? z.infer<Output>
-  : Output extends JSONSchema7
-    ? unknown
-    : undefined;
+export type inferOutput<Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined> =
+  Output extends StandardSchemaWithJSON
+    ? InferStandardSchemaOutput<Output>
+    : Output extends ZodSchema
+      ? z.infer<Output>
+      : Output extends JSONSchema7
+        ? unknown
+        : undefined;
 
 // Tripwire result extensions
 export type TripwireProperties = {

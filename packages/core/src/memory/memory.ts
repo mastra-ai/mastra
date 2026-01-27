@@ -31,7 +31,7 @@ import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from 
 import type {
   SharedMemoryConfig,
   StorageThreadType,
-  MemoryConfig,
+  MemoryConfigInternal,
   MastraMessageV1,
   WorkingMemoryTemplate,
   MessageDeleteInput,
@@ -77,7 +77,7 @@ export const memoryDefaultOptions = {
 - **Projects**: 
 `,
   },
-} satisfies MemoryConfig;
+} satisfies MemoryConfigInternal;
 
 /**
  * Abstract base class for implementing conversation memory systems.
@@ -101,7 +101,7 @@ export abstract class MastraMemory extends MastraBase {
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
-  protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
+  protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
@@ -231,7 +231,7 @@ https://mastra.ai/en/docs/memory/overview`,
   public async getSystemMessage(_input: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     return null;
   }
@@ -241,7 +241,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any>> {
+  public listTools(_config?: MemoryConfigInternal): Record<string, ToolAction<any, any>> {
     return {};
   }
 
@@ -257,7 +257,7 @@ https://mastra.ai/en/docs/memory/overview`,
     return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
   }
 
-  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfigInternal): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const indexName = this.getEmbeddingIndexName(dimensions);
@@ -290,7 +290,7 @@ https://mastra.ai/en/docs/memory/overview`,
     return { indexName };
   }
 
-  public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
+  public getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
     if (config?.workingMemory && typeof config.workingMemory === 'object' && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
@@ -369,7 +369,7 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 
   /**
@@ -379,7 +379,7 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
-    memoryConfig?: MemoryConfig | undefined;
+    memoryConfig?: MemoryConfigInternal | undefined;
   }): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
@@ -392,7 +392,7 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   abstract recall(
     args: StorageListMessagesInput & {
-      threadConfig?: MemoryConfig;
+      threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
     },
   ): Promise<{ messages: MastraDBMessage[] }>;
@@ -415,7 +415,7 @@ https://mastra.ai/en/docs/memory/overview`,
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
@@ -457,7 +457,7 @@ https://mastra.ai/en/docs/memory/overview`,
   async addMessage(_params: {
     threadId: string;
     resourceId: string;
-    config?: MemoryConfig;
+    config?: MemoryConfigInternal;
     content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
     type: 'text' | 'tool-call' | 'tool-result';
@@ -491,7 +491,7 @@ https://mastra.ai/en/docs/memory/overview`,
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null>;
 
   /**
@@ -503,7 +503,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract getWorkingMemoryTemplate({
     memoryConfig,
   }: {
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
   abstract updateWorkingMemory({
@@ -515,7 +515,7 @@ https://mastra.ai/en/docs/memory/overview`,
     threadId: string;
     resourceId?: string;
     workingMemory: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void>;
 
   /**
@@ -532,7 +532,7 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId?: string;
     workingMemory: string;
     searchString?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }>;
 
   /**

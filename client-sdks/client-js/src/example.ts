@@ -12,8 +12,9 @@ import { MastraClient } from './client';
 
   try {
     const agent = client.getAgent('weatherAgent');
+    // @ts-ignore - example code: in practice, schema should be JSONSchema7 for client SDK
     const response = await agent.stream('what is the weather in new york?', {
-      // @ts-expect-error - TODO: fix this
+      // @ts-ignore - example code: in practice, schema should be JSONSchema7 for client SDK
       structuredOutput: {
         schema: z.object({
           weather: z.string(),

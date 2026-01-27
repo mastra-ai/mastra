@@ -45,7 +45,7 @@ export type MemoryConfigType =
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;
-  options: MemoryConfig;
+  options: MemoryConfigInternal;
 }
 
 export interface BenchmarkMetrics {

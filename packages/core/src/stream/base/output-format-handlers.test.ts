@@ -4,7 +4,6 @@ import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import z3 from 'zod/v3';
-import z4 from 'zod/v4';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
 import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
@@ -505,9 +504,9 @@ describe('output-format-handlers', () => {
 
   describe('zod v4 compatibility', () => {
     it('should validate zod v4 schema with detailed errors', async () => {
-      const schema = z4.object({
-        email: z4.string().email(),
-        score: z4.number().min(0).max(100),
+      const schema = z.object({
+        email: z.string().email(),
+        score: z.number().min(0).max(100),
       });
 
       const transformer = createObjectStreamTransformer({
@@ -550,9 +549,9 @@ describe('output-format-handlers', () => {
     });
 
     it('should successfully validate zod v4 schema', async () => {
-      const schema = z4.object({
-        username: z4.string(),
-        active: z4.boolean(),
+      const schema = z.object({
+        username: z.string(),
+        active: z.boolean(),
       });
 
       const transformer = createObjectStreamTransformer({
