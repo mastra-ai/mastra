@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { createWorkflow } from '../../../workflows';
 import type { PubSub } from '../../../events/pubsub';
-import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import type { Mastra } from '../../../mastra';
+import { createWorkflow } from '../../../workflows';
+import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { emitFinishEvent } from '../stream-adapter';
 import type {

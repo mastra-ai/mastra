@@ -1,19 +1,19 @@
-import type { JSONSchema7 } from 'json-schema';
-import type { LanguageModelUsage, ToolSet, StepResult } from '@internal/ai-sdk-v5';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2CallWarning,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
+import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
-import type { SerializedMessageListState } from '../message-list/state';
-import type { MemoryConfig } from '../../memory/types';
-import type { CoreTool } from '../../tools/types';
-import type { ChunkType } from '../../stream/types';
-import type { SaveQueueManager } from '../save-queue';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MemoryConfig } from '../../memory/types';
+import type { ChunkType } from '../../stream/types';
+import type { CoreTool } from '../../tools/types';
+import type { SerializedMessageListState } from '../message-list/state';
+import type { SaveQueueManager } from '../save-queue';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -113,6 +113,12 @@ export interface DurableAgenticWorkflowInput {
   state: SerializableDurableState;
   /** Message ID for the current generation */
   messageId: string;
+  /** Exported agent span data for observability (created before workflow starts) */
+  agentSpanData?: unknown;
+  /** Exported model_generation span data for observability (created before workflow starts) */
+  modelSpanData?: unknown;
+  /** Starting step index for continuation across iterations */
+  stepIndex?: number;
 }
 
 /**
@@ -149,6 +155,12 @@ export interface DurableLLMStepOutput {
   processorRetryFeedback?: string;
   /** Updated serializable state */
   state: SerializableDurableState;
+  /** Exported model_generation span data (only set when there are tool calls) */
+  modelSpanData?: unknown;
+  /** Exported model_step span data (only set when there are tool calls) */
+  stepSpanData?: unknown;
+  /** Step finish payload data for closing step span later */
+  stepFinishPayload?: unknown;
 }
 
 /**

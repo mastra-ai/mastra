@@ -5,9 +5,9 @@
  * HTTP URLs, and attachments in durable execution.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { DurableAgent } from '../durable-agent';
 

@@ -59,7 +59,14 @@ export function createDurableLLMMappingStep() {
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
     execute: async ({ inputData }) => {
-      const { llmOutput, toolResults, runId, agentId, messageId, state } = inputData as {
+      const {
+        llmOutput,
+        toolResults,
+        runId: _runId,
+        agentId: _agentId,
+        messageId,
+        state,
+      } = inputData as {
         llmOutput: DurableLLMStepOutput;
         toolResults: DurableToolCallOutput[];
         runId: string;

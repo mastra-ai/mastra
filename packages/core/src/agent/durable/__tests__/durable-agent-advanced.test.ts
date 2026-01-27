@@ -9,14 +9,14 @@
  * - Workflow state serialization
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
 import { MessageList } from '../../message-list';
+import { DurableAgent } from '../durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -48,7 +48,7 @@ function createTextModel(text: string) {
   });
 }
 
-function createJsonModel(jsonData: unknown) {
+function _createJsonModel(jsonData: unknown) {
   const jsonString = JSON.stringify(jsonData);
   return new MockLanguageModelV2({
     doStream: async () => ({

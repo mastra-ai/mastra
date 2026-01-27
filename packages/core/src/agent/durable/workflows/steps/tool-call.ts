@@ -1,14 +1,14 @@
 import { z } from 'zod';
-import { createStep } from '../../../../workflows';
 import type { PubSub } from '../../../../events/pubsub';
-import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { Mastra } from '../../../../mastra';
+import { createStep } from '../../../../workflows';
+import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { DurableStepIds } from '../../constants';
-import { emitChunkEvent, emitSuspendedEvent } from '../../stream-adapter';
+import type { RunRegistry } from '../../run-registry';
+import { emitSuspendedEvent } from '../../stream-adapter';
+import type { DurableToolCallInput, SerializableDurableOptions } from '../../types';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
-import type { RunRegistry } from '../../run-registry';
-import type { DurableToolCallInput, DurableToolCallOutput, SerializableDurableOptions } from '../../types';
 
 /**
  * Input schema for the durable tool call step
@@ -68,7 +68,7 @@ export interface DurableToolCallStepOptions {
  * Tool suspension is handled via workflow suspend/resume mechanism.
  */
 export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
-  const { runRegistry, context } = options;
+  const { runRegistry: _runRegistry, context } = options;
 
   return createStep({
     id: DurableStepIds.TOOL_CALL,

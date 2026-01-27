@@ -5,21 +5,21 @@
  * including the workflow execution, pubsub event emission, and callbacks.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import type { AgentStreamEvent, AgentChunkEventData } from '../types';
+import { DurableAgent } from '../durable-agent';
+import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-function createTextStreamModel(text: string, options?: { delay?: number }) {
+function createTextStreamModel(text: string, _options?: { delay?: number }) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -59,7 +59,7 @@ function createMultiChunkStreamModel(chunks: string[]) {
   });
 }
 
-function createToolCallModel(toolName: string, args: Record<string, unknown>) {
+function _createToolCallModel(toolName: string, args: Record<string, unknown>) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -83,7 +83,7 @@ function createToolCallModel(toolName: string, args: Record<string, unknown>) {
   });
 }
 
-function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
+function _createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
@@ -225,7 +225,7 @@ describe('DurableAgent streaming execution', () => {
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
       const mockModel = createTextStreamModel('Complete response');
-      let finishData: any = null;
+      let _finishData: any = null;
 
       const agent = new DurableAgent({
         id: 'finish-callback-agent',
@@ -235,9 +235,9 @@ describe('DurableAgent streaming execution', () => {
         pubsub,
       });
 
-      const { runId, cleanup } = await agent.stream('Test', {
+      const { runId: _runId, cleanup } = await agent.stream('Test', {
         onFinish: data => {
-          finishData = data;
+          _finishData = data;
         },
       });
 
@@ -254,7 +254,7 @@ describe('DurableAgent streaming execution', () => {
         },
       });
 
-      let errorReceived: Error | null = null;
+      let _errorReceived: Error | null = null;
 
       const agent = new DurableAgent({
         id: 'error-callback-agent',
@@ -266,7 +266,7 @@ describe('DurableAgent streaming execution', () => {
 
       const { cleanup } = await agent.stream('Test', {
         onError: error => {
-          errorReceived = error;
+          _errorReceived = error;
         },
       });
 
@@ -504,7 +504,7 @@ describe('DurableAgent error handling', () => {
       },
     });
 
-    let errorReceived: Error | null = null;
+    let _errorReceived: Error | null = null;
 
     const agent = new DurableAgent({
       id: 'error-model-agent',
@@ -516,7 +516,7 @@ describe('DurableAgent error handling', () => {
 
     const { cleanup } = await agent.stream('Test', {
       onError: error => {
-        errorReceived = error;
+        _errorReceived = error;
       },
     });
 

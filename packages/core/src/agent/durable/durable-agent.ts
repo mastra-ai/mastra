@@ -296,7 +296,7 @@ export class DurableAgent<
     // The workflow will emit events to pubsub as it executes
     this.#executeWorkflow(runId, workflowInput).catch(error => {
       // Emit error to pubsub so the stream receives it
-      this.#emitError(runId, error);
+      void this.#emitError(runId, error);
     });
 
     // 6. Create cleanup function
@@ -403,7 +403,7 @@ export class DurableAgent<
         const run = await this.#workflow!.createRun({ runId });
         await run.resume({ resumeData });
       })().catch((error: Error) => {
-        this.#emitError(runId, error);
+        void this.#emitError(runId, error);
       });
     }
 

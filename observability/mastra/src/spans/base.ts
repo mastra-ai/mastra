@@ -1,3 +1,4 @@
+import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -14,9 +15,9 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  TracingPolicy,
 } from '@mastra/core/observability';
 
-import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
@@ -116,6 +117,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public endTime?: Date;
   public isEvent: boolean;
   public isInternal: boolean;
+  public tracingPolicy?: TracingPolicy;
   public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
@@ -153,7 +155,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
-    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+    // Inherit tracingPolicy from parent if not explicitly provided
+    const effectiveTracingPolicy = options.tracingPolicy ?? options.parent?.tracingPolicy;
+    this.isInternal = isSpanInternal(this.type, effectiveTracingPolicy?.internal);
+    // Store tracingPolicy for propagation to child spans
+    this.tracingPolicy = effectiveTracingPolicy;
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;

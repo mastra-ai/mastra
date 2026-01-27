@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { RunRegistry, ExtendedRunRegistry } from '../run-registry';
 import { MessageList } from '../../message-list';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
+import { DurableAgent } from '../durable-agent';
+import { RunRegistry, ExtendedRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -615,8 +615,12 @@ describe('createDurableAgentStream', () => {
   });
 
   it('should invoke callbacks for different event types', async () => {
-    const { createDurableAgentStream, emitChunkEvent, emitStepFinishEvent, emitFinishEvent } =
-      await import('../stream-adapter');
+    const {
+      createDurableAgentStream,
+      emitChunkEvent,
+      emitStepFinishEvent,
+      emitFinishEvent: _emitFinishEvent,
+    } = await import('../stream-adapter');
 
     const runId = 'test-run-callbacks';
     const chunks: any[] = [];

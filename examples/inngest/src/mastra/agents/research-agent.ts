@@ -62,10 +62,10 @@ const webSearchTool = createTool({
   },
 });
 
-// Create the base agent
-const researchAgentBase = new Agent({
-  id: 'research-agent',
-  name: 'Research Agent',
+// Create the base agent (also exported for trace comparison)
+export const researchAgentRegular = new Agent({
+  id: 'research-agent-regular',
+  name: 'Research Agent (Regular)',
   model: 'openai/gpt-4o',
   instructions: `You are a research assistant that helps users find and summarize information.
 
@@ -80,8 +80,10 @@ Be thorough but concise. Cite your sources when presenting findings.`,
   },
 });
 
-// Wrap with durable execution via Inngest
+// Wrap with durable execution via Inngest (with custom id/name)
 export const researchAgent = createInngestAgent({
-  agent: researchAgentBase,
+  agent: researchAgentRegular,
+  id: 'research-agent',
+  name: 'Research Agent',
   inngest,
 });

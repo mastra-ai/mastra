@@ -52,6 +52,8 @@ import type {
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { PubSub } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
@@ -71,8 +73,14 @@ export interface CreateInngestAgentOptions {
   agent: Agent<any, any, any>;
   /** Inngest client instance */
   inngest: Inngest;
+  /** Optional ID override (defaults to agent.id) */
+  id?: string;
+  /** Optional name override (defaults to agent.name) */
+  name?: string;
   /** Optional PubSub override (defaults to InngestPubSub) */
   pubsub?: PubSub;
+  /** Mastra instance for observability (optional, set automatically when registered with Mastra) */
+  mastra?: Mastra;
 }
 
 /**
@@ -199,6 +207,13 @@ export interface InngestAgent<TOutput = undefined> {
    * @internal
    */
   getDurableWorkflows(): Workflow<any, any, any, any, any, any, any>[];
+
+  /**
+   * Set the Mastra instance for observability.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra(mastra: Mastra): void;
 }
 
 // =============================================================================
@@ -231,7 +246,14 @@ export interface InngestAgent<TOutput = undefined> {
  * ```
  */
 export function createInngestAgent<TOutput = undefined>(options: CreateInngestAgentOptions): InngestAgent<TOutput> {
-  const { agent, inngest, pubsub: customPubsub } = options;
+  const { agent, inngest, id: idOverride, name: nameOverride, pubsub: customPubsub, mastra: mastraOption } = options;
+
+  // Use provided id/name or fall back to agent.id/agent.name
+  const agentId = idOverride ?? agent.id;
+  const agentName = nameOverride ?? agent.name;
+
+  // Track mastra instance - can be set later when registered with Mastra
+  let mastra: Mastra | undefined = mastraOption;
 
   // Create the durable workflow for this agent
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
@@ -243,7 +265,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   /**
    * Trigger the workflow via Inngest event
    */
-  async function triggerWorkflow(runId: string, workflowInput: any): Promise<void> {
+  async function triggerWorkflow(
+    runId: string,
+    workflowInput: any,
+    tracingOptions?: { traceId: string; parentSpanId: string },
+  ): Promise<void> {
     const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}`;
 
     await inngest.send({
@@ -253,6 +279,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         resourceId: workflowInput.state?.resourceId,
         requestContext: {},
+        tracingOptions,
       },
     });
   }
@@ -267,11 +294,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Return the InngestAgent object
   const inngestAgent: InngestAgent<TOutput> = {
     get id() {
-      return agent.id;
+      return agentId;
     },
 
     get name() {
-      return agent.name;
+      return agentName;
     },
 
     get agent() {
@@ -294,6 +321,53 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       const { runId, messageId, workflowInput, threadId, resourceId } = preparation;
 
+      // Override agentId and agentName in workflowInput with the durable agent's values
+      workflowInput.agentId = agentId;
+      workflowInput.agentName = agentName;
+
+      // 2. Create AGENT_RUN span BEFORE the workflow starts
+      // This ensures the agent_run is the root of the trace, not the workflow
+      const observability = mastra?.observability?.getSelectedInstance({
+        requestContext: streamOptions?.requestContext,
+      });
+      const agentSpan = observability?.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: `agent run: '${agentId}'`,
+        entityType: EntityType.AGENT,
+        entityId: agentId,
+        entityName: agentName,
+        input: workflowInput.messageListState,
+        metadata: {
+          runId,
+          threadId,
+          resourceId,
+        },
+      });
+      // Export span data so it can be passed to the workflow
+      const agentSpanData = agentSpan?.exportSpan();
+
+      // 3. Create MODEL_GENERATION span BEFORE the workflow starts
+      // This ensures ONE model_generation span contains all steps (like regular agents)
+      const modelSpan = agentSpan?.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: `llm: '${workflowInput.modelConfig.modelId}'`,
+        input: { messages: workflowInput.messageListState },
+        attributes: {
+          model: workflowInput.modelConfig.modelId,
+          provider: workflowInput.modelConfig.provider,
+          streaming: true,
+          parameters: {
+            temperature: workflowInput.options?.temperature,
+          },
+        },
+      });
+      const modelSpanData = modelSpan?.exportSpan();
+
+      // Add span data to workflow input
+      workflowInput.agentSpanData = agentSpanData;
+      workflowInput.modelSpanData = modelSpanData;
+      workflowInput.stepIndex = 0;
+
       // 2. Create the durable agent stream (subscribes to pubsub)
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
         pubsub,
@@ -314,9 +388,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
 
       // 3. Trigger the workflow via Inngest (async, don't await)
+      // Pass tracing options so workflow spans are children of the agent span
+      const tracingOptions = agentSpanData
+        ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
+        : undefined;
+
       // Small delay to allow subscription to establish
       setTimeout(() => {
-        void triggerWorkflow(runId, workflowInput).catch(error => {
+        void triggerWorkflow(runId, workflowInput, tracingOptions).catch(error => {
           void emitError(runId, error);
         });
       }, 100);
@@ -392,6 +471,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         requestContext: prepareOptions?.requestContext,
       });
 
+      // Override with durable agent's id/name
+      preparation.workflowInput.agentId = agentId;
+      preparation.workflowInput.agentName = agentName;
+
       return {
         runId: preparation.runId,
         messageId: preparation.messageId,
@@ -403,6 +486,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     getDurableWorkflows() {
       return [workflow];
+    },
+
+    __setMastra(mastraInstance: Mastra) {
+      mastra = mastraInstance;
     },
   };
 

@@ -5,15 +5,15 @@
  * including tool calls, tool results, multi-step execution, and tool approval.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
+import '../constants';
 import { DurableAgent } from '../durable-agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import type { AgentStreamEvent } from '../types';
+import '../types';
 
 // ============================================================================
 // Helper Functions
@@ -67,7 +67,7 @@ function createMultiToolCallModel(toolCalls: Array<{ toolName: string; args: Rec
   });
 }
 
-function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
+function _createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
   return new MockLanguageModelV2({
     doStream: async () => {

@@ -1,27 +1,21 @@
-import type { CoreTool } from '../../tools/types';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { IMastraLogger } from '../../logger';
 import type { MastraMemory } from '../../memory/memory';
-import type { MemoryConfig } from '../../memory/types';
+import type { MemoryConfig as _MemoryConfig } from '../../memory/types';
 import type { RequestContext } from '../../request-context';
+import type { CoreTool } from '../../tools/types';
+import type { Agent } from '../agent';
+import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { IMastraLogger } from '../../logger';
-import type { Agent } from '../agent';
-import type { AgentExecutionOptions } from '../agent.types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
-import {
-  createWorkflowInput,
-  serializeToolsMetadata,
-  serializeModelConfig,
-  serializeDurableState,
-  serializeDurableOptions,
-} from './utils/serialize-state';
+import { createWorkflowInput } from './utils/serialize-state';
 
 /**
  * Result from the preparation phase
  */
-export interface PreparationResult<OUTPUT = undefined> {
+export interface PreparationResult<_OUTPUT = undefined> {
   /** Unique run identifier */
   runId: string;
   /** Message ID for this generation */

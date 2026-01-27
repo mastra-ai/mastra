@@ -466,6 +466,12 @@ export interface DurableAgentLike {
    * Called during agent registration to auto-register durable execution workflows.
    */
   getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
+  /**
+   * Set the Mastra instance for observability and other services.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra?(mastra: any): void;
 }
 
 /**

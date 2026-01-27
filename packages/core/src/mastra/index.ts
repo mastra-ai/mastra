@@ -320,9 +320,6 @@ export class Mastra<
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
-  // Map of agent IDs to their durable wrappers (e.g., InngestAgent)
-  // When a durable agent is registered, the wrapper is stored here so getAgentById can return it
-  #durableAgentWrappers: Map<string, DurableAgentLike> = new Map();
 
   get pubsub() {
     return this.#pubsub;
@@ -692,13 +689,6 @@ export class Mastra<
    * ```
    */
   public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName] {
-    // Check for durable agent wrapper first - if one exists, return it instead of the underlying agent
-    // This ensures calls to agent.stream() go through the durable execution engine (e.g., Inngest)
-    const durableWrapper = this.#durableAgentWrappers.get(String(id));
-    if (durableWrapper) {
-      return durableWrapper as unknown as TAgents[TAgentName];
-    }
-
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
@@ -1279,12 +1269,31 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Store the durable wrapper by agent ID (not key) so getAgentById can find it
-      // This ensures calls to agent.stream() go through the durable execution engine
-      this.#durableAgentWrappers.set(durableAgent.id, durableAgent);
+      // Check if already registered
+      const agents = this.#agents as Record<string, Agent<any>>;
+      if (agents[agentKey]) {
+        const logger = this.getLogger();
+        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+        return;
+      }
 
-      // Register the underlying agent (this handles initialization and processor workflows)
-      this.addAgent(underlyingAgent, agentKey);
+      // Set the Mastra instance on the durable agent for observability
+      durableAgent.__setMastra?.(this);
+
+      // Initialize the underlying agent (needed for tools, memory, etc.)
+      underlyingAgent.__setLogger(this.#logger);
+      underlyingAgent.__registerMastra(this);
+      underlyingAgent.__registerPrimitives({
+        logger: this.getLogger(),
+        storage: this.getStorage(),
+        agents: agents,
+        tts: this.#tts,
+        vectors: this.#vectors,
+      });
+
+      // Store the durable wrapper in #agents (not the underlying agent)
+      // This ensures getAgentById returns the wrapper so .stream() uses durable execution
+      agents[agentKey] = durableAgent as unknown as Agent<any>;
 
       // Register durable workflows if the wrapper provides them
       const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];

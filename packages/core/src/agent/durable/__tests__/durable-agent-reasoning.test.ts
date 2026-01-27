@@ -6,9 +6,9 @@
  * work correctly through durable execution.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { DurableAgent } from '../durable-agent';
 
@@ -100,7 +100,7 @@ function createTextModel(text: string) {
  * Creates a mock model with multiple text chunks (interleaved style)
  */
 function createInterleavedModel(chunks: string[]) {
-  const textChunks = chunks.flatMap((text, index) => [{ type: 'text-delta' as const, id: 'text-1', delta: text }]);
+  const textChunks = chunks.flatMap(text => [{ type: 'text-delta' as const, id: 'text-1', delta: text }]);
 
   return new MockLanguageModelV2({
     doStream: async () => ({

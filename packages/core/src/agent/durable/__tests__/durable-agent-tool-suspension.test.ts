@@ -5,9 +5,9 @@
  * Validates that tools can suspend execution and be resumed with data.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
@@ -80,7 +80,7 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
 /**
  * Creates a simple text model
  */
-function createTextModel(text: string) {
+function _createTextModel(text: string) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([

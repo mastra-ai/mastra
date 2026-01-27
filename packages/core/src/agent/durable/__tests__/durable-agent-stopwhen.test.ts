@@ -5,9 +5,9 @@
  * Validates that stopWhen can be used to stop execution based on step results.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
@@ -162,7 +162,7 @@ describe('DurableAgent stopWhen callback', () => {
         pubsub,
       });
 
-      const stopWhen = vi.fn().mockReturnValue(false);
+      const _stopWhen = vi.fn().mockReturnValue(false);
 
       // Note: stopWhen is typically used with stream, not prepare
       // but we verify the options handling

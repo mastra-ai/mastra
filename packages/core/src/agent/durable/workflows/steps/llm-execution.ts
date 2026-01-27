@@ -1,19 +1,20 @@
-import { z } from 'zod';
-import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import { createStep } from '../../../../workflows';
+import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
-import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
-import type { MastraDBMessage } from '../../../message-list';
 import type { Mastra } from '../../../../mastra';
-import { isSupportedLanguageModel } from '../../../utils';
+import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
-import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import { createStep } from '../../../../workflows';
+import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
+import type { MastraDBMessage } from '../../../message-list';
+import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { emitChunkEvent, emitStepStartEvent, emitErrorEvent } from '../../stream-adapter';
-import { resolveRuntimeDependencies } from '../../utils/resolve-runtime';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
+import { resolveRuntimeDependencies } from '../../utils/resolve-runtime';
 
 /**
  * Input schema for the durable LLM execution step
@@ -33,6 +34,12 @@ const durableLLMInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // Agent span data for model span parenting
+  agentSpanData: z.any().optional(),
+  // Model span data (ONE span for entire agent run, created before workflow)
+  modelSpanData: z.any().optional(),
+  // Step index for continuation (step: 0, 1, 2, ...)
+  stepIndex: z.number().optional(),
 });
 
 /**
@@ -58,6 +65,8 @@ const durableLLMOutputSchema = z.object({
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   state: z.any(),
+  // Step index used in this execution (for tracking)
+  stepIndex: z.number().optional(),
 });
 
 /**
@@ -81,7 +90,7 @@ export interface DurableLLMExecutionStepOptions {
  * flows through the workflow input/output, and non-serializable
  * dependencies are resolved at execution time.
  */
-export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepOptions) {
+export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStepOptions) {
   return createStep({
     id: DurableStepIds.LLM_EXECUTION,
     inputSchema: durableLLMInputSchema,
@@ -121,7 +130,32 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
       // 4. Prepare tools - cast through unknown as CoreTool and ToolSet are structurally compatible at runtime
       const toolSet = tools as unknown as ToolSet;
 
-      // 5. Track state during streaming
+      // 5. Rebuild MODEL_GENERATION span from passed data
+      // For durable execution, ONE model_generation span is created BEFORE the workflow starts
+      // and passed through each iteration. This ensures all steps are children of the same span.
+      const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+
+      // modelSpanData is passed through from the workflow input (created in create-inngest-agent.ts)
+      const inputModelSpanData = (inputData as any).modelSpanData as
+        | ExportedSpan<SpanType.MODEL_GENERATION>
+        | undefined;
+      const modelSpan = inputModelSpanData
+        ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
+        : undefined;
+
+      // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
+      const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
+
+      // Set the step index for continuation (step: 0, 1, 2, ...)
+      // This ensures step numbering continues across agentic loop iterations
+      const stepIndex = (inputData as any).stepIndex ?? 0;
+      modelSpanTracker?.setStepIndex(stepIndex);
+
+      // Enable defer mode - step-finish won't auto-close the step span
+      // This allows us to export the step span and close it later after tool execution
+      modelSpanTracker?.setDeferStepClose(true);
+
+      // 6. Track state during streaming
       let warnings: any[] = [];
       let request: any = {};
       let rawResponse: any = {};
@@ -131,7 +165,10 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
       let usage: any = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       let responseMetadata: any = {};
 
-      // 6. Execute LLM call
+      // 7. Start MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
+      // 8. Execute LLM call
       const modelResult = execute({
         runId,
         model,
@@ -151,7 +188,7 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
 
           // Emit step-start via pubsub
           if (pubsub) {
-            emitStepStartEvent(pubsub, runId, {
+            void emitStepStartEvent(pubsub, runId, {
               stepId: DurableStepIds.LLM_EXECUTION,
               request,
               warnings,
@@ -160,7 +197,7 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
         },
       });
 
-      // 7. Create output stream to process chunks
+      // 9. Create output stream to process chunks
       // Note: We cast through any to handle the web/node ReadableStream type mismatch
       const outputStream = new MastraModelOutput({
         model: {
@@ -173,14 +210,18 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
         messageId,
         options: {
           runId,
-          tracingContext,
+          tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
           requestContext,
         },
       });
 
-      // 8. Process the stream and emit chunks via pubsub
+      // 10. Process the stream and emit chunks via pubsub
+      // Wrap the base stream with ModelSpanTracker to create MODEL_STEP and MODEL_CHUNK spans
+      const baseStream = outputStream._getBaseStream();
+      const trackedStream = modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
+
       try {
-        for await (const chunk of outputStream._getBaseStream()) {
+        for await (const chunk of trackedStream) {
           if (!chunk) continue;
 
           // Emit chunk via pubsub for streaming to client
@@ -251,9 +292,16 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
       } catch (error) {
         logger?.error?.('Error processing LLM stream', { error, runId });
 
+        // Record error in MODEL_GENERATION span via tracker
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        if (modelSpanTracker) {
+          modelSpanTracker.reportGenerationError({ error: errorObj });
+        } else if (modelSpan) {
+          modelSpan.error({ error: errorObj });
+        }
+
         // Emit error event so client stream closes properly
         if (pubsub) {
-          const errorObj = error instanceof Error ? error : new Error(String(error));
           try {
             await emitErrorEvent(pubsub, runId, errorObj);
           } catch {
@@ -269,6 +317,13 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
       if (streamError) {
         logger?.error?.('Stream captured error', { error: streamError, runId });
 
+        // Record error in MODEL_GENERATION span via tracker
+        if (modelSpanTracker) {
+          modelSpanTracker.reportGenerationError({ error: streamError });
+        } else if (modelSpan) {
+          modelSpan.error({ error: streamError });
+        }
+
         // Emit error event so client stream closes properly
         if (pubsub) {
           try {
@@ -281,7 +336,7 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
         throw streamError;
       }
 
-      // 9. Add assistant response to message list
+      // 11. Add assistant response to message list
       if (textDeltas.length > 0 || toolCalls.length > 0) {
         const parts: any[] = [];
 
@@ -317,10 +372,16 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
         messageList.add(assistantMessage, 'response');
       }
 
-      // 10. Determine if we should continue (has tool calls)
+      // 12. Determine if we should continue (has tool calls)
       const isContinued = toolCalls.length > 0 && finishReason !== 'stop';
+      const hasToolCalls = toolCalls.length > 0;
 
-      // 11. Build output
+      // 13. Export spans if there are tool calls (so tools can be children of model_step)
+      // Don't end the spans yet - they will be ended after tool execution
+      const stepSpanData = hasToolCalls ? modelSpanTracker?.exportCurrentStep() : undefined;
+      const stepFinishPayload = hasToolCalls ? modelSpanTracker?.getPendingStepFinishPayload() : undefined;
+
+      // 14. Build output
       const output: DurableLLMStepOutput = {
         messageListState: messageList.serialize(),
         toolCalls,
@@ -341,7 +402,38 @@ export function createDurableLLMExecutionStep(options?: DurableLLMExecutionStepO
           request,
         },
         state: typedInput.state,
+        // Pass span data so tool calls can be children of model_step
+        modelSpanData: hasToolCalls ? modelSpan?.exportSpan?.() : undefined,
+        stepSpanData,
+        stepFinishPayload,
       };
+
+      // 15. End step span only if there are NO tool calls
+      // If there are tool calls, step span will be ended after tool execution
+      // NOTE: We NEVER close the model span here - it stays open for the entire agent run
+      // and is closed in map-final-output after the agentic loop completes
+      if (!hasToolCalls) {
+        // Close the step span with usage/finish info
+        const pendingPayload = modelSpanTracker?.getPendingStepFinishPayload() as any;
+        if (pendingPayload) {
+          // End step span using the pending payload
+          const stepSpan = modelSpanTracker?.exportCurrentStep();
+          if (stepSpan && observability) {
+            const rebuiltStepSpan = observability.rebuildSpan(stepSpan);
+            rebuiltStepSpan?.end({
+              output: {
+                text: textDeltas.join(''),
+                toolCalls: [],
+              },
+              attributes: {
+                usage: pendingPayload.output?.usage,
+                finishReason: pendingPayload.stepResult?.reason,
+                isContinued: pendingPayload.stepResult?.isContinued,
+              },
+            });
+          }
+        }
+      }
 
       return output;
     },

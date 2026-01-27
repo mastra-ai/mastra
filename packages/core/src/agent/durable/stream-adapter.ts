@@ -2,8 +2,8 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import { MastraModelOutput } from '../../stream/base/output';
-import { MessageList } from '../message-list';
 import type { ChunkType } from '../../stream/types';
+import { MessageList } from '../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import type {
   AgentStreamEvent,

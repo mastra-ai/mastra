@@ -5,9 +5,9 @@
  * Validates that structuredOutput option works correctly through the durable workflow.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { DurableAgent } from '../durable-agent';

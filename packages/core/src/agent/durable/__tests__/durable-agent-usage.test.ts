@@ -5,12 +5,12 @@
  * including accumulated usage across multiple steps.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { z } from 'zod';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { createTool } from '../../../tools';
+import '../../../tools';
 import { DurableAgent } from '../durable-agent';
 
 // ============================================================================
@@ -43,7 +43,7 @@ function createModelWithUsage(usage: { inputTokens: number; outputTokens: number
   });
 }
 
-function createMultiStepModelWithUsage(
+function _createMultiStepModelWithUsage(
   steps: Array<{ usage: { inputTokens: number; outputTokens: number; totalTokens: number }; text: string }>,
 ) {
   let stepIndex = 0;

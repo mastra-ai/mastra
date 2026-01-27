@@ -1,11 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraLanguageModel } from '../../../llm/model/shared.types';
+import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import type { CoreTool } from '../../../tools/types';
-import type { StreamInternal } from '../../../loop/types';
-import type { MastraLanguageModel } from '../../../llm/model/shared.types';
-import { SaveQueueManager } from '../../save-queue';
 import { MessageList } from '../../message-list';
+import { SaveQueueManager } from '../../save-queue';
 import type {
   SerializableDurableState,
   SerializableModelConfig,
@@ -144,7 +144,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
  * This fallback returns a metadata-only object that may not work for
  * actual LLM execution (no doStream method).
  */
-export function resolveModel(config: SerializableModelConfig, mastra?: Mastra): MastraLanguageModel {
+export function resolveModel(config: SerializableModelConfig, _mastra?: Mastra): MastraLanguageModel {
   // Try to get model from Mastra's model registry if available
   // This would work if Mastra has a global model registry
   // const model = mastra?.getModel?.(config.modelId);
@@ -227,7 +227,7 @@ export function toolRequiresApproval(tool: CoreTool, globalRequireApproval?: boo
  */
 export function extractToolsForModel(
   tools: Record<string, CoreTool>,
-  toolsMetadata: SerializableToolMetadata[],
+  _toolsMetadata: SerializableToolMetadata[],
 ): Record<string, CoreTool> {
   // Return the tools as-is since they're already in CoreTool format
   // The metadata is just for reference/serialization
