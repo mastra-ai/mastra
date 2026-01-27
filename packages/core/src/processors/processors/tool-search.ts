@@ -282,9 +282,23 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Create the search tool with BM25 ranking
     const searchTool = createTool({
       id: 'search_tools',
-      description: 'Search for available tools by keyword. Returns a ranked list of relevant tools.',
+      description:
+        'Search for available tools by keyword. ' +
+        "Use this when you need a capability you don't currently have. " +
+        'Returns a list of matching tools with their names and descriptions. ' +
+        'After finding a useful tool, use load_tool to make it available.',
       inputSchema: z.object({
-        query: z.string().describe('Search query to find relevant tools'),
+        query: z.string().describe('Search keywords (e.g., "weather", "github issue", "database query")'),
+      }),
+      outputSchema: z.object({
+        results: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            score: z.number(),
+          }),
+        ),
+        message: z.string(),
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
@@ -292,14 +306,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         if (results.length === 0) {
           return {
-            tools: [],
-            message: `No tools found matching query: "${query}". Try different keywords or search more broadly.`,
+            results: [],
+            message: `No tools found matching "${query}". Try different keywords.`,
           };
         }
 
         return {
-          tools: results,
-          message: `Found ${results.length} relevant tool${results.length === 1 ? '' : 's'}. Use load_tool to add them to the conversation.`,
+          results,
+          message: `Found ${results.length} tool(s). Use load_tool with the exact tool name to make it available.`,
         };
       },
     });
@@ -307,19 +321,46 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Create the load tool that uses thread-scoped state
     const loadTool = createTool({
       id: 'load_tool',
-      description: 'Load a specific tool into the current conversation to make it available for use',
+      description:
+        'Load a specific tool into your context. ' +
+        'Call this after finding a tool with search_tools. ' +
+        'Once loaded, the tool will be available for use on subsequent turns. ' +
+        'Args: toolName - The exact name of the tool to load (from search results).',
       inputSchema: z.object({
-        toolName: z.string().describe('The name/ID of the tool to load'),
+        toolName: z.string().describe('The exact name of the tool to load (from search results)'),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        message: z.string(),
+        toolName: z.string().optional(),
       }),
       execute: async ({ toolName }) => {
         // Check if tool exists
         const matchingTool = this.allTools[toolName] ?? Object.values(this.allTools).find(tool => tool.id === toolName);
 
         if (!matchingTool) {
-          // TODO: Add suggestions for similar tool names in task 004
+          // Generate suggestions for similar tool names
+          const availableToolNames = Object.keys(this.allTools).concat(
+            Object.values(this.allTools)
+              .map(t => t.id)
+              .filter(id => !this.allTools[id]),
+          );
+          const suggestions = availableToolNames.filter(
+            name =>
+              name.toLowerCase().includes(toolName.toLowerCase()) ||
+              toolName.toLowerCase().includes(name.toLowerCase()),
+          );
+
+          let message = `Tool "${toolName}" not found.`;
+          if (suggestions.length > 0) {
+            message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+          } else {
+            message += ' Use search_tools to find available tools.';
+          }
+
           return {
             success: false,
-            message: `Tool "${toolName}" not found. Use search_tools to discover available tools.`,
+            message,
           };
         }
 
@@ -328,6 +369,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           return {
             success: true,
             message: `Tool "${toolName}" is already loaded and available.`,
+            toolName,
           };
         }
 
@@ -336,7 +378,8 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         return {
           success: true,
-          message: `Tool "${toolName}" has been loaded and is now available for use.`,
+          message: `Tool "${toolName}" loaded successfully. It will be available on your next turn.`,
+          toolName,
         };
       },
     });
