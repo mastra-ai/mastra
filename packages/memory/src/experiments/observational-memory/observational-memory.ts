@@ -414,6 +414,18 @@ export interface ObservationalMemoryConfig {
    * @default true
    */
   observeFutureOnly?: boolean;
+
+  /**
+   * Enable adaptive threshold that shares budget between messages and observations.
+   * When true, the total budget = observer.threshold + reflector.threshold.
+   * - Messages can use more space when observations are small
+   * - Observations can use more space when messages are small
+   *
+   * This helps maximize context usage by allowing flexible allocation.
+   *
+   * @default false
+   */
+  adaptiveThreshold?: boolean;
 }
 
 /**
@@ -658,24 +670,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Get base thresholds first (needed for adaptive calculation)
     const observerThreshold = config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold;
     const reflectorThreshold = config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold;
-    const observerAdaptive = config.observer?.adaptiveThreshold ?? false;
-    const reflectorAdaptive = config.reflector?.adaptiveThreshold ?? false;
+    const isAdaptive = config.adaptiveThreshold ?? false;
     
     // Total context budget when adaptive is enabled
     const totalBudget = observerThreshold + reflectorThreshold;
     
     // Debug: log adaptive threshold config
-    omDebug(`[OM] Observer config: threshold=${observerThreshold}, adaptive=${observerAdaptive}, totalBudget=${totalBudget}`);
+    omDebug(`[OM] Observer config: threshold=${observerThreshold}, adaptive=${isAdaptive}, totalBudget=${totalBudget}`);
     
     // Resolve observer config with defaults
     this.observerConfig = {
       model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
       // When adaptive, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
-      observationThreshold: observerAdaptive
+      observationThreshold: isAdaptive
         ? { min: observerThreshold, max: totalBudget }
         : observerThreshold,
-      adaptiveThreshold: observerAdaptive,
+      adaptiveThreshold: isAdaptive,
       modelSettings: {
         temperature:
           config.observer?.modelSettings?.temperature ??
@@ -695,7 +706,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.reflectorConfig = {
       model: config.reflector?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
       reflectionThreshold: reflectorThreshold,
-      adaptiveThreshold: reflectorAdaptive,
+      adaptiveThreshold: isAdaptive,
       modelSettings: {
         temperature:
           config.reflector?.modelSettings?.temperature ??

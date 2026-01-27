@@ -400,18 +400,6 @@ export interface ObservationalMemoryObserverConfig {
   threshold?: number;
 
   /**
-   * Enable adaptive threshold that adjusts based on observation space.
-   * When true, the threshold dynamically adjusts:
-   * - When observations are empty: allows more messages (threshold * 1.5)
-   * - When observations are full: triggers earlier (threshold * 0.8)
-   *
-   * This helps balance message history and observation budgets automatically.
-   *
-   * @default false
-   */
-  adaptiveThreshold?: boolean;
-
-  /**
    * Model settings for the Observer agent.
    * @default { temperature: 0.3, maxOutputTokens: 100_000 }
    */
@@ -447,18 +435,6 @@ export interface ObservationalMemoryReflectorConfig {
    * @default 30000
    */
   threshold?: number;
-
-  /**
-   * Enable adaptive threshold that adjusts based on message history space.
-   * When true, the threshold dynamically adjusts:
-   * - When message history is small: allows more observations (threshold * 1.5)
-   * - When message history is large: triggers earlier (threshold * 0.8)
-   *
-   * This helps balance message history and observation budgets automatically.
-   *
-   * @default false
-   */
-  adaptiveThreshold?: boolean;
 
   /**
    * Model settings for the Reflector agent.
@@ -524,6 +500,18 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   observeFutureOnly?: boolean;
+
+  /**
+   * Enable adaptive threshold that shares budget between messages and observations.
+   * When true, the total budget = observer.threshold + reflector.threshold.
+   * - Messages can use more space when observations are small
+   * - Observations can use more space when messages are small
+   *
+   * This helps maximize context usage by allowing flexible allocation.
+   *
+   * @default false
+   */
+  adaptiveThreshold?: boolean;
 }
 
 /**

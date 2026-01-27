@@ -1523,11 +1523,11 @@ ${
           storage: memoryStore,
           scope: omConfig.scope,
           observeFutureOnly: omConfig.observeFutureOnly,
+          adaptiveThreshold: omConfig.adaptiveThreshold,
           observer: omConfig.observer
             ? {
                 model: omConfig.observer.model,
                 observationThreshold: omConfig.observer.threshold,
-                adaptiveThreshold: omConfig.observer.adaptiveThreshold,
                 modelSettings: omConfig.observer.modelSettings,
                 maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
               }
@@ -1536,7 +1536,6 @@ ${
             ? {
                 model: omConfig.reflector.model,
                 reflectionThreshold: omConfig.reflector.threshold,
-                adaptiveThreshold: omConfig.reflector.adaptiveThreshold,
                 modelSettings: omConfig.reflector.modelSettings,
               }
             : undefined,

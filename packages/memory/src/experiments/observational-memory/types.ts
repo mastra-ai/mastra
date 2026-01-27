@@ -79,16 +79,6 @@ export interface ObserverConfig {
   observationThreshold?: number;
 
   /**
-   * Enable adaptive threshold that adjusts based on observation space.
-   * When true, the threshold dynamically adjusts:
-   * - When observations are empty: allows more messages (threshold * 1.5)
-   * - When observations are full: triggers earlier (threshold * 0.8)
-   *
-   * @default false
-   */
-  adaptiveThreshold?: boolean;
-
-  /**
    * Model settings for the Observer agent.
    * @default { temperature: 0.3, maxOutputTokens: 100_000 }
    */
@@ -131,16 +121,6 @@ export interface ReflectorConfig {
    * @default 30000
    */
   reflectionThreshold?: number;
-
-  /**
-   * Enable adaptive threshold that adjusts based on message history space.
-   * When true, the threshold dynamically adjusts:
-   * - When message history is small: allows more observations (threshold * 1.5)
-   * - When message history is large: triggers earlier (threshold * 0.8)
-   *
-   * @default false
-   */
-  adaptiveThreshold?: boolean;
 
   /**
    * Model settings for the Reflector agent.
