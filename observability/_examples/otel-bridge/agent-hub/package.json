@@ -41,13 +41,13 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "@types/node": "20.19.7",
+    "@types/node": "20.19.30",
     "concurrently": "9.2.1",
-    "dotenv": "17.2.0",
+    "dotenv": "17.2.3",
     "prettier": "3.6.2",
     "ts-node": "10.9.2",
     "typescript": "5.9.3",
-    "vitest": "^2.0.0"
+    "vitest": "^2.1.9"
   },
   "pnpm": {
     "overrides": {

@@ -15,7 +15,8 @@
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
-    "validate:frontmatter": "tsx scripts/validate-frontmatter.ts"
+    "validate:frontmatter": "tsx scripts/validate-frontmatter.ts",
+    "format": "prettier --experimental-cli --write ."
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",
@@ -62,10 +63,9 @@
     "@docusaurus/tsconfig": "^3.9.1",
     "@docusaurus/types": "^3.9.1",
     "@tailwindcss/postcss": "^4.0.7",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.3",
     "baseline-browser-mapping": "^2.9.12",
     "postcss": "^8.5.3",
-    "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwind-merge": "^3.0.1",
     "tailwindcss": "^4.0.7",
     "tailwindcss-animate": "^1.0.7",

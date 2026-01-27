@@ -260,7 +260,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return;
       }
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
         // Hijack the response to bypass Fastify's response handling
@@ -274,11 +274,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           rawReq.body = request.body;
         }
 
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {
@@ -316,8 +320,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -397,6 +401,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
+        routePrefix: this.prefix,
       };
 
       try {
