@@ -136,15 +136,24 @@ describe('Template Workflow Integration Tests', () => {
     expect(branches).toContain('feat/install-template-csv-to-questions');
 
     // Verify expected template files were created
-    const expectedPaths = [
-      'src/mastra/agents/csvQuestionAgent.ts',
-      'src/mastra/tools/csvFetcherTool.ts',
-      'src/mastra/workflows/csvToQuestionsWorkflow.ts',
+    // Note: AI discovery is non-deterministic and may return either export names (e.g., csvToQuestionsWorkflow)
+    // or filename-based IDs (e.g., csv-to-questions-workflow), so we check for either naming convention
+    const expectedPatterns = [
+      { dir: 'src/mastra/agents', patterns: ['csvQuestionAgent.ts', 'csv-question-agent.ts'] },
+      {
+        dir: 'src/mastra/tools',
+        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts'],
+      },
+      {
+        dir: 'src/mastra/workflows',
+        patterns: ['csvToQuestionsWorkflow.ts', 'csv-to-questions-workflow.ts'],
+      },
     ];
 
-    for (const expectedPath of expectedPaths) {
-      const fullPath = join(targetRepo, expectedPath);
-      expect(existsSync(fullPath), `Expected ${expectedPath} to exist`).toBe(true);
+    for (const { dir, patterns } of expectedPatterns) {
+      const dirPath = join(targetRepo, dir);
+      const foundMatch = patterns.some(pattern => existsSync(join(dirPath, pattern)));
+      expect(foundMatch, `Expected one of ${patterns.join(' or ')} to exist in ${dir}`).toBe(true);
     }
 
     // Verify package.json was updated
