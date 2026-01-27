@@ -7,6 +7,7 @@ import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/exe
 import type {
   SerializedStepFlowEntry,
   StepResult,
+  StepTripwireInfo,
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
@@ -188,15 +189,34 @@ export class EventedExecutionEngine extends ExecutionEngine {
       error?: any;
       steps: Record<string, StepResult<any, any, any, any>>;
       state?: Record<string, any>;
+      tripwire?: StepTripwireInfo;
     };
 
     if (resultData.prevResult.status === 'failed') {
-      callbackArg = {
-        status: 'failed',
-        error: resultData.prevResult.error,
-        steps: cleanStepResults,
-        state: finalState,
-      };
+      // Check if failure was due to TripWire by scanning step results
+      let tripwireData: StepTripwireInfo | undefined;
+      for (const stepResult of Object.values(cleanStepResults)) {
+        if (stepResult?.status === 'failed' && stepResult?.tripwire) {
+          tripwireData = stepResult.tripwire;
+          break;
+        }
+      }
+
+      if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
+        callbackArg = {
+          status: 'tripwire',
+          steps: cleanStepResults,
+          state: finalState,
+          tripwire: tripwireData,
+        };
+      } else {
+        callbackArg = {
+          status: 'failed',
+          error: resultData.prevResult.error,
+          steps: cleanStepResults,
+          state: finalState,
+        };
+      }
     } else if (resultData.prevResult.status === 'suspended') {
       callbackArg = {
         status: 'suspended',
@@ -225,7 +245,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         result: callbackArg.result,
         error: callbackArg.error,
         steps: callbackArg.steps,
-        tripwire: undefined,
+        tripwire: callbackArg.tripwire,
         runId: params.runId,
         workflowId: params.workflowId,
         resourceId: params.resourceId,
@@ -254,11 +274,20 @@ export class EventedExecutionEngine extends ExecutionEngine {
         suspended: suspendedSteps,
       } as TOutput;
     } else if (resultData.prevResult.status === 'failed') {
-      result = {
-        status: callbackArg.status,
-        error: callbackArg.error,
-        steps: callbackArg.steps,
-      } as TOutput;
+      // Check if this is actually a tripwire status (detected in callbackArg building)
+      if (callbackArg.status === 'tripwire' && callbackArg.tripwire) {
+        result = {
+          status: 'tripwire',
+          tripwire: callbackArg.tripwire,
+          steps: callbackArg.steps,
+        } as TOutput;
+      } else {
+        result = {
+          status: callbackArg.status,
+          error: callbackArg.error,
+          steps: callbackArg.steps,
+        } as TOutput;
+      }
     } else if (resultData.prevResult.status === 'paused' || params.perStep) {
       result = {
         status: 'paused',
