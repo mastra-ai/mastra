@@ -443,7 +443,6 @@ interface ResolvedObserverConfig {
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
-  sequentialBatches: boolean;
 }
 
 interface ResolvedReflectorConfig {
@@ -664,9 +663,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.scope = config.scope ?? 'thread';
     this.observerRecognizePatterns = config.observer?.recognizePatterns ?? false;
     this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? false;
-    // TODO: observeFutureOnly implementation is broken - it sets lastObservedAt to now on record creation,
-    // causing all existing messages to be skipped. Need to fix or remove this feature entirely.
-    // Also, this should only apply to per-resource scope, not per-thread.
     this.observeFutureOnly = config.observeFutureOnly ?? false;
 
     // Resolve observer config with defaults
@@ -685,7 +681,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       },
       providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
       maxTokensPerBatch: config.observer?.maxTokensPerBatch ?? 5000,
-      sequentialBatches: config.observer?.sequentialBatches ?? false,
     };
 
     // Resolve reflector config with defaults
@@ -3113,77 +3108,27 @@ ${formattedMessages}
         batches.push(currentBatch);
       }
 
-      const sequentialBatches = this.observerConfig.sequentialBatches;
       omDebug(
         `[OM] Split ${orderedThreadIds.length} threads into ${batches.length} batches ` +
-          `(maxTokensPerBatch: ${maxTokensPerBatch}, sequential: ${sequentialBatches})`,
+          `(maxTokensPerBatch: ${maxTokensPerBatch})`,
       );
 
-      // Process batches either sequentially or in parallel
-      let batchResults: Array<{
-        results: Map<
-          string,
-          {
-            observations: string;
-            currentTask?: string;
-            suggestedContinuation?: string;
-            patterns?: Record<string, string[]>;
-          }
-        >;
-        usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
-      }>;
+      // Process batches in parallel
+      const batchPromises = batches.map(async (batch, batchIndex) => {
+        omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads`);
+        const batchResult = await this.callMultiThreadObserver(
+          existingObservations,
+          batch.threadMap,
+          batch.threadIds,
+          existingPatterns,
+        );
+        omDebug(
+          `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
+        );
+        return batchResult;
+      });
 
-      if (sequentialBatches) {
-        // Sequential: each batch sees previous batches' observations
-        batchResults = [];
-        let cumulativeObservations = existingObservations;
-
-        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-          const batch = batches[batchIndex]!;
-          omDebug(
-            `[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads (sequential)`,
-          );
-
-          const batchResult = await this.callMultiThreadObserver(
-            cumulativeObservations,
-            batch.threadMap,
-            batch.threadIds,
-            existingPatterns,
-          );
-
-          omDebug(
-            `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
-          );
-
-          batchResults.push(batchResult);
-
-          // Accumulate observations for next batch
-          for (const [, result] of batchResult.results) {
-            if (result.observations) {
-              cumulativeObservations = cumulativeObservations
-                ? `${cumulativeObservations}\n\n${result.observations}`
-                : result.observations;
-            }
-          }
-        }
-      } else {
-        // Parallel: all batches see only the original existingObservations
-        const batchPromises = batches.map(async (batch, batchIndex) => {
-          omDebug(`[OM] Starting batch ${batchIndex + 1}/${batches.length} with ${batch.threadIds.length} threads`);
-          const batchResult = await this.callMultiThreadObserver(
-            existingObservations,
-            batch.threadMap,
-            batch.threadIds,
-            existingPatterns,
-          );
-          omDebug(
-            `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
-          );
-          return batchResult;
-        });
-
-        batchResults = await Promise.all(batchPromises);
-      }
+      const batchResults = await Promise.all(batchPromises);
 
       // Merge all batch results into a single map and accumulate usage
       const multiThreadResults = new Map<

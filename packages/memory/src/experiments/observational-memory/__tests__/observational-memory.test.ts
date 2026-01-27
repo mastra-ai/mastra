@@ -1106,29 +1106,35 @@ Continue the conversation
   });
 
   describe('validateCompression', () => {
-    it('should return true when output is smaller', () => {
-      expect(validateCompression(10000, 5000)).toBe(true);
+    it('should return true when reflected tokens are below threshold', () => {
+      // reflectedTokens=5000, targetThreshold=10000 -> 5000 < 10000 = true
+      expect(validateCompression(5000, 10000)).toBe(true);
     });
 
-    it('should return false when output is same size', () => {
+    it('should return false when reflected tokens equal threshold', () => {
+      // reflectedTokens=10000, targetThreshold=10000 -> 10000 < 10000 = false
       expect(validateCompression(10000, 10000)).toBe(false);
     });
 
-    it('should return false when output is larger', () => {
-      expect(validateCompression(10000, 12000)).toBe(false);
+    it('should return false when reflected tokens exceed threshold', () => {
+      // reflectedTokens=12000, targetThreshold=10000 -> 12000 < 10000 = false
+      expect(validateCompression(12000, 10000)).toBe(false);
     });
 
-    it('should use threshold for validation', () => {
-      // 8500 is 85% of 10000, so with default 0.9 threshold it should pass
-      expect(validateCompression(10000, 8500)).toBe(true);
-      // 9500 is > 90% so should fail
-      expect(validateCompression(10000, 9500)).toBe(false);
+    it('should validate against target threshold', () => {
+      // reflectedTokens=8500, targetThreshold=10000 -> 8500 < 10000 = true
+      expect(validateCompression(8500, 10000)).toBe(true);
+      // reflectedTokens=9500, targetThreshold=10000 -> 9500 < 10000 = true (still below)
+      expect(validateCompression(9500, 10000)).toBe(true);
+      // reflectedTokens=10500, targetThreshold=10000 -> 10500 < 10000 = false
+      expect(validateCompression(10500, 10000)).toBe(false);
     });
 
-    it('should respect custom threshold', () => {
-      // With 0.8 threshold, output must be < 80% of original
-      expect(validateCompression(10000, 7500, 0.8)).toBe(true);
-      expect(validateCompression(10000, 8500, 0.8)).toBe(false);
+    it('should work with different thresholds', () => {
+      // reflectedTokens=7500, targetThreshold=8000 -> 7500 < 8000 = true
+      expect(validateCompression(7500, 8000)).toBe(true);
+      // reflectedTokens=8500, targetThreshold=8000 -> 8500 < 8000 = false
+      expect(validateCompression(8500, 8000)).toBe(false);
     });
   });
 });

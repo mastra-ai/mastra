@@ -269,9 +269,6 @@ export interface MemoryConfigDefinition {
   /** Max tokens per batch for Observer (default: 5000) */
   observerMaxTokensPerBatch?: number;
 
-  /** Process batches sequentially (default: false = parallel) */
-  observerSequentialBatches?: boolean;
-
   /** Use legacy (Jan 7) Observer prompt for A/B testing (default: false) */
   observerUseLegacyPrompt?: boolean;
 
@@ -561,7 +558,6 @@ const MEMORY_CONFIGS = {
     agentModel: 'openai/gpt-4o',
     evalModel: 'openai/gpt-4o',
     observerMaxTokensPerBatch: 10000,
-    observerSequentialBatches: true,
   },
 
   // ============================================================================

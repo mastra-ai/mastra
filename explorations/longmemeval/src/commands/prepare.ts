@@ -876,7 +876,7 @@ export class PrepareCommand {
           // Allow config to override maxTokensPerBatch (default is 5000 in OM)
           ...(configDef.observerMaxTokensPerBatch && { maxTokensPerBatch: configDef.observerMaxTokensPerBatch }),
           // Allow config to enable sequential batch processing (default is parallel)
-          ...(configDef.observerSequentialBatches && { sequentialBatches: configDef.observerSequentialBatches }),
+
         },
         reflector: {
           model: omModel, // Real model for Reflector

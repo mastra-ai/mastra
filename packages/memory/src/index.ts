@@ -1528,7 +1528,6 @@ ${
                 observationThreshold: omConfig.observer.observationThreshold,
                 modelSettings: omConfig.observer.modelSettings,
                 maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
-                sequentialBatches: omConfig.observer.sequentialBatches,
               }
             : undefined,
           reflector: omConfig.reflector
