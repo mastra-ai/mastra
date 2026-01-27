@@ -25,6 +25,11 @@ import type {
 const ARCADE_BASE_URL = 'https://api.arcade.dev';
 
 /**
+ * Default timeout for API requests in milliseconds (30 seconds)
+ */
+const DEFAULT_FETCH_TIMEOUT_MS = 30000;
+
+/**
  * Static list of known Arcade toolkits.
  * This avoids the expensive operation of fetching all 7000+ tools just to discover toolkit names.
  * Updated: 2025-01-15
@@ -314,10 +319,30 @@ export class ArcadeProvider implements ToolProvider {
   readonly name: IntegrationProviderType = 'arcade';
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
+  private readonly fetchTimeoutMs: number;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, fetchTimeoutMs: number = DEFAULT_FETCH_TIMEOUT_MS) {
     this.apiKey = apiKey || process.env.ARCADE_API_KEY;
     this.baseUrl = ARCADE_BASE_URL;
+    this.fetchTimeoutMs = fetchTimeoutMs;
+  }
+
+  /**
+   * Fetch with timeout to prevent indefinite hangs
+   */
+  private async fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -365,9 +390,7 @@ export class ArcadeProvider implements ToolProvider {
     if (options?.search) {
       const searchLower = options.search.toLowerCase();
       toolkits = toolkits.filter(
-        toolkit =>
-          toolkit.name.toLowerCase().includes(searchLower) ||
-          toolkit.slug.toLowerCase().includes(searchLower),
+        toolkit => toolkit.name.toLowerCase().includes(searchLower) || toolkit.slug.toLowerCase().includes(searchLower),
       );
     }
 
@@ -415,7 +438,7 @@ export class ArcadeProvider implements ToolProvider {
     params.append('offset', offset.toString());
 
     const url = `${this.baseUrl}/v1/tools${params.toString() ? `?${params.toString()}` : ''}`;
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
@@ -441,9 +464,7 @@ export class ArcadeProvider implements ToolProvider {
     if (options?.search) {
       const searchLower = options.search.toLowerCase();
       tools = tools.filter(
-        tool =>
-          tool.name.toLowerCase().includes(searchLower) ||
-          tool.description.toLowerCase().includes(searchLower),
+        tool => tool.name.toLowerCase().includes(searchLower) || tool.description.toLowerCase().includes(searchLower),
       );
     }
 
@@ -468,7 +489,7 @@ export class ArcadeProvider implements ToolProvider {
     }
 
     const url = `${this.baseUrl}/v1/tools/${slug}`;
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
@@ -515,18 +536,20 @@ export class ArcadeProvider implements ToolProvider {
     }
 
     // Get auth requirements from the tool's metadata
-    const authInfo = sampleTool.metadata?.authorization as {
-      providerId?: string;
-      providerType?: string;
-      scopes?: string[];
-    } | undefined;
+    const authInfo = sampleTool.metadata?.authorization as
+      | {
+          providerId?: string;
+          providerType?: string;
+          scopes?: string[];
+        }
+      | undefined;
 
     if (!authInfo?.providerId) {
       throw new Error(`Toolkit ${toolkit} does not require OAuth authorization`);
     }
 
     const url = `${this.baseUrl}/v1/auth/authorize`;
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -582,7 +605,7 @@ export class ArcadeProvider implements ToolProvider {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
-      const response = await fetch(`${url}?id=${authorizationId}`, {
+      const response = await this.fetchWithTimeout(`${url}?id=${authorizationId}`, {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',

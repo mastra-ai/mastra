@@ -558,10 +558,8 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
             // Composio/Arcade providers
             const toolProvider = getToolProvider(mastra, updatedIntegration.provider);
 
-            // Delete old cached tools
-            await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
-
             // Fetch and cache new tools - fetch each toolkit separately to preserve toolkit info
+            // Note: We fetch first, then delete old tools to prevent data loss if fetch fails
             const finalToolkits = selectedToolkits || existing.selectedToolkits;
             const allToolsToCache: Array<{
               id: string;
@@ -626,6 +624,10 @@ export const UPDATE_INTEGRATION_ROUTE = createRoute({
 
               allToolsToCache.push(...cachedTools);
             }
+
+            // Delete old cached tools only after successfully fetching new ones
+            // This prevents data loss if the fetch fails
+            await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
             if (allToolsToCache.length > 0) {
               await integrationsStore.cacheTools({ tools: allToolsToCache });
@@ -964,8 +966,8 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
       const existingCachedTools = await integrationsStore.listCachedTools({ integrationId });
       const existingToolSlugs = new Set(existingCachedTools.tools.map(t => t.toolSlug));
 
-      // Delete old cached tools
-      await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
+      // Note: We delete old cached tools AFTER successfully fetching new ones
+      // to prevent data loss if the fetch fails
 
       // Handle MCP provider differently
       if (integration.provider === 'mcp' || integration.provider === 'smithery') {
@@ -1021,6 +1023,9 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
             rawDefinition: tool.metadata || {},
             createdAt: new Date(),
           }));
+
+          // Delete old cached tools only after successfully fetching new ones
+          await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
           if (cachedTools.length > 0) {
             await integrationsStore.cacheTools({ tools: cachedTools });
@@ -1112,6 +1117,10 @@ export const REFRESH_INTEGRATION_TOOLS_ROUTE = createRoute({
 
         allToolsToCache.push(...cachedTools);
       }
+
+      // Delete old cached tools only after successfully fetching new ones
+      // This prevents data loss if the fetch fails
+      await integrationsStore.deleteCachedToolsByIntegration({ integrationId });
 
       if (allToolsToCache.length > 0) {
         await integrationsStore.cacheTools({ tools: allToolsToCache });
