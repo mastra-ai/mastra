@@ -1,7 +1,14 @@
 import { z } from 'zod';
+import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
 import type { ProcessInputStepArgs, Processor } from '../index';
+
+/**
+ * Thread-scoped state management for loaded tools.
+ * Maps threadId -> Set of loaded tool names
+ */
+const threadLoadedTools = new Map<string, Set<string>>();
 
 /**
  * Configuration options for ToolSearchProcessor
@@ -96,7 +103,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   readonly description = 'Enables dynamic tool discovery and loading via search';
 
   private allTools: Record<string, Tool<any, any>>;
-  private enabledTools: Record<string, Tool<any, any>> = {};
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private toolEntries: ToolEntry[] = [];
 
@@ -113,6 +119,56 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
     // Index all tools for BM25 search
     this.indexTools();
+  }
+
+  /**
+   * Get the thread ID from the request context, or use 'default' as fallback.
+   */
+  private getThreadId(args: ProcessInputStepArgs): string {
+    return args.requestContext?.get(MASTRA_THREAD_ID_KEY) || 'default';
+  }
+
+  /**
+   * Get the set of loaded tool names for the current thread.
+   */
+  private getLoadedToolNames(threadId: string): Set<string> {
+    if (!threadLoadedTools.has(threadId)) {
+      threadLoadedTools.set(threadId, new Set());
+    }
+    return threadLoadedTools.get(threadId)!;
+  }
+
+  /**
+   * Get loaded tools as Tool objects for the current thread.
+   */
+  private getLoadedTools(threadId: string): Record<string, Tool<any, any>> {
+    const loadedNames = this.getLoadedToolNames(threadId);
+    const loadedTools: Record<string, Tool<any, any>> = {};
+
+    for (const toolName of loadedNames) {
+      const tool = this.allTools[toolName] || Object.values(this.allTools).find(t => t.id === toolName);
+      if (tool) {
+        loadedTools[toolName] = tool;
+      }
+    }
+
+    return loadedTools;
+  }
+
+  /**
+   * Clear loaded tools for a specific thread (useful for testing).
+   *
+   * @param threadId - The thread ID to clear, or 'default' if not provided
+   */
+  public clearState(threadId: string = 'default'): void {
+    threadLoadedTools.delete(threadId);
+  }
+
+  /**
+   * Clear all thread state (useful for testing).
+   */
+  public static clearAllState(): void {
+    threadLoadedTools.clear();
   }
 
   /**
@@ -211,7 +267,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }));
   }
 
-  async processInputStep({ tools, messageList }: ProcessInputStepArgs) {
+  async processInputStep(args: ProcessInputStepArgs) {
+    const { tools, messageList } = args;
+    const threadId = this.getThreadId(args);
+    const loadedToolNames = this.getLoadedToolNames(threadId);
+
     // Add system instruction about the meta-tools
     messageList.addSystem(
       'To discover available tools, call search_tools with a keyword query. ' +
@@ -244,7 +304,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       },
     });
 
-    // Create the load tool
+    // Create the load tool that uses thread-scoped state
     const loadTool = createTool({
       id: 'load_tool',
       description: 'Load a specific tool into the current conversation to make it available for use',
@@ -263,16 +323,16 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           };
         }
 
-        // Check if already loaded
-        if (this.enabledTools[toolName]) {
+        // Check if already loaded (thread-scoped)
+        if (loadedToolNames.has(toolName)) {
           return {
             success: true,
             message: `Tool "${toolName}" is already loaded and available.`,
           };
         }
 
-        // Load the tool
-        this.enabledTools[toolName] = matchingTool;
+        // Load the tool (thread-scoped)
+        loadedToolNames.add(toolName);
 
         return {
           success: true,
@@ -281,13 +341,16 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       },
     });
 
+    // Get loaded tools for this thread
+    const loadedTools = this.getLoadedTools(threadId);
+
     // Return merged tools: meta-tools + existing tools + loaded tools
     return {
       tools: {
         search_tools: searchTool,
         load_tool: loadTool,
         ...(tools ?? {}),
-        ...this.enabledTools,
+        ...loadedTools,
       },
     };
   }
