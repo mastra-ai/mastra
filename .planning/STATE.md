@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 
 ## Current Position
 
-Phase: 6 of 8 (Playground Integration) — COMPLETE
-Plan: 12 of 12 in phase 6
-Status: Phase 6 verified (5/5 must-haves)
-Last activity: 2026-01-26 — Phase 6 execution complete, verified
+Phase: 7 of 8 (CSV Import)
+Plan: 1 of ? in phase 7
+Status: In progress
+Last activity: 2026-01-27 — Completed 07-01-PLAN.md
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 23
+- Total plans completed: 24
 - Average duration: 4 min
 - Total execution time: 1.5 hours
 
@@ -33,9 +33,10 @@ Progress: [████████░░] 75%
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
 | 06-playground-integration | 12 | 48 min | 4 min |
+| 07-csv-import | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-09 (2 min), 06-08 (3 min), 06-10 (4 min), 06-11 (4 min), 06-12 (8 min)
+- Last 5 plans: 06-10 (4 min), 06-11 (4 min), 06-12 (8 min), 07-01 (2 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -80,6 +81,10 @@ Recent decisions affecting current work:
 - traceId captured from agent/workflow result and stored with run results
 - Item delete uses inline AlertDialog in ItemsList (matches chat-threads pattern)
 - Edit dialogs use useEffect to sync form state when props change
+- JSON auto-parse: CSV cells starting with { or [ attempt JSON.parse
+- Empty CSV cells become null (not empty string)
+- Web worker threshold: 1MB file size for CSV parsing
+- Row numbers 1-indexed + 1 for header (first data row is 2)
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26
-Stopped at: Phase 6 complete — all 12 plans executed, verified
+Last session: 2026-01-27
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None

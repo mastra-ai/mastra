@@ -6,6 +6,11 @@ export * from './hooks/use-compare-runs';
 // Mutation hooks
 export * from './hooks/use-dataset-mutations';
 
+// CSV import utilities
+export * from './hooks/use-csv-parser';
+export * from './utils/csv-validation';
+export * from './utils/json-cell-parser';
+
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
