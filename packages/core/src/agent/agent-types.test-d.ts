@@ -104,7 +104,8 @@ describe('Agent Type Tests', () => {
 
     it('should accept typed RequestContext<T> in agent.generate()', () => {
       const typedContext = new RequestContext<CustomContext>();
-      typedContext.set({ userId: '123', sessionId: 'abc' });
+      typedContext.set('userId', '123');
+      typedContext.set('sessionId', 'abc');
 
       // This should compile without errors
       expectTypeOf(agent.generate(messages, { requestContext: typedContext })).toEqualTypeOf<Promise<any>>();
@@ -119,7 +120,8 @@ describe('Agent Type Tests', () => {
 
     it('should accept typed RequestContext<T> in agent.stream()', () => {
       const typedContext = new RequestContext<CustomContext>();
-      typedContext.set({ userId: '123', sessionId: 'abc' });
+      typedContext.set('userId', '123');
+      typedContext.set('sessionId', 'abc');
 
       // This should compile without errors
       expectTypeOf(agent.stream(messages, { requestContext: typedContext })).toEqualTypeOf<Promise<any>>();

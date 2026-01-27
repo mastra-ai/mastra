@@ -18,22 +18,19 @@ describe('Workflow Type Tests', () => {
     }
 
     const workflow = createWorkflow({
-      name: 'test-workflow',
-      triggerSchema: z.object({
+      id: 'test-workflow',
+      inputSchema: z.object({
         input: z.string().optional(),
       }),
-    })
-      .step({
-        id: 'step1',
-        execute: async () => {
-          return { result: 'success' };
-        },
-      })
-      .commit();
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+    });
 
     it('should accept typed RequestContext<T> in workflow.start()', async () => {
       const typedContext = new RequestContext<CustomContext>();
-      typedContext.set({ tenantId: 'tenant-123', orgId: 'org-456' });
+      typedContext.set('tenantId', 'tenant-123');
+      typedContext.set('orgId', 'org-456');
 
       const run = await workflow.createRun();
 
@@ -52,7 +49,8 @@ describe('Workflow Type Tests', () => {
 
     it('should accept typed RequestContext<T> in workflow.stream()', async () => {
       const typedContext = new RequestContext<CustomContext>();
-      typedContext.set({ tenantId: 'tenant-123', orgId: 'org-456' });
+      typedContext.set('tenantId', 'tenant-123');
+      typedContext.set('orgId', 'org-456');
 
       const run = await workflow.createRun();
 
@@ -71,7 +69,8 @@ describe('Workflow Type Tests', () => {
 
     it('should accept typed RequestContext<T> in workflow.streamLegacy()', async () => {
       const typedContext = new RequestContext<CustomContext>();
-      typedContext.set({ tenantId: 'tenant-123', orgId: 'org-456' });
+      typedContext.set('tenantId', 'tenant-123');
+      typedContext.set('orgId', 'org-456');
 
       const run = await workflow.createRun();
 
