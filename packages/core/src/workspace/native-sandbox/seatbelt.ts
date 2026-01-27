@@ -18,7 +18,7 @@
 import type { NativeSandboxConfig } from './types';
 
 /**
- * Mach services needed for basic operation (based on Claude Code's profile).
+ * Mach services needed for basic operation
  */
 const MACH_SERVICES = [
   'com.apple.distributed_notifications@Uv3',
