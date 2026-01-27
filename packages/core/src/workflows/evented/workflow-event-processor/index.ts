@@ -198,6 +198,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     perStep,
     state,
     outputOptions,
+    forEachIndex,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
@@ -260,6 +261,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         perStep,
         state: initialState,
         outputOptions,
+        forEachIndex,
       },
     });
   }

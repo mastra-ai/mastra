@@ -158,6 +158,7 @@ export async function processWorkflowForEach(
     perStep,
     state,
     outputOptions,
+    forEachIndex,
   }: ProcessorArgs,
   {
     pubsub,
@@ -178,6 +179,43 @@ export async function processWorkflowForEach(
   const idx = currentResult?.output?.length ?? 0;
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
+  // Handle resume with forEachIndex: kick off the targeted iteration resume
+  if (forEachIndex !== undefined && resumeSteps?.length > 0 && idx > 0) {
+    // Check if the target iteration is suspended
+    const iterationResult = currentResult?.output?.[forEachIndex];
+    if (iterationResult?.status === 'suspended' || iterationResult === null) {
+      // Only pass resumeData to the targeted iteration
+      const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+      const targetArray = (prevResult as any)?.output;
+      const iterationPrevResult =
+        isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
+          ? { status: 'success' as const, output: targetArray[forEachIndex] }
+          : prevResult;
+
+      await pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath: [executionPath[0]!, forEachIndex],
+          resumeSteps,
+          timeTravel,
+          stepResults,
+          prevResult: iterationPrevResult,
+          resumeData,
+          activeSteps,
+          requestContext,
+          perStep,
+          state: currentState,
+          outputOptions,
+        },
+      });
+    }
+    return;
+  }
+
   if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
     // Foreach completed all iterations - advance to next step
     await pubsub.publish('workflows', {
@@ -192,7 +230,7 @@ export async function processWorkflowForEach(
         stepResults,
         timeTravel,
         prevResult: currentResult,
-        resumeData,
+        resumeData: undefined, // No resumeData when advancing past foreach
         activeSteps,
         requestContext,
         perStep,
