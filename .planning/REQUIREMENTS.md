@@ -9,11 +9,11 @@ Requirements for Browser Live View milestone. Each maps to roadmap phases.
 
 ### Screencast API
 
-- [ ] **CAST-01**: BrowserToolset exposes `startScreencast()` method that begins CDP frame capture
-- [ ] **CAST-02**: BrowserToolset exposes `stopScreencast()` method that ends frame capture
-- [ ] **CAST-03**: Screencast sends CDP `screencastFrameAck` for each frame to prevent memory exhaustion
-- [ ] **CAST-04**: BrowserToolset exposes `injectMouseEvent()` passthrough for future input injection
-- [ ] **CAST-05**: BrowserToolset exposes `injectKeyboardEvent()` passthrough for future input injection
+- [x] **CAST-01**: BrowserToolset exposes `startScreencast()` method that begins CDP frame capture
+- [x] **CAST-02**: BrowserToolset exposes `stopScreencast()` method that ends frame capture
+- [x] **CAST-03**: Screencast sends CDP `screencastFrameAck` for each frame to prevent memory exhaustion
+- [x] **CAST-04**: BrowserToolset exposes `injectMouseEvent()` passthrough for future input injection
+- [x] **CAST-05**: BrowserToolset exposes `injectKeyboardEvent()` passthrough for future input injection
 
 ### Transport Layer
 
@@ -71,11 +71,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAST-01 | Phase 7 | Pending |
-| CAST-02 | Phase 7 | Pending |
-| CAST-03 | Phase 7 | Pending |
-| CAST-04 | Phase 7 | Pending |
-| CAST-05 | Phase 7 | Pending |
+| CAST-01 | Phase 7 | Complete |
+| CAST-02 | Phase 7 | Complete |
+| CAST-03 | Phase 7 | Complete |
+| CAST-04 | Phase 7 | Complete |
+| CAST-05 | Phase 7 | Complete |
 | XPORT-01 | Phase 8 | Pending |
 | XPORT-02 | Phase 8 | Pending |
 | XPORT-03 | Phase 8 | Pending |
@@ -93,4 +93,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after roadmap creation*
+*Last updated: 2026-01-27 after Phase 7 completion*
