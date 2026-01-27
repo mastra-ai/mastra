@@ -19518,4 +19518,456 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
   });
+
+  describe('Nested Workflow Information - Phase 6', () => {
+    it('should return workflow run execution result with nested workflow steps information', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const nestedIncrementWorkflowAgain = createWorkflow({
+        id: 'nested-increment-workflow-again',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .commit();
+
+      const nestedIncrementWorkflow = createWorkflow({
+        id: 'nested-increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflowAgain)
+        .commit();
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflow)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => {
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { incrementWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await incrementWorkflow.createRun();
+      await run.start({ inputData: { value: 0 } });
+      const result = await incrementWorkflow.getWorkflowRunById(run.runId);
+      expect(result?.status).toBe('success');
+      expect(result?.steps).toMatchObject({
+        'nested-increment-workflow': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again.increment': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        final: {
+          payload: {
+            value: 1,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
+      const innerStep = createStep({
+        id: 'inner-step',
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(innerStep)
+        .commit();
+
+      const outerStep = createStep({
+        id: 'outer-step',
+        execute: async ({ inputData }) => ({ value: inputData.value * 2 }),
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const parentWorkflow = createWorkflow({
+        id: 'parent-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      parentWorkflow.then(nestedWorkflow).then(outerStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { parentWorkflow, nestedWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await parentWorkflow.createRun();
+      await run.start({ inputData: { value: 1 } });
+
+      // With nested workflows (default) - should include nested step keys
+      const withNested = await parentWorkflow.getWorkflowRunById(run.runId);
+      expect(withNested?.status).toBe('success');
+      expect(withNested?.steps).toHaveProperty('nested-workflow');
+      expect(withNested?.steps).toHaveProperty('nested-workflow.inner-step');
+      expect(withNested?.steps).toHaveProperty('outer-step');
+
+      // Without nested workflows - should only include top-level steps
+      const withoutNested = await parentWorkflow.getWorkflowRunById(run.runId, {
+        withNestedWorkflows: false,
+      });
+      expect(withoutNested?.status).toBe('success');
+      expect(withoutNested?.steps).toHaveProperty('nested-workflow');
+      expect(withoutNested?.steps).not.toHaveProperty('nested-workflow.inner-step');
+      expect(withoutNested?.steps).toHaveProperty('outer-step');
+
+      await mastra.stopEventEngine();
+    });
+  });
+
+  describe('Parallel Execution - Phase 6', () => {
+    it('should complete parallel workflow when steps do not suspend', async () => {
+      const normalStep1 = createStep({
+        id: 'normal-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.value * 2 };
+        },
+      });
+
+      const normalStep2 = createStep({
+        id: 'normal-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.value / 2 };
+        },
+      });
+
+      const normalParallelWorkflow = createWorkflow({
+        id: 'normal-parallel-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          'normal-step-1': z.object({ result: z.number() }),
+          'normal-step-2': z.object({ result: z.number() }),
+        }),
+      })
+        .parallel([normalStep1, normalStep2])
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'normal-parallel-workflow': normalParallelWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await normalParallelWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 100 } });
+
+      // Should complete immediately since no steps suspend
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({
+          'normal-step-1': { result: 200 },
+          'normal-step-2': { result: 50 },
+        });
+      }
+      expect(result.steps['normal-step-1'].status).toBe('success');
+      expect(result.steps['normal-step-2'].status).toBe('success');
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should properly update snapshot when executing multiple steps in parallel - polling test incompatible with evented architecture', async () => {
+      // This test polls getWorkflowRunById during execution to verify snapshot updates.
+      // Evented runtime's event-based architecture makes polling behavior different from default.
+      // The parallel execution itself works (tested above), but intermediate snapshot states differ.
+    });
+  });
+
+  describe('ResourceId and Miscellaneous - Phase 6', () => {
+    it('should persist resourceId when creating workflow runs', async () => {
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+      await mastra.startEventEngine();
+
+      // Create run with resourceId
+      const resourceId = 'user-123';
+      const run = await workflow.createRun({ resourceId });
+      await run.start({ inputData: {} });
+
+      // Verify resourceId is persisted in storage
+      const { runs } = await workflow.listWorkflowRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
+
+      // Verify getWorkflowRunById also returns resourceId
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe(resourceId);
+
+      // Create another run with different resourceId
+      const resourceId2 = 'user-456';
+      const run2 = await workflow.createRun({ resourceId: resourceId2 });
+      await run2.start({ inputData: {} });
+
+      // Verify both runs have correct resourceIds
+      const { runs: allRuns } = await workflow.listWorkflowRuns();
+      expect(allRuns).toHaveLength(2);
+      const runWithResource123 = allRuns.find(r => r.resourceId === resourceId);
+      const runWithResource456 = allRuns.find(r => r.resourceId === resourceId2);
+      expect(runWithResource123).toBeDefined();
+      expect(runWithResource456).toBeDefined();
+      expect(runWithResource123?.runId).toBe(run.runId);
+      expect(runWithResource456?.runId).toBe(run2.runId);
+
+      // Create run without resourceId to ensure it's optional
+      const run3 = await workflow.createRun();
+      await run3.start({ inputData: {} });
+
+      const { runs: finalRuns } = await workflow.listWorkflowRuns();
+      expect(finalRuns).toHaveLength(3);
+      const runWithoutResource = finalRuns.find(r => r.runId === run3.runId);
+      expect(runWithoutResource).toBeDefined();
+      expect(runWithoutResource?.resourceId).toBeUndefined();
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve resourceId when resuming a suspended workflow', async () => {
+      const suspendingStep = createStep({
+        id: 'suspendingStep',
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({});
+          }
+          return { resumed: true, data: resumeData };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+        resumeSchema: z.object({ message: z.string() }),
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        execute: async () => ({ completed: true }),
+        inputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+        outputSchema: z.object({ completed: z.boolean() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-with-suspend',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      workflow.then(suspendingStep).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'test-workflow-with-suspend': workflow },
+      });
+      await mastra.startEventEngine();
+
+      const resourceId = 'user-789';
+      const run = await workflow.createRun({ resourceId });
+
+      const initialResult = await run.start({ inputData: {} });
+      expect(initialResult.status).toBe('suspended');
+
+      const runBeforeResume = await workflow.getWorkflowRunById(run.runId);
+      expect(runBeforeResume?.resourceId).toBe(resourceId);
+
+      const resumeResult = await run.resume({
+        step: 'suspendingStep',
+        resumeData: { message: 'resumed with data' },
+      });
+      expect(resumeResult.status).toBe('success');
+
+      // After resume, resourceId should be preserved in storage
+      const runAfterResume = await workflow.getWorkflowRunById(run.runId);
+      expect(runAfterResume?.resourceId).toBe(resourceId);
+
+      const { runs } = await workflow.listWorkflowRuns({ resourceId });
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should automatically commit uncommitted workflow when registering in mastra instance', async () => {
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1);
+
+      expect(workflow.committed).toBe(false);
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      expect(workflow.committed).toBe(true);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      await mastra.stopEventEngine();
+    });
+
+    it.skip('should bail foreach execution when called in a concurrent batch - evented runtime foreach bail not implemented', async () => {
+      // Bail functionality for foreach concurrent execution is not implemented in evented runtime
+    });
+
+    it.skip('should not show removed requestContext values in subsequent steps - evented runtime requestContext removal not tested', async () => {
+      // RequestContext value removal between steps needs verification in evented runtime
+    });
+
+    it.skip('should only update workflow status to success after all steps have run successfully - timing test incompatible with evented', async () => {
+      // This test verifies workflow status during execution. Evented runtime's event-based
+      // architecture makes intermediate status checks behave differently from default runtime.
+    });
+
+    it('should provide full TypeScript support for tracingContext', () => {
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          expect(tracingContext).toBeDefined();
+          expect(typeof tracingContext.currentSpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
+    });
+
+    it.skip('should resolve dynamic mappings via .map() with custom step id - test needs investigation', async () => {
+      // This test involves complex .map() step ID customization that needs investigation
+      // for evented runtime compatibility
+    });
+  });
 });
