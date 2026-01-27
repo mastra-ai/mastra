@@ -176,6 +176,11 @@ export const workspaceInfoResponseSchema = z.object({
       hasSkills: z.boolean(),
     })
     .optional(),
+  safety: z
+    .object({
+      readOnly: z.boolean(),
+    })
+    .optional(),
 });
 
 const workspaceItemSchema = z.object({
@@ -192,6 +197,9 @@ const workspaceItemSchema = z.object({
     canVector: z.boolean(),
     canHybrid: z.boolean(),
     hasSkills: z.boolean(),
+  }),
+  safety: z.object({
+    readOnly: z.boolean(),
   }),
 });
 

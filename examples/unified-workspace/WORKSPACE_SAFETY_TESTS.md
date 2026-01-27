@@ -18,16 +18,16 @@ This document contains test cases for verifying workspace safety features work c
 
 ## Agents Under Test
 
-| Agent                   | Workspace                    | Safety Config                        | Key Restriction                   |
-| ----------------------- | ---------------------------- | ------------------------------------ | --------------------------------- |
-| Research Agent          | `readonlyWorkspace`          | `readOnly: true`                     | No write operations               |
-| Editor Agent            | `safeWriteWorkspace`         | `requireReadBeforeWrite: true`       | Must read before write            |
-| Automation Agent        | `supervisedSandboxWorkspace` | `sandbox.requireApproval: 'all'`     | All sandbox ops need approval     |
-| FS Write Approval Agent | `fsWriteApprovalWorkspace`   | `filesystem.requireApproval: 'write'`| Write ops need approval           |
-| FS All Approval Agent   | `fsAllApprovalWorkspace`     | `filesystem.requireApproval: 'all'`  | All fs ops need approval          |
-| Developer Agent         | `globalWorkspace`            | None                                 | Full access                       |
-| Documentation Agent     | `docsAgentWorkspace`         | None                                 | Full access + extra skills        |
-| Support Agent           | `isolatedDocsWorkspace`      | None                                 | Full access, limited skills       |
+| Agent                   | Workspace                    | Safety Config                         | Key Restriction               |
+| ----------------------- | ---------------------------- | ------------------------------------- | ----------------------------- |
+| Research Agent          | `readonlyWorkspace`          | `readOnly: true`                      | No write operations           |
+| Editor Agent            | `safeWriteWorkspace`         | `requireReadBeforeWrite: true`        | Must read before write        |
+| Automation Agent        | `supervisedSandboxWorkspace` | `sandbox.requireApproval: 'all'`      | All sandbox ops need approval |
+| FS Write Approval Agent | `fsWriteApprovalWorkspace`   | `filesystem.requireApproval: 'write'` | Write ops need approval       |
+| FS All Approval Agent   | `fsAllApprovalWorkspace`     | `filesystem.requireApproval: 'all'`   | All fs ops need approval      |
+| Developer Agent         | `globalWorkspace`            | None                                  | Full access                   |
+| Documentation Agent     | `docsAgentWorkspace`         | None                                  | Full access + extra skills    |
+| Support Agent           | `isolatedDocsWorkspace`      | None                                  | Full access, limited skills   |
 
 ## Test Execution Summary
 

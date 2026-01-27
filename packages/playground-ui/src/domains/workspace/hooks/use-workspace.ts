@@ -14,12 +14,17 @@ export interface WorkspaceCapabilities {
   hasSkills: boolean;
 }
 
+export interface WorkspaceSafety {
+  readOnly: boolean;
+}
+
 export interface WorkspaceInfo {
   isWorkspaceConfigured: boolean;
   id?: string;
   name?: string;
   status?: string;
   capabilities?: WorkspaceCapabilities;
+  safety?: WorkspaceSafety;
 }
 
 export interface WorkspaceItem {
@@ -30,6 +35,7 @@ export interface WorkspaceItem {
   agentId?: string;
   agentName?: string;
   capabilities: WorkspaceCapabilities;
+  safety: WorkspaceSafety;
 }
 
 export interface WorkspacesListResponse {
@@ -382,18 +388,3 @@ export const useIndexWorkspaceContent = () => {
   });
 };
 
-export const useUnindexWorkspaceContent = () => {
-  const client = useMastraClient();
-  const baseUrl = getBaseUrl(client);
-
-  return useMutation({
-    mutationFn: async (path: string): Promise<{ success: boolean; path: string }> => {
-      const searchParams = new URLSearchParams();
-      searchParams.set('path', path);
-
-      return workspaceRequest(baseUrl, `/api/workspace/unindex?${searchParams.toString()}`, {
-        method: 'DELETE',
-      });
-    },
-  });
-};

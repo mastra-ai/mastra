@@ -74,7 +74,6 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   );
 };
 
-
 const ImageWithFallback = ({ alt, src, ...rest }: ImgHTMLAttributes<HTMLImageElement>) => {
   const [error, setError] = useState(false);
 

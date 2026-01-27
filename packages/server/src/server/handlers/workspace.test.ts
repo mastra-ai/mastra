@@ -79,6 +79,7 @@ function createMockWorkspace(
     canBM25?: boolean;
     canVector?: boolean;
     canHybrid?: boolean;
+    readOnly?: boolean;
   } = {},
 ) {
   return {
@@ -91,6 +92,7 @@ function createMockWorkspace(
     canBM25: options.canBM25 ?? false,
     canVector: options.canVector ?? false,
     canHybrid: options.canHybrid ?? false,
+    readOnly: options.readOnly ?? false,
     search: vi.fn().mockResolvedValue([]),
     index: vi.fn().mockResolvedValue(undefined),
   };
@@ -138,6 +140,9 @@ describe('Workspace Handlers', () => {
           canVector: false,
           canHybrid: false,
           hasSkills: true,
+        },
+        safety: {
+          readOnly: false,
         },
       });
     });
@@ -287,6 +292,31 @@ describe('Workspace Handlers', () => {
         expect((e as HTTPException).status).toBe(400);
       }
     });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const fs = createMockFilesystem();
+      const workspace = createMockWorkspace({ fs, readOnly: true });
+      const mastra = createMockMastra(workspace);
+
+      await expect(
+        WORKSPACE_FS_WRITE_ROUTE.handler({
+          mastra,
+          path: '/test.txt',
+          content: 'content',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_FS_WRITE_ROUTE.handler({
+          mastra,
+          path: '/test.txt',
+          content: 'content',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+        expect((e as HTTPException).message).toBe('Workspace is in read-only mode');
+      }
+    });
   });
 
   describe('WORKSPACE_FS_LIST_ROUTE', () => {
@@ -360,6 +390,30 @@ describe('Workspace Handlers', () => {
         expect((e as HTTPException).status).toBe(404);
       }
     });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const files = new Map([['/test.txt', 'content']]);
+      const fs = createMockFilesystem(files);
+      const workspace = createMockWorkspace({ fs, readOnly: true });
+      const mastra = createMockMastra(workspace);
+
+      await expect(
+        WORKSPACE_FS_DELETE_ROUTE.handler({
+          mastra,
+          path: '/test.txt',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_FS_DELETE_ROUTE.handler({
+          mastra,
+          path: '/test.txt',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+        expect((e as HTTPException).message).toBe('Workspace is in read-only mode');
+      }
+    });
   });
 
   describe('WORKSPACE_FS_MKDIR_ROUTE', () => {
@@ -376,6 +430,29 @@ describe('Workspace Handlers', () => {
       expect(result.success).toBe(true);
       expect(result.path).toBe('/newdir');
       expect(fs.mkdir).toHaveBeenCalledWith('/newdir', { recursive: true });
+    });
+
+    it('should throw 403 when workspace is read-only', async () => {
+      const fs = createMockFilesystem();
+      const workspace = createMockWorkspace({ fs, readOnly: true });
+      const mastra = createMockMastra(workspace);
+
+      await expect(
+        WORKSPACE_FS_MKDIR_ROUTE.handler({
+          mastra,
+          path: '/newdir',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_FS_MKDIR_ROUTE.handler({
+          mastra,
+          path: '/newdir',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(403);
+        expect((e as HTTPException).message).toBe('Workspace is in read-only mode');
+      }
     });
   });
 

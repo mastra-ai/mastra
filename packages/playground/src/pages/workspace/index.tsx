@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -43,7 +43,7 @@ export default function Workspace() {
   const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
 
   // List of all workspaces (global + agent workspaces)
-  const { data: workspacesData, isLoading: isLoadingWorkspaces } = useWorkspaces();
+  const { data: workspacesData } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
   // Workspace info (currently always fetches global workspace)
@@ -121,6 +121,8 @@ export default function Workspace() {
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
   const canBM25 = workspaceInfo?.capabilities?.canBM25 ?? false;
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
+  // Check if the selected workspace is read-only
+  const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
@@ -248,6 +250,11 @@ export default function Workspace() {
                         </div>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
+                        {workspace.safety?.readOnly && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                            Read-only
+                          </span>
+                        )}
                         {workspace.capabilities.hasFilesystem && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">FS</span>
                         )}
@@ -279,6 +286,9 @@ export default function Workspace() {
               )}
               <span className="text-icon3">·</span>
               <span className="text-icon3">{selectedWorkspace.status}</span>
+              {isReadOnly && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
+              )}
             </div>
           )}
 
@@ -361,9 +371,16 @@ export default function Workspace() {
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
-                    onCreateDirectory={path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })}
-                    onDelete={path =>
-                      deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
+                    onCreateDirectory={
+                      isReadOnly
+                        ? undefined
+                        : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
+                    }
+                    onDelete={
+                      isReadOnly
+                        ? undefined
+                        : path =>
+                            deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
                     }
                   />
                   {selectedFile && (
