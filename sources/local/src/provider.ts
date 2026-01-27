@@ -4,7 +4,7 @@ import type { MastraProjectDetector } from './detector';
 import { detector as defaultDetector } from './detector';
 import { DirectoryScanner } from './scanner';
 import type { LocalProjectSource as LocalProjectSourceType, LocalProjectSourceConfig } from './types';
-import { generateProjectId, isDirectory, isPathAccessible, resolvePath } from './utils';
+import { copyDirectory, generateProjectId, isDirectory, isPathAccessible, resolvePath } from './utils';
 import { ProjectWatcher } from './watcher';
 
 /**
@@ -156,20 +156,38 @@ export class LocalProjectSource implements ProjectSourceProvider {
 
   /**
    * Get the local path to the project.
-   * For local sources, returns the path directly (no copying needed).
+   *
+   * If targetDir is provided, copies the project to that directory.
+   * If targetDir is not provided, returns the source path directly (for listing/validation).
    *
    * @param source - Project source
-   * @param _targetDir - Target directory (ignored for local source)
-   * @returns Local filesystem path
+   * @param targetDir - Optional target directory to copy project to
+   * @returns Local filesystem path (either source path or targetDir)
    */
-  async getProjectPath(source: ProjectSource, _targetDir: string): Promise<string> {
-    // For local source, just return the path directly
-    // Runners use the project in-place
+  async getProjectPath(source: ProjectSource, targetDir?: string): Promise<string> {
     if (!(await this.validateAccess(source))) {
       throw new Error(`Project path is not accessible: ${source.path}`);
     }
 
-    return source.path;
+    // If no targetDir, return source path (for listing/validation only)
+    if (!targetDir) {
+      return source.path;
+    }
+
+    // Copy source to target directory
+    await this.copyProject(source.path, targetDir);
+    return targetDir;
+  }
+
+  /**
+   * Copy a project directory to a target location.
+   * Excludes node_modules, .git, and other build artifacts.
+   *
+   * @param sourcePath - Source project path
+   * @param targetDir - Target directory
+   */
+  private async copyProject(sourcePath: string, targetDir: string): Promise<void> {
+    await copyDirectory(sourcePath, targetDir);
   }
 
   /**

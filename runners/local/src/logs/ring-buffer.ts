@@ -2,8 +2,10 @@
  * Timestamped log entry.
  */
 export interface LogEntry {
+  id: string;
   timestamp: Date;
   line: string;
+  stream: 'stdout' | 'stderr';
 }
 
 /**
@@ -74,5 +76,29 @@ export class RingBuffer<T> {
     this.head = 0;
     this.tail = 0;
     this.size = 0;
+  }
+
+  /**
+   * Get items before a cursor (older items), returns in chronological order.
+   * Used for "load more" when scrolling up.
+   */
+  getBefore(cursorId: string, limit: number, getId: (item: T) => string): T[] {
+    const all = this.toArray();
+    const cursorIndex = all.findIndex(item => getId(item) === cursorId);
+    if (cursorIndex === -1) {
+      // Cursor not found, return from the start
+      return all.slice(0, limit);
+    }
+    // Get items before the cursor
+    const startIndex = Math.max(0, cursorIndex - limit);
+    return all.slice(startIndex, cursorIndex);
+  }
+
+  /**
+   * Get the newest items (for initial load), returns in chronological order.
+   * Used for initial page load.
+   */
+  getNewest(limit: number): T[] {
+    return this.getTail(limit);
   }
 }

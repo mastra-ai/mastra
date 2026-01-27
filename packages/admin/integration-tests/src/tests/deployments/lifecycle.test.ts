@@ -533,6 +533,7 @@ describe('Deployment Lifecycle Integration Tests', () => {
         commitMessage: 'Test commit',
         status: 'queued' as const,
         logs: '',
+        logPath: null,
         queuedAt: new Date(),
         errorMessage: null,
       };

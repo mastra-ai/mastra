@@ -7,6 +7,7 @@ import { DEPLOYMENT_ROUTES } from './deployments';
 import { BUILD_ROUTES } from './builds';
 import { SERVER_ROUTES } from './servers';
 import { OBSERVABILITY_ROUTES } from './observability';
+import { SPANS_ROUTES } from './spans';
 import { ADMIN_ROUTES } from './admin';
 
 /**
@@ -21,6 +22,7 @@ export const ADMIN_SERVER_ROUTES: AdminServerRoute[] = [
   ...BUILD_ROUTES,
   ...SERVER_ROUTES,
   ...OBSERVABILITY_ROUTES,
+  ...SPANS_ROUTES,
   ...ADMIN_ROUTES,
 ];
 
@@ -34,6 +36,7 @@ export {
   BUILD_ROUTES,
   SERVER_ROUTES,
   OBSERVABILITY_ROUTES,
+  SPANS_ROUTES,
   ADMIN_ROUTES,
 };
 

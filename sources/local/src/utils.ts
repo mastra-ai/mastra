@@ -3,6 +3,18 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 /**
+ * Default directories to exclude when copying projects.
+ */
+export const DEFAULT_COPY_EXCLUDES = [
+  'node_modules',
+  '.git',
+  'dist',
+  '.next',
+  '.turbo',
+  '.mastra',
+];
+
+/**
  * Generate a stable project ID from a path.
  * Uses a hash of the normalized absolute path.
  *
@@ -66,4 +78,59 @@ export function resolvePath(inputPath: string): string {
  */
 export function getProjectNameFromPath(projectPath: string): string {
   return path.basename(projectPath);
+}
+
+/**
+ * Options for copyDirectory.
+ */
+export interface CopyDirectoryOptions {
+  /**
+   * Directories and files to exclude from copy.
+   * @default DEFAULT_COPY_EXCLUDES
+   */
+  exclude?: string[];
+}
+
+/**
+ * Recursively copy a directory to a target location.
+ *
+ * @param source - Source directory path
+ * @param target - Target directory path
+ * @param options - Copy options
+ */
+export async function copyDirectory(
+  source: string,
+  target: string,
+  options: CopyDirectoryOptions = {},
+): Promise<void> {
+  const excludes = new Set(options.exclude ?? DEFAULT_COPY_EXCLUDES);
+
+  // Create target directory
+  await fs.mkdir(target, { recursive: true });
+
+  // Read source directory
+  const entries = await fs.readdir(source, { withFileTypes: true });
+
+  for (const entry of entries) {
+    // Skip excluded entries
+    if (excludes.has(entry.name)) {
+      continue;
+    }
+
+    const sourcePath = path.join(source, entry.name);
+    const targetPath = path.join(target, entry.name);
+
+    if (entry.isDirectory()) {
+      // Recursively copy directory
+      await copyDirectory(sourcePath, targetPath, options);
+    } else if (entry.isFile()) {
+      // Copy file
+      await fs.copyFile(sourcePath, targetPath);
+    } else if (entry.isSymbolicLink()) {
+      // Copy symbolic link
+      const linkTarget = await fs.readlink(sourcePath);
+      await fs.symlink(linkTarget, targetPath);
+    }
+    // Skip other types (sockets, devices, etc.)
+  }
 }

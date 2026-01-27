@@ -1,5 +1,5 @@
-import type { Server as HTTPServer } from 'node:http';
-import { serve } from '@hono/node-server';
+import { createServer, type Server as HTTPServer } from 'node:http';
+import { getRequestListener } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import type { MastraAdmin, AdminLogger } from '@mastra/admin';
 import { ConsoleAdminLogger } from '@mastra/admin';
@@ -64,6 +64,7 @@ export class AdminServer {
   private readonly config: ResolvedAdminServerConfig;
   private readonly admin: MastraAdmin;
   private server?: ServerType;
+  private httpServer?: HTTPServer;
   private wsServer?: AdminWebSocketServer;
   private buildLogStreamer?: BuildLogStreamer;
   private serverLogStreamer?: ServerLogStreamer;
@@ -150,7 +151,13 @@ export class AdminServer {
     });
 
     // Auth middleware (validates tokens, sets user and userId)
-    this.app.use(`${basePath}/*`, createAuthMiddleware(this.admin));
+    // Note: /spans/publish uses custom token auth (deployment ID as token)
+    this.app.use(
+      `${basePath}/*`,
+      createAuthMiddleware(this.admin, {
+        publicPaths: ['/spans/publish'],
+      }),
+    );
 
     // RBAC middleware (resolves team context, sets permissions)
     this.app.use(`${basePath}/*`, createRBACMiddleware(this.admin));
@@ -206,6 +213,17 @@ export class AdminServer {
 
     this.app[method](path, async c => {
       try {
+        // Extract access token for routes that need custom auth
+        let accessToken: string | undefined;
+        if (route.requiresAuth === false) {
+          const authHeader = c.req.header('Authorization');
+          if (authHeader?.startsWith('Bearer ')) {
+            accessToken = authHeader.substring(7);
+          } else if (authHeader) {
+            accessToken = authHeader;
+          }
+        }
+
         // Build context from middleware-set variables
         const context: AdminServerContext = {
           admin: this.admin,
@@ -216,6 +234,7 @@ export class AdminServer {
           permissions: c.get('permissions') ?? [],
           abortSignal: c.get('abortSignal'),
           logger: serverLogger,
+          accessToken,
         };
 
         // Parse and validate params
@@ -316,69 +335,79 @@ export class AdminServer {
   async start(): Promise<void> {
     const { port, host, basePath, enableWebSocket } = this.config;
 
+    // Create HTTP server manually so we can attach WebSocket to it
+    const httpServer = createServer(getRequestListener(this.app.fetch));
+    this.httpServer = httpServer;
+
     return new Promise(resolve => {
-      this.server = serve(
-        {
-          fetch: this.app.fetch,
-          port,
-          hostname: host,
-        },
-        _info => {
-          console.info(`AdminServer listening on http://${host}:${port}`);
-          console.info(`API available at http://${host}:${port}${basePath}`);
-          console.info(`Health check at http://${host}:${port}/health`);
-          console.info(`Readiness check at http://${host}:${port}/ready`);
+      httpServer.listen(port, host, () => {
+        console.info(`AdminServer listening on http://${host}:${port}`);
+        console.info(`API available at http://${host}:${port}${basePath}`);
+        console.info(`Health check at http://${host}:${port}/health`);
+        console.info(`Readiness check at http://${host}:${port}/ready`);
 
-          // Setup WebSocket server if enabled
-          if (enableWebSocket && this.server) {
-            // Get the underlying HTTP server
-            // The serve() function returns a ServerType which has server property
-            const httpServer = (this.server as unknown as { server?: HTTPServer }).server;
-            if (httpServer) {
-              this.wsServer = new AdminWebSocketServer({
-                admin: this.admin,
-                server: httpServer,
-                path: '/ws',
-              });
-              console.info(`WebSocket server listening on ws://${host}:${port}/ws`);
+        // Setup WebSocket server if enabled
+        if (enableWebSocket) {
+          this.wsServer = new AdminWebSocketServer({
+            admin: this.admin,
+            server: httpServer,
+            path: '/ws',
+          });
+          console.info(`WebSocket server listening on ws://${host}:${port}/ws`);
 
-              // Setup log streamers
-              this.buildLogStreamer = new BuildLogStreamer({
-                wsServer: this.wsServer,
-              });
+          // Setup log streamers
+          this.buildLogStreamer = new BuildLogStreamer({
+            wsServer: this.wsServer,
+          });
 
-              this.serverLogStreamer = new ServerLogStreamer({
-                wsServer: this.wsServer,
-              });
-            }
-          }
+          this.serverLogStreamer = new ServerLogStreamer({
+            wsServer: this.wsServer,
+          });
 
-          // Start build worker if enabled
-          if (this.config.enableBuildWorker) {
-            this.buildWorker = new BuildWorker({
-              admin: this.admin,
-              wsServer: this.wsServer,
-              intervalMs: this.config.buildWorkerIntervalMs,
+          // Wire up orchestrator callbacks to broadcast via WebSocket
+          const orchestrator = this.admin.getOrchestrator();
+          orchestrator.setOnLog((buildId, log) => {
+            this.buildLogStreamer?.broadcastLog(buildId, log);
+          });
+          orchestrator.setOnStatus((buildId, status) => {
+            this.buildLogStreamer?.broadcastStatus(buildId, status);
+          });
+
+          // Wire up runner server log callback to broadcast via WebSocket
+          const runner = this.admin.getRunner();
+          if (runner?.setOnServerLog) {
+            runner.setOnServerLog((serverId: string, line: string, stream: 'stdout' | 'stderr', id?: string) => {
+              this.serverLogStreamer?.broadcastLog(serverId, line, stream, id);
             });
-            this.buildWorker.start();
-            console.info(`Build worker started (interval: ${this.config.buildWorkerIntervalMs}ms)`);
+            console.info('Server log streaming enabled via WebSocket');
           }
+        }
 
-          // Start health check worker if enabled
-          if (this.config.enableHealthWorker) {
-            this.healthWorker = new HealthCheckWorker({
-              admin: this.admin,
-              wsServer: this.wsServer,
-              intervalMs: this.config.healthCheckIntervalMs,
-            });
-            this.healthWorker.start();
-            console.info(`Health check worker started (interval: ${this.config.healthCheckIntervalMs}ms)`);
-          }
+        // Start build worker if enabled
+        if (this.config.enableBuildWorker) {
+          this.buildWorker = new BuildWorker({
+            admin: this.admin,
+            wsServer: this.wsServer,
+            intervalMs: this.config.buildWorkerIntervalMs,
+          });
+          this.buildWorker.start();
+          console.info(`Build worker started (interval: ${this.config.buildWorkerIntervalMs}ms)`);
+        }
 
-          this.startTime = new Date();
-          resolve();
-        },
-      );
+        // Start health check worker if enabled
+        if (this.config.enableHealthWorker) {
+          this.healthWorker = new HealthCheckWorker({
+            admin: this.admin,
+            wsServer: this.wsServer,
+            intervalMs: this.config.healthCheckIntervalMs,
+          });
+          this.healthWorker.start();
+          console.info(`Health check worker started (interval: ${this.config.healthCheckIntervalMs}ms)`);
+        }
+
+        this.startTime = new Date();
+        resolve();
+      });
     });
   }
 
@@ -402,8 +431,8 @@ export class AdminServer {
     }
 
     // Close HTTP server
-    if (this.server) {
-      this.server.close();
+    if (this.httpServer) {
+      this.httpServer.close();
     }
 
     console.info('AdminServer stopped');
@@ -427,7 +456,7 @@ export class AdminServer {
    * Check if server is healthy.
    */
   isHealthy(): boolean {
-    return this.server !== undefined;
+    return this.httpServer?.listening ?? false;
   }
 
   /**

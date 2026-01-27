@@ -14,6 +14,8 @@ export interface TimeRange {
 export interface QueryPagination {
   limit?: number;
   offset?: number;
+  /** Sort order for results. Defaults to 'desc' (newest first) for logs. */
+  sortOrder?: 'asc' | 'desc';
 }
 
 /**

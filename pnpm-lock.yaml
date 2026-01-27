@@ -40,6 +40,9 @@ importers:
       globby:
         specifier: ^14.1.0
         version: 14.1.0
+      http-proxy:
+        specifier: ^1.18.1
+        version: 1.18.1
       node-forge:
         specifier: 1.3.2
         version: 1.3.2
@@ -4002,6 +4005,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/observability-writer':
+        specifier: workspace:*
+        version: link:../../observability/writer
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -31038,7 +31044,6 @@ snapshots:
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
-    optional: true
 
   http2-wrapper@2.2.1:
     dependencies:

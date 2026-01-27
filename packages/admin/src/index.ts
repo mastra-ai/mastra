@@ -3,6 +3,7 @@ export { MastraAdmin } from './mastra-admin';
 export type {
   MastraAdminConfig,
   ObservabilityConfig,
+  BuildLogsConfig,
   AdminAuthProvider,
   CreateTeamInput,
   CreateProjectInput,
@@ -16,7 +17,7 @@ export { ConsoleAdminLogger, NoopAdminLogger } from './logger';
 
 // Orchestrator
 export { BuildOrchestrator } from './orchestrator';
-export type { BuildJob, BuildContext, BuildResult } from './orchestrator';
+export type { BuildJob, BuildContext, BuildResult, BuildLogCallback, BuildStatusCallback } from './orchestrator';
 
 // Types
 export type {
@@ -67,20 +68,13 @@ export type { AdminStorage, PaginationParams, PaginatedResult } from './storage/
 // File Storage
 export type { FileStorageProvider } from './file-storage/base';
 
+// Build Logs
+export { BuildLogWriter } from './logs/build-log-writer';
+export type { BuildLogWriterConfig } from './logs/build-log-writer';
+
 // Observability
-export type {
-  Trace,
-  Span,
-  SpanEvent,
-  Log,
-  Metric,
-  Score,
-  ObservabilityEvent,
-} from './observability/types';
-export type {
-  ObservabilityWriterConfig,
-  ObservabilityWriterInterface,
-} from './observability/writer';
+export type { Trace, Span, SpanEvent, Log, Metric, Score, ObservabilityEvent } from './observability/types';
+export type { ObservabilityWriterConfig, ObservabilityWriterInterface } from './observability/writer';
 export type {
   TimeRange,
   QueryPagination,
@@ -94,7 +88,15 @@ export type {
 } from './observability/query-provider';
 
 // Runner
-export type { ProjectRunner, BuildOptions, RunOptions, LogStreamCallback } from './runner/base';
+export type {
+  ProjectRunner,
+  BuildOptions,
+  RunOptions,
+  LogStreamCallback,
+  ServerLogCallback,
+  StructuredLogEntry,
+  PaginatedLogsResult,
+} from './runner/base';
 
 // Router
 export type { EdgeRouterProvider } from './router/base';

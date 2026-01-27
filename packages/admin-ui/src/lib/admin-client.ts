@@ -73,7 +73,7 @@ export class AdminClient {
       body?: unknown;
       params?: Record<string, string | number | boolean | null | undefined>;
       teamId?: string;
-    }
+    },
   ): Promise<T> {
     const token = await this.getToken();
     if (!token) {
@@ -134,8 +134,7 @@ export class AdminClient {
 
     get: (teamId: string) => this.request<Team>('GET', `/teams/${teamId}`),
 
-    create: (data: { name: string; slug?: string }) =>
-      this.request<Team>('POST', '/teams', { body: data }),
+    create: (data: { name: string; slug?: string }) => this.request<Team>('POST', '/teams', { body: data }),
 
     update: (teamId: string, data: { name?: string; settings?: TeamSettings }) =>
       this.request<Team>('PATCH', `/teams/${teamId}`, { body: data }),
@@ -156,8 +155,7 @@ export class AdminClient {
       this.request<void>('DELETE', `/teams/${teamId}/members/${userId}`),
 
     // Invites
-    listInvites: (teamId: string) =>
-      this.request<PaginatedResponse<TeamInvite>>('GET', `/teams/${teamId}/invites`),
+    listInvites: (teamId: string) => this.request<PaginatedResponse<TeamInvite>>('GET', `/teams/${teamId}/invites`),
 
     cancelInvite: (teamId: string, inviteId: string) =>
       this.request<void>('DELETE', `/teams/${teamId}/invites/${inviteId}`),
@@ -174,7 +172,16 @@ export class AdminClient {
   // Sources
   // ============================================================
   sources = {
-    list: (teamId: string) => this.request<ProjectSource[]>('GET', `/teams/${teamId}/sources`),
+    list: async (teamId: string, params?: { search?: string; type?: 'local' | 'github'; page?: number; perPage?: number }) => {
+      const result = await this.request<{
+        data: ProjectSource[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }>('GET', `/teams/${teamId}/sources`, { params });
+      return result;
+    },
 
     get: (sourceId: string) => this.request<ProjectSource>('GET', `/sources/${sourceId}`),
 
@@ -200,8 +207,7 @@ export class AdminClient {
     delete: (projectId: string) => this.request<void>('DELETE', `/projects/${projectId}`),
 
     // Environment Variables
-    getEnvVars: (projectId: string) =>
-      this.request<EncryptedEnvVar[]>('GET', `/projects/${projectId}/env-vars`),
+    getEnvVars: (projectId: string) => this.request<EncryptedEnvVar[]>('GET', `/projects/${projectId}/env-vars`),
 
     setEnvVar: (projectId: string, data: { key: string; value: string; isSecret: boolean }) =>
       this.request<void>('POST', `/projects/${projectId}/env-vars`, { body: data }),
@@ -210,8 +216,7 @@ export class AdminClient {
       this.request<void>('DELETE', `/projects/${projectId}/env-vars/${encodeURIComponent(key)}`),
 
     // API Tokens
-    listApiTokens: (projectId: string) =>
-      this.request<ProjectApiToken[]>('GET', `/projects/${projectId}/api-tokens`),
+    listApiTokens: (projectId: string) => this.request<ProjectApiToken[]>('GET', `/projects/${projectId}/api-tokens`),
 
     createApiToken: (projectId: string, data: { name: string; scopes: string[]; expiresAt?: string }) =>
       this.request<{ token: string; tokenInfo: ProjectApiToken }>('POST', `/projects/${projectId}/api-tokens`, {
@@ -275,6 +280,15 @@ export class AdminClient {
 
     getLogs: (serverId: string, params?: { limit?: number; since?: string }) =>
       this.request<{ logs: string[] }>('GET', `/servers/${serverId}/logs`, { params }),
+
+    getLogsPaginated: (serverId: string, params?: { limit?: number; before?: string }) =>
+      this.request<{
+        serverId: string;
+        entries: Array<{ id: string; timestamp: string; line: string; stream: 'stdout' | 'stderr' }>;
+        hasMore: boolean;
+        oldestCursor: string | null;
+        newestCursor: string | null;
+      }>('GET', `/servers/${serverId}/logs/paginated`, { params }),
 
     getMetrics: (serverId: string) => this.request<ServerMetrics>('GET', `/servers/${serverId}/metrics`),
   };

@@ -36,6 +36,7 @@ export interface ServerLogEvent {
   type: 'server:log';
   payload: {
     serverId: string;
+    id?: string;
     line: string;
     timestamp: string;
     stream: 'stdout' | 'stderr';

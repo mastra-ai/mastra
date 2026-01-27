@@ -11,6 +11,8 @@ export default defineConfig({
     preset: 'smallest',
   },
   sourcemap: true,
+  // Externalize optional dependencies so dynamic imports work at runtime
+  external: ['http-proxy', 'selfsigned'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

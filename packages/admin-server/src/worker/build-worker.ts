@@ -176,18 +176,36 @@ export class BuildWorker {
 
     // Try to process up to `slotsAvailable` builds
     for (let i = 0; i < slotsAvailable; i++) {
-      // Get queue status to check if there are builds waiting
+      // First check in-memory queue (for recently queued builds)
       const queueStatus = this.orchestrator.getQueueStatus();
-      if (queueStatus.length === 0) {
-        break; // No more builds in queue
+      this.logger.debug('Queue status', { queueLength: queueStatus.length, processing: queueStatus.processing });
+
+      if (queueStatus.length > 0) {
+        // Process from in-memory queue
+        this.logger.info('Processing build from in-memory queue');
+        const processed = await this.orchestrator.processNextBuild();
+        this.logger.info('Build processed', { processed });
+        if (processed) {
+          continue;
+        }
       }
 
-      // Process the next build
-      // Note: processNextBuild is synchronous on queue check but async on build
-      const processed = await this.orchestrator.processNextBuild();
-      if (!processed) {
-        break; // No build was processed (queue empty or already processing)
+      // If in-memory queue is empty, check database queue directly
+      // This handles builds queued before server restart or missed builds
+      const storage = this.orchestrator.getStorage();
+      if (storage && 'dequeueNextBuild' in storage) {
+        this.logger.debug('Checking database queue');
+        const build = await (storage as { dequeueNextBuild: () => Promise<unknown> }).dequeueNextBuild();
+        if (build) {
+          // Process the build directly via orchestrator
+          this.logger.info('Processing build from database queue', { buildId: (build as { id: string }).id });
+          await this.orchestrator.processBuildById((build as { id: string }).id);
+          continue;
+        }
       }
+
+      // No more builds to process
+      break;
     }
   }
 

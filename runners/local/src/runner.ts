@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type {
   ProjectRunner,
@@ -8,9 +9,12 @@ import type {
   BuildOptions,
   RunOptions,
   LogStreamCallback,
+  ServerLogCallback,
   ProjectSourceProvider,
   EdgeRouterProvider,
+  FileStorageProvider,
 } from '@mastra/admin';
+import { ObservabilityWriter } from '@mastra/observability-writer';
 import { HealthStatus } from '@mastra/admin';
 import { ProjectBuilder } from './build/builder';
 import { HealthChecker } from './health/checker';
@@ -80,6 +84,7 @@ interface ResolvedConfig {
   logRetentionLines: number;
   buildDir: string;
   globalEnvVars: Record<string, string>;
+  tracesEndpoint?: string;
 }
 
 const DEFAULT_HEALTH_CHECK: RequiredHealthCheckConfig = {
@@ -95,7 +100,7 @@ const DEFAULT_CONFIG: Omit<ResolvedConfig, 'globalEnvVars'> = {
   defaultBuildTimeoutMs: 600000,
   healthCheck: DEFAULT_HEALTH_CHECK,
   logRetentionLines: 10000,
-  buildDir: '.mastra/builds',
+  buildDir: path.join(tmpdir(), 'mastra', 'builds'),
 };
 
 /**
@@ -132,6 +137,13 @@ export class LocalProcessRunner implements ProjectRunner {
   // Injected providers
   private source?: ProjectSourceProvider;
   private router?: EdgeRouterProvider;
+  private observabilityStorage?: FileStorageProvider;
+
+  // Server log callback for real-time streaming
+  private onServerLog?: ServerLogCallback;
+
+  // Track observability writers per server for cleanup on stop
+  private readonly observabilityWriters: Map<string, ObservabilityWriter> = new Map();
 
   constructor(config: LocalProcessRunnerConfig = {}) {
     this.config = {
@@ -139,6 +151,7 @@ export class LocalProcessRunner implements ProjectRunner {
       ...config,
       healthCheck: { ...DEFAULT_HEALTH_CHECK, ...config.healthCheck },
       globalEnvVars: config.globalEnvVars ?? {},
+      tracesEndpoint: config.tracesEndpoint,
     };
 
     this.portAllocator = new PortAllocator(this.config.portRange);
@@ -175,6 +188,23 @@ export class LocalProcessRunner implements ProjectRunner {
   }
 
   /**
+   * Set the callback for server log events.
+   * Called by AdminServer to receive real-time logs from running servers.
+   */
+  setOnServerLog(callback: ServerLogCallback): void {
+    this.onServerLog = callback;
+  }
+
+  /**
+   * Set the file storage provider for observability data persistence.
+   * Called by MastraAdmin during initialization to enable log file writing.
+   */
+  setObservabilityStorage(storage: FileStorageProvider): void {
+    this.observabilityStorage = storage;
+    this.logger.info('Observability storage configured');
+  }
+
+  /**
    * Build a project from source.
    */
   async build(
@@ -185,8 +215,8 @@ export class LocalProcessRunner implements ProjectRunner {
   ): Promise<Build> {
     this.logger.info('Starting build', { projectId: project.id, buildId: build.id });
 
-    // Get project path from source provider
-    const projectPath = await this.getProjectPath(project);
+    // Get project path from source provider (copies to build-specific directory)
+    const projectPath = await this.getProjectPath(project, build.id);
 
     // Run the build
     const result = await this.projectBuilder.build(project, build, projectPath, options, onLog);
@@ -215,16 +245,16 @@ export class LocalProcessRunner implements ProjectRunner {
       buildId: build.id,
     });
 
-    // Get project path
-    const projectPath = await this.getProjectPath(project);
-    const outputDir = path.join(projectPath, '.mastra/output');
+    // Use the build directory (project was copied during build phase)
+    const buildDir = this.getBuildDir(build.id);
+    const outputDir = path.join(buildDir, '.mastra/output');
 
     // Allocate port
     const port = await this.portAllocator.allocate(options?.port);
     this.logger.debug('Allocated port', { port });
 
     // Prepare environment
-    const envVars = {
+    const envVars: Record<string, string> = {
       ...this.config.globalEnvVars,
       ...options?.envVars,
       NODE_ENV: 'production',
@@ -233,8 +263,70 @@ export class LocalProcessRunner implements ProjectRunner {
       MASTRA_PROJECT_ID: project.id,
     };
 
+    // Inject observability env vars if traces endpoint is configured
+    // This enables CloudExporter to send spans to the admin server
+    if (this.config.tracesEndpoint) {
+      envVars.MASTRA_CLOUD_ACCESS_TOKEN = deployment.id;
+      envVars.MASTRA_CLOUD_AI_TRACES_ENDPOINT = this.config.tracesEndpoint;
+      this.logger.info('Injected observability env vars', {
+        MASTRA_CLOUD_ACCESS_TOKEN: deployment.id,
+        MASTRA_CLOUD_AI_TRACES_ENDPOINT: this.config.tracesEndpoint,
+      });
+    } else {
+      this.logger.warn('No tracesEndpoint configured - observability env vars not injected');
+    }
+
     // Create log collector
     const logCollector = new LogCollector(this.config.logRetentionLines);
+
+    // Generate server ID (before starting process so we can use it in callbacks)
+    const serverId = crypto.randomUUID();
+
+    // Create observability writer if storage is configured
+    let observabilityWriter: ObservabilityWriter | undefined;
+    if (this.observabilityStorage) {
+      observabilityWriter = new ObservabilityWriter({
+        fileStorage: this.observabilityStorage,
+        projectId: project.id,
+        deploymentId: deployment.id,
+        batchSize: 100,
+        flushIntervalMs: 5000,
+        debug: false,
+      });
+      this.logger.debug('ObservabilityWriter created', {
+        projectId: project.id,
+        deploymentId: deployment.id,
+      });
+
+      // Track the writer for cleanup on stop
+      this.observabilityWriters.set(serverId, observabilityWriter);
+
+      // Wire log collector to observability writer for persistence
+      logCollector.stream(line => {
+        observabilityWriter!.recordLog({
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          deploymentId: deployment.id,
+          traceId: null,
+          spanId: null,
+          level: 'info',
+          message: line,
+          attributes: {
+            serverId,
+            source: 'server',
+          },
+          timestamp: new Date(),
+        });
+      });
+    }
+
+    // Wire log collector to broadcast callback if set
+    if (this.onServerLog) {
+      const callback = this.onServerLog;
+      logCollector.stream((line, id, stream) => {
+        callback(serverId, line, stream ?? 'stdout', id);
+      });
+    }
 
     // Start the server process
     const entryPoint = path.join(outputDir, 'index.mjs');
@@ -243,9 +335,6 @@ export class LocalProcessRunner implements ProjectRunner {
       env: envVars,
       onOutput: (line: string) => logCollector.append(line),
     });
-
-    // Generate server ID
-    const serverId = crypto.randomUUID();
 
     // Track the process
     this.processManager.track(serverId, deployment.id, proc, port, logCollector);
@@ -318,6 +407,18 @@ export class LocalProcessRunner implements ProjectRunner {
       }
     }
 
+    // Flush and cleanup observability writer
+    const writer = this.observabilityWriters.get(server.id);
+    if (writer) {
+      try {
+        await writer.flush();
+        this.logger.debug('Observability writer flushed', { serverId: server.id });
+      } catch (error) {
+        this.logger.warn('Failed to flush observability writer', { error: String(error) });
+      }
+      this.observabilityWriters.delete(server.id);
+    }
+
     // Kill the process
     await this.processManager.kill(server.id);
 
@@ -360,6 +461,32 @@ export class LocalProcessRunner implements ProjectRunner {
     }
 
     return tracked.logCollector.getAll();
+  }
+
+  /**
+   * Get paginated logs from a running server.
+   * Used for reverse-chronological infinite scroll.
+   */
+  async getLogsPaginated(
+    server: RunningServer,
+    options?: { limit?: number; before?: string },
+  ): Promise<{
+    entries: Array<{ id: string; timestamp: string; line: string; stream: 'stdout' | 'stderr' }>;
+    hasMore: boolean;
+    oldestCursor: string | null;
+    newestCursor: string | null;
+  }> {
+    const tracked = this.processManager.get(server.id);
+    if (!tracked) {
+      return {
+        entries: [],
+        hasMore: false,
+        oldestCursor: null,
+        newestCursor: null,
+      };
+    }
+
+    return tracked.logCollector.getPaginated(options?.limit ?? 100, options?.before);
   }
 
   /**
@@ -418,13 +545,26 @@ export class LocalProcessRunner implements ProjectRunner {
   /**
    * Get project path from source provider.
    */
-  private async getProjectPath(project: Project): Promise<string> {
+  /**
+   * Get the build directory for a specific build.
+   * Uses temp directory structure: {buildDir}/{buildId}
+   */
+  private getBuildDir(buildId: string): string {
+    return path.join(this.config.buildDir, buildId);
+  }
+
+  /**
+   * Get project path from source provider, copying to build-specific directory.
+   */
+  private async getProjectPath(project: Project, buildId: string): Promise<string> {
     if (!this.source) {
       throw new Error('Project source provider not configured');
     }
 
-    // For local source, this returns the path directly
-    // For GitHub source (future), this would clone the repo
+    // Get build-specific directory
+    const buildDir = this.getBuildDir(buildId);
+
+    // Copy project to build directory
     return this.source.getProjectPath(
       {
         id: project.id,
@@ -432,7 +572,7 @@ export class LocalProcessRunner implements ProjectRunner {
         type: project.sourceType,
         path: (project.sourceConfig as { path: string }).path,
       },
-      this.config.buildDir,
+      buildDir,
     );
   }
 }

@@ -1,0 +1,332 @@
+/**
+ * MastraAdmin Development Server
+ *
+ * This server runs the full admin API with dev authentication.
+ * No Supabase required - uses a mock auth provider for development.
+ *
+ * Run with: pnpm dev:server
+ * Then start the UI: pnpm dev:ui
+ * Or run both: pnpm dev:full
+ */
+
+import 'dotenv/config';
+
+import { MastraAdmin, type AdminAuthProvider, type ObservabilityQueryProvider } from '@mastra/admin';
+import { PostgresAdminStorage } from '@mastra/admin-pg';
+import { AdminServer } from '@mastra/admin-server';
+import { LocalProjectSource } from '@mastra/source-local';
+import { LocalProcessRunner } from '@mastra/runner-local';
+import { LocalEdgeRouter } from '@mastra/router-local';
+import { LocalFileStorage } from '@mastra/observability-file-local';
+import { ClickHouseQueryProvider, IngestionWorker } from '@mastra/observability-clickhouse';
+import { resolve } from 'path';
+import { tmpdir } from 'node:os';
+
+// Configuration
+const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
+const PROXY_PORT = parseInt(process.env['PROXY_PORT'] ?? '80', 10);
+const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
+const DEMO_USER_EMAIL = 'demo@example.com';
+const DEMO_USER_NAME = 'Demo User';
+const DEV_TOKEN = 'dev-token';
+
+// ClickHouse configuration
+const CLICKHOUSE_URL = process.env['CLICKHOUSE_URL'] ?? 'http://localhost:8123';
+const CLICKHOUSE_DATABASE = process.env['CLICKHOUSE_DATABASE'] ?? 'mastra_observability';
+const CLICKHOUSE_USER = process.env['CLICKHOUSE_USER'] ?? 'default';
+const CLICKHOUSE_PASSWORD = process.env['CLICKHOUSE_PASSWORD'] ?? 'clickhouse';
+const ENABLE_CLICKHOUSE = process.env['ENABLE_CLICKHOUSE'] === 'true';
+
+/**
+ * Development Auth Provider
+ *
+ * Accepts any token and returns the demo user.
+ * For production, use Supabase or another auth provider.
+ */
+class DevAuthProvider implements AdminAuthProvider {
+  async validateToken(token: string): Promise<{ userId: string } | null> {
+    // Accept any token in dev mode
+    if (token === DEV_TOKEN || token.startsWith('dev-') || token) {
+      return {
+        userId: DEMO_USER_ID,
+      };
+    }
+    return null;
+  }
+
+  async getUser(userId: string): Promise<{ id: string; email?: string; name?: string } | null> {
+    if (userId === DEMO_USER_ID) {
+      return {
+        id: DEMO_USER_ID,
+        email: DEMO_USER_EMAIL,
+        name: DEMO_USER_NAME,
+      };
+    }
+    return null;
+  }
+}
+
+async function main() {
+  console.log('='.repeat(60));
+  console.log('MastraAdmin Development Server');
+  console.log('='.repeat(60));
+  console.log();
+
+  // Initialize storage
+  console.log('[1] Initializing PostgreSQL storage...');
+  const storage = new PostgresAdminStorage({
+    connectionString: process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@localhost:5433/mastra_admin',
+    schemaName: 'mastra_admin',
+  });
+
+  // Initialize project source
+  console.log('[2] Initializing local project source...');
+  const projectsDir = process.env['PROJECTS_DIR'] ?? resolve(process.cwd(), '../');
+  const source = new LocalProjectSource({
+    basePaths: [projectsDir],
+    watchChanges: false,
+    maxDepth: 3,
+  });
+
+  // Initialize runner
+  console.log('[3] Initializing local process runner...');
+  const runner = new LocalProcessRunner({
+    portRange: { start: 4111, end: 4200 },
+    maxConcurrentBuilds: 3,
+    defaultBuildTimeoutMs: 600000,
+    logRetentionLines: 10000,
+    // Automatically inject observability env vars into deployed servers
+    // This enables CloudExporter to send spans to the admin server
+    tracesEndpoint: `http://localhost:${PORT}/api/spans/publish`,
+  });
+
+  // Initialize router with reverse-proxy strategy and custom domain
+  // This allows accessing deployments via http://{subdomain}.mastra.local/
+  // Run with sudo for port 80, or use PROXY_PORT=3100 for non-privileged port
+  console.log('[4] Initializing local edge router...');
+  const router = new LocalEdgeRouter({
+    strategy: 'reverse-proxy',
+    baseDomain: 'mastra.local',
+    proxyPort: PROXY_PORT,
+    portRange: { start: 4100, end: 4199 }, // Backend ports (hidden from user)
+    enableHostsFile: true, // Auto-manage /etc/hosts entries (requires sudo)
+    logRoutes: true,
+  });
+
+  const tmpDir = resolve(tmpdir(), '.mastra');
+  // Initialize file storage for build logs
+  console.log('[5] Initializing local file storage for build logs...');
+  const buildLogStorage = new LocalFileStorage({
+    baseDir: tmpDir,
+    atomicWrites: true,
+  });
+
+  // Initialize file storage for observability (server logs, traces, metrics)
+  console.log('[5a] Initializing local file storage for observability...');
+  const observabilityStorage = new LocalFileStorage({
+    baseDir: tmpDir,
+    atomicWrites: true,
+  });
+
+  // Initialize ClickHouse query provider if enabled
+  let queryProvider: ClickHouseQueryProvider | undefined;
+  let ingestionWorker: IngestionWorker | undefined;
+
+  if (ENABLE_CLICKHOUSE) {
+    console.log('[5b] Initializing ClickHouse query provider...');
+    queryProvider = new ClickHouseQueryProvider({
+      clickhouse: {
+        url: CLICKHOUSE_URL,
+        database: CLICKHOUSE_DATABASE,
+        username: CLICKHOUSE_USER,
+        password: CLICKHOUSE_PASSWORD,
+      },
+      debug: true,
+    });
+
+    // Initialize the query provider (runs migrations if needed)
+    await queryProvider.init();
+    console.log('    ClickHouse query provider initialized');
+
+    // Initialize ingestion worker
+    console.log('[5c] Initializing ClickHouse ingestion worker...');
+    ingestionWorker = new IngestionWorker({
+      fileStorage: observabilityStorage,
+      clickhouse: {
+        url: CLICKHOUSE_URL,
+        database: CLICKHOUSE_DATABASE,
+        username: CLICKHOUSE_USER,
+        password: CLICKHOUSE_PASSWORD,
+      },
+      pollIntervalMs: 10000,
+      batchSize: 10,
+      deleteAfterProcess: false,
+      debug: true,
+    });
+
+    // Initialize and start the ingestion worker
+    await ingestionWorker.init();
+    await ingestionWorker.start();
+    console.log('    ClickHouse ingestion worker started');
+  }
+
+  // Initialize dev auth provider
+  console.log('[6] Initializing dev auth provider...');
+  const auth = new DevAuthProvider();
+
+  // Create MastraAdmin
+  console.log('[7] Creating MastraAdmin instance...');
+  const admin = new MastraAdmin({
+    licenseKey: 'dev',
+    storage,
+    source,
+    runner,
+    router,
+    // Build logs configuration - persists build output to file storage
+    buildLogs: {
+      fileStorage: buildLogStorage,
+    },
+    // Observability configuration - for server logs, traces, metrics
+    observability: {
+      fileStorage: observabilityStorage,
+      // Cast to ObservabilityQueryProvider - ClickHouseQueryProvider implements the interface
+      queryProvider: queryProvider as unknown as ObservabilityQueryProvider,
+    },
+    auth,
+  });
+
+  await admin.init();
+  console.log('    MastraAdmin initialized');
+  console.log('    License:', admin.getLicenseInfo().tier);
+
+  // Start the reverse proxy
+  console.log('    Starting reverse proxy...');
+  await router.startProxy();
+  console.log(`    Reverse proxy started on port ${PROXY_PORT}`);
+
+  // Recover any queued builds from the database
+  console.log('    Recovering queued builds...');
+  const queuedBuilds = await storage.listQueuedBuilds();
+  const orchestrator = admin.getOrchestrator();
+  for (const build of queuedBuilds) {
+    await orchestrator.queueBuild(build.id);
+    console.log(`    Requeued build ${build.id}`);
+  }
+  console.log(`    Recovered ${queuedBuilds.length} build(s)`);
+  console.log();
+
+  // Ensure demo user exists
+  console.log('[8] Ensuring demo user exists...');
+  let demoUser = await admin.getUser(DEMO_USER_ID);
+  if (!demoUser) {
+    await storage.createUser({
+      id: DEMO_USER_ID,
+      email: DEMO_USER_EMAIL,
+      name: DEMO_USER_NAME,
+      avatarUrl: null,
+    });
+    demoUser = await admin.getUser(DEMO_USER_ID);
+    console.log('    Created demo user:', demoUser?.email);
+  } else {
+    console.log('    Demo user exists:', demoUser.email);
+  }
+  console.log();
+
+  // Create AdminServer
+  console.log('[9] Starting AdminServer...');
+  const server = new AdminServer({
+    admin,
+    port: PORT,
+    cors: {
+      origin: [
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'http://localhost:5173',
+        'http://127.0.0.1:3002',
+        'http://127.0.0.1:5173',
+      ],
+      credentials: true,
+    },
+  });
+
+  await server.start();
+  console.log();
+  console.log('='.repeat(60));
+  console.log('Server Ready!');
+  console.log('='.repeat(60));
+  console.log();
+  const proxyPortSuffix = PROXY_PORT === 80 ? '' : `:${PROXY_PORT}`;
+  console.log(`API URL:   http://localhost:${PORT}/api`);
+  console.log(`Health:    http://localhost:${PORT}/api/health`);
+  console.log(`Proxy:     http://{subdomain}.mastra.local${proxyPortSuffix}/`);
+  console.log();
+  console.log('Deployed Mastra instances are accessible via:');
+  console.log(`  http://{subdomain}.mastra.local${proxyPortSuffix}/`);
+  console.log();
+  console.log('Note: /etc/hosts entries are auto-managed.');
+  if (PROXY_PORT === 80) {
+    console.log('Running on port 80 requires sudo.');
+  } else {
+    console.log(`For clean URLs, run: sudo PROXY_PORT=80 pnpm dev:server`);
+  }
+  console.log();
+
+  console.log('Span Collection:');
+  console.log(`  Endpoint: http://localhost:${PORT}/api/spans/publish`);
+  console.log('  Deployed servers auto-configured with MASTRA_CLOUD_* env vars');
+  console.log();
+
+  if (ENABLE_CLICKHOUSE) {
+    console.log('ClickHouse Observability:');
+    console.log(`  URL:      ${CLICKHOUSE_URL}`);
+    console.log(`  Database: ${CLICKHOUSE_DATABASE}`);
+    console.log(`  Ingestion Worker: Running (poll: 10s)`);
+    console.log();
+  } else {
+    console.log('ClickHouse Observability: Disabled');
+    console.log('  Set ENABLE_CLICKHOUSE=true to enable');
+    console.log('  Start ClickHouse: docker-compose up -d clickhouse');
+    console.log();
+  }
+  console.log('Dev Authentication:');
+  console.log(`  User ID: ${DEMO_USER_ID}`);
+  console.log(`  Email:   ${DEMO_USER_EMAIL}`);
+  console.log(`  Token:   ${DEV_TOKEN} (or any token)`);
+  console.log();
+  console.log('To start the Admin UI:');
+  console.log('  pnpm dev:ui');
+  console.log();
+  console.log('Or run everything together:');
+  console.log('  pnpm dev:full');
+  console.log();
+  console.log('Press Ctrl+C to stop.');
+  console.log();
+
+  // Handle shutdown
+  const shutdown = async () => {
+    console.log('\nShutting down...');
+
+    // Stop ingestion worker if running
+    if (ingestionWorker) {
+      console.log('Stopping ingestion worker...');
+      await ingestionWorker.stop();
+    }
+
+    await router.stopProxy();
+    await server.stop();
+    await admin.shutdown();
+    console.log('Done.');
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  // Keep running
+  await new Promise(() => {});
+}
+
+main().catch(error => {
+  console.error('Server failed to start:', error);
+  process.exit(1);
+});

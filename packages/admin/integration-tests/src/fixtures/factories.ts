@@ -214,6 +214,7 @@ export function createBuildData(
     triggeredBy: options.triggeredBy,
     commitSha: options.commitSha ?? `abc${Date.now().toString(16)}`,
     commitMessage: options.commitMessage ?? 'Test commit',
+    logPath: null,
   };
 }
 

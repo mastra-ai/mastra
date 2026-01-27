@@ -1,10 +1,6 @@
 import type { Deployment, Build } from '@mastra/admin';
 import type { AdminServerContext, AdminServerRoute } from '../types';
-import {
-  projectIdParamSchema,
-  deploymentIdParamSchema,
-  successResponseSchema,
-} from '../schemas/common';
+import { projectIdParamSchema, deploymentIdParamSchema, successResponseSchema } from '../schemas/common';
 import {
   deploymentResponseSchema,
   createDeploymentBodySchema,
@@ -29,12 +25,14 @@ function toDeploymentResponse(deployment: Deployment) {
     currentBuildId: deployment.currentBuildId,
     publicUrl: deployment.publicUrl,
     internalHost: deployment.internalHost,
-    envVarOverrides: deployment.envVarOverrides.map(e => ({
-      key: e.key,
-      isSecret: e.isSecret,
-      createdAt: e.createdAt.toISOString(),
-      updatedAt: e.updatedAt.toISOString(),
-    })),
+    envVarOverrides: Array.isArray(deployment.envVarOverrides)
+      ? deployment.envVarOverrides.map(e => ({
+          key: e.key,
+          isSecret: e.isSecret,
+          createdAt: e.createdAt?.toISOString?.() ?? new Date().toISOString(),
+          updatedAt: e.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+        }))
+      : [],
     autoShutdown: deployment.autoShutdown,
     expiresAt: deployment.expiresAt?.toISOString() ?? null,
     createdAt: deployment.createdAt.toISOString(),

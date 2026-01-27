@@ -1,12 +1,23 @@
 import { useParams, Link } from 'react-router';
-import { useDeployment } from '@/hooks/deployments/use-deployment';
+import {
+  useDeployment,
+  useTriggerDeploy,
+  useStopDeployment,
+  useRestartDeployment,
+} from '@/hooks/deployments/use-deployment';
 import { useBuilds } from '@/hooks/builds/use-builds';
-import { Play, Square, RotateCcw } from 'lucide-react';
+import { Play, Square, RotateCcw, Loader2 } from 'lucide-react';
 
 export function DeploymentDetail() {
   const { projectId, deploymentId } = useParams<{ projectId: string; deploymentId: string }>();
   const { data: deployment, isLoading: deploymentLoading } = useDeployment(deploymentId!);
   const { data: builds, isLoading: buildsLoading } = useBuilds(deploymentId!);
+
+  const triggerDeploy = useTriggerDeploy(deploymentId!);
+  const stopDeployment = useStopDeployment(deploymentId!);
+  const restartDeployment = useRestartDeployment(deploymentId!);
+
+  const isActioning = triggerDeploy.isPending || stopDeployment.isPending || restartDeployment.isPending;
 
   if (deploymentLoading || buildsLoading) {
     return (
@@ -32,16 +43,32 @@ export function DeploymentDetail() {
           <p className="text-sm text-neutral6">{deployment.slug}</p>
         </div>
         <div className="flex gap-2">
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20">
-            <Play className="h-4 w-4" />
+          <button
+            onClick={() => triggerDeploy.mutate()}
+            disabled={isActioning || deployment.status === 'building'}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {triggerDeploy.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Deploy
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20">
-            <Square className="h-4 w-4" />
+          <button
+            onClick={() => stopDeployment.mutate()}
+            disabled={isActioning || deployment.status !== 'running'}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {stopDeployment.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
             Stop
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-surface3 text-neutral9 rounded-md hover:bg-surface4">
-            <RotateCcw className="h-4 w-4" />
+          <button
+            onClick={() => restartDeployment.mutate()}
+            disabled={isActioning || deployment.status !== 'running'}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-surface3 text-neutral9 rounded-md hover:bg-surface4 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {restartDeployment.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
             Restart
           </button>
         </div>
@@ -66,7 +93,12 @@ export function DeploymentDetail() {
         {deployment.publicUrl && (
           <div className="p-6 bg-surface2 rounded-lg border border-border">
             <h3 className="text-sm font-medium text-neutral6 mb-2">Public URL</h3>
-            <a href={deployment.publicUrl} target="_blank" rel="noopener noreferrer" className="text-accent1 hover:underline">
+            <a
+              href={deployment.publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent1 hover:underline"
+            >
               {deployment.publicUrl}
             </a>
           </div>

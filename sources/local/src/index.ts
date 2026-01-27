@@ -25,4 +25,13 @@ export type {
 } from './types';
 
 // Utilities
-export { generateProjectId, isPathAccessible, isDirectory, resolvePath, getProjectNameFromPath } from './utils';
+export {
+  copyDirectory,
+  DEFAULT_COPY_EXCLUDES,
+  generateProjectId,
+  getProjectNameFromPath,
+  isDirectory,
+  isPathAccessible,
+  resolvePath,
+} from './utils';
+export type { CopyDirectoryOptions } from './utils';

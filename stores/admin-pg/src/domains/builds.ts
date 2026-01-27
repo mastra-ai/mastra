@@ -16,6 +16,7 @@ export class BuildsPG {
   async createBuild(data: Omit<Build, 'startedAt' | 'completedAt'>): Promise<Build> {
     return this.db.insert<Omit<Build, 'id'>>(TABLES.builds, {
       ...data,
+      logPath: data.logPath ?? null,
       startedAt: null,
       completedAt: null,
     } as unknown as Record<string, unknown>);
@@ -48,7 +49,7 @@ export class BuildsPG {
   async appendBuildLogs(id: string, logs: string): Promise<void> {
     const sql = `
       UPDATE "${this.db.schemaName}"."${TABLES.builds}"
-      SET logs = COALESCE(logs, '') || $1
+      SET logs = COALESCE(logs, '') || $1 || E'\\n'
       WHERE id = $2
     `;
     await this.db.db.none(sql, [logs, id]);
@@ -109,6 +110,10 @@ export class BuildsPG {
 
   async getQueueLength(): Promise<number> {
     return this.db.count(TABLES.builds, { status: 'queued' });
+  }
+
+  async listQueuedBuilds(): Promise<Build[]> {
+    return this.db.findBy<Build>(TABLES.builds, { status: 'queued' }, { orderBy: 'queued_at ASC' });
   }
 
   async cancelQueuedBuilds(deploymentId: string): Promise<number> {

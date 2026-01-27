@@ -489,7 +489,10 @@ export class PostgresAdminStorage implements AdminStorage {
     return this.buildsPg.createBuild(build);
   }
 
-  async updateBuild(buildId: string, updates: Partial<Omit<Build, 'id' | 'deploymentId' | 'queuedAt'>>): Promise<Build> {
+  async updateBuild(
+    buildId: string,
+    updates: Partial<Omit<Build, 'id' | 'deploymentId' | 'queuedAt'>>,
+  ): Promise<Build> {
     const result = await this.buildsPg.updateBuild(buildId, updates);
     if (!result) {
       throw new Error(`Build not found: ${buildId}`);
@@ -511,6 +514,10 @@ export class PostgresAdminStorage implements AdminStorage {
 
   async dequeueNextBuild(): Promise<Build | null> {
     return this.buildsPg.dequeue();
+  }
+
+  async listQueuedBuilds(): Promise<Build[]> {
+    return this.buildsPg.listQueuedBuilds();
   }
 
   // ============================================================================

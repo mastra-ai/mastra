@@ -173,6 +173,7 @@ export const TABLE_SCHEMAS: Record<TableName, string> = {
     commit_message TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'queued',
     logs TEXT DEFAULT '',
+    log_path TEXT,
     error_message TEXT,
     queued_at TIMESTAMPTZ DEFAULT NOW(),
     started_at TIMESTAMPTZ,

@@ -43,14 +43,51 @@ export const QUERY_TRACES_ROUTE: AdminServerRoute = {
       throw new Error('Project not found');
     }
 
-    // Observability queries would go through the query provider
-    // For now, return an empty result
+    const queryProvider = admin.getObservabilityQueryProvider();
+    if (!queryProvider) {
+      return {
+        data: [],
+        total: 0,
+        page: page ?? 1,
+        perPage: limit ?? 20,
+        hasMore: false,
+      };
+    }
+
+    const pageNum = page ?? 1;
+    const perPage = limit ?? 20;
+
+    // Call listTraces with filter and pagination
+    const result = await queryProvider.listTraces(
+      {
+        projectId,
+        status: status as 'ok' | 'error' | 'unset' | undefined,
+        timeRange:
+          startTime || endTime
+            ? {
+                start: startTime ? new Date(startTime) : new Date(0),
+                end: endTime ? new Date(endTime) : new Date(),
+              }
+            : undefined,
+        minDurationMs,
+        maxDurationMs,
+      },
+      {
+        limit: perPage,
+        offset: (pageNum - 1) * perPage,
+      },
+    );
+
+    // Handle both interface styles
+    const total =
+      'total' in result ? result.total : ((result as { pagination?: { total: number } }).pagination?.total ?? 0);
+
     return {
-      data: [],
-      total: 0,
-      page: page ?? 1,
-      perPage: limit ?? 20,
-      hasMore: false,
+      data: result.traces,
+      total,
+      page: pageNum,
+      perPage,
+      hasMore: pageNum * perPage < total,
     };
   },
 };
@@ -68,11 +105,25 @@ export const GET_TRACE_ROUTE: AdminServerRoute = {
   description: 'Get trace details with all spans',
   tags: ['Observability'],
   handler: async params => {
-    const { admin, userId } = params;
+    const { admin } = params;
     const { traceId } = params as AdminServerContext & { traceId: string };
-    // Get trace from observability provider
-    // For now, throw not found
-    throw new Error('Trace not found');
+
+    const queryProvider = admin.getObservabilityQueryProvider();
+    if (!queryProvider) {
+      throw new Error('Trace not found');
+    }
+
+    const trace = await queryProvider.getTrace(traceId);
+    if (!trace) {
+      throw new Error('Trace not found');
+    }
+
+    const spans = await queryProvider.getTraceSpans(traceId);
+
+    return {
+      ...trace,
+      spans,
+    };
   },
 };
 
@@ -90,30 +141,66 @@ export const QUERY_LOGS_ROUTE: AdminServerRoute = {
   tags: ['Observability'],
   handler: async params => {
     const { admin, userId } = params;
-    const { projectId, page, limit, startTime, endTime, level, search, traceId } =
-      params as AdminServerContext & {
-        projectId: string;
-        page?: number;
-        limit?: number;
-        startTime?: string;
-        endTime?: string;
-        level?: string;
-        search?: string;
-        traceId?: string;
-      };
+    const { projectId, page, limit, startTime, endTime, level, search, traceId } = params as AdminServerContext & {
+      projectId: string;
+      page?: number;
+      limit?: number;
+      startTime?: string;
+      endTime?: string;
+      level?: string;
+      search?: string;
+      traceId?: string;
+    };
     const project = await admin.getProject(userId, projectId);
     if (!project) {
       throw new Error('Project not found');
     }
 
-    // Log queries would go through the query provider
-    // For now, return an empty result
+    const queryProvider = admin.getObservabilityQueryProvider();
+    if (!queryProvider) {
+      return {
+        data: [],
+        total: 0,
+        page: page ?? 1,
+        perPage: limit ?? 100,
+        hasMore: false,
+      };
+    }
+
+    const pageNum = page ?? 1;
+    const perPage = limit ?? 100;
+
+    const result = await queryProvider.listLogs(
+      {
+        projectId,
+        traceId,
+        level: level as 'debug' | 'info' | 'warn' | 'error' | undefined,
+        messageContains: search,
+        timeRange:
+          startTime || endTime
+            ? {
+                start: startTime ? new Date(startTime) : new Date(0),
+                end: endTime ? new Date(endTime) : new Date(),
+              }
+            : undefined,
+      },
+      {
+        limit: perPage,
+        offset: (pageNum - 1) * perPage,
+        sortOrder: 'desc', // Newest first for reverse infinite scroll
+      },
+    );
+
+    // Handle both interface styles
+    const total =
+      'total' in result ? result.total : ((result as { pagination?: { total: number } }).pagination?.total ?? 0);
+
     return {
-      data: [],
-      total: 0,
-      page: page ?? 1,
-      perPage: limit ?? 20,
-      hasMore: false,
+      data: result.logs,
+      total,
+      page: pageNum,
+      perPage,
+      hasMore: pageNum * perPage < total,
     };
   },
 };
@@ -132,25 +219,70 @@ export const QUERY_METRICS_ROUTE: AdminServerRoute = {
   tags: ['Observability'],
   handler: async params => {
     const { admin, userId } = params;
-    const { projectId, startTime, endTime, name, aggregation, groupBy, interval } =
-      params as AdminServerContext & {
-        projectId: string;
-        startTime?: string;
-        endTime?: string;
-        name?: string;
-        aggregation?: string;
-        groupBy?: string;
-        interval?: string;
-      };
+    const { projectId, startTime, endTime, name, aggregation, groupBy, interval } = params as AdminServerContext & {
+      projectId: string;
+      startTime?: string;
+      endTime?: string;
+      name?: string;
+      aggregation?: string;
+      groupBy?: string;
+      interval?: string;
+    };
     const project = await admin.getProject(userId, projectId);
     if (!project) {
       throw new Error('Project not found');
     }
 
-    // Metric queries would go through the query provider
-    // For now, return an empty result
+    const queryProvider = admin.getObservabilityQueryProvider();
+    if (!queryProvider) {
+      return {
+        data: [],
+      };
+    }
+
+    // If aggregation is requested, use aggregateMetrics
+    if (aggregation) {
+      const result = await queryProvider.aggregateMetrics(
+        {
+          projectId,
+          name,
+          timeRange:
+            startTime || endTime
+              ? {
+                  start: startTime ? new Date(startTime) : new Date(0),
+                  end: endTime ? new Date(endTime) : new Date(),
+                }
+              : undefined,
+        },
+        groupBy ? groupBy.split(',') : undefined,
+      );
+
+      return {
+        data: result,
+      };
+    }
+
+    // Otherwise, list metrics
+    const result = await queryProvider.listMetrics(
+      {
+        projectId,
+        name,
+        timeRange:
+          startTime || endTime
+            ? {
+                start: startTime ? new Date(startTime) : new Date(0),
+                end: endTime ? new Date(endTime) : new Date(),
+              }
+            : undefined,
+      },
+      {
+        limit: 100,
+        offset: 0,
+      },
+    );
+
     return {
-      data: [],
+      data: result.metrics,
     };
   },
 };
@@ -186,14 +318,51 @@ export const QUERY_SCORES_ROUTE: AdminServerRoute = {
       throw new Error('Project not found');
     }
 
-    // Score queries would go through the query provider
-    // For now, return an empty result
+    const queryProvider = admin.getObservabilityQueryProvider();
+    if (!queryProvider) {
+      return {
+        data: [],
+        total: 0,
+        page: page ?? 1,
+        perPage: limit ?? 20,
+        hasMore: false,
+      };
+    }
+
+    const pageNum = page ?? 1;
+    const perPage = limit ?? 20;
+
+    const result = await queryProvider.listScores(
+      {
+        projectId,
+        traceId,
+        name,
+        minValue,
+        maxValue,
+        timeRange:
+          startTime || endTime
+            ? {
+                start: startTime ? new Date(startTime) : new Date(0),
+                end: endTime ? new Date(endTime) : new Date(),
+              }
+            : undefined,
+      },
+      {
+        limit: perPage,
+        offset: (pageNum - 1) * perPage,
+      },
+    );
+
+    // Handle both interface styles
+    const total =
+      'total' in result ? result.total : ((result as { pagination?: { total: number } }).pagination?.total ?? 0);
+
     return {
-      data: [],
-      total: 0,
-      page: page ?? 1,
-      perPage: limit ?? 20,
-      hasMore: false,
+      data: result.scores,
+      total,
+      page: pageNum,
+      perPage,
+      hasMore: pageNum * perPage < total,
     };
   },
 };

@@ -17,6 +17,8 @@ import { TeamSettings } from './routes/dashboard/teams/[teamId]/settings';
 import { TeamMembers } from './routes/dashboard/teams/[teamId]/members';
 import { TeamProjects } from './routes/dashboard/teams/[teamId]/projects';
 import { NewProjectPage } from './routes/dashboard/teams/[teamId]/projects/new';
+import { TeamDeployments } from './routes/dashboard/teams/[teamId]/deployments';
+import { TeamObservability } from './routes/dashboard/teams/[teamId]/observability';
 import { ProjectOverview } from './routes/dashboard/projects/[projectId]';
 import { ProjectSettings } from './routes/dashboard/projects/[projectId]/settings';
 import { ProjectEnvVars } from './routes/dashboard/projects/[projectId]/env-vars';
@@ -114,6 +116,8 @@ export function App() {
         <Route path="teams/:teamId/members" element={<TeamMembers />} />
         <Route path="teams/:teamId/projects" element={<TeamProjects />} />
         <Route path="teams/:teamId/projects/new" element={<NewProjectPage />} />
+        <Route path="teams/:teamId/deployments" element={<TeamDeployments />} />
+        <Route path="teams/:teamId/observability" element={<TeamObservability />} />
         <Route path="projects/:projectId" element={<ProjectOverview />} />
         <Route path="projects/:projectId/settings" element={<ProjectSettings />} />
         <Route path="projects/:projectId/env-vars" element={<ProjectEnvVars />} />

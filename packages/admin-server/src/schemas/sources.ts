@@ -31,6 +31,7 @@ export type ValidateSourceResponse = z.infer<typeof validateSourceResponseSchema
  */
 export const listSourcesQuerySchema = paginationQuerySchema.extend({
   type: z.enum(['local', 'github']).optional(),
+  search: z.string().optional(),
 });
 
 export type ListSourcesQuery = z.infer<typeof listSourcesQuerySchema>;

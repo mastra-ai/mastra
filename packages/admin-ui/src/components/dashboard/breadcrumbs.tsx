@@ -67,6 +67,8 @@ function getBreadcrumbs(pathname: string, context: BreadcrumbContext): Breadcrum
 
   let currentPath = '';
 
+  let deploymentPath = '';
+
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
     currentPath += `/${segment}`;
@@ -77,9 +79,13 @@ function getBreadcrumbs(pathname: string, context: BreadcrumbContext): Breadcrum
     } else if (segment === context.projectId && context.projectName) {
       breadcrumbs.push({ label: context.projectName, href: currentPath });
     } else if (segment === context.deploymentId) {
+      deploymentPath = currentPath;
       breadcrumbs.push({ label: `Deployment ${segment.slice(0, 8)}...`, href: currentPath });
     } else if (segment === context.buildId) {
       breadcrumbs.push({ label: `Build ${segment.slice(0, 8)}...`, href: currentPath });
+    } else if (segment === 'builds' && deploymentPath) {
+      // "Builds" links back to the deployment page since builds are shown there
+      breadcrumbs.push({ label: 'Builds', href: deploymentPath });
     } else {
       // Standard route segments
       const label = getSegmentLabel(segment);

@@ -115,6 +115,7 @@
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "globby": "^14.1.0",
+    "http-proxy": "^1.18.1",
     "node-forge": "1.3.2",
     "resolve-from": "^5.0.0"
   }

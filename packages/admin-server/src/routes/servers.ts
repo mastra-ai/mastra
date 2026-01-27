@@ -8,6 +8,7 @@ import {
   serverHealthResponseSchema,
   serverMetricsResponseSchema,
   serverLogsResponseSchema,
+  paginatedServerLogsResponseSchema,
   getServerLogsQuerySchema,
 } from '../schemas/servers';
 
@@ -101,12 +102,112 @@ export const GET_SERVER_LOGS_ROUTE: AdminServerRoute = {
       throw new Error('Deployment not found');
     }
 
-    // Get logs - this would typically come from the runner
-    // For now, return empty logs
+    // Get logs from runner
+    const runner = admin.getRunner();
+    if (!runner) {
+      return {
+        serverId,
+        logs: [],
+        hasMore: false,
+      };
+    }
+
+    const logsString = await runner.getLogs(
+      {
+        id: server.id,
+        deploymentId: server.deploymentId,
+        buildId: server.buildId,
+        processId: server.processId,
+        containerId: server.containerId,
+        port: server.port,
+        host: server.host,
+        healthStatus: server.healthStatus as 'starting' | 'healthy' | 'unhealthy',
+        lastHealthCheck: server.lastHealthCheck,
+        memoryUsageMb: server.memoryUsageMb,
+        cpuPercent: server.cpuPercent,
+        startedAt: server.startedAt,
+        stoppedAt: server.stoppedAt,
+      },
+      {
+        tail,
+        since: since ? new Date(since) : undefined,
+      },
+    );
+
     return {
       serverId,
-      logs: '',
+      logs: logsString || '',
       hasMore: false,
+    };
+  },
+};
+
+/**
+ * GET /servers/:serverId/logs/paginated - Get paginated server logs.
+ */
+export const GET_SERVER_LOGS_PAGINATED_ROUTE: AdminServerRoute = {
+  method: 'GET',
+  path: '/servers/:serverId/logs/paginated',
+  responseType: 'json',
+  pathParamSchema: serverIdParamSchema,
+  queryParamSchema: getServerLogsQuerySchema,
+  responseSchema: paginatedServerLogsResponseSchema,
+  summary: 'Get paginated server logs',
+  description: 'Get server logs with cursor-based pagination for infinite scroll.',
+  tags: ['Servers'],
+  handler: async params => {
+    const { admin, userId } = params;
+    const { serverId, limit, before } = params as AdminServerContext & {
+      serverId: string;
+      limit?: number;
+      before?: string;
+    };
+    const storage = admin.getStorage();
+    const server = await storage.getRunningServer(serverId);
+    if (!server) {
+      throw new Error('Server not found');
+    }
+
+    // Verify access through deployment
+    const deployment = await admin.getDeployment(userId, server.deploymentId);
+    if (!deployment) {
+      throw new Error('Deployment not found');
+    }
+
+    // Get logs from runner
+    const runner = admin.getRunner();
+    if (!runner || !runner.getLogsPaginated) {
+      return {
+        serverId,
+        entries: [],
+        hasMore: false,
+        oldestCursor: null,
+        newestCursor: null,
+      };
+    }
+
+    const result = await runner.getLogsPaginated(
+      {
+        id: server.id,
+        deploymentId: server.deploymentId,
+        buildId: server.buildId,
+        processId: server.processId,
+        containerId: server.containerId,
+        port: server.port,
+        host: server.host,
+        healthStatus: server.healthStatus as 'starting' | 'healthy' | 'unhealthy',
+        lastHealthCheck: server.lastHealthCheck,
+        memoryUsageMb: server.memoryUsageMb,
+        cpuPercent: server.cpuPercent,
+        startedAt: server.startedAt,
+        stoppedAt: server.stoppedAt,
+      },
+      { limit, before },
+    );
+
+    return {
+      serverId,
+      ...result,
     };
   },
 };
@@ -195,6 +296,7 @@ export const GET_SERVER_METRICS_ROUTE: AdminServerRoute = {
 export const SERVER_ROUTES: AdminServerRoute[] = [
   GET_SERVER_ROUTE,
   GET_SERVER_LOGS_ROUTE,
+  GET_SERVER_LOGS_PAGINATED_ROUTE,
   GET_SERVER_HEALTH_ROUTE,
   GET_SERVER_METRICS_ROUTE,
 ];

@@ -1,19 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useCreateProject } from '@/hooks/projects/use-create-project';
-import { SourceType } from '@/types/api';
+import { SourceType, type ProjectSource } from '@/types/api';
+import { SourcePicker } from '@/components/projects/source-picker';
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 50);
+}
 
 export function NewProjectPage() {
   const { teamId } = useParams<{ teamId: string }>();
   const [name, setName] = useState('');
-  const [sourcePath, setSourcePath] = useState('');
+  const [slug, setSlug] = useState('');
+  const [selectedSource, setSelectedSource] = useState<ProjectSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const createProject = useCreateProject();
 
+  // Auto-populate name and slug from selected source
+  useEffect(() => {
+    if (selectedSource) {
+      setName(selectedSource.name);
+      setSlug(generateSlug(selectedSource.name));
+    }
+  }, [selectedSource]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teamId) return;
+    if (!teamId || !selectedSource) return;
     setError(null);
 
     try {
@@ -21,9 +40,10 @@ export function NewProjectPage() {
         teamId,
         data: {
           name,
-          sourceType: SourceType.LOCAL,
+          slug,
+          sourceType: selectedSource.type as SourceType,
           sourceConfig: {
-            path: sourcePath,
+            path: selectedSource.path,
           },
         },
       });
@@ -40,35 +60,46 @@ export function NewProjectPage() {
       {error && <div className="mb-4 p-3 bg-red-500/10 text-red-500 rounded-md text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="name" className="block text-sm text-neutral6 mb-1">
-            Project Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            required
-            className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
-          />
-        </div>
+        <SourcePicker
+          teamId={teamId!}
+          selectedSourceId={selectedSource?.id}
+          onSelect={setSelectedSource}
+        />
 
-        <div>
-          <label htmlFor="sourcePath" className="block text-sm text-neutral6 mb-1">
-            Project Path
-          </label>
-          <input
-            id="sourcePath"
-            type="text"
-            value={sourcePath}
-            onChange={e => setSourcePath(e.target.value)}
-            placeholder="/path/to/project"
-            required
-            className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
-          />
-          <p className="mt-1 text-xs text-neutral6">Absolute path to the Mastra project directory</p>
-        </div>
+        {selectedSource && (
+          <>
+            <div>
+              <label htmlFor="name" className="block text-sm text-neutral6 mb-1">
+                Project Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  setSlug(generateSlug(e.target.value));
+                }}
+                required
+                className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
+              />
+            </div>
+            <div>
+              <label htmlFor="slug" className="block text-sm text-neutral6 mb-1">
+                Slug
+              </label>
+              <input
+                id="slug"
+                type="text"
+                value={slug}
+                onChange={e => setSlug(e.target.value)}
+                required
+                className="w-full px-3 py-2 bg-surface3 border border-border rounded-md text-neutral9 focus:outline-none focus:ring-2 focus:ring-accent1"
+              />
+              <p className="mt-1 text-xs text-neutral6">URL-friendly identifier for the project</p>
+            </div>
+          </>
+        )}
 
         <div className="flex gap-3">
           <button
@@ -81,7 +112,7 @@ export function NewProjectPage() {
           <button
             type="submit"
             className="px-4 py-2 bg-accent1 text-white rounded-md hover:bg-accent2 disabled:opacity-50"
-            disabled={createProject.isPending}
+            disabled={createProject.isPending || !selectedSource}
           >
             {createProject.isPending ? 'Creating...' : 'Create Project'}
           </button>
