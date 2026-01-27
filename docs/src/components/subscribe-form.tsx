@@ -3,9 +3,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Spinner } from './spinner'
 import { cn } from '@site/src/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
-import { toast } from './custom-toast'
 import { z } from 'zod/v4'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { Button } from './ui/button'
@@ -65,13 +63,8 @@ const SubscribeForm = ({
     if (buttonState === 'success') return
 
     const sanitizedEmail = values.email.trim()
-    if (!sanitizedEmail) {
-      return toast({
-        title: 'Error Validating Email',
-        description: 'Please enter an email',
-      })
-    }
     setButtonState('loading')
+
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${hsPortalId}/${hsFormGuid}`,
@@ -104,10 +97,6 @@ const SubscribeForm = ({
       await new Promise(resolve => setTimeout(resolve, 1750))
     } catch (error) {
       console.error('Error submitting form:', error)
-      toast({
-        title: 'Error Submitting Form',
-        description: 'Please try again',
-      })
       setButtonState('idle')
     } finally {
       setButtonState('idle')
@@ -174,7 +163,7 @@ const SubscribeForm = ({
 
         <Button
           className={cn(
-            'flex h-[32px] w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
+            'flex h-8 w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
             buttonClassName,
           )}
           onClick={e => {
@@ -183,22 +172,12 @@ const SubscribeForm = ({
           }}
           disabled={buttonState === 'loading'}
         >
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span
-              transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              key={buttonState}
-            >
-              {
-                buttonCopy({
-                  idleIcon,
-                  successIcon,
-                })[buttonState as keyof typeof buttonCopy]
-              }
-            </motion.span>
-          </AnimatePresence>
+          {
+            buttonCopy({
+              idleIcon,
+              successIcon,
+            })[buttonState as keyof typeof buttonCopy]
+          }
         </Button>
       </form>
     </Form>

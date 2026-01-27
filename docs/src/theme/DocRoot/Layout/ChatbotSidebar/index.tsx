@@ -10,7 +10,6 @@ import { ArrowUp, PanelLeftClose, PanelRightClose, Square, ThumbsDown, ThumbsUp 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatbotSidebar } from './context'
 import styles from './styles.module.css'
-import { TextShimmer } from './text-shimmer'
 
 function LeftClickableBorder({
   toggleSidebar,
@@ -191,11 +190,7 @@ export default function ChatbotSidebar() {
                     )
                   })
                 : null}
-              {isPreparingAnswer && (
-                <TextShimmer className="font-mono text-xs" duration={2}>
-                  Generating answer...
-                </TextShimmer>
-              )}
+              {true && <div className="animate-pulse font-mono text-xs">Generating answer...</div>}
             </ConversationContent>
             <ConversationScrollButton className="border-none bg-white/50 ring-1 ring-(--border-subtle) backdrop-blur-lg dark:bg-black/50" />
           </Conversation>
