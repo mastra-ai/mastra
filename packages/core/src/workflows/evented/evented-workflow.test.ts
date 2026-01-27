@@ -15098,4 +15098,449 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
   });
+
+  describe('Suspend/Resume Edge Cases - Phase 4', () => {
+    it('should auto-resume simple suspended step without specifying step parameter', async () => {
+      const simpleStep = createStep({
+        id: 'simple-step',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.number(),
+        }),
+        resumeSchema: z.object({
+          multiplier: z.number(),
+        }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const simpleWorkflow = createWorkflow({
+        id: 'simple-auto-resume-workflow-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+      })
+        .then(simpleStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'simple-auto-resume-workflow-evented': simpleWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await simpleWorkflow.createRun();
+
+      // Start workflow - should suspend
+      const startResult = await run.start({ inputData: { value: 10 } });
+      expect(startResult.status).toBe('suspended');
+      if (startResult.status === 'suspended') {
+        expect(startResult.suspended).toEqual([['simple-step']]);
+      }
+
+      // Test auto-resume without step parameter
+      const autoResumeResult = await run.resume({
+        resumeData: { multiplier: 5 },
+        // No step parameter - should auto-detect
+      });
+
+      expect(autoResumeResult.status).toBe('success');
+      if (autoResumeResult.status === 'success') {
+        expect(autoResumeResult.result.result).toBe(50); // 10 * 5
+      }
+
+      // Test explicit step parameter still works (backwards compatibility)
+      const run2 = await simpleWorkflow.createRun();
+      const startResult2 = await run2.start({ inputData: { value: 20 } });
+      expect(startResult2.status).toBe('suspended');
+      if (startResult2.status === 'suspended') {
+        const explicitResumeResult = await run2.resume({
+          step: startResult2.suspended[0],
+          resumeData: { multiplier: 3 },
+        });
+
+        expect(explicitResumeResult.status).toBe('success');
+        if (explicitResumeResult.status === 'success') {
+          expect(explicitResumeResult.result.result).toBe(60); // 20 * 3
+        }
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should throw error when multiple steps are suspended and no step specified', async () => {
+      // Create two steps that will suspend in different branches
+      const branchStep1 = createStep({
+        id: 'branch-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const branchStep2 = createStep({
+        id: 'branch-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ divisor: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value / resumeData.divisor };
+        },
+      });
+
+      // Create a workflow that uses branching where both conditions are true
+      // This will cause both branches to execute and suspend
+      const multiSuspendWorkflow = createWorkflow({
+        id: 'multi-suspend-workflow-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({}),
+      })
+        .branch([
+          [() => Promise.resolve(true), branchStep1], // This will always execute and suspend
+          [() => Promise.resolve(true), branchStep2], // This will also execute and suspend
+        ])
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'multi-suspend-workflow-evented': multiSuspendWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await multiSuspendWorkflow.createRun();
+
+      // Start workflow - both branch steps should suspend
+      const startResult = await run.start({ inputData: { value: 100 } });
+      expect(startResult.status).toBe('suspended');
+
+      if (startResult.status === 'suspended') {
+        // Should have two suspended steps from different branches
+        expect(startResult.suspended.length).toBeGreaterThan(1);
+        // Check that we have both steps suspended
+        const suspendedStepIds = startResult.suspended.map(path => path[path.length - 1]);
+        expect(suspendedStepIds).toContain('branch-step-1');
+        expect(suspendedStepIds).toContain('branch-step-2');
+      }
+
+      // Test auto-resume should fail with multiple suspended steps
+      await expect(
+        run.resume({
+          resumeData: { multiplier: 2 },
+          // No step parameter - should fail with multiple suspended steps
+        }),
+      ).rejects.toThrow('Multiple suspended steps found');
+
+      // Test explicit step parameter works correctly
+      const explicitResumeResult = await run.resume({
+        step: 'branch-step-1',
+        resumeData: { multiplier: 2 },
+      });
+
+      // After resuming one step, there should still be another suspended
+      expect(explicitResumeResult.status).toBe('suspended');
+      if (explicitResumeResult.status === 'suspended') {
+        const suspendedStepIds = explicitResumeResult.suspended.map(path => path[path.length - 1]);
+        expect(suspendedStepIds).toContain('branch-step-2');
+        expect(suspendedStepIds).not.toContain('branch-step-1');
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should throw error when you try to resume a workflow that is not suspended', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'increment-workflow-evented': incrementWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('success');
+
+      try {
+        await run.resume({
+          resumeData: { value: 2 },
+          step: ['increment'],
+        });
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('This workflow run was not suspended');
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should throw error when you try to resume a workflow step that is not suspended', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow-step-not-suspended-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'increment-workflow-step-not-suspended-evented': incrementWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      try {
+        await run.resume({
+          resumeData: { value: 2 },
+          step: ['increment'],
+        });
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe(
+          'This workflow step "increment" was not suspended. Available suspended steps: [resume]',
+        );
+      }
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should support both explicit step resume and auto-resume (backwards compatibility)', async () => {
+      const suspendStep = createStep({
+        id: 'suspend-step',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        resumeSchema: z.object({
+          extraData: z.string(),
+        }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            // First execution - suspend
+            await suspend({ waitingFor: 'user-input', originalValue: inputData.value });
+            return { result: '' }; // Should not be reached
+          } else {
+            // Resume execution
+            return { result: `processed-${resumeData.extraData}` };
+          }
+        },
+      });
+
+      const completeStep = createStep({
+        id: 'complete-step',
+        inputSchema: z.object({
+          result: z.string(),
+        }),
+        outputSchema: z.object({
+          final: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { final: `Completed: ${inputData.result}` };
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'auto-resume-test-workflow-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ final: z.string() }),
+      })
+        .then(suspendStep)
+        .then(completeStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'auto-resume-test-workflow-evented': testWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      // Test 1: Start workflow and suspend
+      const run1 = await testWorkflow.createRun();
+      const result1 = await run1.start({ inputData: { value: 42 } });
+      expect(result1.status).toBe('suspended');
+      expect(result1.suspended).toEqual([['suspend-step']]);
+
+      // Test 2: Resume with explicit step parameter (backwards compatibility)
+      const explicitResumeResult = await run1.resume({
+        step: result1.suspended[0], // Pass the explicit suspended step
+        resumeData: { extraData: 'explicit-resume' },
+      });
+      expect(explicitResumeResult.status).toBe('success');
+      expect(explicitResumeResult.result.final).toBe('Completed: processed-explicit-resume');
+
+      // Test 3: Auto-resume without step parameter (new feature)
+      const run2 = await testWorkflow.createRun();
+      const result2 = await run2.start({ inputData: { value: 100 } });
+      expect(result2.status).toBe('suspended');
+
+      const autoResumeResult = await run2.resume({
+        resumeData: { extraData: 'auto-resume' },
+        // No step parameter - should auto-detect
+      });
+      expect(autoResumeResult.status).toBe('success');
+      expect(autoResumeResult.result.final).toBe('Completed: processed-auto-resume');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should handle missing suspendData gracefully', async () => {
+      const stepWithoutSuspend = createStep({
+        id: 'no-suspend-step',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        execute: async ({ inputData, suspendData }) => {
+          // Should handle missing suspendData gracefully
+          const message = suspendData ? 'Had suspend data' : 'No suspend data';
+          return { result: `${inputData.value}: ${message}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-suspend-workflow-evented',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(stepWithoutSuspend).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'no-suspend-workflow-evented': workflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+
+      const result = await run.start({
+        inputData: { value: 'test' },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result.result).toBe('test: No suspend data');
+
+      await mastra.stopEventEngine();
+    });
+  });
 });
