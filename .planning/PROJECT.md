@@ -59,9 +59,10 @@ Users can pass typed RequestContext instances to framework methods without TypeS
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use `RequestContext<any>` instead of `RequestContext<unknown>` | `any` is covariant (accepts all typed variants), `unknown` is invariant (causes current issue). Framework treats context as opaque anyway. | — Pending |
-| Patch release scope | Type-only change with full backward compatibility. `RequestContext<any>` accepts everything `RequestContext<unknown>` did. | — Pending |
+| Use function overloads (not simple `any`) | Provides maximum type safety while solving variance issue. Overload 1 accepts typed contexts, overload 2 preserves existing behavior, implementation uses `any`. Follows Express/Fastify pattern. | ✓ Approved |
+| Patch release scope | Type-only change with full backward compatibility. Overload 2 explicitly preserves existing signatures. No runtime changes. | — Pending |
 | Focus on core package only | Issue manifests in core type definitions. Other packages inherit these types. | — Pending |
+| Apply pattern consistently | All methods accepting requestContext (generate, stream, text, streamText, streamObject, getMemory, etc.) use same overload pattern for consistency. | — Pending |
 
 ---
 *Last updated: 2026-01-27 after initialization*
