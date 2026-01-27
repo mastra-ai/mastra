@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Milestone complete
+**Current focus:** Phase 8 - Item Selection & Actions
 
 ## Current Position
 
-Phase: 7 of 7 (CSV Import) — COMPLETE
-Plan: 5 of 5 in phase 7 (includes gap closure)
-Status: All phases complete
-Last activity: 2026-01-27 — Removed Phase 8 (Item Selection)
+Phase: 8 of 8 (Item Selection & Actions)
+Plan: 2 of 6 in phase 8
+Status: In progress
+Last activity: 2026-01-27 — Completed 08-02-PLAN.md (ActionsMenu + deleteItems)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28
+- Total plans completed: 30
 - Average duration: 4 min
-- Total execution time: 1.6 hours
+- Total execution time: 1.7 hours
 
 **By Phase:**
 
@@ -34,9 +34,10 @@ Progress: [██████████] 100%
 | 05-run-analytics | 1 | 4 min | 4 min |
 | 06-playground-integration | 12 | 48 min | 4 min |
 | 07-csv-import | 5 | 10 min | 2 min |
+| 08-item-selection-actions | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-02 (2 min), 07-03 (3 min), 07-04 (2 min), 07-05 (1 min)
+- Last 5 plans: 07-04 (2 min), 07-05 (1 min), 08-01 (3 min), 08-02 (3 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -102,5 +103,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 07-05 gap closure (column mapping fix)
+Stopped at: Completed 08-02-PLAN.md (ActionsMenu + deleteItems)
 Resume file: None
