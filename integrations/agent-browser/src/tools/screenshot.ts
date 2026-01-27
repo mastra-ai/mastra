@@ -1,67 +1,16 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
 import { type BrowserToolError, createError } from '../errors.js';
+import { screenshotInputSchema, screenshotOutputSchema, type ScreenshotOutput } from '../types.js';
 
 /**
  * Maximum dimension (width or height) before emitting a warning.
  * Images exceeding 8000px may be rejected by some multimodal APIs.
  */
 const MAX_DIMENSION = 8000;
-
-/**
- * Zod schema for screenshot tool input parameters.
- */
-const screenshotInputSchema = z.object({
-  fullPage: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Capture the entire scrollable page instead of just the viewport'),
-  format: z
-    .enum(['png', 'jpeg'])
-    .optional()
-    .default('png')
-    .describe('Image format. PNG is lossless, JPEG is smaller.'),
-  quality: z
-    .number()
-    .min(0)
-    .max(100)
-    .optional()
-    .default(80)
-    .describe('JPEG quality (0-100). Ignored for PNG.'),
-  ref: z.string().optional().describe('Element ref from snapshot to capture specific element (e.g., @e5)'),
-});
-
-/**
- * Zod schema for screenshot tool output.
- */
-const screenshotOutputSchema = z.object({
-  base64: z.string().describe('Base64-encoded image data'),
-  mimeType: z.enum(['image/png', 'image/jpeg']).describe('Image MIME type'),
-  dimensions: z
-    .object({
-      width: z.number().describe('Image width in pixels'),
-      height: z.number().describe('Image height in pixels'),
-    })
-    .describe('Image dimensions'),
-  fileSize: z.number().describe('Image file size in bytes'),
-  timestamp: z.string().describe('ISO timestamp when screenshot was captured'),
-  url: z.string().describe('Page URL at capture time'),
-  title: z.string().describe('Page title at capture time'),
-  warning: z.string().optional().describe('Warning message if image dimensions exceed recommended limits'),
-});
-
-/**
- * Input type for the screenshot tool.
- */
-export type ScreenshotInput = z.infer<typeof screenshotInputSchema>;
-
-/**
- * Output type for the screenshot tool.
- */
-export type ScreenshotOutput = z.infer<typeof screenshotOutputSchema>;
 
 /**
  * Creates a screenshot tool that captures images of the current page or specific elements.
@@ -171,8 +120,26 @@ export function createScreenshotTool(getBrowser: () => Promise<BrowserManager>, 
           ? `Image dimensions (${dimensions.width}x${dimensions.height}) exceed recommended ${MAX_DIMENSION}px limit. Some APIs may reject this image.`
           : undefined;
 
+        // Save screenshot to screenshots folder in cwd
+        // (Mastra studio runs from a directory that's already public-accessible)
+        const screenshotsDir = join(process.cwd(), 'screenshots');
+        await mkdir(screenshotsDir, { recursive: true });
+
+        // Generate unique filename using timestamp
+        const ext = format || 'png';
+        const filename = `screenshot-${Date.now()}.${ext}`;
+        const filePath = join(screenshotsDir, filename);
+        await writeFile(filePath, buffer);
+
+        // Build descriptive message about what was captured
+        const captureType = input.ref ? `element ${input.ref}` : input.fullPage ? 'full page' : 'viewport';
+        const message = `Screenshot captured: ${captureType} (${dimensions.width}x${dimensions.height}px, ${Math.round(buffer.length / 1024)}KB ${ext.toUpperCase()})`;
+
         return {
-          base64: buffer.toString('base64'),
+          success: true,
+          message,
+          path: filePath,
+          publicPath: `/screenshots/${filename}`,
           mimeType,
           dimensions,
           fileSize: buffer.length,
