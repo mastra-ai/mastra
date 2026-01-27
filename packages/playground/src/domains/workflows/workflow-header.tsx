@@ -1,3 +1,4 @@
+import { EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
@@ -47,13 +48,16 @@ export function WorkflowHeader({
               <DividerIcon />
             </>
           )}
-
-          <Button as={Link} to={`/observability?entity=${workflowName}`}>
-            Traces
-          </Button>
         </HeaderGroup>
 
         <HeaderAction>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Traces
+          </Button>
+
           <Button as={Link} target="_blank" to="/swagger-ui">
             <Icon>
               <ApiIcon />

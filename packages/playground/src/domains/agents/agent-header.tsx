@@ -1,12 +1,11 @@
+import { EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
   Header,
   Breadcrumb,
   Crumb,
-  HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
@@ -14,7 +13,7 @@ import {
   AgentCombobox,
 } from '@mastra/playground-ui';
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({ agentId }: { agentId: string }) {
   return (
     <Header>
       <Breadcrumb>
@@ -29,19 +28,14 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
         </Crumb>
       </Breadcrumb>
 
-      <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
-
-        <DividerIcon />
-
+      <HeaderAction>
         <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
           Traces
         </Button>
-      </HeaderGroup>
 
-      <HeaderAction>
         <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
           <Icon>
             <DocsIcon />

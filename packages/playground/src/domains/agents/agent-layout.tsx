@@ -5,7 +5,7 @@ import { HeaderTitle, Header, MainContentLayout, useAgent, Skeleton } from '@mas
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { isLoading: isAgentLoading } = useAgent(agentId!);
   return (
     <MainContentLayout>
       {isAgentLoading ? (
@@ -15,7 +15,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           </HeaderTitle>
         </Header>
       ) : (
-        <AgentHeader agentName={agent?.name!} agentId={agentId!} />
+        <AgentHeader agentId={agentId!} />
       )}
       {children}
     </MainContentLayout>
