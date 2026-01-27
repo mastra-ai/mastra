@@ -203,7 +203,7 @@ Foreach Suspend/Resume:
 
 Plans:
 
-- [ ] 05-01-PLAN.md - Implement stream() and resumeStream() on EventedRun, unskip 4 streaming tests
+- [x] 05-01-PLAN.md - Implement stream() and resumeStream() on EventedRun, unskip 4 streaming tests
 
 **Missing Tests:**
 
@@ -276,12 +276,12 @@ Plans:
 | 2     | Lifecycle Callbacks       | 15            | Complete    |
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
 | 4     | Suspend/Resume Edge Cases | 26 (11+15skip)| Complete    |
-| 5     | Streaming vNext           | 4             | Planned     |
+| 5     | Streaming vNext           | 6 (4+2skip)   | Complete    |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
-**Total:** ~49 tests to port (~113 - 47 completed - 17 skipped)
+**Total:** ~43 tests to port (~113 - 52 completed - 18 skipped)
 
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 5 planning_
+_Last updated: 2026-01-27 after Phase 5 completion_
