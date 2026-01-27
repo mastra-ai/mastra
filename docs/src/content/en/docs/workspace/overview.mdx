@@ -53,7 +53,7 @@ const sandbox = new LocalSandbox({
 ```
 
 - `workingDirectory` - Where shell commands run from
-- `env` - Environment variables to pass (PATH is always included by default)
+- `env` - Environment variables to pass (PATH is included by default unless overridden)
 - `isolation` - Native OS sandboxing: `'seatbelt'` (macOS) or `'bwrap'` (Linux)
 
 See [Sandbox Reference](/reference/workspace/sandbox) for the full API.
