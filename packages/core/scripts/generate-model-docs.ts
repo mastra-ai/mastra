@@ -883,7 +883,7 @@ const agent = new Agent({
   instructions: "You are a helpful assistant",
   model: {
     id: "custom/my-qwen3-model",
-    url: "http://your-custom-openai-compatible-enddpoint.com/v1"
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
   }
 })
 \`\`\`
