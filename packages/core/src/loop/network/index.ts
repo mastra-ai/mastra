@@ -333,39 +333,6 @@ export async function prepareMemoryStep({
  *
  * @internal
  */
-async function saveFinalResultIfProvided({
-  memory,
-  finalResult,
-  threadId,
-  resourceId,
-  generateId,
-}: {
-  memory: Awaited<ReturnType<Agent['getMemory']>>;
-  finalResult: string | undefined;
-  threadId: string;
-  resourceId: string;
-  generateId: () => string;
-}) {
-  if (memory && finalResult) {
-    await memory.saveMessages({
-      messages: [
-        {
-          id: generateId(),
-          type: 'text',
-          role: 'assistant',
-          content: {
-            parts: [{ type: 'text', text: finalResult }],
-            format: 2,
-          },
-          createdAt: new Date(),
-          threadId,
-          resourceId,
-        },
-      ] as MastraDBMessage[],
-    });
-  }
-}
-
 /**
  * Helper function to apply output processors to messages before saving.
  * This ensures that user-configured output processors (like TraceIdInjector)
@@ -401,6 +368,46 @@ async function saveMessagesWithProcessors(
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
   await memory.saveMessages({ messages: processedMessages });
+}
+
+async function saveFinalResultIfProvided({
+  memory,
+  finalResult,
+  threadId,
+  resourceId,
+  generateId,
+  processorRunner,
+  requestContext,
+}: {
+  memory: Awaited<ReturnType<Agent['getMemory']>>;
+  finalResult: string | undefined;
+  threadId: string;
+  resourceId: string;
+  generateId: () => string;
+  processorRunner: ProcessorRunner | null;
+  requestContext?: RequestContext;
+}) {
+  if (memory && finalResult) {
+    await saveMessagesWithProcessors(
+      memory,
+      [
+        {
+          id: generateId(),
+          type: 'text',
+          role: 'assistant',
+          content: {
+            parts: [{ type: 'text', text: finalResult }],
+            format: 2,
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        },
+      ] as MastraDBMessage[],
+      processorRunner,
+      { requestContext },
+    );
+  }
 }
 
 export async function createNetworkLoop({
@@ -1974,6 +1981,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       } else {
@@ -2025,6 +2034,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       }
