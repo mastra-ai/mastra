@@ -100,7 +100,7 @@ export interface LocalSandboxOptions {
   workingDirectory?: string;
   /**
    * Environment variables to set for command execution.
-   * PATH is always included by default (needed for finding executables).
+   * PATH is included by default unless overridden (needed for finding executables).
    * Other host environment variables are not inherited unless explicitly passed.
    *
    * @example
