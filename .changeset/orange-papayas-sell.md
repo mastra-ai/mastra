@@ -1,5 +1,5 @@
 ---
-'@mastra/react': patch
+'@mastra/react': minor
 ---
 
 Added `apiPrefix` prop to `MastraClientProvider` for connecting to servers with custom API route prefixes (defaults to `/api`).

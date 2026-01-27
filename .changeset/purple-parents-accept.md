@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Added `normalizeRoutePath` utility function for consistent route path handling.

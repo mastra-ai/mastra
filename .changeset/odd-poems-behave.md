@@ -1,5 +1,5 @@
 ---
-'@mastra/client-js': patch
+'@mastra/client-js': minor
 ---
 
 Added `apiPrefix` option to `MastraClient` for connecting to servers with custom API route prefixes.
