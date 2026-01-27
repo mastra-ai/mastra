@@ -8,7 +8,9 @@ import {
 } from 'react';
 
 // Define the props type for your Link component
-export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
+export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
+  viewTransition?: boolean;
+};
 
 // Define the actual component type with ref attributes
 export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAttributes<HTMLAnchorElement>>;
