@@ -29,7 +29,7 @@ export const weatherAgent = new Agent({
 });
 ```
 
-> 詳細は、[Mastra での AI SDK の使用](/models#use-ai-sdk-with-mastra) をご覧ください。
+> 詳細は、[Mastra での AI SDK の使用](/models/v0#use-ai-sdk-with-mastra) をご覧ください。
 
 
 <div id="streaming">
@@ -65,7 +65,7 @@ Mastra と AI SDK を併用する推奨方法は、`@mastra/ai-sdk` パッケー
   ### `chatRoute()`
 </div>
 
-[カスタム API ルート](/docs/server-db/custom-api-routes) を設定する際は、`chatRoute()` ユーティリティを使って、エージェントのストリームを AI SDK 互換形式に自動整形するルートハンドラーを作成します。
+[カスタム API ルート](/docs/v0/server-db/custom-api-routes) を設定する際は、`chatRoute()` ユーティリティを使って、エージェントのストリームを AI SDK 互換形式に自動整形するルートハンドラーを作成します。
 
 ```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
@@ -206,7 +206,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   * `data-tool-network`: ツールのストリーム内から出力されるネストされたネットワーク。
   * `data-tool-agent`: ツールのストリーム内から出力されるネストされたエージェント。
 
-例: [ツール内のネストされたエージェントストリーム](/docs/streaming/tool-streaming#tool-using-an-agent) の場合、`data-tool-agent` の UI メッセージパーツが出力され、以下のとおりクライアント側で利用できます。
+例: [ツール内のネストされたエージェントストリーム](/docs/v0/streaming/tool-streaming#tool-using-an-agent) の場合、`data-tool-agent` の UI メッセージパーツが出力され、以下のとおりクライアント側で利用できます。
 
 ```typescript title="app/page.tsx" copy
 "use client";
@@ -298,7 +298,7 @@ export const testTool = createTool({
 });
 ```
 
-ツール ストリーミングの詳細は、[ツール ストリーミングのドキュメント](/docs/streaming/tool-streaming)をご覧ください
+ツール ストリーミングの詳細は、[ツール ストリーミングのドキュメント](/docs/v0/streaming/tool-streaming)をご覧ください
 
 
 <div id="stream-transformations">
@@ -461,7 +461,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> `useChat()` をエージェントのメモリと併用する場合は、実装の要点については [Agent Memory セクション](/docs/agents/agent-memory) を参照してください。
+> `useChat()` をエージェントのメモリと併用する場合は、実装の要点については [Agent Memory セクション](/docs/v0/agents/agent-memory) を参照してください。
 
 
 <div id="using-usecompletion">
@@ -615,7 +615,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> その後、ツールで `runtimeContext` パラメータを通じてこのデータにアクセスできます。詳しくは [Runtime Context のドキュメント](/docs/server-db/runtime-context)をご覧ください。
+> その後、ツールで `runtimeContext` パラメータを通じてこのデータにアクセスできます。詳しくは [Runtime Context のドキュメント](/docs/v0/server-db/runtime-context)をご覧ください。
 
 
 <div id="migrating-from-ai-sdk-v4-to-v5">

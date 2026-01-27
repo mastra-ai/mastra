@@ -106,7 +106,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> サーバーミドルウェアの使い方は [Middleware](/docs/server-db/middleware) を参照してください。
+> サーバーミドルウェアの使い方は [Middleware](/docs/v0/server-db/middleware) を参照してください。
 
 
 <div id="accessing-values-with-agents">
@@ -144,7 +144,7 @@ export const weatherAgent = new Agent({
 
 `requestContext` は、`agents`、`workflows`、`scorers`、`inputProcessors`、`outputProcessors` といった他のオプションでも使用できます。
 
-> 設定オプションの一覧については [Agent](/reference/agents/agent) を参照してください。
+> 設定オプションの一覧については [Agent](/reference/v0/agents/agent) を参照してください。
 
 
 <div id="accessing-values-from-workflow-steps">
@@ -171,7 +171,7 @@ const stepOne = createStep({
 });
 ```
 
-> 設定オプションの全一覧は [createStep()](/reference/workflows/step) を参照してください。
+> 設定オプションの全一覧は [createStep()](/reference/v0/workflows/step) を参照してください。
 
 
 <div id="accessing-values-with-tools">
@@ -198,15 +198,15 @@ export const weatherTool = createTool({
 });
 ```
 
-> 設定項目の全一覧は [createTool()](/reference/tools/create-tool) をご覧ください。
+> 設定項目の全一覧は [createTool()](/reference/v0/tools/create-tool) をご覧ください。
 
 
 <div id="related">
   ## 関連
 </div>
 
-- [Request Context の例](/examples/agents/request-context)
-- [エージェントの Request Context](/docs/agents/overview#using-requestcontext)
+- [Request Context の例](/examples/v0/agents/request-context)
+- [エージェントの Request Context](/docs/v0/agents/overview#using-requestcontext)
 - [ワークフローの Request Context](../workflows/overview#using-requestcontext)
 - [ツールの Request Context](../tools-mcp/overview#using-requestcontext)
-- [サーバーのミドルウェアにおける Request Context](/docs/server-db/middleware)
+- [サーバーのミドルウェアにおける Request Context](/docs/v0/server-db/middleware)

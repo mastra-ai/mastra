@@ -23,13 +23,13 @@ Express から直接 Mastra を呼び出せるため、Express サーバーと�
 
 - TypeScript で構築された既存の Express アプリ
 - Node.js `v20.0` 以上
-- サポートされている[モデルプロバイダー](/models)の API キー
+- サポートされている[モデルプロバイダー](/models/v0)の API キー
 
 <div id="adding-mastra">
   ## Mastra の追加
 </div>
 
-まず、エージェントを実行するために必要な Mastra の依存関係をインストールします。本ガイドではモデルとして OpenAI を使用しますが、サポートされている任意の[モデルプロバイダー](/models)を利用できます。
+まず、エージェントを実行するために必要な Mastra の依存関係をインストールします。本ガイドではモデルとして OpenAI を使用しますが、サポートされている任意の[モデルプロバイダー](/models/v0)を利用できます。
 
 ```bash copy
 npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @ai-sdk/openai@^1.0.0
@@ -177,11 +177,11 @@ app.listen(port, () => {
 });
 ```
 
-`src/mastra/index.ts` ファイルをインポートすると、[`.getAgent()`](/reference/core/getAgent) などのメソッドでプログラムからアクセスできます。さらに [`.generate()`](/reference/agents/generate) を使うと、該当するエージェントとやり取りできます。
+`src/mastra/index.ts` ファイルをインポートすると、[`.getAgent()`](/reference/v0/core/getAgent) などのメソッドでプログラムからアクセスできます。さらに [`.generate()`](/reference/v0/agents/generate) を使うと、該当するエージェントとやり取りできます。
 
 :::note
 
-詳しくは [Agent リファレンス](/reference/agents/agent) を参照してください。
+詳しくは [Agent リファレンス](/reference/v0/agents/agent) を参照してください。
 
 :::
 
@@ -202,7 +202,7 @@ http://localhost:3456/api/weather?city=London
   ## エージェントサーバーの実行
 </div>
 
-本番環境では、Express サーバーと並行して Mastra を動かす必要はありません。一方、開発時には、Mastra が提供する [ローカル開発環境](/docs/getting-started/studio) を使ってエージェントの改善やデバッグができます。
+本番環境では、Express サーバーと並行して Mastra を動かす必要はありません。一方、開発時には、Mastra が提供する [ローカル開発環境](/docs/v0/getting-started/studio) を使ってエージェントの改善やデバッグができます。
 
 `package.json` にスクリプトを追加します:
 

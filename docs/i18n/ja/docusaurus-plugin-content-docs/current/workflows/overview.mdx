@@ -62,7 +62,7 @@ const step1 = createStep({
 });
 ```
 
-> 設定項目の全一覧は [Step クラス](/reference/workflows/step) を参照してください。
+> 設定項目の全一覧は [Step クラス](/reference/v0/workflows/step) を参照してください。
 
 
 <div id="using-agents-and-tools">
@@ -97,7 +97,7 @@ export const testWorkflow = createWorkflow({
 
 ```
 
-> すべての設定オプションの一覧については、[Workflow Class](/reference/workflows/workflow) を参照してください。
+> すべての設定オプションの一覧については、[Workflow Class](/reference/v0/workflows/workflow) を参照してください。
 
 
 <div id="understanding-control-flow">
@@ -181,7 +181,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 :::
 
-> 詳しくは、[Running Workflows](/examples/workflows_legacy/creating-a-workflow) をご覧ください。
+> 詳しくは、[Running Workflows](/examples/v0/workflows_legacy/creating-a-workflow) をご覧ください。
 
 
 <div id="running-workflows">
@@ -273,7 +273,7 @@ for await (const chunk of result.stream) {
   ## `RuntimeContext` の使用
 </div>
 
-[RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストの状況に応じて動作を条件付きで調整できます。
+[RuntimeContext](/docs/v0/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストの状況に応じて動作を条件付きで調整できます。
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -292,25 +292,25 @@ const step1 = createStep({
 });
 ```
 
-> 詳細については、[Runtime Context](/docs/server-db/runtime-context)を参照してください。
+> 詳細については、[Runtime Context](/docs/v0/server-db/runtime-context)を参照してください。
 
 
 <div id="testing-with-mastra-playground">
   ## Mastra Playground でのテスト
 </div>
 
-Mastra の [Playground](/docs/getting-started/studio) を使うと、さまざまな入力でワークフローを手軽に実行し、実行ライフサイクルを可視化し、各ステップの入出力を確認し、ワークフローの各要素をより詳しく確認できます。
+Mastra の [Playground](/docs/v0/getting-started/studio) を使うと、さまざまな入力でワークフローを手軽に実行し、実行ライフサイクルを可視化し、各ステップの入出力を確認し、ワークフローの各要素をより詳しく確認できます。
 
 <div id="related">
   ## 関連
 </div>
 
-ワークフローの詳細については、実践的な例を用いて中核概念を解説する[Workflow Guide](/guides/guide/ai-recruiter)をご覧ください。
+ワークフローの詳細については、実践的な例を用いて中核概念を解説する[Workflow Guide](/guides/v0/guide/ai-recruiter)をご覧ください。
 
-- [Parallel Steps のワークフロー例](/examples/workflows_legacy/parallel-steps)
-- [Conditional Branching のワークフロー例](/examples/workflows_legacy/conditional-branching)
-- [Inngest のワークフロー例](/examples/workflows/inngest-workflow)
-- [Suspend and Resume のワークフロー例](/examples/workflows_legacy/human-in-the-loop)
+- [Parallel Steps のワークフロー例](/examples/v0/workflows_legacy/parallel-steps)
+- [Conditional Branching のワークフロー例](/examples/v0/workflows_legacy/conditional-branching)
+- [Inngest のワークフロー例](/examples/v0/workflows/inngest-workflow)
+- [Suspend and Resume のワークフロー例](/examples/v0/workflows_legacy/human-in-the-loop)
 
 <div id="workflows-legacy">
   ## ワークフロー（レガシー）

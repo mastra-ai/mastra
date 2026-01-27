@@ -18,7 +18,7 @@ Mastra の Voice システムは、音声インタラクション向けの統一
   ## エージェントに音声を追加する
 </div>
 
-エージェントに音声機能を統合する方法は、[「エージェントに音声を追加する」](/docs/agents/adding-voice)のドキュメントをご参照ください。本セクションでは、単一および複数の音声プロバイダーの活用方法に加え、リアルタイムでのインタラクションについても解説します。
+エージェントに音声機能を統合する方法は、[「エージェントに音声を追加する」](/docs/v0/agents/adding-voice)のドキュメントをご参照ください。本セクションでは、単一および複数の音声プロバイダーの活用方法に加え、リアルタイムでのインタラクションについても解説します。
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -75,7 +75,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    OpenAI の音声プロバイダーについて詳しくは、[OpenAI Voice Reference](/reference/voice/openai)をご覧ください。
+    OpenAI の音声プロバイダーについて詳しくは、[OpenAI Voice Reference](/reference/v0/voice/openai)をご覧ください。
   </TabItem>
 
   <TabItem value="azure" label="Azure">
@@ -103,7 +103,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Azure 音声プロバイダーの詳細は、[Azure Voice Reference](/reference/voice/azure) をご覧ください。
+    Azure 音声プロバイダーの詳細は、[Azure Voice Reference](/reference/v0/voice/azure) をご覧ください。
   </TabItem>
 
   <TabItem value="ElevenLabs" label="ElevenLabs">
@@ -131,7 +131,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    ElevenLabs の音声プロバイダーの詳細は、[ElevenLabs Voice Reference](/reference/voice/elevenlabs) をご覧ください。
+    ElevenLabs の音声プロバイダーの詳細は、[ElevenLabs Voice Reference](/reference/v0/voice/elevenlabs) をご覧ください。
   </TabItem>
 
   <TabItem value="PlayAI" label="PlayAI">
@@ -159,7 +159,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    PlayAI の音声プロバイダーについて詳しくは、[PlayAI Voice Reference](/reference/voice/playai)をご覧ください。
+    PlayAI の音声プロバイダーについて詳しくは、[PlayAI Voice Reference](/reference/v0/voice/playai)をご覧ください。
   </TabItem>
 
   <TabItem value="Google" label="Google">
@@ -187,7 +187,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Google の音声プロバイダーについて詳しくは、[Google Voice リファレンス](/reference/voice/google)をご覧ください。
+    Google の音声プロバイダーについて詳しくは、[Google Voice リファレンス](/reference/v0/voice/google)をご覧ください。
   </TabItem>
 
   <TabItem value="Cloudflare" label="Cloudflare">
@@ -215,7 +215,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Cloudflare の音声プロバイダーについて詳しくは、[Cloudflare Voice Reference](/reference/voice/cloudflare) をご覧ください。
+    Cloudflare の音声プロバイダーについて詳しくは、[Cloudflare Voice Reference](/reference/v0/voice/cloudflare) をご覧ください。
   </TabItem>
 
   <TabItem value="Deepgram" label="Deepgram">
@@ -243,7 +243,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Deepgram の音声プロバイダーの詳細については、[Deepgram Voice リファレンス](/reference/voice/deepgram)を参照してください。
+    Deepgram の音声プロバイダーの詳細については、[Deepgram Voice リファレンス](/reference/v0/voice/deepgram)を参照してください。
   </TabItem>
 
   <TabItem value="Speechify（スピーチファイ）" label="Speechify">
@@ -271,7 +271,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Speechify の音声プロバイダーの詳細は、[Speechify Voice Reference](/reference/voice/speechify) をご覧ください。
+    Speechify の音声プロバイダーの詳細は、[Speechify Voice Reference](/reference/v0/voice/speechify) をご覧ください。
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
@@ -299,7 +299,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Sarvam の音声プロバイダーについて詳しくは、[Sarvam Voice Reference](/reference/voice/sarvam)をご覧ください。
+    Sarvam の音声プロバイダーについて詳しくは、[Sarvam Voice Reference](/reference/v0/voice/sarvam)をご覧ください。
   </TabItem>
 
   <TabItem value="murf" label="Murf">
@@ -327,7 +327,7 @@ OpenAI、ElevenLabs など、複数のプロバイダーから選べます。
     playAudio(audioStream);
     ```
 
-    Murf の音声プロバイダーについて詳しくは、[Murf Voice Reference](/reference/voice/murf) をご覧ください。
+    Murf の音声プロバイダーについて詳しくは、[Murf Voice Reference](/reference/v0/voice/murf) をご覧ください。
   </TabItem>
 </Tabs>
 
@@ -370,7 +370,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    OpenAI の音声プロバイダーの詳細は、[OpenAI Voice Reference](/reference/voice/openai)をご覧ください。
+    OpenAI の音声プロバイダーの詳細は、[OpenAI Voice Reference](/reference/v0/voice/openai)をご覧ください。
   </TabItem>
 
   <TabItem value="アジュール" label="Azure">
@@ -400,7 +400,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    Azure の音声プロバイダーの詳細は、[Azure Voice Reference](/reference/voice/azure) をご覧ください。
+    Azure の音声プロバイダーの詳細は、[Azure Voice Reference](/reference/v0/voice/azure) をご覧ください。
   </TabItem>
 
   <TabItem value="ElevenLabs" label="ElevenLabs">
@@ -429,7 +429,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    ElevenLabs の音声プロバイダーについて詳しくは、[ElevenLabs Voice Reference](/reference/voice/elevenlabs) をご覧ください。
+    ElevenLabs の音声プロバイダーについて詳しくは、[ElevenLabs Voice Reference](/reference/v0/voice/elevenlabs) をご覧ください。
   </TabItem>
 
   <TabItem value="google" label="Google">
@@ -458,7 +458,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    Google の音声プロバイダーについて詳しくは、[Google Voice リファレンス](/reference/voice/google)をご覧ください。
+    Google の音声プロバイダーについて詳しくは、[Google Voice リファレンス](/reference/v0/voice/google)をご覧ください。
   </TabItem>
 
   <TabItem value="Cloudflare" label="Cloudflare">
@@ -487,7 +487,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    Cloudflare の音声プロバイダーの詳細は、[Cloudflare Voice Reference](/reference/voice/cloudflare) をご覧ください。
+    Cloudflare の音声プロバイダーの詳細は、[Cloudflare Voice Reference](/reference/v0/voice/cloudflare) をご覧ください。
   </TabItem>
 
   <TabItem value="Deepgram" label="Deepgram">
@@ -516,7 +516,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    Deepgram の音声プロバイダーに関する詳細は、[Deepgram Voice Reference](/reference/voice/deepgram) をご覧ください。
+    Deepgram の音声プロバイダーに関する詳細は、[Deepgram Voice Reference](/reference/v0/voice/deepgram) をご覧ください。
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
@@ -545,7 +545,7 @@ OpenAI、ElevenLabs などの各種プロバイダーを利用して、話し言
     const { text } = await voiceAgent.generate(transcript);
     ```
 
-    Sarvam の音声プロバイダーについての詳細は、[Sarvam Voice Reference](/reference/voice/sarvam) をご覧ください。
+    Sarvam の音声プロバイダーについての詳細は、[Sarvam Voice Reference](/reference/v0/voice/sarvam) をご覧ください。
   </TabItem>
 </Tabs>
 
@@ -586,7 +586,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ```
 
-OpenAI の音声プロバイダーに関する詳細は、[OpenAI Voice Reference](/reference/voice/openai-realtime)をご覧ください。
+OpenAI の音声プロバイダーに関する詳細は、[OpenAI Voice Reference](/reference/v0/voice/openai-realtime)をご覧ください。
 
   </TabItem>
   <TabItem value="google" label="Google">
@@ -637,7 +637,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ```
 
-Google Gemini Live の音声プロバイダーに関する詳細は、[Google Gemini Live Reference](/reference/voice/google-gemini-live)をご覧ください。
+Google Gemini Live の音声プロバイダーに関する詳細は、[Google Gemini Live Reference](/reference/v0/voice/google-gemini-live)をご覧ください。
 
   </TabItem>
 </Tabs>
@@ -669,7 +669,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    OpenAI の音声プロバイダーの詳細については、[OpenAI Voice Reference](/reference/voice/openai) をご覧ください。
+    OpenAI の音声プロバイダーの詳細については、[OpenAI Voice Reference](/reference/v0/voice/openai) をご覧ください。
   </TabItem>
 
   <TabItem value="Azure" label="Azure">
@@ -694,7 +694,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Azure の音声プロバイダーの詳細は、[Azure Voice Reference](/reference/voice/azure) をご覧ください。
+    Azure の音声プロバイダーの詳細は、[Azure Voice Reference](/reference/v0/voice/azure) をご覧ください。
   </TabItem>
 
   <TabItem value="ElevenLabs" label="ElevenLabs">
@@ -712,7 +712,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    ElevenLabs の音声プロバイダーについての詳細は、[ElevenLabs Voice Reference](/reference/voice/elevenlabs) をご参照ください。
+    ElevenLabs の音声プロバイダーについての詳細は、[ElevenLabs Voice Reference](/reference/v0/voice/elevenlabs) をご参照ください。
   </TabItem>
 
   <TabItem value="Play.ai" label="PlayAI">
@@ -730,7 +730,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    PlayAI の音声プロバイダーの詳細は、[PlayAI Voice Reference](/reference/voice/playai)をご覧ください。
+    PlayAI の音声プロバイダーの詳細は、[PlayAI Voice Reference](/reference/v0/voice/playai)をご覧ください。
   </TabItem>
 
   <TabItem value="Google" label="Google">
@@ -751,7 +751,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Google 音声プロバイダーの詳細については、[Google Voice リファレンス](/reference/voice/google)をご覧ください。
+    Google 音声プロバイダーの詳細については、[Google Voice リファレンス](/reference/v0/voice/google)をご覧ください。
   </TabItem>
 
   <TabItem value="Cloudflare" label="Cloudflare">
@@ -769,7 +769,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Cloudflare の音声プロバイダーについて詳しくは、[Cloudflare Voice Reference](/reference/voice/cloudflare) をご覧ください。
+    Cloudflare の音声プロバイダーについて詳しくは、[Cloudflare Voice Reference](/reference/v0/voice/cloudflare) をご覧ください。
   </TabItem>
 
   <TabItem value="Deepgram" label="Deepgram">
@@ -790,7 +790,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Deepgram の音声プロバイダーについて詳しくは、[Deepgram Voice リファレンス](/reference/voice/deepgram)をご覧ください。
+    Deepgram の音声プロバイダーについて詳しくは、[Deepgram Voice リファレンス](/reference/v0/voice/deepgram)をご覧ください。
   </TabItem>
 
   <TabItem value="Speechify" label="Speechify">
@@ -808,7 +808,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Speechify の音声プロバイダーについて詳しくは、[Speechify Voice Reference](/reference/voice/speechify) をご覧ください。
+    Speechify の音声プロバイダーについて詳しくは、[Speechify Voice Reference](/reference/v0/voice/speechify) をご覧ください。
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
@@ -825,7 +825,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Sarvam のボイスプロバイダーについての詳細は、[Sarvam Voice Reference](/reference/voice/sarvam) をご覧ください。
+    Sarvam のボイスプロバイダーについての詳細は、[Sarvam Voice Reference](/reference/v0/voice/sarvam) をご覧ください。
   </TabItem>
 
   <TabItem value="murf" label="Murf">
@@ -842,7 +842,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Murf の音声プロバイダーの詳細は、[Murf Voice Reference](/reference/voice/murf) をご覧ください。
+    Murf の音声プロバイダーの詳細は、[Murf Voice Reference](/reference/v0/voice/murf) をご覧ください。
   </TabItem>
 
   <TabItem value="openai-realtime" label="OpenAI リアルタイム">
@@ -863,7 +863,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    OpenAI Realtime の音声プロバイダーについて詳しくは、[OpenAI Realtime Voice Reference](/reference/voice/openai-realtime)をご参照ください。
+    OpenAI Realtime の音声プロバイダーについて詳しくは、[OpenAI Realtime Voice Reference](/reference/v0/voice/openai-realtime)をご参照ください。
   </TabItem>
 
   <TabItem value="google-gemini-live" label="Google Gemini Live">
@@ -879,7 +879,7 @@ Google Gemini Live の音声プロバイダーに関する詳細は、[Google Ge
     });
     ```
 
-    Google Gemini Live の音声プロバイダーの詳細は、[Google Gemini Live リファレンス](/reference/voice/google-gemini-live)をご覧ください。
+    Google Gemini Live の音声プロバイダーの詳細は、[Google Gemini Live リファレンス](/reference/v0/voice/google-gemini-live)をご覧ください。
   </TabItem>
 </Tabs>
 
@@ -936,20 +936,20 @@ const responseAudio = await voice.speak(`あなたは次のように言いまし
 playAudio(responseAudio);
 ```
 
-CompositeVoice の詳細は、[CompositeVoice リファレンス](/reference/voice/composite-voice)をご参照ください。
+CompositeVoice の詳細は、[CompositeVoice リファレンス](/reference/v0/voice/composite-voice)をご参照ください。
 
 
 <div id="more-resources">
   ## 参考情報
 </div>
 
-- [CompositeVoice](/reference/voice/composite-voice)
-- [MastraVoice](/reference/voice/mastra-voice)
-- [OpenAI Voice](/reference/voice/openai)
-- [OpenAI Realtime Voice](/reference/voice/openai-realtime)
-- [Azure Voice](/reference/voice/azure)
-- [Google Voice](/reference/voice/google)
-- [Google Gemini Live Voice](/reference/voice/google-gemini-live)
-- [Deepgram Voice](/reference/voice/deepgram)
-- [PlayAI Voice](/reference/voice/playai)
-- [音声のサンプル](/examples/voice/text-to-speech)
+- [CompositeVoice](/reference/v0/voice/composite-voice)
+- [MastraVoice](/reference/v0/voice/mastra-voice)
+- [OpenAI Voice](/reference/v0/voice/openai)
+- [OpenAI Realtime Voice](/reference/v0/voice/openai-realtime)
+- [Azure Voice](/reference/v0/voice/azure)
+- [Google Voice](/reference/v0/voice/google)
+- [Google Gemini Live Voice](/reference/v0/voice/google-gemini-live)
+- [Deepgram Voice](/reference/v0/voice/deepgram)
+- [PlayAI Voice](/reference/v0/voice/playai)
+- [音声のサンプル](/examples/v0/voice/text-to-speech)

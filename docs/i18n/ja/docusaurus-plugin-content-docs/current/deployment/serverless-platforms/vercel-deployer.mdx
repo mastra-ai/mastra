@@ -7,7 +7,7 @@ description: "Mastra VercelDeployer を使って Mastra アプリを Vercel に�
   # VercelDeployer
 </div>
 
-`VercelDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Vercel にデプロイする役割を担います。設定やデプロイの管理を行い、Vercel 固有の機能でベースとなる [Deployer](/reference/deployer/) クラスを拡張します。
+`VercelDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Vercel にデプロイする役割を担います。設定やデプロイの管理を行い、Vercel 固有の機能でベースとなる [Deployer](/reference/v0/deployer/) クラスを拡張します。
 
 <div id="installation">
   ## インストール
@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> 利用可能なすべての設定オプションについては、[VercelDeployer](/reference/deployer/vercel) の API リファレンスを参照してください。
+> 利用可能なすべての設定オプションについては、[VercelDeployer](/reference/v0/deployer/vercel) の API リファレンスを参照してください。
 
 
 <div id="optional-overrides">
@@ -122,4 +122,4 @@ npm run build && vercel --prod --prebuilt --archive=tgz
   ## 次のステップ
 </div>
 
-- [Mastra クライアント SDK](/reference/client-js/mastra-client)
+- [Mastra クライアント SDK](/reference/v0/client-js/mastra-client)

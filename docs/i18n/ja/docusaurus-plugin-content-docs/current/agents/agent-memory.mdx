@@ -36,7 +36,7 @@ npm install @mastra/memory@latest @mastra/libsql@latest
   ## ストレージプロバイダー
 </div>
 
-Memory では、ユーザーのメッセージやエージェントの応答を含む会話履歴を保持するために、ストレージプロバイダーが必要です。利用可能なプロバイダーや Mastra におけるストレージの仕組みについて詳しくは、[Storage](/docs/server-db/storage) のドキュメントをご覧ください。
+Memory では、ユーザーのメッセージやエージェントの応答を含む会話履歴を保持するために、ストレージプロバイダーが必要です。利用可能なプロバイダーや Mastra におけるストレージの仕組みについて詳しくは、[Storage](/docs/v0/server-db/storage) のドキュメントをご覧ください。
 
 <div id="configuring-memory">
   ## メモリの構成
@@ -62,7 +62,7 @@ Memory では、ユーザーのメッセージやエージェントの応答を�
 
     :::note
 
-    利用可能な設定オプションの一覧は、[Memory クラス](/reference/memory/memory-class)のドキュメントをご覧ください。
+    利用可能な設定オプションの一覧は、[Memory クラス](/reference/v0/memory/memory-class)のドキュメントをご覧ください。
 
     :::
   </StepItem>
@@ -84,7 +84,7 @@ Memory では、ユーザーのメッセージやエージェントの応答を�
 
     :::note
 
-    利用可能な設定オプションの一覧は、[LibSQL ストレージ](/reference/storage/libsql)のドキュメントをご覧ください。
+    利用可能な設定オプションの一覧は、[LibSQL ストレージ](/reference/v0/storage/libsql)のドキュメントをご覧ください。
 
     :::
   </StepItem>
@@ -149,7 +149,7 @@ const response = await memoryAgent.generate("私の好きな色は何ですか?"
   ## `RuntimeContext` の使用
 </div>
 
-[RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストのコンテキストに応じて、メモリやストレージの構成を条件付きで切り替えられます。
+[RuntimeContext](/docs/v0/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストのコンテキストに応じて、メモリやストレージの構成を条件付きで切り替えられます。
 
 ```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -176,7 +176,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-詳細は [Runtime Context](/docs/server-db/runtime-context) のドキュメントをご参照ください。
+詳細は [Runtime Context](/docs/v0/server-db/runtime-context) のドキュメントをご参照ください。
 
 :::
 
@@ -188,4 +188,4 @@ export const memoryAgent = new Agent({
 - [ワーキングメモリ](../memory/working-memory)
 - [セマンティックリコール](../memory/semantic-recall)
 - [スレッドとリソース](../memory/threads-and-resources)
-- [ランタイムコンテキスト](/docs/server-db/runtime-context)
+- [ランタイムコンテキスト](/docs/v0/server-db/runtime-context)

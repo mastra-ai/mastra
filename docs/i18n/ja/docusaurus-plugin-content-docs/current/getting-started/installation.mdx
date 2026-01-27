@@ -16,13 +16,13 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 `create mastra` CLI コマンドは、新しい Mastra プロジェクトを始める最速の方法です。セットアップを対話的に案内し、学習やカスタマイズに使えるサンプルのエージェント、ワークフロー、ツールを作成します。
 
-セットアップをより細かく制御したい場合や、既存プロジェクトに Mastra を追加する場合は、[手動インストールガイド](#install-manually)をご覧ください。既存プロジェクトには [`mastra init`](/reference/cli/mastra#mastra-init) も利用できます。
+セットアップをより細かく制御したい場合や、既存プロジェクトに Mastra を追加する場合は、[手動インストールガイド](#install-manually)をご覧ください。既存プロジェクトには [`mastra init`](/reference/v0/cli/mastra#mastra-init) も利用できます。
 
 <div id="before-you-start">
   ## 始める前に
 </div>
 
-- セットアップを完了するには、[モデルプロバイダー](/models)の API キーが必要です。まずは [OpenAI](https://platform.openai.com/api-keys) の利用をおすすめしますが、クレジットカード不要のプロバイダーが必要な場合は、Google の [Gemini](https://aistudio.google.com/app/api-keys) も選択肢です。
+- セットアップを完了するには、[モデルプロバイダー](/models/v0)の API キーが必要です。まずは [OpenAI](https://platform.openai.com/api-keys) の利用をおすすめしますが、クレジットカード不要のプロバイダーが必要な場合は、Google の [Gemini](https://aistudio.google.com/app/api-keys) も選択肢です。
 - Node.js 20 以降を[インストール](https://nodejs.org/en/download)してください。
 
 <div id="install-with-create-mastra">
@@ -66,7 +66,7 @@ bun create mastra@latest
 
 :::note
 
-`create mastra` では、`--no-example` のようなフラグでサンプルの天気エージェントをスキップしたり、`--template` で特定の[テンプレート](/docs/getting-started/templates)から開始したりできます。すべてのオプションは [CLI リファレンス](/reference/cli/create-mastra)をご覧ください。
+`create mastra` では、`--no-example` のようなフラグでサンプルの天気エージェントをスキップしたり、`--template` で特定の[テンプレート](/docs/v0/getting-started/templates)から開始したりできます。すべてのオプションは [CLI リファレンス](/reference/v0/cli/create-mastra)をご覧ください。
 
 :::
 
@@ -86,15 +86,15 @@ bun create mastra@latest
 
 :::
 
-[Playground](/docs/getting-started/studio) を使えば、UI を作成せずにエージェントを素早く構築・プロトタイピングできます。準備が整ったら、以下のガイドに従って Mastra エージェントをアプリケーションに統合できます。
+[Playground](/docs/v0/getting-started/studio) を使えば、UI を作成せずにエージェントを素早く構築・プロトタイピングできます。準備が整ったら、以下のガイドに従って Mastra エージェントをアプリケーションに統合できます。
 
 <div id="next-steps">
   ### 次のステップ
 </div>
 
-- [Mastra の機能](/docs#why-mastra)について詳しく読む
-- フロントエンドフレームワークと Mastra を連携する: [Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)
-- [ガイド](/guides)に沿って、ゼロからエージェントを作成する
+- [Mastra の機能](/docs/v0#why-mastra)について詳しく読む
+- フロントエンドフレームワークと Mastra を連携する: [Next.js](/docs/v0/frameworks/web-frameworks/next-js)、[React](/docs/v0/frameworks/web-frameworks/vite-react)、または [Astro](/docs/v0/frameworks/web-frameworks/astro)
+- [ガイド](/guides/v0)に沿って、ゼロからエージェントを作成する
 - [YouTube チャンネル](https://www.youtube.com/@mastra-ai)でコンセプトガイドを視聴し、[チャンネル登録](https://www.youtube.com/@mastra-ai?sub_confirmation=1)する
 
 <div id="install-manually">
@@ -208,7 +208,7 @@ bun create mastra@latest
 
     :::note
 
-    このガイドでは Google Gemini を使用していますが、OpenAI や Anthropic などを含むサポート対象の任意の[モデルプロバイダー](/models)を利用できます。
+    このガイドでは Google Gemini を使用していますが、OpenAI や Anthropic などを含むサポート対象の任意の[モデルプロバイダー](/models/v0)を利用できます。
 
     :::
   </StepItem>
@@ -245,7 +245,7 @@ bun create mastra@latest
 
     :::info
 
-    ここでは `weatherTool` の例を簡略化しています。完全なツールは [Giving an Agent a Tool](/docs/agents/using-tools) でご覧いただけます。
+    ここでは `weatherTool` の例を簡略化しています。完全なツールは [Giving an Agent a Tool](/docs/v0/agents/using-tools) でご覧いただけます。
 
     :::
   </StepItem>
@@ -303,7 +303,7 @@ bun create mastra@latest
   </StepItem>
 
   <StepItem>
-    [Playground](/docs/getting-started/studio) を起動して、エージェントをテストできます。
+    [Playground](/docs/v0/getting-started/studio) を起動して、エージェントをテストできます。
 
     <Tabs>
       <TabItem value="npm" label="npm">

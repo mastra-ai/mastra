@@ -209,7 +209,7 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
-**プロンプトオブジェクト:** `generateScore` でプロンプトオブジェクトを使用する方法の詳細は、[`createScorer`](/reference/scorers/create-scorer) の API リファレンスを参照してください。必須の `calculateScore` 関数についても説明しています。
+**プロンプトオブジェクト:** `generateScore` でプロンプトオブジェクトを使用する方法の詳細は、[`createScorer`](/reference/v0/scorers/create-scorer) の API リファレンスを参照してください。必須の `calculateScore` 関数についても説明しています。
 
 **データフロー:** スコアは `generateReason` で `score` パラメータとして参照できます
 
@@ -270,7 +270,7 @@ Mastra のカスタムスコアラーは、`createScorer` を使い、次の4つ
 
 これらのコンポーネントを組み合わせることで、LLM を審査員として用いたカスタム評価ロジックを定義できます。
 
-> すべての API と設定オプションについては [createScorer](/reference/scorers/create-scorer) を参照してください。
+> すべての API と設定オプションについては [createScorer](/reference/v0/scorers/create-scorer) を参照してください。
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -534,5 +534,5 @@ console.log("理由:", result.reason);
 
 **例とリソース:**
 
-* [createScorer API リファレンス](/reference/scorers/create-scorer) - 技術仕様の完全版ドキュメント
+* [createScorer API リファレンス](/reference/v0/scorers/create-scorer) - 技術仕様の完全版ドキュメント
 * [組み込みスコアラーのソースコード](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - 参照用の実装例

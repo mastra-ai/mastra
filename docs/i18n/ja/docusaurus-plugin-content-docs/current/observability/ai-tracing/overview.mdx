@@ -91,8 +91,8 @@ export const mastra = new Mastra({
 
 Mastra には、すぐに使えるエクスポーターが 2 つ用意されています:
 
-- **[Default](/docs/observability/ai-tracing/exporters/default)** - プレイグラウンドでの閲覧のため、トレースをローカルストレージに保存します
-- **[Cloud](/docs/observability/ai-tracing/exporters/cloud)** - 本番環境の監視やコラボレーションのために、トレースを Mastra Cloud に送信します
+- **[Default](/docs/v0/observability/ai-tracing/exporters/default)** - プレイグラウンドでの閲覧のため、トレースをローカルストレージに保存します
+- **[Cloud](/docs/v0/observability/ai-tracing/exporters/cloud)** - 本番環境の監視やコラボレーションのために、トレースを Mastra Cloud に送信します
 
 <div id="external-exporters">
   ### 外部エクスポーター
@@ -100,11 +100,11 @@ Mastra には、すぐに使えるエクスポーターが 2 つ用意されて�
 
 内部エクスポーターに加え、Mastra は主要なオブザーバビリティプラットフォームとの連携に対応しています。これらのエクスポーターにより、既存の監視基盤を活用しつつ、アラート、ダッシュボード、他のアプリケーションメトリクスとの相関など、プラットフォーム固有の機能を活用できます。
 
-- **[Arize](/docs/observability/ai-tracing/exporters/arize)** - OpenInference のセマンティック規約に沿って Arize Phoenix または Arize AX へトレースをエクスポート
-- **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Braintrust の評価・オブザーバビリティプラットフォームへトレースをエクスポート
-- **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Langfuse のオープンソース LLM エンジニアリングプラットフォームへトレースを送信
-- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - LangSmith のオブザーバビリティ／評価ツールキットへトレースを送信
-- **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - OpenTelemetry 互換のあらゆるオブザーバビリティシステムへトレースを送信
+- **[Arize](/docs/v0/observability/ai-tracing/exporters/arize)** - OpenInference のセマンティック規約に沿って Arize Phoenix または Arize AX へトレースをエクスポート
+- **[Braintrust](/docs/v0/observability/ai-tracing/exporters/braintrust)** - Braintrust の評価・オブザーバビリティプラットフォームへトレースをエクスポート
+- **[Langfuse](/docs/v0/observability/ai-tracing/exporters/langfuse)** - Langfuse のオープンソース LLM エンジニアリングプラットフォームへトレースを送信
+- **[LangSmith](/docs/v0/observability/ai-tracing/exporters/langsmith)** - LangSmith のオブザーバビリティ／評価ツールキットへトレースを送信
+- **[OpenTelemetry](/docs/v0/observability/ai-tracing/exporters/otel)** - OpenTelemetry 互換のあらゆるオブザーバビリティシステムへトレースを送信
   - サポート: Dash0、Laminar、New Relic、SigNoz、Traceloop、Zipkin など！
 
 <div id="sampling-strategies">
@@ -620,7 +620,7 @@ execute: async ({ input, tracingContext }) => {
   ### 組み込みプロセッサ
 </div>
 
-- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) は機密情報をマスクします。デフォルトのオブザーバビリティ設定で有効になっています。
+- [Sensitive Data Filter](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter) は機密情報をマスクします。デフォルトのオブザーバビリティ設定で有効になっています。
 
 <div id="creating-custom-processors">
   ### カスタムプロセッサの作成
@@ -902,31 +902,31 @@ Mastra は自動的に次のスパンを作成します：
   ### 例
 </div>
 
-- [Basic AI トレーシングの基本例](/examples/observability/basic-ai-tracing) - 動作する実装
+- [Basic AI トレーシングの基本例](/examples/v0/observability/basic-ai-tracing) - 動作する実装
 
 <div id="reference-documentation">
   ### 参考資料
 </div>
 
-- [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig の詳細
-- [AITracing クラス](/reference/observability/ai-tracing/) - 主要クラスとメソッド
-- [Span インターフェース](/reference/observability/ai-tracing/span) - Span の種類とライフサイクル
-- [型定義](/reference/observability/ai-tracing/interfaces) - インターフェースの完全なリファレンス
+- [Configuration API](/reference/v0/observability/ai-tracing/configuration) - ObservabilityConfig の詳細
+- [AITracing クラス](/reference/v0/observability/ai-tracing/) - 主要クラスとメソッド
+- [Span インターフェース](/reference/v0/observability/ai-tracing/span) - Span の種類とライフサイクル
+- [型定義](/reference/v0/observability/ai-tracing/interfaces) - インターフェースの完全なリファレンス
 
 <div id="exporters">
   ### エクスポーター
 </div>
 
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud と連携
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
-- [Arize](/reference/observability/ai-tracing/exporters/arize) - Arize Phoenix と Arize AX に対応
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust と連携
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse と連携
-- [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL 互換プラットフォームに対応
+- [DefaultExporter](/reference/v0/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
+- [CloudExporter](/reference/v0/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud と連携
+- [ConsoleExporter](/reference/v0/observability/ai-tracing/exporters/console-exporter) - デバッグ出力
+- [Arize](/reference/v0/observability/ai-tracing/exporters/arize) - Arize Phoenix と Arize AX に対応
+- [Braintrust](/reference/v0/observability/ai-tracing/exporters/braintrust) - Braintrust と連携
+- [Langfuse](/reference/v0/observability/ai-tracing/exporters/langfuse) - Langfuse と連携
+- [OpenTelemetry](/reference/v0/observability/ai-tracing/exporters/otel) - OTEL 互換プラットフォームに対応
 
 <div id="processors">
   ### プロセッサ
 </div>
 
-- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - データのマスキング
+- [Sensitive Data Filter](/docs/v0/observability/ai-tracing/processors/sensitive-data-filter) - データのマスキング

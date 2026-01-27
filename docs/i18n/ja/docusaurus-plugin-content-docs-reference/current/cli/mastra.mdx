@@ -13,9 +13,9 @@ Mastra が提供するコマンドラインインターフェース（CLI）を�
   ## `mastra dev`
 </div>
 
-[ローカル開発用プレイグラウンド](/docs/getting-started/studio)と、エージェント・ツール・ワークフロー向けのRESTエンドポイントを公開するサーバーを起動します。`mastra dev` の実行中は、[http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) にアクセスして、利用可能なエンドポイントの一覧と概要を確認できます。
+[ローカル開発用プレイグラウンド](/docs/v0/getting-started/studio)と、エージェント・ツール・ワークフロー向けのRESTエンドポイントを公開するサーバーを起動します。`mastra dev` の実行中は、[http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) にアクセスして、利用可能なエンドポイントの一覧と概要を確認できます。
 
-[サーバーの設定](/docs/getting-started/studio#configuration)も行えます。
+[サーバーの設定](/docs/v0/getting-started/studio#configuration)も行えます。
 
 <div id="flags">
   ### フラグ
@@ -27,7 +27,7 @@ Mastra が提供するコマンドラインインターフェース（CLI）を�
   #### `--https`
 </div>
 
-ローカルの HTTPS サポートを有効にします。[詳細はこちら](/docs/getting-started/studio#local-https)。
+ローカルの HTTPS サポートを有効にします。[詳細はこちら](/docs/v0/getting-started/studio#local-https)。
 
 <div id="inspect">
   #### `--inspect`
@@ -110,7 +110,7 @@ mastra dev
 
 `.mastra` に出力された成果物は、[`mastra start`](#mastra-start) を使って任意のクラウドサーバーにデプロイできます。
 
-[serverless platform](/docs/deployment/serverless-platforms) にデプロイする場合は、`.mastra` で適切な出力を得るために、対応するデプロイヤーをインストールする必要があります。
+[serverless platform](/docs/v0/deployment/serverless-platforms) にデプロイする場合は、`.mastra` で適切な出力を得るために、対応するデプロイヤーをインストールする必要があります。
 
 [common flags][common-flags] を受け付けます。
 
@@ -141,7 +141,7 @@ MASTRA_CONCURRENCY=2 mastra build
 
 :::
 
-本番モードでビルド済みの Mastra アプリケーションを配信するローカルサーバーを起動します。既定で [OTEL Tracing](/docs/observability/ai-tracing/overview) が有効化されています。
+本番モードでビルド済みの Mastra アプリケーションを配信するローカルサーバーを起動します。既定で [OTEL Tracing](/docs/v0/observability/ai-tracing/overview) が有効化されています。
 
 <div id="flags">
   ### フラグ
@@ -159,7 +159,7 @@ MASTRA_CONCURRENCY=2 mastra build
   #### `--no-telemetry`
 </div>
 
-[OTEL Tracing](/docs/observability/ai-tracing/overview) を無効にします。
+[OTEL Tracing](/docs/v0/observability/ai-tracing/overview) を無効にします。
 
 <div id="mastra-lint">
   ## `mastra lint`
@@ -175,7 +175,7 @@ MASTRA_CONCURRENCY=2 mastra build
 
 `mastra scorers` コマンドは、AI 生成出力の品質・正確性・パフォーマンスを測定する評価用スコアラーの管理機能を提供します。
 
-詳しくは [Scorers overview](/docs/scorers/overview) をご覧ください。
+詳しくは [Scorers overview](/docs/v0/scorers/overview) をご覧ください。
 
 <div id="add">
   ### `add`

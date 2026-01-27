@@ -11,7 +11,7 @@ import TabItem from "@theme/TabItem";
   # Mastra Client SDK
 </div>
 
-Mastra Client SDK は、クライアント環境から [Mastra Server](/docs/server-db/production-server) とやり取りするための、シンプルで型安全なインターフェースを提供します。
+Mastra Client SDK は、クライアント環境から [Mastra Server](/docs/v0/server-db/production-server) とやり取りするための、シンプルで型安全なインターフェースを提供します。
 
 <div id="prerequisites">
   ## 前提条件
@@ -87,13 +87,13 @@ export const mastraClient = new MastraClient({
 
 Mastra Client SDK は、Mastra Server が提供するすべてのリソースを公開します。
 
-- **[Agents](/reference/client-js/agents)**: 応答を生成し、会話をストリーミングします。
-- **[Memory](/reference/client-js/memory)**: 会話スレッドとメッセージ履歴を管理します。
-- **[Tools](/reference/client-js/tools)**: ツールを実行・管理します。
-- **[Workflows](/reference/client-js/workflows)**: ワークフローを起動し、実行状況を追跡します。
-- **[Vectors](/reference/client-js/vectors)**: セマンティック検索のためにベクトル埋め込みを活用します。
-- **[Logs](/reference/client-js/logs)**: ログを閲覧し、システムの挙動をデバッグします。
-- **[Telemetry](/reference/client-js/telemetry)**: アプリのパフォーマンスを監視し、アクティビティをトレースします。
+- **[Agents](/reference/v0/client-js/agents)**: 応答を生成し、会話をストリーミングします。
+- **[Memory](/reference/v0/client-js/memory)**: 会話スレッドとメッセージ履歴を管理します。
+- **[Tools](/reference/v0/client-js/tools)**: ツールを実行・管理します。
+- **[Workflows](/reference/v0/client-js/workflows)**: ワークフローを起動し、実行状況を追跡します。
+- **[Vectors](/reference/v0/client-js/vectors)**: セマンティック検索のためにベクトル埋め込みを活用します。
+- **[Logs](/reference/v0/client-js/logs)**: ログを閲覧し、システムの挙動をデバッグします。
+- **[Telemetry](/reference/v0/client-js/telemetry)**: アプリのパフォーマンスを監視し、アクティビティをトレースします。
 
 <div id="generating-responses">
   ## 応答の生成
@@ -124,7 +124,7 @@ const testAgent = async () => {
 };
 ```
 
-> 詳細は [.generate()](/reference/client-js/agents#generate-response) を参照してください。
+> 詳細は [.generate()](/reference/v0/client-js/agents#generate-response) を参照してください。
 
 
 <div id="streaming-responses">
@@ -160,7 +160,7 @@ const testAgent = async () => {
 };
 ```
 
-> 詳細は [.stream()](/reference/client-js/agents#stream-response) を参照してください。
+> 詳細は [.stream()](/reference/v0/client-js/agents#stream-response) を参照してください。
 
 
 <div id="configuration-options">
@@ -183,7 +183,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> 追加の設定オプションについては、[MastraClient](/reference/client-js/mastra-client) を参照してください。
+> 追加の設定オプションについては、[MastraClient](/reference/v0/client-js/mastra-client) を参照してください。
 
 
 <div id="adding-request-cancelling">
@@ -310,7 +310,7 @@ export async function action() {
   ## ベストプラクティス
 </div>
 
-1. **エラーハンドリング**: 開発環境向けに適切な[エラーハンドリング](/reference/client-js/error-handling)を実装します。
+1. **エラーハンドリング**: 開発環境向けに適切な[エラーハンドリング](/reference/v0/client-js/error-handling)を実装します。
 2. **環境変数**: 設定には環境変数を使用します。
-3. **デバッグ**: 必要に応じて詳細な[ログ](/reference/client-js/logs)を有効化します。
-4. **パフォーマンス**: アプリケーションのパフォーマンス、[テレメトリー](/reference/client-js/telemetry)、トレースを監視します。
+3. **デバッグ**: 必要に応じて詳細な[ログ](/reference/v0/client-js/logs)を有効化します。
+4. **パフォーマンス**: アプリケーションのパフォーマンス、[テレメトリー](/reference/v0/client-js/telemetry)、トレースを監視します。

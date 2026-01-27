@@ -150,7 +150,7 @@ Mastra は対応する環境変数（例: `ANTHROPIC_API_KEY`）を読み取り�
 
 エディタ内からモデルを直接見つけることもできます。Mastra は `model` フィールドのオートコンプリートを完全にサポートしています。入力し始めると、IDE に利用可能なオプションが表示されます。
 
-または、[Playground](/docs/getting-started/studio) の UI でモデルを参照・テストできます。
+または、[Playground](/docs/v0/getting-started/studio) の UI でモデルを参照・テストできます。
 
 :::info
 
@@ -187,7 +187,7 @@ const reasoningAgent = new Agent({
   ## 動的なモデル選択
 </div>
 
-モデルは単なる文字列にすぎないため、[request context](/docs/server-db/request-context)や変数、その他のロジックに応じて動的に選択できます。
+モデルは単なる文字列にすぎないため、[request context](/docs/v0/server-db/request-context)や変数、その他のロジックに応じて動的に選択できます。
 
 ```typescript showLineNumbers
 const agent = new Agent({
@@ -318,4 +318,4 @@ const agent = new Agent({
 })
 ```
 
-`"provider/model"` という文字列を受け付けるあらゆる場所で、AI SDK のモデル（例: `groq('gemma2-9b-it')`）を使用できます。これは、モデルルーターのフォールバックや [scorers](/docs/scorers/overview) 内でも同様です。
+`"provider/model"` という文字列を受け付けるあらゆる場所で、AI SDK のモデル（例: `groq('gemma2-9b-it')`）を使用できます。これは、モデルルーターのフォールバックや [scorers](/docs/v0/scorers/overview) 内でも同様です。
