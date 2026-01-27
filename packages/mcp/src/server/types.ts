@@ -48,20 +48,17 @@ export type MCPServerResources = {
  *
  * @param params - Parameters for prompt message retrieval
  * @param params.name - Name of the prompt
- * @param params.version - Optional version of the prompt
  * @param params.args - Optional arguments for the prompt
  * @param params.extra - Additional request handler context
  * @returns Promise resolving to array of prompt messages
  */
 export type MCPServerPromptMessagesCallback = ({
   name,
-  version,
   args,
   extra,
 }: {
   name: string;
-  version?: string;
-  args?: any;
+  args?: Record<string, string>;
   extra: MCPRequestHandlerExtra;
 }) => Promise<PromptMessage[]>;
 

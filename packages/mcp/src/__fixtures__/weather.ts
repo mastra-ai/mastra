@@ -119,33 +119,25 @@ const weatherResourceContents: Record<string, MCPServerResourceContent> = {
   },
 };
 
+// Prompt content stored separately since Prompt type no longer includes content
+const weatherPromptContents: Record<string, string> = {
+  current: JSON.stringify({ location: 'Current weather for San Francisco' }),
+  forecast: JSON.stringify({ location: 'Forecast for San Francisco' }),
+  historical: JSON.stringify({ location: 'Historical weather for San Francisco' }),
+};
+
 const weatherPrompts: Prompt[] = [
   {
     name: 'current',
-    version: 'v1',
     description: 'Get current weather for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Current weather for San Francisco',
-    }),
   },
   {
     name: 'forecast',
-    version: 'v1',
     description: 'Get weather forecast for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Forecast for San Francisco',
-    }),
   },
   {
     name: 'historical',
-    version: 'v1',
     description: 'Get historical weather data for a location',
-    mimeType: 'application/json',
-    content: JSON.stringify({
-      location: 'Historical weather for San Francisco',
-    }),
   },
 ];
 
@@ -162,17 +154,21 @@ const mcpServerResources: MCPServerResources = {
 
 const mcpServerPrompts: MCPServerPrompts = {
   listPrompts: async () => weatherPrompts,
-  getPromptMessages: async ({ name }: { name: string }): Promise<PromptMessage[]> => {
+  getPromptMessages: async ({ name }) => {
     const prompt = weatherPrompts.find(p => p.name === name);
     if (!prompt) {
       throw new Error(`Mock prompt not found for ${name}`);
+    }
+    const content = weatherPromptContents[name];
+    if (!content) {
+      throw new Error(`Mock prompt content not found for ${name}`);
     }
     return [
       {
         role: 'user',
         content: {
           type: 'text',
-          text: prompt.content as string,
+          text: content,
         },
       },
     ];
