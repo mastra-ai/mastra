@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
-import { navigateInputSchema, navigateOutputSchema, type NavigateOutput, type BrowserError } from '../types.js';
+import { createError, type BrowserToolError } from '../errors.js';
+import { navigateInputSchema, navigateOutputSchema, type NavigateOutput } from '../types.js';
 
 /**
  * Creates a navigate tool that uses the BrowserManager to navigate to URLs.
@@ -19,7 +20,7 @@ export function createNavigateTool(getBrowser: () => Promise<BrowserManager>, de
     description: 'Navigate the browser to a URL. Returns the final URL and page title after navigation completes.',
     inputSchema: navigateInputSchema,
     outputSchema: navigateOutputSchema,
-    execute: async (input, context): Promise<NavigateOutput | BrowserError> => {
+    execute: async (input, context): Promise<NavigateOutput | BrowserToolError> => {
       const timeoutMs = defaultTimeout;
 
       try {
@@ -58,25 +59,18 @@ export function createNavigateTool(getBrowser: () => Promise<BrowserManager>, de
           clearTimeout(timeoutId);
         }
       } catch (error) {
-        // Return LLM-friendly error with recovery hints
+        // Return LLM-friendly error with recovery hints using unified error format
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('aborted');
         const isNotLaunched = errorMessage.includes('not launched') || errorMessage.includes('Browser is not launched');
 
-        let hint: string;
         if (isTimeout) {
-          hint = 'The page took too long to load. Try a different URL or increase timeout.';
+          return createError('timeout', 'Navigation timed out', 'Try a different URL or increase timeout');
         } else if (isNotLaunched) {
-          hint = 'Browser was not initialized. This is an internal error - please try again.';
+          return createError('browser_error', 'Browser was not initialized', 'This is an internal error - please try again');
         } else {
-          hint = 'Check that the URL is valid and the site is accessible.';
+          return createError('browser_error', `Navigation failed: ${errorMessage}`, 'Check that the URL is valid and the site is accessible');
         }
-
-        return {
-          success: false,
-          error: `Navigation failed: ${errorMessage}`,
-          hint,
-        };
       }
     },
   });
