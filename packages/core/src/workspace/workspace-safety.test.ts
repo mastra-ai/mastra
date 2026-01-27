@@ -25,176 +25,197 @@ describe('Workspace Safety Features', () => {
     }
   });
 
-  describe('requireReadBeforeWrite', () => {
-    it('should allow writing new files without reading first', async () => {
+  describe('requireReadBeforeWrite (via tools)', () => {
+    // Note: requireReadBeforeWrite is now enforced at the tool level, not workspace level.
+    // This allows direct workspace.writeFile() calls (from users/server) to work without restriction,
+    // while agent tool calls still enforce the read-before-write requirement.
+
+    it('should allow direct workspace.writeFile() without reading first', async () => {
+      // Direct workspace calls are not restricted by requireReadBeforeWrite
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       await workspace.init();
 
+      await workspace.writeFile('/test.txt', 'original');
+      await workspace.writeFile('/test.txt', 'modified'); // Should succeed without reading
+
+      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      expect(content).toBe('modified');
+
+      await workspace.destroy();
+    });
+
+    it('should throw error when write_file tool is used without reading first', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+            requireReadBeforeWrite: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      // Create file first (direct call - no restriction)
+      await workspace.writeFile('/existing.txt', 'original');
+
+      // Create tools
+      const tools = createWorkspaceTools(workspace);
+      const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
+
+      // Should fail - file exists but wasn't read via read_file tool
+      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' })).rejects.toThrow(
+        FileReadRequiredError,
+      );
+      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' })).rejects.toThrow(
+        'has not been read',
+      );
+
+      await workspace.destroy();
+    });
+
+    it('should allow write_file after read_file tool is used', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+            requireReadBeforeWrite: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      // Create file first
+      await workspace.writeFile('/test.txt', 'original');
+
+      // Create tools
+      const tools = createWorkspaceTools(workspace);
+      const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+      const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
+
+      // Read first via tool
+      await readTool.execute({ path: '/test.txt' });
+
+      // Now write should succeed
+      await writeTool.execute({ path: '/test.txt', content: 'modified' });
+
+      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      expect(content).toBe('modified');
+
+      await workspace.destroy();
+    });
+
+    it('should allow writing new files without reading first', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+            requireReadBeforeWrite: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+      const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
+
       // Should succeed - new file doesn't require reading
-      await workspace.writeFile('/new-file.txt', 'content');
+      await writeTool.execute({ path: '/new-file.txt', content: 'content' });
+
       const content = await workspace.readFile('/new-file.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
 
       await workspace.destroy();
     });
 
-    it('should throw error when writing existing file without reading first', async () => {
+    it('should require re-reading after successful write', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+            requireReadBeforeWrite: true,
+          },
+        },
       });
       await workspace.init();
 
       // Create file first
-      await workspace.writeFile('/existing.txt', 'original');
-
-      // Create new workspace instance (simulates fresh session)
-      const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace2.init();
-
-      // Should fail - file exists but wasn't read in this session
-      await expect(workspace2.writeFile('/existing.txt', 'modified')).rejects.toThrow(FileReadRequiredError);
-      await expect(workspace2.writeFile('/existing.txt', 'modified')).rejects.toThrow('has not been read');
-
-      await workspace.destroy();
-      await workspace2.destroy();
-    });
-
-    it('should allow writing after reading', async () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace.init();
-
-      // Create file
-      await workspace.writeFile('/test.txt', 'original');
-
-      // Create new workspace to simulate fresh session
-      const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace2.init();
-
-      // Read first
-      await workspace2.readFile('/test.txt');
-
-      // Now write should succeed
-      await workspace2.writeFile('/test.txt', 'modified');
-      const content = await workspace2.readFile('/test.txt', { encoding: 'utf-8' });
-      expect(content).toBe('modified');
-
-      await workspace.destroy();
-      await workspace2.destroy();
-    });
-
-    it('should throw error when file was modified externally after reading', async () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace.init();
-
-      // Create and read file
-      await workspace.writeFile('/test.txt', 'original');
-
-      // Create new workspace
-      const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace2.init();
-
-      // Read file
-      await workspace2.readFile('/test.txt');
-
-      // Wait a bit and modify file externally
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await fs.writeFile(path.join(tempDir, 'test.txt'), 'externally modified');
-
-      // Should fail - file was modified since last read
-      await expect(workspace2.writeFile('/test.txt', 'new content')).rejects.toThrow(FileReadRequiredError);
-      await expect(workspace2.writeFile('/test.txt', 'new content')).rejects.toThrow('was modified since last read');
-
-      await workspace.destroy();
-      await workspace2.destroy();
-    });
-
-    it('should require re-reading after successful write', async () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace.init();
-
-      // Create file
       await workspace.writeFile('/test.txt', 'v1');
 
-      // Create new workspace
-      const workspace2 = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: true },
-        }),
-      });
-      await workspace2.init();
+      const tools = createWorkspaceTools(workspace);
+      const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+      const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Read and write
-      await workspace2.readFile('/test.txt');
-      await workspace2.writeFile('/test.txt', 'v2');
+      await readTool.execute({ path: '/test.txt' });
+      await writeTool.execute({ path: '/test.txt', content: 'v2' });
 
       // Second write without re-reading should fail
-      await expect(workspace2.writeFile('/test.txt', 'v3')).rejects.toThrow(FileReadRequiredError);
+      await expect(writeTool.execute({ path: '/test.txt', content: 'v3' })).rejects.toThrow(FileReadRequiredError);
 
       // Read again and write should succeed
-      await workspace2.readFile('/test.txt');
-      await workspace2.writeFile('/test.txt', 'v3');
+      await readTool.execute({ path: '/test.txt' });
+      await writeTool.execute({ path: '/test.txt', content: 'v3' });
 
-      const content = await workspace2.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('v3');
 
       await workspace.destroy();
-      await workspace2.destroy();
     });
 
-    it('should not require read-before-write when disabled', async () => {
+    it('should not require read-before-write when not configured', async () => {
       const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: { requireReadBeforeWrite: false },
-        }),
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        // No requireReadBeforeWrite in tools config
       });
       await workspace.init();
 
+      // Create file first
       await workspace.writeFile('/test.txt', 'original');
 
+      const tools = createWorkspaceTools(workspace);
+      const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
+
       // Should succeed without reading first
-      await workspace.writeFile('/test.txt', 'modified');
+      await writeTool.execute({ path: '/test.txt', content: 'modified' });
+
       const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
+
+      await workspace.destroy();
+    });
+
+    it('should enforce requireReadBeforeWrite on edit_file tool', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: {
+            requireReadBeforeWrite: true,
+          },
+        },
+      });
+      await workspace.init();
+
+      // Create file first
+      await workspace.writeFile('/test.txt', 'hello world');
+
+      const tools = createWorkspaceTools(workspace);
+      const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+      const editTool = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
+
+      // Should fail - file wasn't read via read_file tool
+      await expect(editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' })).rejects.toThrow(
+        FileReadRequiredError,
+      );
+
+      // Read first, then edit should succeed
+      await readTool.execute({ path: '/test.txt' });
+      const result = await editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' });
+      expect(result.success).toBe(true);
+
+      const content = await workspace.readFile('/test.txt', { encoding: 'utf-8' });
+      expect(content).toBe('goodbye world');
 
       await workspace.destroy();
     });

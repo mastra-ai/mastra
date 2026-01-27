@@ -9,6 +9,9 @@ import { z } from 'zod';
 import { createTool } from '../tools';
 import { WORKSPACE_TOOLS } from './constants';
 import type { WorkspaceToolName, WorkspaceToolsConfig } from './constants';
+import { InMemoryFileReadTracker } from './file-read-tracker';
+import type { FileReadTracker } from './file-read-tracker';
+import { FileReadRequiredError } from './filesystem';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -78,6 +81,17 @@ export function createWorkspaceTools(workspace: Workspace) {
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.readOnly;
 
+  // Create a shared file read tracker for requireReadBeforeWrite enforcement
+  // This is only used by tools, not by direct workspace method calls
+  let readTracker: FileReadTracker | undefined;
+
+  // Check if any write tool has requireReadBeforeWrite enabled
+  const writeFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+  const editFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+  if (writeFileConfig.requireReadBeforeWrite || editFileConfig.requireReadBeforeWrite) {
+    readTracker = new InMemoryFileReadTracker();
+  }
+
   // Only add filesystem tools if filesystem is available
   if (workspace.filesystem) {
     // Read file tool
@@ -127,6 +141,11 @@ export function createWorkspaceTools(workspace: Workspace) {
           });
           const stat = await workspace.filesystem!.stat(path);
 
+          // Track the read for requireReadBeforeWrite enforcement
+          if (readTracker) {
+            readTracker.recordRead(path, stat.modifiedAt);
+          }
+
           // If content is binary (Buffer), return as base64 without line processing
           if (typeof fullContent !== 'string') {
             return {
@@ -160,7 +179,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     }
 
     // Write file tool (only if not in readonly mode)
-    const writeFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    // Note: writeFileConfig was already resolved above for tracker creation
     if (!isReadOnly && writeFileConfig.enabled) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -181,7 +200,25 @@ export function createWorkspaceTools(workspace: Workspace) {
           size: z.number().describe('The size of the written content in bytes'),
         }),
         execute: async ({ path, content, overwrite }) => {
+          // Check read-before-write requirement (only for existing files)
+          if (readTracker && writeFileConfig.requireReadBeforeWrite) {
+            const exists = await workspace.exists(path);
+            if (exists) {
+              const stat = await workspace.filesystem!.stat(path);
+              const check = readTracker.needsReRead(path, stat.modifiedAt);
+              if (check.needsReRead) {
+                throw new FileReadRequiredError(path, check.reason!);
+              }
+            }
+          }
+
           await workspace.writeFile(path, content, { overwrite });
+
+          // Clear the read record after successful write (requires a new read to write again)
+          if (readTracker) {
+            readTracker.clearReadRecord(path);
+          }
+
           return {
             success: true,
             path,
@@ -192,7 +229,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     }
 
     // Edit file tool (only if not in readonly mode)
-    const editFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+    // Note: editFileConfig was already resolved above for tracker creation
     if (!isReadOnly && editFileConfig.enabled) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
@@ -217,6 +254,16 @@ export function createWorkspaceTools(workspace: Workspace) {
         }),
         execute: async ({ path, old_string, new_string, replace_all }) => {
           try {
+            // Check read-before-write requirement before reading
+            // Edit file needs the file to have been read by the read_file tool first
+            if (readTracker && editFileConfig.requireReadBeforeWrite) {
+              const stat = await workspace.filesystem!.stat(path);
+              const check = readTracker.needsReRead(path, stat.modifiedAt);
+              if (check.needsReRead) {
+                throw new FileReadRequiredError(path, check.reason!);
+              }
+            }
+
             // Read the current file content
             const content = await workspace.readFile(path, { encoding: 'utf-8' });
 
@@ -235,12 +282,20 @@ export function createWorkspaceTools(workspace: Workspace) {
             // Write the modified content back
             await workspace.writeFile(path, result.content, { overwrite: true });
 
+            // Clear the read record after successful write (requires a new read to write again)
+            if (readTracker) {
+              readTracker.clearReadRecord(path);
+            }
+
             return {
               success: true,
               path,
               replacements: result.replacements,
             };
           } catch (error) {
+            if (error instanceof FileReadRequiredError) {
+              throw error; // Re-throw to be handled by caller
+            }
             if (error instanceof StringNotFoundError) {
               return {
                 success: false,

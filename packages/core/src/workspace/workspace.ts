@@ -42,9 +42,6 @@ import {
   SearchNotAvailableError,
   WorkspaceReadOnlyError,
 } from './errors';
-import { InMemoryFileReadTracker } from './file-read-tracker';
-import type { FileReadTracker } from './file-read-tracker';
-import { FileReadRequiredError } from './filesystem';
 import type { WorkspaceFilesystem, FileContent, FileEntry, ReadOptions, WriteOptions, ListOptions } from './filesystem';
 import type { WorkspaceSandbox, CommandResult, ExecuteCommandOptions } from './sandbox';
 import { SearchEngine } from './search-engine';
@@ -283,8 +280,6 @@ export class Workspace {
 
   // Safety-related properties
   private readonly _readOnly: boolean;
-  private readonly _requireReadBeforeWrite: boolean;
-  private readonly _readTracker?: FileReadTracker;
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -298,10 +293,6 @@ export class Workspace {
 
     // Initialize safety features from filesystem provider
     this._readOnly = config.filesystem?.safety?.readOnly ?? false;
-    this._requireReadBeforeWrite = config.filesystem?.safety?.requireReadBeforeWrite ?? true;
-    if (this._requireReadBeforeWrite) {
-      this._readTracker = new InMemoryFileReadTracker();
-    }
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
@@ -505,23 +496,13 @@ export class Workspace {
       throw new FilesystemNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-
-    const content = await this._fs.readFile(path, options);
-
-    // Track the read if requireReadBeforeWrite is enabled
-    if (this._readTracker) {
-      const stat = await this._fs.stat(path);
-      this._readTracker.recordRead(path, stat.modifiedAt);
-    }
-
-    return content;
+    return this._fs.readFile(path, options);
   }
 
   /**
    * Write a file to the workspace filesystem.
    * @throws {FilesystemNotAvailableError} if no filesystem is configured
    * @throws {WorkspaceReadOnlyError} if workspace is in read-only mode
-   * @throws {FileReadRequiredError} if requireReadBeforeWrite is enabled and file wasn't read or was modified
    */
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     if (!this._fs) {
@@ -531,27 +512,8 @@ export class Workspace {
     // Check readonly mode
     this.assertWritable('writeFile');
 
-    // Check read-before-write requirement (only for existing files)
-    if (this._readTracker) {
-      const exists = await this._fs.exists(path);
-      if (exists) {
-        const stat = await this._fs.stat(path);
-        const check = this._readTracker.needsReRead(path, stat.modifiedAt);
-        if (check.needsReRead) {
-          throw new FileReadRequiredError(path, check.reason!);
-        }
-      }
-      // New files don't require reading first
-    }
-
     this.lastAccessedAt = new Date();
     await this._fs.writeFile(path, content, options);
-
-    // Clear the read record after successful write
-    // (requires a new read to write again)
-    if (this._readTracker) {
-      this._readTracker.clearReadRecord(path);
-    }
   }
 
   /**
