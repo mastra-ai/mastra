@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 8 of 8 (Item Selection & Actions)
-Plan: 2 of 6 in phase 8
+Plan: 3 of 6 in phase 8
 Status: In progress
-Last activity: 2026-01-27 — Completed 08-02-PLAN.md (ActionsMenu + deleteItems)
+Last activity: 2026-01-27 — Completed 08-03-PLAN.md (CreateDatasetFromItemsDialog)
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 30
+- Total plans completed: 31
 - Average duration: 4 min
-- Total execution time: 1.7 hours
+- Total execution time: 1.75 hours
 
 **By Phase:**
 
@@ -34,10 +34,10 @@ Progress: [█████████░] 91%
 | 05-run-analytics | 1 | 4 min | 4 min |
 | 06-playground-integration | 12 | 48 min | 4 min |
 | 07-csv-import | 5 | 10 min | 2 min |
-| 08-item-selection-actions | 2 | 6 min | 3 min |
+| 08-item-selection-actions | 3 | 9 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-04 (2 min), 07-05 (1 min), 08-01 (3 min), 08-02 (3 min)
+- Last 5 plans: 07-05 (1 min), 08-01 (3 min), 08-02 (3 min), 08-03 (3 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -91,6 +91,8 @@ Recent decisions affecting current work:
 - Import CSV button uses outline variant to distinguish from Add Item primary action
 - Optional action props pattern: only render UI when callback provided
 - useEffect rebuilds entire mapping on headers change (not incremental merge)
+- Sequential item copying with progress - simpler than batch, shows user feedback
+- Disable dialog close during creation - prevents partial state
 
 ### Pending Todos
 
@@ -103,5 +105,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 08-02-PLAN.md (ActionsMenu + deleteItems)
+Stopped at: Completed 08-03-PLAN.md (CreateDatasetFromItemsDialog)
 Resume file: None
