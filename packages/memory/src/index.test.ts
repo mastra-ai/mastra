@@ -1279,4 +1279,101 @@ describe('Memory', () => {
       expect(result).toHaveProperty('hasMore', false);
     });
   });
+
+  describe('Vector Deletion', () => {
+    function createMemoryWithMockVector(indexSeparator = '_') {
+      const mockVector = {
+        deleteVectors: vi.fn(),
+        listIndexes: vi.fn().mockResolvedValue([`memory${indexSeparator}messages`]),
+        query: vi.fn(),
+        upsert: vi.fn(),
+        createIndex: vi.fn(),
+        describeIndex: vi.fn(),
+        listCollections: vi.fn(),
+        createCollection: vi.fn(),
+        describeCollection: vi.fn(),
+        deleteCollection: vi.fn(),
+        indexSeparator,
+      };
+
+      class MemoryWithMockVector extends Memory {
+        public mockVector = mockVector;
+
+        constructor() {
+          super({ storage: new InMemoryStore() });
+          // @ts-expect-error - injecting mock vector
+          this.vector = this.mockVector;
+        }
+      }
+
+      return new MemoryWithMockVector();
+    }
+
+    it('should delete message vectors with default separator', async () => {
+      const memory = createMemoryWithMockVector('_');
+      const messageId = 'msg-123';
+
+      await memory.deleteMessages([messageId]);
+
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory_messages',
+          filter: { message_id: messageId },
+        });
+      });
+    });
+
+    it('should delete thread vectors with default separator', async () => {
+      const memory = createMemoryWithMockVector('_');
+      const threadId = 'thread-123';
+
+      await memory.deleteThread(threadId);
+
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory_messages',
+          filter: { thread_id: threadId },
+        });
+      });
+    });
+
+    it('should delete message vectors with dash separator (Pinecone/Vectorize)', async () => {
+      const memory = createMemoryWithMockVector('-');
+      const messageId = 'msg-456';
+
+      await memory.deleteMessages([messageId]);
+
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory-messages',
+          filter: { message_id: messageId },
+        });
+      });
+    });
+
+    it('should delete thread vectors with dash separator (Pinecone/Vectorize)', async () => {
+      const memory = createMemoryWithMockVector('-');
+      const threadId = 'thread-456';
+
+      await memory.deleteThread(threadId);
+
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory-messages',
+          filter: { thread_id: threadId },
+        });
+      });
+    });
+
+    it('should not call deleteVectors when no vector store is configured', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const deleteVectorsSpy = vi.fn();
+
+      // No vector store, so deleteVectors should never be called
+      await memory.deleteThread('thread-789');
+      await memory.deleteMessages(['msg-789']);
+
+      expect(deleteVectorsSpy).not.toHaveBeenCalled();
+    });
+  });
 });
