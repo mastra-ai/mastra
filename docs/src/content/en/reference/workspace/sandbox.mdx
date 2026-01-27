@@ -40,7 +40,7 @@ const sandbox = new LocalSandbox({
     {
       name: "env",
       type: "NodeJS.ProcessEnv",
-      description: "Environment variables to set. PATH is always included by default.",
+      description: "Environment variables to set. PATH is included by default unless overridden.",
       isOptional: true,
     },
     {
