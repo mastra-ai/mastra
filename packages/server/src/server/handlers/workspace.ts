@@ -3,7 +3,7 @@
  *
  * Unified handlers for workspace operations including:
  * - Filesystem operations (read, write, list, delete, mkdir, stat)
- * - Search operations (search, index, unindex)
+ * - Search operations (search, index)
  * - Skills operations (list, get, search, references)
  */
 
@@ -31,8 +31,6 @@ import {
   searchResponseSchema,
   indexBodySchema,
   indexResponseSchema,
-  unindexQuerySchema,
-  unindexResponseSchema,
   // Skills schemas
   skillNamePathParams,
   skillReferencePathParams,
@@ -636,43 +634,6 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
   },
 });
 
-export const WORKSPACE_UNINDEX_ROUTE = createRoute({
-  method: 'DELETE',
-  path: '/workspace/unindex',
-  responseType: 'json',
-  queryParamSchema: unindexQuerySchema,
-  responseSchema: unindexResponseSchema,
-  summary: 'Remove content from search index',
-  description: 'Removes previously indexed content from the search index',
-  tags: ['Workspace'],
-  handler: async ({ mastra, path }) => {
-    try {
-      if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
-      }
-
-      const workspace = getWorkspace(mastra);
-      if (!workspace) {
-        throw new HTTPException(404, { message: 'No workspace configured' });
-      }
-
-      const canSearch = workspace.canBM25 || workspace.canVector;
-      if (!canSearch) {
-        throw new HTTPException(400, { message: 'Workspace does not have search configured' });
-      }
-
-      await workspace.unindex(path);
-
-      return {
-        success: true,
-        path,
-      };
-    } catch (error) {
-      return handleError(error, 'Error unindexing content');
-    }
-  },
-});
-
 // =============================================================================
 // Skills Routes (under /workspace/skills)
 // =============================================================================
@@ -897,7 +858,7 @@ export const WORKSPACE_FS_ROUTES = [
   WORKSPACE_FS_STAT_ROUTE,
 ];
 
-export const WORKSPACE_SEARCH_ROUTES = [WORKSPACE_SEARCH_ROUTE, WORKSPACE_INDEX_ROUTE, WORKSPACE_UNINDEX_ROUTE];
+export const WORKSPACE_SEARCH_ROUTES = [WORKSPACE_SEARCH_ROUTE, WORKSPACE_INDEX_ROUTE];
 
 // IMPORTANT: Search route must come before the parameterized routes
 // to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillName
