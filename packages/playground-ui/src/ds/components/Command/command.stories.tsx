@@ -1,12 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  Calculator,
-  Calendar,
-  CreditCard,
-  Settings,
-  Smile,
-  User,
-} from 'lucide-react';
+import { Calculator, Calendar, CreditCard, Settings, Smile, User } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -212,28 +205,13 @@ export const SearchOnly: Story = {
   render: function SearchOnlyStory() {
     const [search, setSearch] = React.useState('');
 
-    const items = [
-      'Apple',
-      'Banana',
-      'Cherry',
-      'Date',
-      'Elderberry',
-      'Fig',
-      'Grape',
-      'Honeydew',
-    ];
+    const items = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry', 'Fig', 'Grape', 'Honeydew'];
 
-    const filteredItems = items.filter(item =>
-      item.toLowerCase().includes(search.toLowerCase()),
-    );
+    const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
       <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
-        <CommandInput
-          placeholder="Search fruits..."
-          value={search}
-          onValueChange={setSearch}
-        />
+        <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>
           <CommandGroup heading="Fruits">

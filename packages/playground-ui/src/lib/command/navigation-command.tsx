@@ -150,11 +150,7 @@ export const NavigationCommand = () => {
               {scorerEntries.map(([id, scorer]) => {
                 const name = scorer.scorer?.config?.name || scorer.scorer?.config?.id || id;
                 return (
-                  <CommandItem
-                    key={id}
-                    value={`scorer ${name}`}
-                    onSelect={() => handleSelect(paths.scorerLink(id))}
-                  >
+                  <CommandItem key={id} value={`scorer ${name}`} onSelect={() => handleSelect(paths.scorerLink(id))}>
                     <GaugeIcon className="text-neutral3" />
                     <span>{name}</span>
                   </CommandItem>
