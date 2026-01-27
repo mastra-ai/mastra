@@ -124,10 +124,10 @@ Plans:
   3. forEachIndex stored in __workflow_meta on suspend for tracking
   4. Resume validates forEachIndex is within valid range (0 to foreachTotal-1)
 
-**Plans:** TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 09-01: TBD during planning
+- [ ] 09-01-PLAN.md — Add forEachIndex parameter threading and iteration targeting
 
 ## Progress
 
@@ -144,4 +144,4 @@ Phases execute in numeric order: 7 → 8 → 9
 | 6. Remaining Parity | v1.0 | 4/4 | Complete | 2026-01-27 |
 | 7. V2 Model + TripWire | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 8. Writer API | v1.1 | 1/1 | Complete | 2026-01-27 |
-| 9. Foreach Index | v1.1 | 0/TBD | Not started | - |
+| 9. Foreach Index | v1.1 | 0/1 | Planned | - |
