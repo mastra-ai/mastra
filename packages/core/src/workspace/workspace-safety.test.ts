@@ -228,7 +228,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
       });
       await workspace.init();
@@ -245,7 +245,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
       });
       await workspace.init();
@@ -262,7 +262,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
       });
       await workspace.init();
@@ -280,7 +280,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
       });
       await workspace.init();
@@ -295,7 +295,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
       });
 
@@ -314,7 +314,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: true },
+          readOnly: true,
         }),
         bm25: true,
       });
@@ -341,7 +341,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({
           basePath: tempDir,
-          safety: { readOnly: false },
+          readOnly: false,
         }),
         bm25: true,
       });

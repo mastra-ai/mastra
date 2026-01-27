@@ -90,23 +90,6 @@ export interface CopyOptions {
 }
 
 // =============================================================================
-// Filesystem Safety Options
-// =============================================================================
-
-/**
- * Safety options that can be configured per-filesystem.
- */
-export interface FilesystemSafetyOptions {
-  /**
-   * When true, all write operations to this filesystem are blocked.
-   * Read operations are still allowed.
-   *
-   * @default false
-   */
-  readOnly?: boolean;
-}
-
-// =============================================================================
 // Filesystem Interface
 // =============================================================================
 
@@ -130,10 +113,12 @@ export interface WorkspaceFilesystem {
   readonly provider: string;
 
   /**
-   * Safety configuration for this filesystem.
-   * Optional - if not provided, defaults apply.
+   * When true, all write operations to this filesystem are blocked.
+   * Read operations are still allowed.
+   *
+   * @default false
    */
-  readonly safety?: FilesystemSafetyOptions;
+  readonly readOnly?: boolean;
 
   // ---------------------------------------------------------------------------
   // File Operations

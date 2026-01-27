@@ -292,7 +292,7 @@ export class Workspace {
     this._sandbox = config.sandbox;
 
     // Initialize safety features from filesystem provider
-    this._readOnly = config.filesystem?.safety?.readOnly ?? false;
+    this._readOnly = config.filesystem?.readOnly ?? false;
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {

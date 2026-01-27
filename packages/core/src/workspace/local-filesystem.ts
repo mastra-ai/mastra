@@ -26,7 +26,6 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  FilesystemSafetyOptions,
 } from './filesystem';
 import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
 
@@ -41,10 +40,11 @@ export interface LocalFilesystemOptions {
   /** Restrict operations to basePath (default: true) */
   sandbox?: boolean;
   /**
-   * Safety options for this filesystem.
-   * These control read-only mode, read-before-write, and approval requirements.
+   * When true, all write operations to this filesystem are blocked.
+   * Read operations are still allowed.
+   * @default false
    */
-  safety?: FilesystemSafetyOptions;
+  readOnly?: boolean;
 }
 
 /**
@@ -69,7 +69,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
-  readonly safety?: FilesystemSafetyOptions;
+  readonly readOnly?: boolean;
 
   private readonly _basePath: string;
   private readonly _sandbox: boolean;
@@ -86,7 +86,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._sandbox = options.sandbox ?? true;
-    this.safety = options.safety;
+    this.readOnly = options.readOnly;
   }
 
   private generateId(): string {

@@ -104,7 +104,6 @@ describe('Workspace', () => {
 
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -115,7 +114,6 @@ describe('Workspace', () => {
     it('should write file to filesystem', async () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -132,7 +130,6 @@ describe('Workspace', () => {
 
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -146,7 +143,6 @@ describe('Workspace', () => {
 
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -157,7 +153,6 @@ describe('Workspace', () => {
     it('should update lastAccessedAt on file operations', async () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -400,7 +395,6 @@ Line 3 conclusion`;
     it('should return info without sandbox when not configured', async () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
@@ -432,7 +426,6 @@ Line 3 conclusion`;
     it('should return filesystem-only when no sandbox configured', () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
-        safety: { requireReadBeforeWrite: false },
       });
       const workspace = new Workspace({ filesystem });
 
