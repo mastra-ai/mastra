@@ -49,12 +49,12 @@ import { LocalSandbox } from '@mastra/core/workspace';
 
 const sandbox = new LocalSandbox({
   workingDirectory: './workspace',
-  inheritEnv: false,
 });
 ```
 
 - `workingDirectory` - Where shell commands run from
-- `inheritEnv` - Whether to pass `process.env` to executed commands (default: `false` for security)
+- `env` - Environment variables to pass (PATH is included by default unless overridden)
+- `isolation` - Native OS sandboxing: `'seatbelt'` (macOS) or `'bwrap'` (Linux)
 
 See [Sandbox Reference](/reference/workspace/sandbox) for the full API.
 
