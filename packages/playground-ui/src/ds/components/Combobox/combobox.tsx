@@ -99,10 +99,10 @@ export function Combobox({
                       <Check className={cn('h-4 w-4 text-accent1', transitions.opacity)} />
                     </BaseCombobox.ItemIndicator>
                   </span>
-                  <span className="whitespace-nowrap flex items-center gap-2">
+                  <span className="whitespace-nowrap flex items-center gap-2 w-full">
                     {option.start}
                     {option.label}
-                    {option.end}
+                    {option.end ? <div className="ml-auto">{option.end}</div> : null}
                   </span>
                 </BaseCombobox.Item>
               )}

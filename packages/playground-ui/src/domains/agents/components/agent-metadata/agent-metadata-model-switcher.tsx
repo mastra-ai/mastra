@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Spinner } from '@/ds/components/Spinner';
-import { RotateCcw } from 'lucide-react';
+import { Info, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { useModelReset } from '../../context/model-reset-context';
@@ -92,7 +92,7 @@ export const AgentMetadataModelSwitcher = ({
     return sortedProviders.map(provider => ({
       label: provider.name,
       value: provider.id,
-      icon: (
+      start: (
         <div className="relative">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
@@ -103,6 +103,15 @@ export const AgentMetadataModelSwitcher = ({
           />
         </div>
       ),
+      end: provider.docUrl ? (
+        <Info
+          className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
+          onClick={e => {
+            e.stopPropagation();
+            window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
+          }}
+        />
+      ) : null,
     }));
   }, [sortedProviders]);
 
