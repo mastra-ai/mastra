@@ -90,48 +90,6 @@ export interface CopyOptions {
 }
 
 // =============================================================================
-// Filesystem Safety Options
-// =============================================================================
-
-/**
- * Safety options that can be configured per-filesystem.
- * These options control how the filesystem behaves with regard to write operations.
- */
-export interface FilesystemSafetyOptions {
-  /**
-   * When true, all write operations to this filesystem are blocked.
-   * Read operations are still allowed.
-   *
-   * @default false
-   */
-  readOnly?: boolean;
-
-  /**
-   * Require files to be read before they can be written to.
-   * If enabled, writeFile will throw an error if:
-   * - The file exists but was never read in this session
-   * - The file was modified since the last read
-   *
-   * New files (that don't exist yet) can be written without reading.
-   *
-   * @default true
-   */
-  requireReadBeforeWrite?: boolean;
-
-  /**
-   * Require approval for filesystem operations.
-   * - 'all': Require approval for all filesystem operations (read, write, list, delete, mkdir)
-   * - 'write': Require approval only for write operations (write, delete, mkdir)
-   * - 'none': No approval required
-   *
-   * This setting is used by workspace tools to set the `requireApproval` flag.
-   *
-   * @default 'none'
-   */
-  requireApproval?: 'all' | 'write' | 'none';
-}
-
-// =============================================================================
 // Filesystem Interface
 // =============================================================================
 
@@ -155,10 +113,12 @@ export interface WorkspaceFilesystem {
   readonly provider: string;
 
   /**
-   * Safety configuration for this filesystem.
-   * Optional - if not provided, defaults apply.
+   * When true, all write operations to this filesystem are blocked.
+   * Read operations are still allowed.
+   *
+   * @default false
    */
-  readonly safety?: FilesystemSafetyOptions;
+  readonly readOnly?: boolean;
 
   // ---------------------------------------------------------------------------
   // File Operations
@@ -245,16 +205,6 @@ export interface WorkspaceFilesystem {
    */
   stat(path: string): Promise<FileStat>;
 
-  /**
-   * Check if path is a file.
-   */
-  isFile(path: string): Promise<boolean>;
-
-  /**
-   * Check if path is a directory.
-   */
-  isDirectory(path: string): Promise<boolean>;
-
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -320,75 +270,4 @@ export interface WorkspaceFilesystemAudit {
    * Get the total count of audit entries matching the filter.
    */
   count(options?: Omit<FilesystemAuditOptions, 'limit' | 'offset'>): Promise<number>;
-}
-
-// =============================================================================
-// Errors
-// =============================================================================
-
-export class FilesystemError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly path: string,
-  ) {
-    super(message);
-    this.name = 'FilesystemError';
-  }
-}
-
-export class FileNotFoundError extends FilesystemError {
-  constructor(path: string) {
-    super(`File not found: ${path}`, 'ENOENT', path);
-    this.name = 'FileNotFoundError';
-  }
-}
-
-export class DirectoryNotFoundError extends FilesystemError {
-  constructor(path: string) {
-    super(`Directory not found: ${path}`, 'ENOENT', path);
-    this.name = 'DirectoryNotFoundError';
-  }
-}
-
-export class FileExistsError extends FilesystemError {
-  constructor(path: string) {
-    super(`File already exists: ${path}`, 'EEXIST', path);
-    this.name = 'FileExistsError';
-  }
-}
-
-export class IsDirectoryError extends FilesystemError {
-  constructor(path: string) {
-    super(`Path is a directory: ${path}`, 'EISDIR', path);
-    this.name = 'IsDirectoryError';
-  }
-}
-
-export class NotDirectoryError extends FilesystemError {
-  constructor(path: string) {
-    super(`Path is not a directory: ${path}`, 'ENOTDIR', path);
-    this.name = 'NotDirectoryError';
-  }
-}
-
-export class DirectoryNotEmptyError extends FilesystemError {
-  constructor(path: string) {
-    super(`Directory not empty: ${path}`, 'ENOTEMPTY', path);
-    this.name = 'DirectoryNotEmptyError';
-  }
-}
-
-export class PermissionError extends FilesystemError {
-  constructor(path: string, operation: string) {
-    super(`Permission denied: ${operation} on ${path}`, 'EACCES', path);
-    this.name = 'PermissionError';
-  }
-}
-
-export class FileReadRequiredError extends FilesystemError {
-  constructor(path: string, reason: string) {
-    super(reason, 'EREAD_REQUIRED', path);
-    this.name = 'FileReadRequiredError';
-  }
 }

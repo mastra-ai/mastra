@@ -237,21 +237,20 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     }
 
     const tools: string[] = [];
-    const safetyConfig = workspace.getSafetyConfig();
-    const isReadOnly = safetyConfig?.readOnly ?? false;
+    const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
     // Filesystem tools
     if (workspace.filesystem) {
       // Read tools are always available
       tools.push('workspace_read_file');
       tools.push('workspace_list_files');
-      tools.push('workspace_file_exists');
+      tools.push('workspace_file_stat');
 
       // Write tools only if not readonly
       if (!isReadOnly) {
         tools.push('workspace_write_file');
         tools.push('workspace_edit_file');
-        tools.push('workspace_delete_file');
+        tools.push('workspace_delete');
         tools.push('workspace_mkdir');
       }
     }

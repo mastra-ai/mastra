@@ -29,15 +29,13 @@ await workspace.init();
 
 // File operations
 await workspace.writeFile('/docs/guide.md', '# Guide');
-const content = await workspace.readFile('/docs/guide.md');
+const content = await workspace.readFile('/docs/guide.md', { encoding: 'utf-8' });
 
-// Code execution
-const result = await workspace.executeCode('console.log(2 + 2)', {
-  runtime: 'javascript',
-});
+// Command execution
+const result = await workspace.executeCommand('echo', ['hello world']);
 
 // Search
-await workspace.index('/docs/guide.md', content);
+await workspace.index('/docs/guide.md', content as string);
 const results = await workspace.search('guide');
 ```
 
@@ -57,13 +55,21 @@ const agent = new Agent({
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    readOnly: true, // Block all write operations (default: false)
+  }),
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  safety: {
-    readOnly: false, // Block all write operations
-    requireReadBeforeWrite: true, // Require reading files before writing (default)
-    requireSandboxApproval: 'all', // 'all' | 'commands' | 'none' (default: 'all')
-    requireFilesystemApproval: 'none', // 'all' | 'write' | 'none' (default: 'none')
+  tools: {
+    // Top-level defaults for all tools
+    requireApproval: true,
+    // Per-tool overrides
+    mastra_workspace_write_file: {
+      requireReadBeforeWrite: true, // Require reading files before writing
+    },
+    mastra_workspace_execute_command: {
+      requireApproval: true,
+    },
   },
 });
 ```

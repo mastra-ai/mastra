@@ -38,8 +38,8 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
     });
 
@@ -110,8 +110,8 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
       // Search tools
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
@@ -224,7 +224,7 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       // Read first (required by safety)
-      await workspace.readFile('/existing.txt');
+      await workspace.filesystem!.readFile('/existing.txt');
 
       await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
         path: '/existing.txt',
@@ -485,7 +485,7 @@ describe('createWorkspaceTools', () => {
     });
   });
 
-  describe('workspace_delete_file', () => {
+  describe('workspace_delete', () => {
     it('should delete file', async () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
       const workspace = new Workspace({
@@ -493,7 +493,7 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({ path: '/test.txt' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/test.txt' });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/test.txt');
@@ -506,33 +506,65 @@ describe('createWorkspaceTools', () => {
       expect(exists).toBe(false);
     });
 
-    it('should handle force option for non-existent file', async () => {
+    it('should delete empty directory', async () => {
+      await fs.mkdir(path.join(tempDir, 'emptydir'));
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE].execute({
-        path: '/nonexistent.txt',
-        force: true,
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/emptydir' });
+
+      expect(result.success).toBe(true);
+      expect(result.path).toBe('/emptydir');
+
+      // Verify directory was deleted
+      const exists = await fs
+        .access(path.join(tempDir, 'emptydir'))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+
+    it('should delete directory recursively when recursive=true', async () => {
+      await fs.mkdir(path.join(tempDir, 'dirwithfiles'));
+      await fs.writeFile(path.join(tempDir, 'dirwithfiles', 'file.txt'), 'content');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({
+        path: '/dirwithfiles',
+        recursive: true,
       });
 
       expect(result.success).toBe(true);
+
+      // Verify directory was deleted
+      const exists = await fs
+        .access(path.join(tempDir, 'dirwithfiles'))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
     });
   });
 
-  describe('workspace_file_exists', () => {
-    it('should return exists=true for existing file', async () => {
+  describe('workspace_file_stat', () => {
+    it('should return full stat for existing file', async () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/test.txt' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/test.txt' });
 
       expect(result.exists).toBe(true);
       expect(result.type).toBe('file');
+      expect(result.size).toBe(7); // 'content' is 7 bytes
+      expect(result.modifiedAt).toBeDefined();
+      expect(new Date(result.modifiedAt!).getTime()).toBeGreaterThan(0);
     });
 
     it('should return exists=false for non-existing path', async () => {
@@ -541,10 +573,12 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/nonexistent' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/nonexistent' });
 
       expect(result.exists).toBe(false);
       expect(result.type).toBe('none');
+      expect(result.size).toBeUndefined();
+      expect(result.modifiedAt).toBeUndefined();
     });
 
     it('should return type=directory for directories', async () => {
@@ -554,10 +588,12 @@ describe('createWorkspaceTools', () => {
       });
       const tools = createWorkspaceTools(workspace);
 
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS].execute({ path: '/subdir' });
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/subdir' });
 
       expect(result.exists).toBe(true);
       expect(result.type).toBe('directory');
+      expect(result.size).toBeDefined();
+      expect(result.modifiedAt).toBeDefined();
     });
   });
 
@@ -708,8 +744,8 @@ describe('createWorkspaceTools', () => {
       expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');
       expect(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE).toBe('mastra_workspace_edit_file');
       expect(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES).toBe('mastra_workspace_list_files');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE).toBe('mastra_workspace_delete_file');
-      expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS).toBe('mastra_workspace_file_exists');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE).toBe('mastra_workspace_delete');
+      expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT).toBe('mastra_workspace_file_stat');
       expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
       // Search tools
       expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');

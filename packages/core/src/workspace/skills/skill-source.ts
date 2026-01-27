@@ -10,11 +10,22 @@
  */
 
 /**
- * Minimal file stat info needed for staleness checks.
+ * File stat info for skill sources.
+ * Aligned with FileStat from WorkspaceFilesystem.
  */
 export interface SkillSourceStat {
+  /** File or directory name */
+  name: string;
+  /** 'file' or 'directory' */
+  type: 'file' | 'directory';
+  /** Size in bytes (0 for directories) */
+  size: number;
+  /** Creation time */
+  createdAt: Date;
   /** Last modification time */
   modifiedAt: Date;
+  /** MIME type (for files) */
+  mimeType?: string;
 }
 
 /**

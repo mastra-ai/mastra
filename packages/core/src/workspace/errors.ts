@@ -70,3 +70,74 @@ export class WorkspaceReadOnlyError extends WorkspaceError {
     this.name = 'WorkspaceReadOnlyError';
   }
 }
+
+// =============================================================================
+// Filesystem Errors
+// =============================================================================
+
+export class FilesystemError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly path: string,
+  ) {
+    super(message);
+    this.name = 'FilesystemError';
+  }
+}
+
+export class FileNotFoundError extends FilesystemError {
+  constructor(path: string) {
+    super(`File not found: ${path}`, 'ENOENT', path);
+    this.name = 'FileNotFoundError';
+  }
+}
+
+export class DirectoryNotFoundError extends FilesystemError {
+  constructor(path: string) {
+    super(`Directory not found: ${path}`, 'ENOENT', path);
+    this.name = 'DirectoryNotFoundError';
+  }
+}
+
+export class FileExistsError extends FilesystemError {
+  constructor(path: string) {
+    super(`File already exists: ${path}`, 'EEXIST', path);
+    this.name = 'FileExistsError';
+  }
+}
+
+export class IsDirectoryError extends FilesystemError {
+  constructor(path: string) {
+    super(`Path is a directory: ${path}`, 'EISDIR', path);
+    this.name = 'IsDirectoryError';
+  }
+}
+
+export class NotDirectoryError extends FilesystemError {
+  constructor(path: string) {
+    super(`Path is not a directory: ${path}`, 'ENOTDIR', path);
+    this.name = 'NotDirectoryError';
+  }
+}
+
+export class DirectoryNotEmptyError extends FilesystemError {
+  constructor(path: string) {
+    super(`Directory not empty: ${path}`, 'ENOTEMPTY', path);
+    this.name = 'DirectoryNotEmptyError';
+  }
+}
+
+export class PermissionError extends FilesystemError {
+  constructor(path: string, operation: string) {
+    super(`Permission denied: ${operation} on ${path}`, 'EACCES', path);
+    this.name = 'PermissionError';
+  }
+}
+
+export class FileReadRequiredError extends FilesystemError {
+  constructor(path: string, reason: string) {
+    super(reason, 'EREAD_REQUIRED', path);
+    this.name = 'FileReadRequiredError';
+  }
+}

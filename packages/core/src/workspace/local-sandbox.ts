@@ -17,14 +17,7 @@ import { promisify } from 'node:util';
 
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type {
-  WorkspaceSandbox,
-  SandboxStatus,
-  SandboxInfo,
-  ExecuteCommandOptions,
-  CommandResult,
-  SandboxSafetyOptions,
-} from './sandbox';
+import type { WorkspaceSandbox, SandboxStatus, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
@@ -119,11 +112,6 @@ export interface LocalSandboxOptions {
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
-   * Safety options for this sandbox.
-   * Controls approval requirements for command execution.
-   */
-  safety?: SandboxSafetyOptions;
-  /**
    * Isolation backend for sandboxed execution.
    * - 'none': No sandboxing (direct execution on host) - default
    * - 'seatbelt': macOS sandbox-exec (built-in on macOS)
@@ -163,7 +151,6 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
-  readonly safety?: SandboxSafetyOptions;
 
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
@@ -209,7 +196,6 @@ export class LocalSandbox implements WorkspaceSandbox {
     this._workingDirectory = options.workingDirectory ?? process.cwd();
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 30000;
-    this.safety = options.safety;
     this._nativeSandboxConfig = options.nativeSandbox ?? {};
 
     // Validate and set isolation backend

@@ -9,9 +9,9 @@ import { z } from 'zod';
 import { createTool } from '../tools';
 import { WORKSPACE_TOOLS } from './constants';
 import type { WorkspaceToolName, WorkspaceToolsConfig } from './constants';
+import { FileNotFoundError, FileReadRequiredError } from './errors';
 import { InMemoryFileReadTracker } from './file-read-tracker';
 import type { FileReadTracker } from './file-read-tracker';
-import { FileReadRequiredError } from './filesystem';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -79,7 +79,7 @@ function resolveToolConfig(
 export function createWorkspaceTools(workspace: Workspace) {
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
-  const isReadOnly = workspace.readOnly;
+  const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
   // Create a shared file read tracker for requireReadBeforeWrite enforcement
   // This is only used by tools, not by direct workspace method calls
@@ -136,7 +136,7 @@ export function createWorkspaceTools(workspace: Workspace) {
           totalLines: z.number().optional().describe('Total number of lines in the file'),
         }),
         execute: async ({ path, encoding, offset, limit, showLineNumbers }) => {
-          const fullContent = await workspace.readFile(path, {
+          const fullContent = await workspace.filesystem!.readFile(path, {
             encoding: (encoding as BufferEncoding) ?? 'utf-8',
           });
           const stat = await workspace.filesystem!.stat(path);
@@ -202,17 +202,21 @@ export function createWorkspaceTools(workspace: Workspace) {
         execute: async ({ path, content, overwrite }) => {
           // Check read-before-write requirement (only for existing files)
           if (readTracker && writeFileConfig.requireReadBeforeWrite) {
-            const exists = await workspace.exists(path);
-            if (exists) {
+            try {
               const stat = await workspace.filesystem!.stat(path);
               const check = readTracker.needsReRead(path, stat.modifiedAt);
               if (check.needsReRead) {
                 throw new FileReadRequiredError(path, check.reason!);
               }
+            } catch (error) {
+              // File doesn't exist - that's fine, no read-before-write check needed for new files
+              if (!(error instanceof FileNotFoundError)) {
+                throw error;
+              }
             }
           }
 
-          await workspace.writeFile(path, content, { overwrite });
+          await workspace.filesystem!.writeFile(path, content, { overwrite });
 
           // Clear the read record after successful write (requires a new read to write again)
           if (readTracker) {
@@ -265,7 +269,7 @@ export function createWorkspaceTools(workspace: Workspace) {
             }
 
             // Read the current file content
-            const content = await workspace.readFile(path, { encoding: 'utf-8' });
+            const content = await workspace.filesystem!.readFile(path, { encoding: 'utf-8' });
 
             if (typeof content !== 'string') {
               return {
@@ -280,7 +284,7 @@ export function createWorkspaceTools(workspace: Workspace) {
             const result = replaceString(content, old_string, new_string, replace_all);
 
             // Write the modified content back
-            await workspace.writeFile(path, result.content, { overwrite: true });
+            await workspace.filesystem!.writeFile(path, result.content, { overwrite: true });
 
             // Clear the read record after successful write (requires a new read to write again)
             if (readTracker) {
@@ -411,52 +415,68 @@ Examples:
       });
     }
 
-    // Delete file tool (only if not in readonly mode)
-    const deleteFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
-    if (!isReadOnly && deleteFileConfig.enabled) {
-      tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE] = createTool({
-        id: WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE,
-        description: 'Delete a file from the workspace filesystem',
-        requireApproval: deleteFileConfig.requireApproval,
+    // Delete tool (only if not in readonly mode)
+    const deleteConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+    if (!isReadOnly && deleteConfig.enabled) {
+      tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
+        description: 'Delete a file or directory from the workspace filesystem',
+        requireApproval: deleteConfig.requireApproval,
         inputSchema: z.object({
-          path: z.string().describe('The path to the file to delete'),
-          force: z.boolean().optional().default(false).describe('Whether to ignore errors if the file does not exist'),
+          path: z.string().describe('The path to the file or directory to delete'),
+          recursive: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe(
+              'If true, delete directories and their contents recursively. Required for non-empty directories.',
+            ),
         }),
         outputSchema: z.object({
           success: z.boolean(),
           path: z.string(),
         }),
-        execute: async ({ path, force }) => {
-          await workspace.filesystem!.deleteFile(path, { force });
+        execute: async ({ path, recursive }) => {
+          const stat = await workspace.filesystem!.stat(path);
+          if (stat.type === 'directory') {
+            await workspace.filesystem!.rmdir(path, { recursive, force: recursive });
+          } else {
+            await workspace.filesystem!.deleteFile(path);
+          }
           return { success: true, path };
         },
       });
     }
 
-    // File exists tool
-    const fileExistsConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
-    if (fileExistsConfig.enabled) {
-      tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS] = createTool({
-        id: WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS,
-        description: 'Check if a file or directory exists in the workspace',
-        requireApproval: fileExistsConfig.requireApproval,
+    // File stat tool
+    const fileStatConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+    if (fileStatConfig.enabled) {
+      tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT,
+        description:
+          'Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.',
+        requireApproval: fileStatConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to check'),
         }),
         outputSchema: z.object({
           exists: z.boolean().describe('Whether the path exists'),
           type: z.enum(['file', 'directory', 'none']).describe('The type of the path if it exists'),
+          size: z.number().optional().describe('Size in bytes (for files)'),
+          modifiedAt: z.string().optional().describe('Last modification time (ISO string)'),
         }),
         execute: async ({ path }) => {
-          const exists = await workspace.exists(path);
-          if (!exists) {
+          try {
+            const stat = await workspace.filesystem!.stat(path);
+            return {
+              exists: true,
+              type: stat.type,
+              size: stat.size,
+              modifiedAt: stat.modifiedAt.toISOString(),
+            };
+          } catch {
             return { exists: false, type: 'none' as const };
           }
-          const isFile = await workspace.filesystem!.isFile(path);
-          return {
-            exists: true,
-            type: isFile ? ('file' as const) : ('directory' as const),
-          };
         },
       });
     }
@@ -630,7 +650,7 @@ Examples:
             },
           });
 
-          const result = await workspace.executeCommand(command, args ?? [], {
+          const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
             timeout: timeout ?? 30000,
             cwd: cwd ?? undefined,
             // Stream stdout/stderr as tool-output chunks for proper UI integration

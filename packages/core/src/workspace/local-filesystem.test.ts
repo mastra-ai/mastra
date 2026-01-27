@@ -11,7 +11,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from './filesystem';
+} from './errors';
 import { LocalFilesystem } from './local-filesystem';
 
 describe('LocalFilesystem', () => {
@@ -435,41 +435,6 @@ describe('LocalFilesystem', () => {
 
     it('should throw FileNotFoundError for missing path', async () => {
       await expect(localFs.stat('/nonexistent')).rejects.toThrow(FileNotFoundError);
-    });
-  });
-
-  // ===========================================================================
-  // isFile / isDirectory
-  // ===========================================================================
-  describe('isFile', () => {
-    it('should return true for files', async () => {
-      await localFs.writeFile('/test.txt', 'content');
-      expect(await localFs.isFile('/test.txt')).toBe(true);
-    });
-
-    it('should return false for directories', async () => {
-      await localFs.mkdir('/testdir');
-      expect(await localFs.isFile('/testdir')).toBe(false);
-    });
-
-    it('should return false for non-existing paths', async () => {
-      expect(await localFs.isFile('/nonexistent')).toBe(false);
-    });
-  });
-
-  describe('isDirectory', () => {
-    it('should return true for directories', async () => {
-      await localFs.mkdir('/testdir');
-      expect(await localFs.isDirectory('/testdir')).toBe(true);
-    });
-
-    it('should return false for files', async () => {
-      await localFs.writeFile('/test.txt', 'content');
-      expect(await localFs.isDirectory('/test.txt')).toBe(false);
-    });
-
-    it('should return false for non-existing paths', async () => {
-      expect(await localFs.isDirectory('/nonexistent')).toBe(false);
     });
   });
 

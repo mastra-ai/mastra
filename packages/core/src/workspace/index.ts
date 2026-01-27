@@ -118,7 +118,7 @@ export {
   DirectoryNotEmptyError,
   PermissionError,
   FileReadRequiredError,
-} from './filesystem';
+} from './errors';
 
 /**
  * Sandbox-specific error classes.

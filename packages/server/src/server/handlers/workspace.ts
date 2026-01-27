@@ -151,7 +151,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
             hasSkills: !!globalWorkspace.skills,
           },
           safety: {
-            readOnly: globalWorkspace.readOnly,
+            readOnly: globalWorkspace.filesystem?.readOnly ?? false,
           },
         });
       }
@@ -180,7 +180,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
                   hasSkills: !!agentWorkspace.skills,
                 },
                 safety: {
-                  readOnly: agentWorkspace.readOnly,
+                  readOnly: agentWorkspace.filesystem?.readOnly ?? false,
                 },
               });
             }
@@ -269,7 +269,7 @@ export const WORKSPACE_INFO_ROUTE = createRoute({
           hasSkills: !!workspace.skills,
         },
         safety: {
-          readOnly: workspace.readOnly,
+          readOnly: workspace.filesystem?.readOnly ?? false,
         },
       };
     } catch (error) {
@@ -345,7 +345,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
-      if (workspace.readOnly) {
+      if (workspace.filesystem?.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
@@ -436,7 +436,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
-      if (workspace.readOnly) {
+      if (workspace.filesystem?.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
@@ -487,7 +487,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
-      if (workspace.readOnly) {
+      if (workspace.filesystem?.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
       }
 
