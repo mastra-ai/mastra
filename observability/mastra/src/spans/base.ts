@@ -21,6 +21,9 @@ import { ModelSpanTracker } from '../model-tracing';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
+/** Extended span type that includes getParentSpan method available on BaseSpan instances */
+type AnyBaseSpan = AnySpan & { getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined };
+
 /**
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
@@ -218,7 +221,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return undefined;
     }
     if (includeInternalSpans) return this.parent;
-    if (this.parent.isInternal) return this.parent.getParentSpan(includeInternalSpans);
+    if (this.parent.isInternal) return (this.parent as AnyBaseSpan).getParentSpan(includeInternalSpans);
     return this.parent;
   }
 
