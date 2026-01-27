@@ -27,8 +27,8 @@ The evented workflow runtime already implements most features (119/125 tests pas
 
 Plans:
 
-- [ ] 01-01-PLAN.md - Port 12 state-related tests from default to evented runtime (RED phase)
-- [ ] 01-02-PLAN.md - Implement state support to make tests pass (GREEN phase)
+- [x] 01-01-PLAN.md - Port 12 state-related tests from default to evented runtime (RED phase)
+- [x] 01-02-PLAN.md - Implement state support to make tests pass (GREEN phase)
 
 **Missing Tests:**
 
@@ -55,9 +55,15 @@ Plans:
 
 ### Phase 2: Lifecycle Callbacks (onFinish/onError)
 
-**Goal:** Implement workflow lifecycle callbacks with full context
+**Goal:** Port 15 callback context tests and fix resourceId propagation
 
-**Gap Analysis:** 16 tests for onFinish/onError callbacks not implemented in evented
+**Gap Analysis:** 15 tests verify callback context properties (state callbacks already covered in Phase 1)
+
+**Plans:** 1 plan
+
+Plans:
+
+- [ ] 02-01-PLAN.md - Port 15 callback context tests and fix resourceId bug
 
 **Missing Tests:**
 
@@ -76,13 +82,13 @@ Plans:
 - should provide getInitData function in onFinish callback
 - should provide getInitData function in onError callback
 - should support async onError callback
-- (state callbacks covered in Phase 1)
 
 **Success Criteria:**
 
-1. Port all 16 callback-related tests
+1. Port all 15 callback context tests
 2. All callbacks fire with correct context
 3. Async callbacks are properly awaited
+4. resourceId correctly propagated to callbacks
 
 ---
 
@@ -221,16 +227,16 @@ Plans:
 
 | Phase | Name                      | Tests to Port | Status      |
 | ----- | ------------------------- | ------------- | ----------- |
-| 1     | State Object Support      | 12            | Not Started |
-| 2     | Lifecycle Callbacks       | 16            | Not Started |
+| 1     | State Object Support      | 12            | Complete    |
+| 2     | Lifecycle Callbacks       | 15            | Planned     |
 | 3     | Schema Validation         | 12            | Not Started |
 | 4     | Suspend/Resume Edge Cases | 24            | Not Started |
 | 5     | Streaming vNext           | 6             | Not Started |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
-**Total:** ~113 tests to port (119 gap - 6 restart tests)
+**Total:** ~101 tests to port (113 - 12 completed)
 
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-26 after gap analysis_
+_Last updated: 2026-01-27 after Phase 2 planning_
