@@ -6,7 +6,6 @@ import {
   Crumb,
   HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
@@ -30,9 +29,10 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       </Breadcrumb>
 
       <HeaderGroup>
-        <DividerIcon />
-
         <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
           Traces
         </Button>
       </HeaderGroup>
