@@ -101,7 +101,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     // Create a simple test agent
     const testAgent = new Agent({
-      id: 'test-agent',
+      id: 'testAgent',
       name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
       model: 'openai/gpt-4.1-mini',
