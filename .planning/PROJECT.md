@@ -8,9 +8,18 @@ The evented workflow runtime now has full feature parity with the default workfl
 
 The evented runtime passes the same test suite as the default runtime — tests are the specification for parity.
 
-## Current State (v1.0 Shipped)
+## Current Milestone: v1.1 Agent Integration
 
-**Shipped:** 2026-01-27
+**Goal:** Complete agent step parity and foreach resume capabilities
+
+**Target features:**
+- V2 model support for agent steps
+- TripWire propagation from agents to workflow
+- Writer API exposure in step context
+- Foreach index resume parameter
+
+## v1.0 (Shipped 2026-01-27)
+
 **Test Parity:** 189 passing tests (83.3% of 227 total)
 **Skipped:** 38 tests with documented architectural differences
 
@@ -96,4 +105,4 @@ The evented runtime passes the same test suite as the default runtime — tests 
 
 ---
 
-_Last updated: 2026-01-27 after v1.0 milestone_
+_Last updated: 2026-01-27 after v1.1 milestone start_
