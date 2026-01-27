@@ -1,8 +1,29 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { normalizeRoutePath } from '@mastra/core/route-utils';
 import { MastraServerBase } from '@mastra/core/server';
+
+/**
+ * Normalizes a route path to ensure consistent formatting.
+ * Inlined to avoid backwards compatibility issues with older @mastra/core versions.
+ */
+function normalizeRoutePath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
+    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
+  }
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/' || normalized === '') {
+    return '';
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  return normalized;
+}
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';

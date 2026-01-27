@@ -2,7 +2,6 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { builtinModules } from 'node:module';
-import { normalizeRoutePath } from '@mastra/core/route-utils';
 
 /** The detected JavaScript runtime environment */
 export type RuntimePlatform = 'node' | 'bun';
@@ -150,14 +149,43 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 }
 
 /**
- * Ensures that server.studioBase is normalized.
+ * Ensures that server.studioBase is normalized:
+ * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Normalizes multiple slashes to single slash (e.g., '//api' → '/api')
+ * - Returns empty string for root paths ('/' or '')
  *
- * @deprecated Use `normalizeRoutePath` from `@mastra/core/route-utils` instead.
  * @param studioBase - The studioBase path to normalize
  * @returns Normalized studioBase path string
+ * @throws Error if path contains invalid characters ('..', '?', '#')
  */
 export function normalizeStudioBase(studioBase: string): string {
-  return normalizeRoutePath(studioBase);
+  studioBase = studioBase.trim();
+
+  // Validate: no path traversal, no query params, no special chars
+  if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
+    throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);
+  }
+
+  // Normalize multiple slashes to single slash
+  studioBase = studioBase.replace(/\/+/g, '/');
+
+  // Handle default value cases
+  if (studioBase === '/' || studioBase === '') {
+    return '';
+  }
+
+  // Remove trailing slash
+  if (studioBase.endsWith('/')) {
+    studioBase = studioBase.slice(0, -1);
+  }
+
+  // Add leading slash if missing
+  if (!studioBase.startsWith('/')) {
+    studioBase = `/${studioBase}`;
+  }
+
+  return studioBase;
 }
 
 /**
