@@ -2,6 +2,8 @@
 
 This document describes how to investigate failing questions in LongMemEval benchmarks to identify root causes and implement fixes.
 
+The point is to find deficiencies in the LongMemEval dataset - there appear to be many broken question/answer pairs where the question is misleading, or the answer includes incorrect information or details that the question didn't ask for.
+
 ## Overview
 
 The investigation workflow has 4 stages:
