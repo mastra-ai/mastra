@@ -33,7 +33,7 @@ export function MainSidebarNavLink({
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const isExternal = link?.url?.startsWith('http');
-  const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : { viewTransition: true };
+  const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
 
   return (
     <li
