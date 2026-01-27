@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Uses `normalizeRoutePath` from `@mastra/core` for consistent prefix handling in server adapters.
+Route prefixes are now normalized for consistent handling (trailing slashes removed, leading slashes added, multiple slashes collapsed).
