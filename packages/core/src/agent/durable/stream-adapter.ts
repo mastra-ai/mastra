@@ -225,7 +225,8 @@ export async function emitChunkEvent<OUTPUT = undefined>(
   runId: string,
   chunk: ChunkType<OUTPUT>,
 ): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+  const topic = AGENT_STREAM_TOPIC(runId);
+  await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
     data: chunk,

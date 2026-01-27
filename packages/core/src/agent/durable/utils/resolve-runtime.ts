@@ -1,16 +1,21 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import { RequestContext } from '../../../request-context';
 import type { CoreTool } from '../../../tools/types';
 import { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import { globalRunRegistry } from '../run-registry';
 import type {
   SerializableDurableState,
   SerializableModelConfig,
+  SerializableModelListEntry,
   SerializableToolMetadata,
   DurableAgenticWorkflowInput,
+  RegistryModelListEntry,
 } from '../types';
 
 /**
@@ -24,6 +29,8 @@ export interface ResolvedRuntimeDependencies {
   tools: Record<string, CoreTool>;
   /** Resolved language model */
   model: MastraLanguageModel;
+  /** Resolved model list for fallback support (actual model instances) */
+  modelList?: RegistryModelListEntry[];
   /** Deserialized MessageList */
   messageList: MessageList;
   /** Memory instance (if available) */
@@ -70,12 +77,18 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   });
   messageList.deserialize(input.messageListState);
 
-  // 2. Get agent from Mastra and resolve tools
-  let tools: Record<string, CoreTool> = {};
-  let model: MastraLanguageModel;
+  // 2. Check global registry first (for local/test execution)
+  // This is necessary because workflow steps don't have direct access to DurableAgent's registry
+  const globalEntry = globalRunRegistry.get(runId);
+  let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
+  let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
+  let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
   let memory: MastraMemory | undefined;
 
-  if (mastra) {
+  // If we found the entry in global registry, we already have model and tools
+  if (globalEntry) {
+    logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
+  } else if (mastra) {
     try {
       const agent = mastra.getAgentById(agentId);
 
@@ -90,6 +103,17 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       // Get model from agent
       model = (await (agent as any).getModel?.({})) ?? resolveModel(input.modelConfig, mastra);
+
+      // Get model list from agent for fallback support
+      const rawModelList = await (agent as any).getModelList?.({});
+      if (rawModelList && Array.isArray(rawModelList)) {
+        modelList = rawModelList.map((entry: any) => ({
+          id: entry.id,
+          model: entry.model,
+          maxRetries: entry.maxRetries ?? 0,
+          enabled: entry.enabled ?? true,
+        }));
+      }
 
       // Get memory from agent
       memory = await (agent as any).getMemory?.({});
@@ -128,6 +152,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     _internal,
     tools,
     model,
+    modelList,
     messageList,
     memory,
     saveQueueManager,
@@ -232,4 +257,50 @@ export function extractToolsForModel(
   // Return the tools as-is since they're already in CoreTool format
   // The metadata is just for reference/serialization
   return tools;
+}
+
+/**
+ * Resolve a language model from a serialized model config.
+ *
+ * This is used during durable execution to reconstruct models from
+ * serialized configuration. It uses the originalConfig string (e.g., 'openai/gpt-4o')
+ * to resolve the model through the standard model resolution pipeline.
+ *
+ * @param config The serialized model configuration
+ * @param mastra Optional Mastra instance for custom gateways
+ * @returns Resolved language model
+ */
+export async function resolveModelFromConfig(
+  config: SerializableModelConfig,
+  mastra?: Mastra,
+): Promise<MastraLanguageModel> {
+  const requestContext = new RequestContext();
+
+  // Use originalConfig if available (e.g., 'openai/gpt-4o'), otherwise construct from provider/modelId
+  const modelConfigString = config.originalConfig ?? `${config.provider}/${config.modelId}`;
+
+  if (typeof modelConfigString === 'string') {
+    return (await resolveModelConfig(modelConfigString, requestContext, mastra)) as MastraLanguageModel;
+  }
+
+  // If originalConfig is an object, pass it through
+  return (await resolveModelConfig(
+    modelConfigString as Parameters<typeof resolveModelConfig>[0],
+    requestContext,
+    mastra,
+  )) as MastraLanguageModel;
+}
+
+/**
+ * Resolve a model from a model list entry.
+ *
+ * @param entry The model list entry with config, maxRetries, enabled
+ * @param mastra Optional Mastra instance
+ * @returns Resolved language model
+ */
+export async function resolveModelFromListEntry(
+  entry: SerializableModelListEntry,
+  mastra?: Mastra,
+): Promise<MastraLanguageModel> {
+  return resolveModelFromConfig(entry.config, mastra);
 }

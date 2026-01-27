@@ -137,11 +137,33 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger?.debug?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 
-  // 6. Get model
+  // 6. Get model (and model list if configured)
   // Note: This gets the first model from the agent's model configuration
   const model = (await (agent as any).getModel?.({ requestContext })) as MastraLanguageModel;
   if (!model) {
     throw new Error('Agent model not available');
+  }
+
+  // Check if agent has a model list (for fallback support)
+  const modelList = await (agent as any).getModelList?.(requestContext);
+
+  // 6b. Get scorers configuration
+  // Scorers can come from agent config or be overridden via execOptions
+  const overrideScorers = (execOptions as any)?.scorers;
+  let scorers: Record<string, { scorer: any; sampling?: any }> | undefined;
+
+  if (overrideScorers) {
+    scorers = overrideScorers;
+  } else {
+    // Try to get scorers from the agent using listScorers method
+    try {
+      const agentScorers = await (agent as any).listScorers?.({ requestContext });
+      if (agentScorers && Object.keys(agentScorers).length > 0) {
+        scorers = agentScorers;
+      }
+    } catch (error) {
+      logger?.debug?.(`[DurableAgent] Error getting scorers: ${error}`);
+    }
   }
 
   // 7. Get memory and create SaveQueueManager
@@ -163,6 +185,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messageList,
     tools,
     model,
+    modelList: modelList ?? undefined, // Include model list for fallback support
+    scorers, // Include scorers for evaluation (if configured)
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
@@ -172,6 +196,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
+      returnScorerData: (execOptions as any)?.returnScorerData,
     },
     state: {
       memoryConfig,
@@ -187,6 +212,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     tools,
     saveQueueManager: saveQueueManager!,
     model,
+    // Store model list instances for fallback support (enables testing with mock models)
+    modelList: modelList
+      ? modelList.map(entry => ({
+          id: entry.id,
+          model: entry.model,
+          maxRetries: entry.maxRetries ?? 0,
+          enabled: entry.enabled ?? true,
+        }))
+      : undefined,
     cleanup: () => {
       // Cleanup resources when run completes
       // Note: SaveQueueManager handles cleanup internally via flushMessages

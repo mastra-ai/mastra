@@ -3,6 +3,12 @@
  */
 
 /**
+ * Symbol for passing run registry to workflow steps
+ * This allows steps to access the actual model/tool instances
+ */
+export const RUN_REGISTRY_SYMBOL = Symbol('run_registry');
+
+/**
  * Generate the pubsub topic name for agent streaming events
  * @param runId - The unique run identifier
  * @returns The topic name for subscribing/publishing agent stream events
@@ -53,4 +59,6 @@ export const DurableStepIds = {
   AGENTIC_EXECUTION: 'durable-agentic-execution',
   /** Full agentic loop workflow */
   AGENTIC_LOOP: 'durable-agentic-loop',
+  /** Scorer execution step */
+  SCORER_EXECUTION: 'durable-scorer-execution',
 } as const;

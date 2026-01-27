@@ -1797,6 +1797,8 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
+    /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -1836,6 +1838,7 @@ export class Workflow<
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
+        pubsub: options?.pubsub,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1917,7 +1920,7 @@ export class Workflow<
   // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
   // To run a workflow use `.createRun` and then `.start` or `.resume`
   async execute({
-    runId,
+    runId: _runId,
     inputData,
     resumeData,
     state,
@@ -1997,7 +2000,10 @@ export class Workflow<
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);
 
-    const run = isResume ? await this.createRun({ runId: resume.runId }) : await this.createRun({ runId });
+    // Pass pubsub to share the event bus for streaming (PUBSUB_SYMBOL), but don't pass runId
+    // for non-resume cases. This gives nested workflows their own unique runId, which prevents
+    // the nested-watch event loop (nested-watch filters by runId, so different runIds don't conflict).
+    const run = isResume ? await this.createRun({ runId: resume.runId, pubsub }) : await this.createRun({ pubsub });
     const nestedAbortCb = () => {
       abort();
     };
@@ -2471,6 +2477,8 @@ export class Run<
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
     workflowEngineType: WorkflowEngineType;
+    /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
+    pubsub?: PubSub;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -2479,7 +2487,7 @@ export class Run<
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
-    this.pubsub = new EventEmitterPubSub();
+    this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
@@ -3196,6 +3204,12 @@ export class Run<
           event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
           workflowId: string;
         };
+
+        // Skip events from this workflow itself (prevents infinite loop when pubsub is shared)
+        // nestedWatchCb should only process events from CHILD workflows, not from itself
+        if (workflowId === this.workflowId) {
+          return;
+        }
 
         // Data chunks from writer.custom() should bubble up directly without modification
         // These are events with type starting with 'data-' and have a 'data' property

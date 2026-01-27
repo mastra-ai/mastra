@@ -7,7 +7,7 @@ import type { MessageListInput } from '../message-list';
 import type { AgentConfig, ToolsInput } from '../types';
 
 import { prepareForDurableExecution } from './preparation';
-import { ExtendedRunRegistry } from './run-registry';
+import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream } from './stream-adapter';
 import type { AgentFinishEventData, AgentStepFinishEventData, AgentSuspendedEventData } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
@@ -263,8 +263,9 @@ export class DurableAgent<
 
     const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
 
-    // 2. Register non-serializable state
+    // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+    globalRunRegistry.set(runId, registryEntry);
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
@@ -303,6 +304,7 @@ export class DurableAgent<
     const cleanup = () => {
       streamCleanup();
       this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
     };
 
     return {
@@ -324,8 +326,8 @@ export class DurableAgent<
     }
 
     try {
-      // Create a run and start it
-      const run = await this.#workflow.createRun({ runId });
+      // Create a run and start it, passing our pubsub for streaming
+      const run = await this.#workflow.createRun({ runId, pubsub: this.#pubsub });
       const result = await run.start({ inputData: workflowInput });
 
       // Check for errors in result
@@ -400,7 +402,7 @@ export class DurableAgent<
     // Resume the workflow
     if (this.#workflow) {
       (async () => {
-        const run = await this.#workflow!.createRun({ runId });
+        const run = await this.#workflow!.createRun({ runId, pubsub: this.#pubsub });
         await run.resume({ resumeData });
       })().catch((error: Error) => {
         void this.#emitError(runId, error);

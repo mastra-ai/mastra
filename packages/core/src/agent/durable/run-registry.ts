@@ -5,6 +5,15 @@ import type { SaveQueueManager } from '../save-queue';
 import type { RunRegistryEntry } from './types';
 
 /**
+ * Global registry for accessing run entries from workflow steps.
+ * This is necessary because workflow steps don't have direct access to
+ * the DurableAgent instance's registry.
+ *
+ * Entries are keyed by runId (which are unique UUIDs).
+ */
+export const globalRunRegistry = new Map<string, RunRegistryEntry>();
+
+/**
  * Registry for per-run non-serializable state.
  *
  * During durable execution, the DurableAgent needs to store non-serializable

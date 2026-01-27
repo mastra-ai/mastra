@@ -43,6 +43,8 @@ export interface SerializableModelConfig {
   modelId: string;
   /** Model specification version */
   specificationVersion?: string;
+  /** Original model string/config for resolution at runtime (e.g., 'openai/gpt-4o') */
+  originalConfig?: string | Record<string, unknown>;
   /** Additional model settings */
   settings?: {
     temperature?: number;
@@ -53,6 +55,40 @@ export interface SerializableModelConfig {
     [key: string]: unknown;
   };
 }
+
+/**
+ * Entry in the model list for fallback support (serializable)
+ */
+export interface SerializableModelListEntry {
+  /** Unique identifier for this model entry */
+  id: string;
+  /** Model configuration */
+  config: SerializableModelConfig;
+  /** Maximum retries before moving to next model */
+  maxRetries: number;
+  /** Whether this model is enabled */
+  enabled: boolean;
+}
+
+/**
+ * Sampling configuration for scorers (serializable)
+ */
+export type SerializableScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+
+/**
+ * Entry for a single scorer in the configuration (serializable)
+ */
+export interface SerializableScorerEntry {
+  /** Scorer name (for resolution from Mastra at runtime) */
+  scorerName: string;
+  /** Optional sampling configuration */
+  sampling?: SerializableScoringSamplingConfig;
+}
+
+/**
+ * Scorers configuration (serializable)
+ */
+export type SerializableScorersConfig = Record<string, SerializableScorerEntry>;
 
 /**
  * Serializable subset of _internal (StreamInternal) that flows through workflow state
@@ -88,6 +124,8 @@ export interface SerializableDurableOptions {
   maxProcessorRetries?: number;
   /** Whether to include raw chunks in the stream */
   includeRawChunks?: boolean;
+  /** Whether to return scorer data in the result */
+  returnScorerData?: boolean;
 }
 
 /**
@@ -105,8 +143,12 @@ export interface DurableAgenticWorkflowInput {
   messageListState: SerializedMessageListState;
   /** Tool metadata (without execute functions) */
   toolsMetadata: SerializableToolMetadata[];
-  /** Model configuration for resolution */
+  /** Model configuration for resolution (primary model) */
   modelConfig: SerializableModelConfig;
+  /** Model list for fallback support (when agent configured with array of models) */
+  modelList?: SerializableModelListEntry[];
+  /** Scorers configuration for evaluation */
+  scorers?: SerializableScorersConfig;
   /** Serializable execution options */
   options: SerializableDurableOptions;
   /** Serializable internal state */
@@ -303,6 +345,16 @@ export interface AgentSuspendedEventData {
 }
 
 /**
+ * Model list entry stored in registry (actual model instances, not serialized config)
+ */
+export interface RegistryModelListEntry {
+  id: string;
+  model: MastraLanguageModel;
+  maxRetries: number;
+  enabled: boolean;
+}
+
+/**
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
@@ -312,6 +364,8 @@ export interface RunRegistryEntry {
   saveQueueManager: SaveQueueManager;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
+  /** Model list for fallback support (stores actual model instances) */
+  modelList?: RegistryModelListEntry[];
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
 }

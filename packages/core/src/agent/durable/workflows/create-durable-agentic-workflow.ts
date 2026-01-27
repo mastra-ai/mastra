@@ -1,8 +1,12 @@
 import { z } from 'zod';
+import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
+import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
+import { RequestContext } from '../../../request-context';
 import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
+import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { emitFinishEvent } from '../stream-adapter';
 import type {
@@ -10,6 +14,7 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
+  SerializableScorersConfig,
 } from '../types';
 import { createDurableLLMExecutionStep, createDurableLLMMappingStep } from './steps';
 
@@ -36,6 +41,22 @@ const durableAgenticInputSchema = z.object({
     specificationVersion: z.string().optional(),
     settings: z.record(z.any()).optional(),
   }),
+  // Model list for fallback support (when agent configured with array of models)
+  modelList: z
+    .array(
+      z.object({
+        id: z.string(),
+        config: z.object({
+          provider: z.string(),
+          modelId: z.string(),
+          specificationVersion: z.string().optional(),
+          originalConfig: z.union([z.string(), z.record(z.any())]).optional(),
+        }),
+        maxRetries: z.number(),
+        enabled: z.boolean(),
+      }),
+    )
+    .optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
@@ -67,6 +88,8 @@ const iterationStateSchema = z.object({
   messageListState: z.any(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.any(),
+  // Model list for fallback support
+  modelList: z.array(z.any()).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
@@ -127,6 +150,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           messageListState: state.messageListState,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
+          modelList: state.modelList,
           options: state.options,
           state: state.state,
           messageId: state.messageId,
@@ -269,6 +293,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           messageListState: executionOutput.messageListState,
           toolsMetadata: initData.toolsMetadata,
           modelConfig: initData.modelConfig,
+          modelList: initData.modelList,
           options: initData.options,
           state: executionOutput.state,
           messageId: executionOutput.messageId,
@@ -364,6 +389,96 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           return finalOutput;
         },
         { id: 'map-final-output' },
+      )
+      // Execute scorers (fire-and-forget, doesn't affect main result)
+      .map(
+        async params => {
+          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const finalOutput = inputData;
+          const initData = getInitData() as DurableAgenticWorkflowInput;
+
+          // If no scorers configured, skip
+          const scorers = initData.scorers as SerializableScorersConfig | undefined;
+          if (!scorers || Object.keys(scorers).length === 0) {
+            return finalOutput;
+          }
+
+          const logger = mastra?.getLogger?.();
+
+          // Reconstruct input MessageList to extract scorer input
+          const inputMessageList = new MessageList();
+          inputMessageList.deserialize(initData.messageListState);
+
+          // Build scorer input (messages before generation)
+          const scorerInput = {
+            inputMessages: inputMessageList.getPersisted.input.db(),
+            rememberedMessages: inputMessageList.getPersisted.remembered.db(),
+            systemMessages: inputMessageList.getSystemMessages(),
+            taggedSystemMessages: inputMessageList.getPersisted.taggedSystemMessages,
+          };
+
+          // Reconstruct output MessageList to extract scorer output
+          const outputMessageList = new MessageList();
+          outputMessageList.deserialize(finalOutput.messageListState);
+          const scorerOutput = outputMessageList.getPersisted.response.db();
+
+          // Create request context for scorer resolution
+          const resolveContext = requestContext ?? new RequestContext();
+
+          // Execute each scorer (fire-and-forget)
+          for (const [scorerKey, scorerEntry] of Object.entries(scorers)) {
+            const { scorerName, sampling } = scorerEntry;
+
+            try {
+              // Resolve the scorer from Mastra
+              const scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+
+              if (!scorer) {
+                logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, {
+                  runId: initData.runId,
+                  scorerKey,
+                });
+                continue;
+              }
+
+              // Create the scorer entry expected by runScorer
+              const scorerObject: MastraScorerEntry = {
+                scorer,
+                sampling,
+              };
+
+              // Call runScorer (fire-and-forget via hooks)
+              runScorer({
+                runId: initData.runId,
+                scorerId: scorerKey,
+                scorerObject,
+                input: scorerInput,
+                output: scorerOutput,
+                requestContext: resolveContext as any,
+                entity: {
+                  id: initData.agentId,
+                  name: initData.agentName ?? initData.agentId,
+                },
+                structuredOutput: false,
+                source: 'LIVE',
+                entityType: 'AGENT',
+                threadId: initData.state?.threadId,
+                resourceId: initData.state?.resourceId,
+                tracingContext,
+              });
+            } catch (error) {
+              // Log but don't fail - scorer errors shouldn't affect main execution
+              logger?.warn?.(`Error executing scorer ${scorerName}`, {
+                error,
+                runId: initData.runId,
+                scorerKey,
+              });
+            }
+          }
+
+          return finalOutput;
+        },
+        { id: 'execute-scorers' },
       )
       .commit()
   );
