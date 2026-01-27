@@ -15544,5 +15544,424 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('should have access to requestContext from before suspension during workflow resume', async () => {
+      const testValue = 'test-dependency';
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({
+              message: `Please provide additional information. now value is ${inputData.value}`,
+            });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData, requestContext }) => {
+          requestContext.set('testKey', testValue);
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow-context-evented',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData, requestContext }) => {
+              const testKey = requestContext.get('testKey');
+              expect(testKey).toBe(testValue);
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'increment-workflow-context-evented': incrementWorkflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await incrementWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve request context in nested workflows after suspend/resume', async () => {
+      // Step that sets request context data
+      const setupStep = createStep({
+        id: 'setup-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          setup: z.boolean(),
+        }),
+        execute: async ({ requestContext }) => {
+          requestContext.set('test-key', 'test-context-value');
+          return { setup: true };
+        },
+      });
+
+      // Suspend step
+      const suspendStep = createStep({
+        id: 'suspend-step-nested',
+        inputSchema: z.object({
+          setup: z.boolean(),
+        }),
+        outputSchema: z.object({
+          resumed: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          message: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirmed: z.boolean(),
+        }),
+        execute: async ({ resumeData, suspend, requestContext }) => {
+          // Verify request context is still available during suspend
+          expect(requestContext.get('test-key')).toBe('test-context-value');
+
+          if (!resumeData?.confirmed) {
+            return await suspend({ message: 'Workflow suspended for testing' });
+          }
+          return { resumed: true };
+        },
+      });
+
+      // Step in nested workflow that verifies request context access
+      const verifyContextStep = createStep({
+        id: 'verify-context-step',
+        inputSchema: z.object({
+          resumed: z.boolean(),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          hasTestData: z.boolean(),
+        }),
+        execute: async ({ requestContext, mastra, getInitData, inputData }) => {
+          // Verify all context is available in nested workflow after suspend/resume
+          const testData = requestContext.get('test-key');
+          const initData = getInitData();
+
+          expect(testData).toBe('test-context-value');
+          expect(mastra).toBeDefined();
+          expect(requestContext).toBeDefined();
+          expect(inputData).toEqual({ resumed: true });
+          expect(initData).toEqual({ resumed: true });
+
+          return { success: true, hasTestData: !!testData };
+        },
+      });
+
+      // Nested workflow that runs after suspend/resume
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow-after-suspend-evented',
+        inputSchema: z.object({
+          resumed: z.boolean(),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          hasTestData: z.boolean(),
+        }),
+      })
+        .then(verifyContextStep)
+        .commit();
+
+      // Main workflow
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow-with-suspend-evented',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          success: z.boolean(),
+          hasTestData: z.boolean(),
+        }),
+      })
+        .then(setupStep)
+        .then(suspendStep)
+        .then(nestedWorkflow)
+        .commit();
+
+      // Initialize Mastra with storage for suspend/resume
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: {
+          'main-workflow-with-suspend-evented': mainWorkflow,
+          'nested-workflow-after-suspend-evented': nestedWorkflow,
+        },
+      });
+      await mastra.startEventEngine();
+
+      const run = await mainWorkflow.createRun();
+
+      // Start workflow (should suspend)
+      const suspendResult = await run.start({ inputData: {} });
+      expect(suspendResult.status).toBe('suspended');
+
+      // Resume workflow
+      const resumeResult = await run.resume({
+        step: 'suspend-step-nested',
+        resumeData: { confirmed: true },
+      });
+
+      expect(resumeResult.status).toBe('success');
+      if (resumeResult.status === 'success') {
+        expect(resumeResult.result.success).toBe(true);
+        expect(resumeResult.result.hasTestData).toBe(true);
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should handle basic suspend and resume flow using resumeLabel', async () => {
+      const stepAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend(undefined, { resumeLabel: 'test-resume-label' });
+          return { result: 'should not be reached' };
+        })
+        .mockImplementationOnce(() => ({ result: 'resumed successfully' }));
+
+      const suspendStep = createStep({
+        id: 'suspend-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: stepAction,
+      });
+
+      const workflow = createWorkflow({
+        id: 'resume-label-test-workflow-evented',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(suspendStep)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'resume-label-test-workflow-evented': workflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+
+      // Start workflow - should suspend
+      const startResult = await run.start({ inputData: { input: 'test' } });
+      expect(startResult.status).toBe('suspended');
+      expect(stepAction).toHaveBeenCalledTimes(1);
+
+      // Resume using label instead of step parameter
+      const resumeResult = await run.resume({
+        resumeData: {},
+        label: 'test-resume-label',
+      });
+
+      expect(resumeResult.status).toBe('success');
+      expect(stepAction).toHaveBeenCalledTimes(2);
+      if (resumeResult.status === 'success') {
+        expect(resumeResult.result.result).toBe('resumed successfully');
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should provide access to suspendData in workflow step on resume', async () => {
+      const suspendDataAccess = createStep({
+        id: 'suspend-data-access-test',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        resumeSchema: z.object({
+          confirm: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          reason: z.string(),
+          originalValue: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+        execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+          const { value } = inputData;
+          const { confirm } = resumeData ?? {};
+
+          // On first execution, suspend with context
+          if (!confirm) {
+            return await suspend({
+              reason: 'User confirmation required',
+              originalValue: value,
+            });
+          }
+
+          // On resume, we can now access the suspend data!
+          const suspendReason = suspendData?.reason || 'Unknown';
+          const originalValue = suspendData?.originalValue || 'Unknown';
+
+          return {
+            result: `Processed ${originalValue} after ${suspendReason}`,
+            wasResumed: true,
+            suspendReason,
+          };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'suspend-data-test-workflow-evented',
+        inputSchema: z.object({
+          value: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+          wasResumed: z.boolean(),
+          suspendReason: z.string().optional(),
+        }),
+      });
+
+      workflow.then(suspendDataAccess).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'suspend-data-test-workflow-evented': workflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+
+      // Start the workflow - should suspend
+      const initialResult = await run.start({
+        inputData: { value: 'test-value' },
+      });
+
+      expect(initialResult.status).toBe('suspended');
+
+      // Resume the workflow with confirmation
+      const resumedResult = await run.resume({
+        step: suspendDataAccess,
+        resumeData: { confirm: true },
+      });
+
+      expect(resumedResult.status).toBe('success');
+      if (resumedResult.status === 'success') {
+        expect(resumedResult.result.suspendReason).toBe('User confirmation required');
+        expect(resumedResult.result.result).toBe('Processed test-value after User confirmation required');
+      }
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should preserve input property from snapshot context after resume', async () => {
+      const step1Action = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend({});
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ result: 'resumed' }));
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'input-preserve-test-workflow-evented',
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'input-preserve-test-workflow-evented': workflow },
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const originalInput = { originalInput: 'original-data' };
+
+      // Start workflow - should suspend
+      const startResult = await run.start({ inputData: originalInput });
+      expect(startResult.status).toBe('suspended');
+
+      // Resume with different data to test that input comes from snapshot, not resume data
+      const resumeResult = await run.resume({
+        resumeData: {},
+        step: step1,
+      });
+
+      expect(resumeResult.status).toBe('success');
+      if (resumeResult.status === 'success') {
+        // Verify that the step received the original input as payload
+        // The step's inputData should still be the original input, not the resumeData
+        expect(resumeResult.result.result).toBe('resumed');
+      }
+
+      // Verify input is preserved in the workflow state
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'input-preserve-test-workflow-evented',
+        runId: run.runId,
+      });
+
+      expect(snapshot?.context?.input).toEqual(originalInput);
+
+      await mastra.stopEventEngine();
+    });
+
+    // Note: closeOnSuspend test skipped for evented runtime as streaming behavior differs
+    // The evented runtime uses pubsub events instead of the stream() API with closeOnSuspend option
+    it.skip('should handle basic suspend and resume flow that does not close on suspend', async () => {
+      // This test requires stream() API with closeOnSuspend option which is not yet implemented
+      // in the evented runtime. The evented runtime handles streaming differently via pubsub.
+    });
   });
 });
