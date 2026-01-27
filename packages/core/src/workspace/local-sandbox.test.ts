@@ -1,11 +1,11 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { SandboxNotReadyError } from './sandbox';
+import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -402,21 +402,17 @@ describe('LocalSandbox', () => {
       await sandboxedSandbox.destroy();
     });
 
-    it('should fall back to none when unavailable backend requested', () => {
+    it('should throw error when unavailable backend requested', () => {
       // Request an unavailable backend
       const unavailableBackend = os.platform() === 'darwin' ? 'bwrap' : 'seatbelt';
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const fallbackSandbox = new LocalSandbox({
-        workingDirectory: tempDir,
-        isolation: unavailableBackend as 'seatbelt' | 'bwrap',
-      });
-
-      expect(fallbackSandbox.isolation).toBe('none');
-      expect(warnSpy).toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+      expect(
+        () =>
+          new LocalSandbox({
+            workingDirectory: tempDir,
+            isolation: unavailableBackend as 'seatbelt' | 'bwrap',
+          }),
+      ).toThrow(IsolationUnavailableError);
     });
 
     it('should include isolation in getInfo', async () => {

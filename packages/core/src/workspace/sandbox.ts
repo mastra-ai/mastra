@@ -242,3 +242,13 @@ export class SandboxNotReadyError extends SandboxError {
     this.name = 'SandboxNotReadyError';
   }
 }
+
+export class IsolationUnavailableError extends SandboxError {
+  constructor(
+    public readonly backend: string,
+    public readonly reason: string,
+  ) {
+    super(`Isolation backend '${backend}' is not available: ${reason}`, 'ISOLATION_UNAVAILABLE', { backend, reason });
+    this.name = 'IsolationUnavailableError';
+  }
+}

@@ -125,7 +125,13 @@ export {
  *
  * @public
  */
-export { SandboxError, SandboxExecutionError, SandboxTimeoutError, SandboxNotReadyError } from './sandbox';
+export {
+  SandboxError,
+  SandboxExecutionError,
+  SandboxTimeoutError,
+  SandboxNotReadyError,
+  IsolationUnavailableError,
+} from './sandbox';
 
 // =============================================================================
 // PUBLIC API - Tool Creation

@@ -25,7 +25,7 @@ import type {
   CommandResult,
   SandboxSafetyOptions,
 } from './sandbox';
-import { SandboxNotReadyError } from './sandbox';
+import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
 
@@ -217,14 +217,9 @@ export class LocalSandbox implements WorkspaceSandbox {
     const requestedIsolation = options.isolation ?? 'none';
     if (requestedIsolation !== 'none' && !isIsolationAvailable(requestedIsolation)) {
       const detection = detectIsolation();
-      console.warn(
-        `Isolation backend '${requestedIsolation}' is not available. ${detection.message}. ` +
-          `Falling back to 'none'.`,
-      );
-      this._isolation = 'none';
-    } else {
-      this._isolation = requestedIsolation;
+      throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
+    this._isolation = requestedIsolation;
   }
 
   private generateId(): string {
