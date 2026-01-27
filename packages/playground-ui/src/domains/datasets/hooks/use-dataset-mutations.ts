@@ -61,6 +61,19 @@ export const useDatasetMutations = () => {
     },
   });
 
+  // Bulk delete - sequential since no bulk endpoint exists
+  const deleteItems = useMutation({
+    mutationFn: async ({ datasetId, itemIds }: { datasetId: string; itemIds: string[] }) => {
+      for (const itemId of itemIds) {
+        await client.deleteDatasetItem(datasetId, itemId);
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+    },
+  });
+
   const triggerRun = useMutation({
     mutationFn: (params: TriggerDatasetRunParams) => client.triggerDatasetRun(params),
     onSuccess: (_, variables) => {
@@ -75,6 +88,7 @@ export const useDatasetMutations = () => {
     addItem,
     updateItem,
     deleteItem,
+    deleteItems,
     triggerRun,
   };
 };
