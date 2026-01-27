@@ -70,7 +70,7 @@ The implementation follows the PRD's phased approach with adapter-based architec
 
 ### Overview
 
-Create core types, interfaces, PostgreSQL storage adapter, and local project source. This establishes the data model and project discovery that all subsequent phases depend on.
+Create core types, abstract adapter classes, PostgreSQL storage adapter, and local project source. This establishes the data model, adapter pattern, and project discovery that all subsequent phases depend on.
 
 ### Changes Required
 
@@ -84,24 +84,70 @@ Create core types, interfaces, PostgreSQL storage adapter, and local project sou
 packages/admin/
 ├── src/
 │   ├── index.ts              # Main exports
-│   ├── admin.ts              # MastraAdmin class
+│   ├── admin.ts              # MastraAdmin class (follows Mastra pattern)
+│   ├── base.ts               # MastraAdminBase class
+│   ├── error.ts              # Admin-specific error domain
 │   ├── types/
 │   │   ├── index.ts          # Type exports
 │   │   ├── entities.ts       # Team, Project, Deployment, Build
-│   │   ├── config.ts         # MastraAdminConfig
-│   │   └── providers.ts      # Provider interfaces
+│   │   └── config.ts         # MastraAdminConfig
+│   ├── adapters/
+│   │   ├── index.ts          # Adapter exports
+│   │   ├── storage.ts        # MastraAdminStorage abstract class
+│   │   ├── source.ts         # MastraProjectSource abstract class
+│   │   ├── runner.ts         # MastraRunner abstract class
+│   │   └── router.ts         # MastraRouter abstract class
 │   └── utils/
 │       ├── index.ts
-│       └── safe-array.ts     # Defensive JSONB handling
+│       ├── safe-array.ts     # Defensive JSONB handling
+│       └── pagination.ts     # Pagination helpers
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.build.json
 └── tsup.config.ts
 ```
 
+**File: `src/error.ts`**
+
+```typescript
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+
+// Extend ErrorDomain for admin-specific errors
+export const AdminErrorDomain = {
+  ...ErrorDomain,
+  ADMIN: 'ADMIN',
+  ADMIN_STORAGE: 'ADMIN_STORAGE',
+  ADMIN_SOURCE: 'ADMIN_SOURCE',
+  ADMIN_RUNNER: 'ADMIN_RUNNER',
+  ADMIN_ROUTER: 'ADMIN_ROUTER',
+} as const;
+
+export { MastraError, ErrorCategory };
+export type AdminErrorDomain = typeof AdminErrorDomain[keyof typeof AdminErrorDomain];
+```
+
+**File: `src/base.ts`**
+
+```typescript
+import { MastraBase } from '@mastra/core/base';
+
+/**
+ * Base class for all MastraAdmin components.
+ * Provides logging and component identification.
+ */
+export class MastraAdminBase extends MastraBase {
+  constructor(config: { component: string; name: string }) {
+    super(config);
+  }
+}
+```
+
 **File: `src/types/entities.ts`**
 
 ```typescript
+/**
+ * A team represents an organization unit that owns projects.
+ */
 export interface Team {
   id: string;
   name: string;
@@ -110,19 +156,32 @@ export interface Team {
   updatedAt: Date;
 }
 
+/**
+ * A project represents a Mastra application that can be deployed.
+ */
 export interface Project {
   id: string;
   teamId: string;
   name: string;
   slug: string;
   sourceType: 'local' | 'github';
-  sourceConfig: Record<string, unknown>;
+  sourceConfig: ProjectSourceConfig;
   defaultBranch: string;
   envVars: EncryptedEnvVar[];
   createdAt: Date;
   updatedAt: Date;
 }
 
+export interface ProjectSourceConfig {
+  sourceId: string;
+  path?: string;
+  repository?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * A deployment represents a running instance of a project.
+ */
 export interface Deployment {
   id: string;
   projectId: string;
@@ -141,6 +200,9 @@ export interface Deployment {
 
 export type DeploymentStatus = 'pending' | 'building' | 'running' | 'stopped' | 'failed';
 
+/**
+ * A build represents a single build attempt for a deployment.
+ */
 export interface Build {
   id: string;
   deploymentId: string;
@@ -163,126 +225,627 @@ export interface EncryptedEnvVar {
 }
 ```
 
-**File: `src/types/providers.ts`**
+**File: `src/utils/pagination.ts`**
 
 ```typescript
-export interface AdminStorage {
-  teams: TeamStorage;
-  projects: ProjectStorage;
-  deployments: DeploymentStorage;
-  builds: BuildStorage;
-  init(): Promise<void>;
-  close(): Promise<void>;
+/**
+ * Pagination parameters for list operations.
+ */
+export interface PaginationParams {
+  /** Zero-indexed page number */
+  page?: number;
+  /** Items per page, or false to return all */
+  perPage?: number | false;
 }
 
-export interface TeamStorage {
-  create(team: Omit<Team, 'id' | 'createdAt' | 'updatedAt'>): Promise<Team>;
-  getById(id: string): Promise<Team | null>;
-  getBySlug(slug: string): Promise<Team | null>;
-  list(): Promise<Team[]>;
-  update(id: string, data: Partial<Team>): Promise<Team>;
-  delete(id: string): Promise<void>;
+/**
+ * Paginated result wrapper.
+ */
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
 }
 
-export interface ProjectStorage {
-  create(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project>;
-  getById(id: string): Promise<Project | null>;
-  getBySlug(teamId: string, slug: string): Promise<Project | null>;
-  listByTeam(teamId: string): Promise<Project[]>;
-  update(id: string, data: Partial<Project>): Promise<Project>;
-  delete(id: string): Promise<void>;
+/**
+ * Normalizes perPage input for pagination queries.
+ */
+export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
+  if (perPageInput === false) {
+    return Number.MAX_SAFE_INTEGER;
+  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+    return perPageInput;
+  }
+  return defaultValue;
 }
 
-export interface DeploymentStorage {
-  create(deployment: Omit<Deployment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Deployment>;
-  getById(id: string): Promise<Deployment | null>;
-  listByProject(projectId: string): Promise<Deployment[]>;
-  listByStatus(status: DeploymentStatus): Promise<Deployment[]>;
-  update(id: string, data: Partial<Deployment>): Promise<Deployment>;
-  delete(id: string): Promise<void>;
+/**
+ * Calculates pagination offset.
+ */
+export function calculateOffset(page: number, normalizedPerPage: number): number {
+  return page * normalizedPerPage;
 }
+```
 
-export interface BuildStorage {
-  create(build: Omit<Build, 'id' | 'createdAt'>): Promise<Build>;
-  getById(id: string): Promise<Build | null>;
-  listByDeployment(deploymentId: string): Promise<Build[]>;
-  listByStatus(status: BuildStatus): Promise<Build[]>;
-  update(id: string, data: Partial<Build>): Promise<Build>;
+**File: `src/adapters/storage.ts`** (Abstract Storage Adapter)
+
+```typescript
+import { MastraAdminBase } from '../base';
+import { MastraError, AdminErrorDomain, ErrorCategory } from '../error';
+import type { Team, Project, Deployment, Build, DeploymentStatus, BuildStatus } from '../types/entities';
+import type { PaginationParams, PaginatedResult } from '../utils/pagination';
+
+/**
+ * Abstract base class for admin storage adapters.
+ * Implementations: PostgresAdminStorage, etc.
+ */
+export abstract class MastraAdminStorage extends MastraAdminBase {
+  id: string;
+
+  constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'ADMIN_STORAGE_INVALID_ID',
+        text: 'Storage id must be provided and cannot be empty',
+        domain: AdminErrorDomain.ADMIN_STORAGE,
+        category: ErrorCategory.USER,
+      });
+    }
+    super({ name: 'MastraAdminStorage', component: 'ADMIN_STORAGE' });
+    this.id = id;
+  }
+
+  /** Initialize storage (create tables, run migrations) */
+  abstract init(): Promise<void>;
+
+  /** Close storage connections */
+  abstract close(): Promise<void>;
+
+  // Team operations
+  abstract createTeam(data: Omit<Team, 'id' | 'createdAt' | 'updatedAt'>): Promise<Team>;
+  abstract getTeamById(id: string): Promise<Team | null>;
+  abstract getTeamBySlug(slug: string): Promise<Team | null>;
+  abstract listTeams(params?: PaginationParams): Promise<PaginatedResult<Team>>;
+  abstract updateTeam(id: string, data: Partial<Team>): Promise<Team>;
+  abstract deleteTeam(id: string): Promise<void>;
+
+  // Project operations
+  abstract createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project>;
+  abstract getProjectById(id: string): Promise<Project | null>;
+  abstract getProjectBySlug(teamId: string, slug: string): Promise<Project | null>;
+  abstract listProjects(params?: PaginationParams & { teamId?: string }): Promise<PaginatedResult<Project>>;
+  abstract updateProject(id: string, data: Partial<Project>): Promise<Project>;
+  abstract deleteProject(id: string): Promise<void>;
+
+  // Deployment operations
+  abstract createDeployment(data: Omit<Deployment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Deployment>;
+  abstract getDeploymentById(id: string): Promise<Deployment | null>;
+  abstract listDeployments(params?: PaginationParams & { projectId?: string; status?: DeploymentStatus }): Promise<PaginatedResult<Deployment>>;
+  abstract updateDeployment(id: string, data: Partial<Deployment>): Promise<Deployment>;
+  abstract deleteDeployment(id: string): Promise<void>;
+
+  // Build operations
+  abstract createBuild(data: Omit<Build, 'id' | 'createdAt'>): Promise<Build>;
+  abstract getBuildById(id: string): Promise<Build | null>;
+  abstract listBuilds(params?: PaginationParams & { deploymentId?: string; status?: BuildStatus }): Promise<PaginatedResult<Build>>;
+  abstract updateBuild(id: string, data: Partial<Build>): Promise<Build>;
 }
+```
 
-export interface ProjectSourceProvider {
-  readonly type: 'local' | 'github' | string;
-  listProjects(): Promise<ProjectSource[]>;
-  getProject(projectId: string): Promise<ProjectSource | null>;
-  validateAccess(source: ProjectSource): Promise<boolean>;
-  getProjectPath(source: ProjectSource, targetDir?: string): Promise<string>;
-  watchChanges?(source: ProjectSource, callback: (event: ChangeEvent) => void): () => void;
-}
+**File: `src/adapters/source.ts`** (Abstract Project Source Adapter)
 
-export interface ProjectSource {
+```typescript
+import { MastraAdminBase } from '../base';
+import { MastraError, AdminErrorDomain, ErrorCategory } from '../error';
+import type { PaginationParams, PaginatedResult } from '../utils/pagination';
+
+/**
+ * Discovered project from a source provider.
+ */
+export interface DiscoveredProject {
   id: string;
   name: string;
-  type: 'local' | 'github' | string;
   path: string;
   defaultBranch?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    packageManager?: 'npm' | 'pnpm' | 'yarn' | 'bun';
+    mastraVersion?: string;
+    [key: string]: unknown;
+  };
 }
 
-export interface ChangeEvent {
+/**
+ * Filter options for listing projects.
+ */
+export interface ProjectSourceFilter {
+  /** Filter by name (partial match) */
+  name?: string;
+  /** Filter by path prefix */
+  pathPrefix?: string;
+  /** Filter by package manager */
+  packageManager?: string;
+}
+
+/**
+ * Event emitted when a project changes.
+ */
+export interface ProjectChangeEvent {
   type: 'add' | 'change' | 'unlink';
+  projectId: string;
   path: string;
 }
 
-export interface Runner {
-  build(build: Build, deployment: Deployment, project: Project): Promise<void>;
-  start(deployment: Deployment, build: Build, port: number): Promise<{ processId: number }>;
-  stop(deployment: Deployment): Promise<void>;
-  isRunning(processId: number): Promise<boolean>;
+/**
+ * Abstract base class for project source adapters.
+ * Implementations: LocalProjectSource, GitHubProjectSource, etc.
+ */
+export abstract class MastraProjectSource extends MastraAdminBase {
+  id: string;
+
+  /** The type identifier for this source (e.g., 'local', 'github') */
+  abstract readonly sourceType: string;
+
+  constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'ADMIN_SOURCE_INVALID_ID',
+        text: 'Source id must be provided and cannot be empty',
+        domain: AdminErrorDomain.ADMIN_SOURCE,
+        category: ErrorCategory.USER,
+      });
+    }
+    super({ name: 'MastraProjectSource', component: 'ADMIN_SOURCE' });
+    this.id = id;
+  }
+
+  /**
+   * List available projects with pagination and filtering.
+   */
+  abstract listProjects(params?: PaginationParams & { filter?: ProjectSourceFilter }): Promise<PaginatedResult<DiscoveredProject>>;
+
+  /**
+   * Get a specific project by its ID.
+   */
+  abstract getProject(projectId: string): Promise<DiscoveredProject | null>;
+
+  /**
+   * Validate that the source can access the project.
+   */
+  abstract validateAccess(project: DiscoveredProject): Promise<boolean>;
+
+  /**
+   * Get the project path for building.
+   * If targetDir is provided, MUST copy the project to that directory.
+   * This is critical for build isolation.
+   */
+  abstract getProjectPath(project: DiscoveredProject, targetDir?: string): Promise<string>;
+
+  /**
+   * Watch for changes to projects (optional, for dev mode).
+   * Returns an unsubscribe function.
+   */
+  watchChanges?(callback: (event: ProjectChangeEvent) => void): () => void;
+}
+```
+
+**File: `src/adapters/runner.ts`** (Abstract Runner Adapter)
+
+```typescript
+import { MastraAdminBase } from '../base';
+import { MastraError, AdminErrorDomain, ErrorCategory } from '../error';
+import type { Build, Deployment, Project } from '../types/entities';
+
+/**
+ * Build options for the runner.
+ */
+export interface BuildOptions {
+  /** Callback for build log lines */
+  onLog?: (line: string) => void;
 }
 
-export interface Router {
-  register(config: RouteConfig): Promise<void>;
-  unregister(subdomain: string): Promise<void>;
-  getRoute(subdomain: string): RouteConfig | undefined;
+/**
+ * Result of starting a server.
+ */
+export interface StartResult {
+  processId: number;
+  port: number;
 }
 
+/**
+ * Abstract base class for runner adapters.
+ * Implementations: LocalRunner, KubernetesRunner, etc.
+ */
+export abstract class MastraRunner extends MastraAdminBase {
+  id: string;
+
+  constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'ADMIN_RUNNER_INVALID_ID',
+        text: 'Runner id must be provided and cannot be empty',
+        domain: AdminErrorDomain.ADMIN_RUNNER,
+        category: ErrorCategory.USER,
+      });
+    }
+    super({ name: 'MastraRunner', component: 'ADMIN_RUNNER' });
+    this.id = id;
+  }
+
+  /**
+   * Build a project for deployment.
+   */
+  abstract build(build: Build, deployment: Deployment, project: Project, options?: BuildOptions): Promise<void>;
+
+  /**
+   * Start a deployed server.
+   */
+  abstract start(deployment: Deployment, build: Build): Promise<StartResult>;
+
+  /**
+   * Stop a running server.
+   */
+  abstract stop(deployment: Deployment): Promise<void>;
+
+  /**
+   * Check if a process is still running.
+   */
+  abstract isRunning(processId: number): Promise<boolean>;
+
+  /**
+   * Allocate an available port.
+   */
+  abstract allocatePort(): number;
+
+  /**
+   * Release an allocated port.
+   */
+  abstract releasePort(port: number): void;
+}
+```
+
+**File: `src/adapters/router.ts`** (Abstract Router Adapter)
+
+```typescript
+import { MastraAdminBase } from '../base';
+import { MastraError, AdminErrorDomain, ErrorCategory } from '../error';
+
+/**
+ * Route configuration for the reverse proxy.
+ */
 export interface RouteConfig {
   subdomain: string;
   targetPort: number;
   targetHost: string;
 }
+
+/**
+ * Abstract base class for router adapters.
+ * Implementations: LocalRouter, CloudflareRouter, etc.
+ */
+export abstract class MastraRouter extends MastraAdminBase {
+  id: string;
+
+  constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'ADMIN_ROUTER_INVALID_ID',
+        text: 'Router id must be provided and cannot be empty',
+        domain: AdminErrorDomain.ADMIN_ROUTER,
+        category: ErrorCategory.USER,
+      });
+    }
+    super({ name: 'MastraRouter', component: 'ADMIN_ROUTER' });
+    this.id = id;
+  }
+
+  /**
+   * Register a route in the reverse proxy.
+   */
+  abstract register(config: RouteConfig): Promise<void>;
+
+  /**
+   * Unregister a route from the reverse proxy.
+   */
+  abstract unregister(subdomain: string): Promise<void>;
+
+  /**
+   * Get a registered route by subdomain.
+   */
+  abstract getRoute(subdomain: string): RouteConfig | undefined;
+
+  /**
+   * List all registered routes.
+   */
+  abstract listRoutes(): RouteConfig[];
+
+  /**
+   * Start the router (e.g., start listening on a port).
+   */
+  abstract start(): Promise<void>;
+
+  /**
+   * Stop the router.
+   */
+  abstract stop(): Promise<void>;
+}
 ```
 
-**File: `src/admin.ts`**
+**File: `src/admin.ts`** (MastraAdmin Class - follows Mastra pattern)
 
 ```typescript
-import type { AdminStorage, ProjectSourceProvider, Runner, Router } from './types/providers';
+import { ConsoleLogger, LogLevel, noopLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { MastraError, AdminErrorDomain, ErrorCategory } from './error';
+import type { MastraAdminStorage } from './adapters/storage';
+import type { MastraProjectSource } from './adapters/source';
+import type { MastraRunner } from './adapters/runner';
+import type { MastraRouter } from './adapters/router';
 
-export interface MastraAdminConfig {
-  storage: AdminStorage;
-  source: ProjectSourceProvider;
-  runner: Runner;
-  router: Router;
+/**
+ * Configuration interface for initializing a MastraAdmin instance.
+ *
+ * @template TStorage - Storage adapter type
+ * @template TSource - Project source adapter type
+ * @template TRunner - Runner adapter type
+ * @template TRouter - Router adapter type
+ *
+ * @example
+ * ```typescript
+ * const admin = new MastraAdmin({
+ *   storage: new PostgresAdminStorage({ id: 'pg', connectionString: '...' }),
+ *   source: new LocalProjectSource({ id: 'local', basePaths: ['./projects'] }),
+ *   runner: new LocalRunner({ id: 'local' }),
+ *   router: new LocalRouter({ id: 'local', port: 80 }),
+ *   logger: new PinoLogger({ name: 'MastraAdmin' }),
+ * });
+ * ```
+ */
+export interface MastraAdminConfig<
+  TStorage extends MastraAdminStorage = MastraAdminStorage,
+  TSource extends MastraProjectSource = MastraProjectSource,
+  TRunner extends MastraRunner = MastraRunner,
+  TRouter extends MastraRouter = MastraRouter,
+> {
+  /**
+   * Storage adapter for persisting teams, projects, deployments, and builds.
+   */
+  storage: TStorage;
+
+  /**
+   * Project source adapter for discovering Mastra projects.
+   */
+  source: TSource;
+
+  /**
+   * Runner adapter for building and running Mastra servers.
+   */
+  runner: TRunner;
+
+  /**
+   * Router adapter for subdomain-based routing.
+   */
+  router: TRouter;
+
+  /**
+   * Logger implementation for application logging.
+   * Set to `false` to disable logging entirely.
+   * @default ConsoleLogger with INFO level
+   */
+  logger?: IMastraLogger | false;
+
+  /**
+   * Path for file storage (build logs, etc.).
+   * @default './.mastra-admin/storage'
+   */
   fileStoragePath?: string;
 }
 
-export class MastraAdmin {
-  readonly storage: AdminStorage;
-  readonly source: ProjectSourceProvider;
-  readonly runner: Runner;
-  readonly router: Router;
-  readonly fileStoragePath: string;
+/**
+ * The central orchestrator for MastraAdmin applications.
+ *
+ * MastraAdmin manages the lifecycle of teams, projects, deployments, and builds
+ * for enterprise Mastra server management.
+ *
+ * @template TStorage - Storage adapter type
+ * @template TSource - Project source adapter type
+ * @template TRunner - Runner adapter type
+ * @template TRouter - Router adapter type
+ *
+ * @example
+ * ```typescript
+ * const admin = new MastraAdmin({
+ *   storage: new PostgresAdminStorage({ id: 'pg', connectionString: '...' }),
+ *   source: new LocalProjectSource({ id: 'local', basePaths: ['./projects'] }),
+ *   runner: new LocalRunner({ id: 'local' }),
+ *   router: new LocalRouter({ id: 'local', port: 80 }),
+ * });
+ *
+ * await admin.init();
+ *
+ * // Create a team
+ * const team = await admin.getStorage().createTeam({ name: 'Engineering', slug: 'eng' });
+ *
+ * // Discover projects
+ * const projects = await admin.getSource().listProjects();
+ * ```
+ */
+export class MastraAdmin<
+  TStorage extends MastraAdminStorage = MastraAdminStorage,
+  TSource extends MastraProjectSource = MastraProjectSource,
+  TRunner extends MastraRunner = MastraRunner,
+  TRouter extends MastraRouter = MastraRouter,
+> {
+  #storage: TStorage;
+  #source: TSource;
+  #runner: TRunner;
+  #router: TRouter;
+  #logger: IMastraLogger;
+  #fileStoragePath: string;
+  #initialized = false;
 
-  constructor(config: MastraAdminConfig) {
-    this.storage = config.storage;
-    this.source = config.source;
-    this.runner = config.runner;
-    this.router = config.router;
-    this.fileStoragePath = config.fileStoragePath ?? './.mastra-admin/storage';
+  constructor(config: MastraAdminConfig<TStorage, TSource, TRunner, TRouter>) {
+    // Validate required adapters
+    if (!config.storage) {
+      throw new MastraError({
+        id: 'ADMIN_CONFIG_MISSING_STORAGE',
+        text: 'MastraAdmin requires a storage adapter',
+        domain: AdminErrorDomain.ADMIN,
+        category: ErrorCategory.USER,
+      });
+    }
+    if (!config.source) {
+      throw new MastraError({
+        id: 'ADMIN_CONFIG_MISSING_SOURCE',
+        text: 'MastraAdmin requires a source adapter',
+        domain: AdminErrorDomain.ADMIN,
+        category: ErrorCategory.USER,
+      });
+    }
+    if (!config.runner) {
+      throw new MastraError({
+        id: 'ADMIN_CONFIG_MISSING_RUNNER',
+        text: 'MastraAdmin requires a runner adapter',
+        domain: AdminErrorDomain.ADMIN,
+        category: ErrorCategory.USER,
+      });
+    }
+    if (!config.router) {
+      throw new MastraError({
+        id: 'ADMIN_CONFIG_MISSING_ROUTER',
+        text: 'MastraAdmin requires a router adapter',
+        domain: AdminErrorDomain.ADMIN,
+        category: ErrorCategory.USER,
+      });
+    }
+
+    // Initialize logger
+    if (config.logger === false) {
+      this.#logger = noopLogger;
+    } else if (config.logger) {
+      this.#logger = config.logger;
+    } else {
+      const levelOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
+      this.#logger = new ConsoleLogger({ name: 'MastraAdmin', level: levelOnEnv });
+    }
+
+    // Store adapters
+    this.#storage = config.storage;
+    this.#source = config.source;
+    this.#runner = config.runner;
+    this.#router = config.router;
+    this.#fileStoragePath = config.fileStoragePath ?? './.mastra-admin/storage';
+
+    // Set logger on adapters
+    this.#storage.__setLogger?.(this.#logger);
+    this.#source.__setLogger?.(this.#logger);
+    this.#runner.__setLogger?.(this.#logger);
+    this.#router.__setLogger?.(this.#logger);
+
+    this.#logger.info('MastraAdmin instance created');
   }
 
+  /**
+   * Initialize MastraAdmin and all adapters.
+   * Must be called before using the admin instance.
+   */
   async init(): Promise<void> {
-    await this.storage.init();
+    if (this.#initialized) {
+      this.#logger.warn('MastraAdmin already initialized');
+      return;
+    }
+
+    this.#logger.info('Initializing MastraAdmin...');
+
+    try {
+      await this.#storage.init();
+      this.#logger.debug('Storage initialized');
+
+      await this.#router.start();
+      this.#logger.debug('Router started');
+
+      this.#initialized = true;
+      this.#logger.info('MastraAdmin initialized successfully');
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'ADMIN_INIT_FAILED',
+          text: 'Failed to initialize MastraAdmin',
+          domain: AdminErrorDomain.ADMIN,
+          category: ErrorCategory.SYSTEM,
+        },
+        error,
+      );
+      this.#logger.trackException(mastraError);
+      throw mastraError;
+    }
+  }
+
+  /**
+   * Shutdown MastraAdmin and all adapters.
+   */
+  async close(): Promise<void> {
+    this.#logger.info('Shutting down MastraAdmin...');
+
+    try {
+      await this.#router.stop();
+      await this.#storage.close();
+      this.#initialized = false;
+      this.#logger.info('MastraAdmin shutdown complete');
+    } catch (error) {
+      this.#logger.error('Error during shutdown', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Get the storage adapter.
+   */
+  getStorage(): TStorage {
+    return this.#storage;
+  }
+
+  /**
+   * Get the project source adapter.
+   */
+  getSource(): TSource {
+    return this.#source;
+  }
+
+  /**
+   * Get the runner adapter.
+   */
+  getRunner(): TRunner {
+    return this.#runner;
+  }
+
+  /**
+   * Get the router adapter.
+   */
+  getRouter(): TRouter {
+    return this.#router;
+  }
+
+  /**
+   * Get the logger instance.
+   */
+  getLogger(): IMastraLogger {
+    return this.#logger;
+  }
+
+  /**
+   * Get the file storage path.
+   */
+  getFileStoragePath(): string {
+    return this.#fileStoragePath;
+  }
+
+  /**
+   * Check if MastraAdmin has been initialized.
+   */
+  isInitialized(): boolean {
+    return this.#initialized;
   }
 
   async close(): Promise<void> {
@@ -371,35 +934,54 @@ stores/admin-pg/
 └── docker-compose.yaml
 ```
 
-**File: `src/storage.ts`**
+**File: `src/storage.ts`** (Extends MastraAdminStorage)
 
 ```typescript
 import { Pool } from 'pg';
-import type { AdminStorage, TeamStorage, ProjectStorage, DeploymentStorage, BuildStorage } from '@mastra/admin';
-import { TeamsPostgres } from './domains/teams';
-import { ProjectsPostgres } from './domains/projects';
-import { DeploymentsPostgres } from './domains/deployments';
-import { BuildsPostgres } from './domains/builds';
+import {
+  MastraAdminStorage,
+  type Team,
+  type Project,
+  type Deployment,
+  type Build,
+  type DeploymentStatus,
+  type BuildStatus,
+  type PaginationParams,
+  type PaginatedResult,
+  normalizePerPage,
+  calculateOffset,
+  safeArray,
+} from '@mastra/admin';
 import { runMigrations } from './migrations';
 
 export interface PostgresAdminStorageConfig {
+  id: string;
   connectionString?: string;
   pool?: Pool;
   schemaName?: string;
 }
 
-export class PostgresAdminStorage implements AdminStorage {
-  readonly teams: TeamStorage;
-  readonly projects: ProjectStorage;
-  readonly deployments: DeploymentStorage;
-  readonly builds: BuildStorage;
-
+/**
+ * PostgreSQL implementation of MastraAdminStorage.
+ *
+ * @example
+ * ```typescript
+ * const storage = new PostgresAdminStorage({
+ *   id: 'pg-admin',
+ *   connectionString: 'postgresql://...',
+ * });
+ * await storage.init();
+ * ```
+ */
+export class PostgresAdminStorage extends MastraAdminStorage {
   #pool: Pool;
   #ownsPool: boolean;
   #schema: string;
   #initialized = false;
 
   constructor(config: PostgresAdminStorageConfig) {
+    super({ id: config.id });
+
     if (config.pool) {
       this.#pool = config.pool;
       this.#ownsPool = false;
@@ -411,16 +993,12 @@ export class PostgresAdminStorage implements AdminStorage {
     }
 
     this.#schema = config.schemaName ?? 'mastra_admin';
-
-    const domainConfig = { pool: this.#pool, schema: this.#schema };
-    this.teams = new TeamsPostgres(domainConfig);
-    this.projects = new ProjectsPostgres(domainConfig);
-    this.deployments = new DeploymentsPostgres(domainConfig);
-    this.builds = new BuildsPostgres(domainConfig);
   }
 
   async init(): Promise<void> {
     if (this.#initialized) return;
+
+    this.logger?.info('Initializing PostgresAdminStorage...');
 
     // Create schema if not exists
     await this.#pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.#schema}`);
@@ -429,6 +1007,7 @@ export class PostgresAdminStorage implements AdminStorage {
     await runMigrations(this.#pool, this.#schema);
 
     this.#initialized = true;
+    this.logger?.info('PostgresAdminStorage initialized');
   }
 
   async close(): Promise<void> {
@@ -439,6 +1018,312 @@ export class PostgresAdminStorage implements AdminStorage {
 
   get pool(): Pool {
     return this.#pool;
+  }
+
+  // ============ Team Operations ============
+
+  async createTeam(data: Omit<Team, 'id' | 'createdAt' | 'updatedAt'>): Promise<Team> {
+    const result = await this.#pool.query(
+      `INSERT INTO ${this.#schema}.teams (name, slug) VALUES ($1, $2) RETURNING *`,
+      [data.name, data.slug]
+    );
+    return this.mapTeamRow(result.rows[0]);
+  }
+
+  async getTeamById(id: string): Promise<Team | null> {
+    const result = await this.#pool.query(
+      `SELECT * FROM ${this.#schema}.teams WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] ? this.mapTeamRow(result.rows[0]) : null;
+  }
+
+  async getTeamBySlug(slug: string): Promise<Team | null> {
+    const result = await this.#pool.query(
+      `SELECT * FROM ${this.#schema}.teams WHERE slug = $1`,
+      [slug]
+    );
+    return result.rows[0] ? this.mapTeamRow(result.rows[0]) : null;
+  }
+
+  async listTeams(params?: PaginationParams): Promise<PaginatedResult<Team>> {
+    const perPage = normalizePerPage(params?.perPage, 100);
+    const page = params?.page ?? 0;
+    const offset = calculateOffset(page, perPage);
+
+    const [countResult, dataResult] = await Promise.all([
+      this.#pool.query(`SELECT COUNT(*) FROM ${this.#schema}.teams`),
+      this.#pool.query(
+        `SELECT * FROM ${this.#schema}.teams ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+        [perPage, offset]
+      ),
+    ]);
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    const items = dataResult.rows.map(this.mapTeamRow);
+
+    return {
+      items,
+      total,
+      page,
+      perPage: params?.perPage === false ? false : perPage,
+      hasMore: offset + items.length < total,
+    };
+  }
+
+  async updateTeam(id: string, data: Partial<Team>): Promise<Team> {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
+
+    if (data.name !== undefined) {
+      fields.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.slug !== undefined) {
+      fields.push(`slug = $${paramIndex++}`);
+      values.push(data.slug);
+    }
+
+    if (fields.length === 0) {
+      const existing = await this.getTeamById(id);
+      if (!existing) throw new Error('Team not found');
+      return existing;
+    }
+
+    values.push(id);
+    const result = await this.#pool.query(
+      `UPDATE ${this.#schema}.teams SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    );
+    return this.mapTeamRow(result.rows[0]);
+  }
+
+  async deleteTeam(id: string): Promise<void> {
+    await this.#pool.query(`DELETE FROM ${this.#schema}.teams WHERE id = $1`, [id]);
+  }
+
+  // ============ Project Operations ============
+
+  async createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> {
+    const result = await this.#pool.query(
+      `INSERT INTO ${this.#schema}.projects
+       (team_id, name, slug, source_type, source_config, default_branch, env_vars)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        data.teamId,
+        data.name,
+        data.slug,
+        data.sourceType,
+        JSON.stringify(data.sourceConfig),
+        data.defaultBranch,
+        JSON.stringify(data.envVars),
+      ]
+    );
+    return this.mapProjectRow(result.rows[0]);
+  }
+
+  async getProjectById(id: string): Promise<Project | null> {
+    const result = await this.#pool.query(
+      `SELECT * FROM ${this.#schema}.projects WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] ? this.mapProjectRow(result.rows[0]) : null;
+  }
+
+  async getProjectBySlug(teamId: string, slug: string): Promise<Project | null> {
+    const result = await this.#pool.query(
+      `SELECT * FROM ${this.#schema}.projects WHERE team_id = $1 AND slug = $2`,
+      [teamId, slug]
+    );
+    return result.rows[0] ? this.mapProjectRow(result.rows[0]) : null;
+  }
+
+  async listProjects(params?: PaginationParams & { teamId?: string }): Promise<PaginatedResult<Project>> {
+    const perPage = normalizePerPage(params?.perPage, 100);
+    const page = params?.page ?? 0;
+    const offset = calculateOffset(page, perPage);
+
+    const conditions: string[] = [];
+    const countParams: unknown[] = [];
+    const queryParams: unknown[] = [];
+    let paramIndex = 1;
+
+    if (params?.teamId) {
+      conditions.push(`team_id = $${paramIndex++}`);
+      countParams.push(params.teamId);
+      queryParams.push(params.teamId);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [countResult, dataResult] = await Promise.all([
+      this.#pool.query(`SELECT COUNT(*) FROM ${this.#schema}.projects ${where}`, countParams),
+      this.#pool.query(
+        `SELECT * FROM ${this.#schema}.projects ${where} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...queryParams, perPage, offset]
+      ),
+    ]);
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    const items = dataResult.rows.map(this.mapProjectRow.bind(this));
+
+    return {
+      items,
+      total,
+      page,
+      perPage: params?.perPage === false ? false : perPage,
+      hasMore: offset + items.length < total,
+    };
+  }
+
+  async updateProject(id: string, data: Partial<Project>): Promise<Project> {
+    // Implementation similar to updateTeam
+    const result = await this.#pool.query(
+      `UPDATE ${this.#schema}.projects SET
+       name = COALESCE($1, name),
+       slug = COALESCE($2, slug),
+       source_type = COALESCE($3, source_type),
+       source_config = COALESCE($4, source_config),
+       default_branch = COALESCE($5, default_branch),
+       env_vars = COALESCE($6, env_vars)
+       WHERE id = $7 RETURNING *`,
+      [
+        data.name,
+        data.slug,
+        data.sourceType,
+        data.sourceConfig ? JSON.stringify(data.sourceConfig) : null,
+        data.defaultBranch,
+        data.envVars ? JSON.stringify(data.envVars) : null,
+        id,
+      ]
+    );
+    return this.mapProjectRow(result.rows[0]);
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.#pool.query(`DELETE FROM ${this.#schema}.projects WHERE id = $1`, [id]);
+  }
+
+  // ============ Deployment & Build Operations (similar pattern) ============
+  // ... (abbreviated for length - follow same pattern as above)
+
+  async createDeployment(data: Omit<Deployment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Deployment> {
+    const result = await this.#pool.query(
+      `INSERT INTO ${this.#schema}.deployments
+       (project_id, type, branch, slug, status, env_var_overrides)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [data.projectId, data.type, data.branch, data.slug, data.status, JSON.stringify(data.envVarOverrides)]
+    );
+    return this.mapDeploymentRow(result.rows[0]);
+  }
+
+  async getDeploymentById(id: string): Promise<Deployment | null> {
+    const result = await this.#pool.query(`SELECT * FROM ${this.#schema}.deployments WHERE id = $1`, [id]);
+    return result.rows[0] ? this.mapDeploymentRow(result.rows[0]) : null;
+  }
+
+  async listDeployments(params?: PaginationParams & { projectId?: string; status?: DeploymentStatus }): Promise<PaginatedResult<Deployment>> {
+    // Implementation follows listProjects pattern with additional status filter
+    const perPage = normalizePerPage(params?.perPage, 100);
+    const page = params?.page ?? 0;
+    const offset = calculateOffset(page, perPage);
+    // ... query implementation
+    return { items: [], total: 0, page, perPage, hasMore: false }; // Placeholder
+  }
+
+  async updateDeployment(id: string, data: Partial<Deployment>): Promise<Deployment> {
+    // Similar to updateProject
+    const result = await this.#pool.query(`SELECT * FROM ${this.#schema}.deployments WHERE id = $1`, [id]);
+    return this.mapDeploymentRow(result.rows[0]);
+  }
+
+  async deleteDeployment(id: string): Promise<void> {
+    await this.#pool.query(`DELETE FROM ${this.#schema}.deployments WHERE id = $1`, [id]);
+  }
+
+  async createBuild(data: Omit<Build, 'id' | 'createdAt'>): Promise<Build> {
+    const result = await this.#pool.query(
+      `INSERT INTO ${this.#schema}.builds (deployment_id, trigger, status, queued_at)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [data.deploymentId, data.trigger, data.status, data.queuedAt]
+    );
+    return this.mapBuildRow(result.rows[0]);
+  }
+
+  async getBuildById(id: string): Promise<Build | null> {
+    const result = await this.#pool.query(`SELECT * FROM ${this.#schema}.builds WHERE id = $1`, [id]);
+    return result.rows[0] ? this.mapBuildRow(result.rows[0]) : null;
+  }
+
+  async listBuilds(params?: PaginationParams & { deploymentId?: string; status?: BuildStatus }): Promise<PaginatedResult<Build>> {
+    // Implementation follows same pattern
+    return { items: [], total: 0, page: 0, perPage: 100, hasMore: false }; // Placeholder
+  }
+
+  async updateBuild(id: string, data: Partial<Build>): Promise<Build> {
+    const result = await this.#pool.query(`SELECT * FROM ${this.#schema}.builds WHERE id = $1`, [id]);
+    return this.mapBuildRow(result.rows[0]);
+  }
+
+  // ============ Row Mappers ============
+
+  private mapTeamRow(row: Record<string, unknown>): Team {
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      slug: row.slug as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+
+  private mapProjectRow(row: Record<string, unknown>): Project {
+    return {
+      id: row.id as string,
+      teamId: row.team_id as string,
+      name: row.name as string,
+      slug: row.slug as string,
+      sourceType: row.source_type as 'local' | 'github',
+      sourceConfig: row.source_config as Project['sourceConfig'],
+      defaultBranch: row.default_branch as string,
+      envVars: safeArray(row.env_vars),
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+
+  private mapDeploymentRow(row: Record<string, unknown>): Deployment {
+    return {
+      id: row.id as string,
+      projectId: row.project_id as string,
+      type: row.type as Deployment['type'],
+      branch: row.branch as string,
+      slug: row.slug as string,
+      status: row.status as DeploymentStatus,
+      currentBuildId: row.current_build_id as string | null,
+      publicUrl: row.public_url as string | null,
+      port: row.port as number | null,
+      processId: row.process_id as number | null,
+      envVarOverrides: safeArray(row.env_var_overrides),
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+
+  private mapBuildRow(row: Record<string, unknown>): Build {
+    return {
+      id: row.id as string,
+      deploymentId: row.deployment_id as string,
+      trigger: row.trigger as Build['trigger'],
+      status: row.status as BuildStatus,
+      logPath: row.log_path as string | null,
+      queuedAt: new Date(row.queued_at as string),
+      startedAt: row.started_at ? new Date(row.started_at as string) : null,
+      completedAt: row.completed_at ? new Date(row.completed_at as string) : null,
+      errorMessage: row.error_message as string | null,
+      createdAt: new Date(row.created_at as string),
+    };
   }
 }
 ```
@@ -649,29 +1534,56 @@ sources/local/
 └── vitest.config.ts
 ```
 
-**File: `src/provider.ts`**
+**File: `src/provider.ts`** (Extends MastraProjectSource)
 
 ```typescript
 import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { ProjectSourceProvider, ProjectSource, ChangeEvent } from '@mastra/admin';
+import {
+  MastraProjectSource,
+  type DiscoveredProject,
+  type ProjectSourceFilter,
+  type ProjectChangeEvent,
+  type PaginationParams,
+  type PaginatedResult,
+  normalizePerPage,
+  calculateOffset,
+} from '@mastra/admin';
 import { DirectoryScanner } from './scanner';
 import { MastraProjectDetector } from './detector';
 import { copyDirectory } from './utils';
 import type { LocalProjectSourceConfig } from './types';
 
-export class LocalProjectSource implements ProjectSourceProvider {
-  readonly type = 'local' as const;
+/**
+ * Local filesystem implementation of MastraProjectSource.
+ * Discovers Mastra projects in configured directories.
+ *
+ * @example
+ * ```typescript
+ * const source = new LocalProjectSource({
+ *   id: 'local',
+ *   basePaths: ['/home/user/projects', '/opt/mastra'],
+ *   maxDepth: 3,
+ * });
+ *
+ * const projects = await source.listProjects({ perPage: 10 });
+ * ```
+ */
+export class LocalProjectSource extends MastraProjectSource {
+  readonly sourceType = 'local';
 
   #config: LocalProjectSourceConfig;
   #scanner: DirectoryScanner;
   #detector: MastraProjectDetector;
-  #cache: Map<string, ProjectSource> = new Map();
+  #cache: Map<string, DiscoveredProject> = new Map();
   #cacheExpiry: number = 0;
   #cacheTtlMs: number = 30000; // 30 seconds
 
   constructor(config: LocalProjectSourceConfig) {
+    super({ id: config.id });
+
     this.#config = {
+      id: config.id,
       basePaths: config.basePaths,
       include: config.include ?? ['*'],
       exclude: config.exclude ?? ['node_modules', '.git', 'dist', '.next', '.mastra'],
@@ -683,13 +1595,110 @@ export class LocalProjectSource implements ProjectSourceProvider {
     this.#detector = new MastraProjectDetector();
   }
 
-  async listProjects(): Promise<ProjectSource[]> {
-    // Return cached if valid
-    if (Date.now() < this.#cacheExpiry && this.#cache.size > 0) {
-      return Array.from(this.#cache.values());
+  /**
+   * List available projects with pagination and filtering.
+   */
+  async listProjects(
+    params?: PaginationParams & { filter?: ProjectSourceFilter }
+  ): Promise<PaginatedResult<DiscoveredProject>> {
+    // Refresh cache if expired
+    if (Date.now() >= this.#cacheExpiry || this.#cache.size === 0) {
+      await this.refreshCache();
     }
 
-    const projects: ProjectSource[] = [];
+    let projects = Array.from(this.#cache.values());
+
+    // Apply filters
+    if (params?.filter) {
+      const { name, pathPrefix, packageManager } = params.filter;
+
+      if (name) {
+        const lowerName = name.toLowerCase();
+        projects = projects.filter(p => p.name.toLowerCase().includes(lowerName));
+      }
+
+      if (pathPrefix) {
+        projects = projects.filter(p => p.path.startsWith(pathPrefix));
+      }
+
+      if (packageManager) {
+        projects = projects.filter(p => p.metadata?.packageManager === packageManager);
+      }
+    }
+
+    // Apply pagination
+    const total = projects.length;
+    const perPage = normalizePerPage(params?.perPage, 100);
+    const page = params?.page ?? 0;
+    const offset = calculateOffset(page, perPage);
+
+    const items = projects.slice(offset, offset + perPage);
+
+    return {
+      items,
+      total,
+      page,
+      perPage: params?.perPage === false ? false : perPage,
+      hasMore: offset + items.length < total,
+    };
+  }
+
+  /**
+   * Get a specific project by ID.
+   */
+  async getProject(projectId: string): Promise<DiscoveredProject | null> {
+    // Refresh cache if expired
+    if (Date.now() >= this.#cacheExpiry) {
+      await this.refreshCache();
+    }
+    return this.#cache.get(projectId) ?? null;
+  }
+
+  /**
+   * Validate that the source can access the project.
+   */
+  async validateAccess(project: DiscoveredProject): Promise<boolean> {
+    return this.#detector.detect(project.path);
+  }
+
+  /**
+   * Get project path - MUST copy to targetDir if provided.
+   * This is critical: builds need isolated directories.
+   */
+  async getProjectPath(project: DiscoveredProject, targetDir?: string): Promise<string> {
+    if (!targetDir) {
+      // No target dir - return source path (for validation/listing only)
+      return project.path;
+    }
+
+    this.logger?.info(`Copying project ${project.name} to ${targetDir}`);
+
+    // MUST copy source to target directory for builds
+    await copyDirectory(project.path, targetDir, {
+      exclude: this.#config.exclude,
+    });
+
+    return targetDir;
+  }
+
+  /**
+   * Watch for changes to projects (optional, for dev mode).
+   */
+  watchChanges?(callback: (event: ProjectChangeEvent) => void): () => void {
+    if (!this.#config.watchChanges) {
+      return () => {};
+    }
+    // TODO: Implement file watching with chokidar or similar
+    this.logger?.warn('Project watching not yet implemented');
+    return () => {};
+  }
+
+  /**
+   * Refresh the internal cache by scanning directories.
+   */
+  private async refreshCache(): Promise<void> {
+    this.logger?.debug('Refreshing project cache...');
+    this.#cache.clear();
 
     for (const basePath of this.#config.basePaths) {
       const directories = await this.#scanner.scan(basePath);
@@ -698,65 +1707,50 @@ export class LocalProjectSource implements ProjectSourceProvider {
         const isMastraProject = await this.#detector.detect(dir);
         if (isMastraProject) {
           const metadata = await this.#detector.getMetadata(dir);
-          const project: ProjectSource = {
+          const project: DiscoveredProject = {
             id: this.generateId(dir),
             name: metadata.name ?? basename(dir),
-            type: 'local',
             path: dir,
             defaultBranch: 'main',
             metadata,
           };
-          projects.push(project);
           this.#cache.set(project.id, project);
         }
       }
     }
 
     this.#cacheExpiry = Date.now() + this.#cacheTtlMs;
-    return projects;
-  }
-
-  async getProject(projectId: string): Promise<ProjectSource | null> {
-    // Refresh cache if needed
-    if (Date.now() >= this.#cacheExpiry) {
-      await this.listProjects();
-    }
-    return this.#cache.get(projectId) ?? null;
-  }
-
-  async validateAccess(source: ProjectSource): Promise<boolean> {
-    return this.#detector.detect(source.path);
+    this.logger?.debug(`Found ${this.#cache.size} Mastra projects`);
   }
 
   /**
-   * Get project path - MUST copy to targetDir if provided.
-   * This is critical: builds need isolated directories.
+   * Generate a stable ID from a path.
    */
-  async getProjectPath(source: ProjectSource, targetDir?: string): Promise<string> {
-    if (!targetDir) {
-      // No target dir - return source path (for validation/listing only)
-      return source.path;
-    }
-
-    // MUST copy source to target directory for builds
-    await copyDirectory(source.path, targetDir, {
-      exclude: this.#config.exclude,
-    });
-
-    return targetDir;
-  }
-
-  watchChanges?(source: ProjectSource, callback: (event: ChangeEvent) => void): () => void {
-    if (!this.#config.watchChanges) {
-      return () => {};
-    }
-    // TODO: Implement file watching with chokidar or similar
-    return () => {};
-  }
-
   private generateId(path: string): string {
     return createHash('sha256').update(path).digest('hex').substring(0, 16);
   }
+}
+```
+
+**File: `src/types.ts`**
+
+```typescript
+/**
+ * Configuration for LocalProjectSource.
+ */
+export interface LocalProjectSourceConfig {
+  /** Unique identifier for this source */
+  id: string;
+  /** Directories to scan for Mastra projects */
+  basePaths: string[];
+  /** Glob patterns to include (default: ['*']) */
+  include?: string[];
+  /** Patterns to exclude (default: ['node_modules', '.git', 'dist', '.next', '.mastra']) */
+  exclude?: string[];
+  /** Maximum depth to scan (default: 3) */
+  maxDepth?: number;
+  /** Enable file watching for dev mode (default: false) */
+  watchChanges?: boolean;
 }
 ```
 
@@ -1080,31 +2074,55 @@ runners/local/
 └── vitest.config.ts
 ```
 
-**File: `src/runner.ts`**
+**File: `src/runner.ts`** (Extends MastraRunner)
 
 ```typescript
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { Runner, Build, Deployment, Project, ProjectSourceProvider } from '@mastra/admin';
+import {
+  MastraRunner,
+  type MastraProjectSource,
+  type Build,
+  type Deployment,
+  type Project,
+  type BuildOptions,
+  type StartResult,
+} from '@mastra/admin';
 import { ProjectBuilder } from './builder';
 import { ProcessManager } from './process-manager';
 import { PortAllocator } from './port-allocator';
 
 export interface LocalRunnerConfig {
-  source: ProjectSourceProvider;
+  id: string;
+  source: MastraProjectSource;
   buildDir?: string;
   portRange?: { min: number; max: number };
 }
 
-export class LocalRunner implements Runner {
-  #source: ProjectSourceProvider;
+/**
+ * Local process-based implementation of MastraRunner.
+ * Builds and runs Mastra servers as local Node.js processes.
+ *
+ * @example
+ * ```typescript
+ * const runner = new LocalRunner({
+ *   id: 'local',
+ *   source: localProjectSource,
+ *   portRange: { min: 4100, max: 4199 },
+ * });
+ * ```
+ */
+export class LocalRunner extends MastraRunner {
+  #source: MastraProjectSource;
   #buildDir: string;
   #builder: ProjectBuilder;
   #processManager: ProcessManager;
   #portAllocator: PortAllocator;
 
   constructor(config: LocalRunnerConfig) {
+    super({ id: config.id });
+
     this.#source = config.source;
     this.#buildDir = config.buildDir ?? join(tmpdir(), 'mastra', 'builds');
     this.#builder = new ProjectBuilder();
@@ -1112,9 +2130,11 @@ export class LocalRunner implements Runner {
     this.#portAllocator = new PortAllocator(config.portRange ?? { min: 4100, max: 4199 });
   }
 
-  async build(build: Build, deployment: Deployment, project: Project): Promise<void> {
+  async build(build: Build, deployment: Deployment, project: Project, options?: BuildOptions): Promise<void> {
     const buildPath = join(this.#buildDir, build.id);
     await mkdir(buildPath, { recursive: true });
+
+    this.logger?.info(`Building project ${project.name} for deployment ${deployment.slug}`);
 
     // Get project source and copy to build directory
     const projectSource = await this.#source.getProject(project.sourceConfig.sourceId as string);
@@ -1124,15 +2144,19 @@ export class LocalRunner implements Runner {
 
     await this.#source.getProjectPath(projectSource, buildPath);
 
-    // Run build
+    // Run build with log callback
     await this.#builder.build(buildPath, {
       packageManager: projectSource.metadata?.packageManager as string ?? 'npm',
+      onLog: options?.onLog,
     });
+
+    this.logger?.info(`Build completed for deployment ${deployment.slug}`);
   }
 
-  async start(deployment: Deployment, build: Build, port: number): Promise<{ processId: number }> {
+  async start(deployment: Deployment, build: Build): Promise<StartResult> {
     const buildPath = join(this.#buildDir, build.id);
     const observabilityDir = join(buildPath, 'observability');
+    const port = this.allocatePort();
 
     // Create observability directories
     await mkdir(join(observabilityDir, 'spans'), { recursive: true });
