@@ -322,11 +322,11 @@ export async function handleAutoVersioning<TAgent>(
 // ============================================================================
 
 /**
- * GET /api/stored/agents/:agentId/versions - List all versions for an agent
+ * GET /stored/agents/:agentId/versions - List all versions for an agent
  */
 export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions',
+  path: '/stored/agents/:agentId/versions',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: listVersionsQuerySchema,
@@ -368,11 +368,11 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions - Create a new version snapshot
+ * POST /stored/agents/:agentId/versions - Create a new version snapshot
  */
 export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions',
+  path: '/stored/agents/:agentId/versions',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   bodySchema: createVersionBodySchema,
@@ -432,11 +432,11 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions/:versionId - Get a specific version
+ * GET /stored/agents/:agentId/versions/:versionId - Get a specific version
  */
 export const GET_AGENT_VERSION_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions/:versionId',
+  path: '/stored/agents/:agentId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: getVersionResponseSchema,
@@ -475,11 +475,11 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions/:versionId/activate - Set a version as active
+ * POST /stored/agents/:agentId/versions/:versionId/activate - Set a version as active
  */
 export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions/:versionId/activate',
+  path: '/stored/agents/:agentId/versions/:versionId/activate',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: activateVersionResponseSchema,
@@ -532,11 +532,11 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents/:agentId/versions/:versionId/restore - Restore agent to a version
+ * POST /stored/agents/:agentId/versions/:versionId/restore - Restore agent to a version
  */
 export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents/:agentId/versions/:versionId/restore',
+  path: '/stored/agents/:agentId/versions/:versionId/restore',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: restoreVersionResponseSchema,
@@ -634,11 +634,11 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:agentId/versions/:versionId - Delete a version
+ * DELETE /stored/agents/:agentId/versions/:versionId - Delete a version
  */
 export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:agentId/versions/:versionId',
+  path: '/stored/agents/:agentId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: deleteVersionResponseSchema,
@@ -693,11 +693,11 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:agentId/versions/compare - Compare two versions
+ * GET /stored/agents/:agentId/versions/compare - Compare two versions
  */
 export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:agentId/versions/compare',
+  path: '/stored/agents/:agentId/versions/compare',
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: compareVersionsQuerySchema,
