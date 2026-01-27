@@ -3,7 +3,7 @@
 Once you have the configuration set up, you need to initialize the MCP tools:
 
 ```typescript
-const mcpTools = await mcp.listTools();
+const mcpTools = await mcp.listTools()
 ```
 
 This asynchronous call fetches all the available tools from the configured MCP servers. The `listTools()` method connects to each server specified in your configuration, retrieves the available tools, and returns them in a format that can be used by your Mastra agent.

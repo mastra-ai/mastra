@@ -32,7 +32,7 @@ import type { OutputSchema } from '../stream';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Workspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
@@ -229,7 +229,7 @@ export interface AgentConfig<
   /**
    * Voice settings for speech input and output.
    */
-  voice?: CompositeVoice;
+  voice?: MastraVoice;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

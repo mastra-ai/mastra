@@ -1,5 +1,5 @@
 import { MastraStorage, TraceStatus } from '@mastra/core/storage';
-import type { ObservabilityStorage, SpanRecord } from '@mastra/core/storage';
+import type { ObservabilityStorage, SpanRecord, TraceSpan } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSpan, createChildSpan, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 
@@ -649,6 +649,62 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
           expect(result.spans.length).toBe(1);
           expect(result.spans[0]!.traceId).toBe('trace-3');
+        });
+      });
+
+      describe('status field in response', () => {
+        beforeEach(async () => {
+          await createMultipleTraces();
+        });
+
+        it('should include status field on all returned spans', async () => {
+          const result = await observabilityStorage.listTraces({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.spans.length).toBe(4);
+          result.spans.forEach((span: TraceSpan) => {
+            expect(span.status).toBeDefined();
+            expect([TraceStatus.SUCCESS, TraceStatus.ERROR, TraceStatus.RUNNING]).toContain(span.status);
+          });
+        });
+
+        it('should return SUCCESS status for completed spans without error', async () => {
+          const result = await observabilityStorage.listTraces({
+            filters: { status: TraceStatus.SUCCESS },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          result.spans.forEach((span: TraceSpan) => {
+            expect(span.status).toBe(TraceStatus.SUCCESS);
+            expect(span.endedAt).not.toBeNull();
+            expect(span.error).toBeNull();
+          });
+        });
+
+        it('should return ERROR status for spans with error', async () => {
+          const result = await observabilityStorage.listTraces({
+            filters: { status: TraceStatus.ERROR },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.spans.length).toBe(1);
+          const span = result.spans[0]! as TraceSpan;
+          expect(span.status).toBe(TraceStatus.ERROR);
+          expect(span.error).not.toBeNull();
+        });
+
+        it('should return RUNNING status for spans without endedAt', async () => {
+          const result = await observabilityStorage.listTraces({
+            filters: { status: TraceStatus.RUNNING },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.spans.length).toBe(1);
+          const span = result.spans[0]! as TraceSpan;
+          expect(span.status).toBe(TraceStatus.RUNNING);
+          expect(span.endedAt).toBeNull();
+          expect(span.error).toBeNull();
         });
       });
 

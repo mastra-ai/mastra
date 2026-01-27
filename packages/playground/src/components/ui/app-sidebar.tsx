@@ -49,6 +49,7 @@ const mainNavigation: NavSection[] = [
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'MCP Servers',
