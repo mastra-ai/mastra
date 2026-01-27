@@ -6,11 +6,11 @@
  *
  * @example
  * ```typescript
- * // Auto-created by Agent when workspace has skillsPaths
+ * // Auto-created by Agent when workspace has skills
  * const agent = new Agent({
  *   workspace: new Workspace({
  *     filesystem: new LocalFilesystem({ basePath: './data' }),
- *     skillsPaths: ['/skills'],
+ *     skills: ['/skills'],
  *   }),
  * });
  *

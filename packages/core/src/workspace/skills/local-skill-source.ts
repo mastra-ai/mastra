@@ -10,10 +10,10 @@
  *   basePath: process.cwd(),
  * });
  *
- * // skillsPaths are relative to basePath
- * const skills = new WorkspaceSkillsImpl({
+ * // skills paths are relative to basePath
+ * const skillsImpl = new WorkspaceSkillsImpl({
  *   source,
- *   skillsPaths: ['./skills', './node_modules/@company/skills'],
+ *   skills: ['./skills', './node_modules/@company/skills'],
  * });
  * ```
  */
