@@ -5,6 +5,7 @@ import { createClickTool } from './tools/click.js';
 import { createNavigateTool } from './tools/navigate.js';
 import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollTool } from './tools/scroll.js';
+import { createSelectTool } from './tools/select.js';
 import { createSnapshotTool } from './tools/snapshot.js';
 import { createTypeTool } from './tools/type.js';
 import type { BrowserToolsetConfig } from './types.js';
@@ -38,6 +39,9 @@ export class BrowserToolset {
   /** Internal BrowserManager instance, lazily initialized */
   private browserManager: BrowserManager | null = null;
 
+  /** Promise for in-progress browser launch - prevents concurrent launches */
+  private launchPromise: Promise<BrowserManager> | null = null;
+
   /** Resolved configuration with defaults */
   private config: Required<BrowserToolsetConfig>;
 
@@ -63,6 +67,7 @@ export class BrowserToolset {
       browser_snapshot: createSnapshotTool(() => this.getBrowser()),
       browser_click: createClickTool(() => this.getBrowser(), this.config.timeout),
       browser_type: createTypeTool(() => this.getBrowser(), this.config.timeout),
+      browser_select: createSelectTool(() => this.getBrowser(), this.config.timeout),
       browser_scroll: createScrollTool(() => this.getBrowser()),
       browser_screenshot: createScreenshotTool(() => this.getBrowser(), 30_000), // 30s timeout for screenshots
     };
@@ -70,20 +75,54 @@ export class BrowserToolset {
 
   /**
    * Lazily initializes and returns the browser instance.
-   * Browser is only launched on first tool use, not at construction.
+   * Uses Singleton Promise pattern to prevent concurrent launches.
    *
    * @returns Promise resolving to the BrowserManager instance
    */
   private async getBrowser(): Promise<BrowserManager> {
-    if (!this.browserManager) {
-      this.browserManager = new BrowserManager();
-      await this.browserManager.launch({
+    // Fast path: already initialized
+    if (this.browserManager) {
+      return this.browserManager;
+    }
+
+    // Start launch if not in progress
+    // CRITICAL: This assignment is synchronous - no await between check and assign
+    if (!this.launchPromise) {
+      this.launchPromise = this.launchBrowser();
+    }
+
+    // All concurrent callers share this same promise
+    return this.launchPromise;
+  }
+
+  /**
+   * Internal method that performs the actual browser launch.
+   * Only called once per toolset lifecycle (unless launch fails).
+   *
+   * @returns Promise resolving to the BrowserManager instance
+   */
+  private async launchBrowser(): Promise<BrowserManager> {
+    const manager = new BrowserManager();
+    try {
+      await manager.launch({
         id: 'browser-toolset-launch',
         action: 'launch',
         headless: this.config.headless,
       });
+      // Store the successfully launched browser
+      this.browserManager = manager;
+      return manager;
+    } catch (error) {
+      // Reset promise to allow retry on next call
+      this.launchPromise = null;
+      // Clean up partial state
+      try {
+        await manager.close();
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
     }
-    return this.browserManager;
   }
 
   /**
