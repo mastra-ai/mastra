@@ -8,20 +8,27 @@ A browser toolset integration for Mastra agents that enables web page navigation
 
 Agents can browse and interact with real websites to gather information that requires JavaScript rendering or user interaction.
 
+## Current State (v1.0 shipped)
+
+**Package:** `integrations/agent-browser/`
+**Lines of code:** 1,446 TypeScript
+**Tools:** 7 (navigate, snapshot, click, type, select, scroll, screenshot)
+**Build:** ESM + CJS with TypeScript declarations
+
 ## Requirements
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Toolset exposes core browser primitives (navigate, snapshot, click, type, scroll) — v1.0
+- [x] Screenshot capture tool for visual documentation — v1.0
+- [x] Uses agent-browser programmatic API (BrowserManager, not CLI) — v1.0
+- [x] Follows Mastra integration patterns (lives in integrations/agent-browser) — v1.0
+- [x] Browser lifecycle managed within toolset (launch on first use, cleanup) — v1.0
+- [x] Accessibility snapshots return element refs for LLM-friendly targeting — v1.0
 
 ### Active
 
-- [ ] Toolset exposes core browser primitives (navigate, snapshot, click, type, scroll)
-- [ ] Screenshot capture tool for visual documentation
-- [ ] Uses agent-browser programmatic API (BrowserManager, not CLI)
-- [ ] Follows Mastra integration patterns (lives in integrations/agent-browser)
-- [ ] Browser lifecycle managed within toolset (launch on first use, cleanup)
-- [ ] Accessibility snapshots return element refs for LLM-friendly targeting
+(None — see next milestone)
 
 ### Out of Scope
 
@@ -64,9 +71,14 @@ Agents can browse and interact with real websites to gather information that req
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Programmatic API over CLI | Cleaner integration, no process spawning, native async | — Pending |
-| Toolset over individual tools | Cohesive developer experience, managed browser lifecycle | — Pending |
-| integrations/ location | Follows existing Mastra patterns for external tool integrations | — Pending |
+| Programmatic API over CLI | Cleaner integration, no process spawning, native async | Good |
+| Toolset over individual tools | Cohesive developer experience, managed browser lifecycle | Good |
+| integrations/ location | Follows existing Mastra patterns for external tool integrations | Good |
+| Zod schemas with .describe() | LLM-friendly tool parameter documentation | Good |
+| Singleton Promise pattern for getBrowser | Prevents concurrent browser launches, thread-safe | Good |
+| Types.ts as single source of truth | Eliminates schema duplication, prevents drift | Good |
+| @e ref format from agent-browser | LLM-friendly element targeting, deterministic | Good |
+| BrowserToolError unified interface | Consistent error handling with recovery hints | Good |
 
 ---
-*Last updated: 2026-01-26 after initialization*
+*Last updated: 2026-01-27 after v1.0 milestone*
