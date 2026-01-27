@@ -397,7 +397,7 @@ export interface ObservationalMemoryObserverConfig {
    *
    * @default 10000
    */
-  observationThreshold?: number;
+  threshold?: number;
 
   /**
    * Enable adaptive threshold that adjusts based on observation space.
@@ -446,7 +446,7 @@ export interface ObservationalMemoryReflectorConfig {
    *
    * @default 30000
    */
-  reflectionThreshold?: number;
+  threshold?: number;
 
   /**
    * Enable adaptive threshold that adjusts based on message history space.
@@ -481,11 +481,11 @@ export interface ObservationalMemoryReflectorConfig {
  *   scope: 'resource', // Cross-thread memory for the user
  *   observer: {
  *     model: 'google/gemini-2.5-flash',
- *     observationThreshold: 10_000,
+ *     threshold: 10_000,
  *   },
  *   reflector: {
  *     model: 'google/gemini-2.5-flash',
- *     reflectionThreshold: 30_000,
+ *     threshold: 30_000,
  *   },
  * }
  * ```

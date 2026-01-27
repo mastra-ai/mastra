@@ -1526,7 +1526,7 @@ ${
           observer: omConfig.observer
             ? {
                 model: omConfig.observer.model,
-                observationThreshold: omConfig.observer.observationThreshold,
+                observationThreshold: omConfig.observer.threshold,
                 adaptiveThreshold: omConfig.observer.adaptiveThreshold,
                 modelSettings: omConfig.observer.modelSettings,
                 maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
@@ -1535,7 +1535,7 @@ ${
           reflector: omConfig.reflector
             ? {
                 model: omConfig.reflector.model,
-                reflectionThreshold: omConfig.reflector.reflectionThreshold,
+                reflectionThreshold: omConfig.reflector.threshold,
                 adaptiveThreshold: omConfig.reflector.adaptiveThreshold,
                 modelSettings: omConfig.reflector.modelSettings,
               }
