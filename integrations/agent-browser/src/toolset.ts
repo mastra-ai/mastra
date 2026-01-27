@@ -141,6 +141,9 @@ export class BrowserToolset {
    * ```
    */
   async close(): Promise<void> {
+    // Clear the launch promise to allow fresh launch after close
+    this.launchPromise = null;
+
     if (this.browserManager) {
       try {
         await this.browserManager.close();
