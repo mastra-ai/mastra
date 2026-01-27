@@ -14,15 +14,15 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Milestone:** v1.1 Agent Integration
 **Phase:** 7 - V2 Model + TripWire Support
-**Plan:** 1 of 3 (07-01-PLAN.md completed)
+**Plan:** 2 of 3 (07-02-PLAN.md completed)
 **Status:** In progress
 
 ```
-Progress: [██░░░░░░░░] 11% (Phase 7, Plan 1 of 3)
-Milestone: v1.1 Agent Integration — Plan 07-01 completed 2026-01-27
+Progress: [███░░░░░░░] 22% (Phase 7, Plan 2 of 3)
+Milestone: v1.1 Agent Integration — Plan 07-02 completed 2026-01-27
 ```
 
-**Next action:** Execute 07-02-PLAN.md (stream consumption loop with tripwire handling)
+**Next action:** Execute 07-03-PLAN.md (final validation and edge cases)
 
 ## v1.1 Roadmap Summary
 
@@ -65,8 +65,8 @@ Milestone: v1.1 Agent Integration — Plan 07-01 completed 2026-01-27
 | Phases completed | 6          | 3           |
 | Plans completed  | 15         | TBD         |
 | Tests ported     | 70         | ~10         |
-| Tests passing    | 189 (83.3%)| ~195 (86%) |
-| Tests skipped    | 38         | ~32         |
+| Tests passing    | 193 (85%)  | ~195 (86%) |
+| Tests skipped    | 34         | ~32         |
 
 ## Accumulated Context
 
@@ -84,9 +84,13 @@ Milestone: v1.1 Agent Integration — Plan 07-01 completed 2026-01-27
 - Check original error (not errorInstance) for TripWire instanceof check
 - V2 chunk format uses payload.text not textDelta
 
+**07-02 Decisions:**
+- Cast chunk to any for tripwire type check (tripwire is runtime addition not in base type)
+- Follow default runtime pattern for structured output (onFinish callback)
+
 ### Current Blockers
 
-None. Plan 07-01 complete, ready for 07-02 execution.
+None. Plan 07-02 complete, ready for 07-03 execution.
 
 ### Open Questions
 
@@ -95,12 +99,12 @@ None. All v1.1 features have reference implementations in default runtime.
 ### Technical Debt
 
 **Inherited from v1.0:**
-- 38 skipped tests with documented architectural differences
+- 34 skipped tests with documented architectural differences (reduced from 38)
 - console.dir debug logging in workflow.ts:1429-1432
 - Pre-existing TypeScript errors in workflow-event-processor/index.ts
 
 **v1.1 will address:**
-- 4 test skips for V2 model limitations (lines 12831, 12935)
+- ~~4 test skips for V2 model limitations~~ (RESOLVED in 07-02)
 - 2 test skips for writer support (lines 1851, 1938)
 - Multiple test skips for forEachIndex parameter (lines 19119-19492)
 
@@ -110,18 +114,20 @@ None. All v1.1 features have reference implementations in default runtime.
 
 **Date:** 2026-01-27
 **Work completed:**
-- Executed 07-01-PLAN.md (V2 Model + TripWire Foundation)
-- Added V2 model detection in createStepFromAgent
-- Added TripWire catching and serialization in StepExecutor
-- Created 07-01-SUMMARY.md
+- Executed 07-02-PLAN.md (TripWire status propagation)
+- Added tripwire detection in EventedExecutionEngine
+- Added tripwire chunk detection in agent step stream consumption
+- Added structured output capture in agent steps
+- Unskipped and verified 4 V2 model + TripWire tests
+- Created 07-02-SUMMARY.md
 
 **Commits:**
-- cfa65cf: V2 model detection and branching in createStepFromAgent
-- a80df0d: TripWire catching and serialization in StepExecutor
+- b14582255d: TripWire status propagation in EventedExecutionEngine
+- bf70bc180b: Unskip tests, add tripwire chunk detection and structured output
 
-**Next action:** Execute 07-02-PLAN.md (stream consumption with tripwire handling)
+**Next action:** Execute 07-03-PLAN.md (final validation and edge cases)
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after 07-01 execution_
+_Last updated: 2026-01-27 after 07-02 execution_
