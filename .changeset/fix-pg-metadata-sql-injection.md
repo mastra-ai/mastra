@@ -2,21 +2,14 @@
 '@mastra/pg': patch
 ---
 
-Fix SQL injection vulnerability in message metadata filtering
+Add metadata filtering support for message queries
 
-The metadata filtering implementation in the PostgreSQL memory storage had a critical SQL injection vulnerability where metadata keys were directly interpolated into the SQL query string without proper escaping.
+You can now filter messages by metadata key-value pairs, enabling efficient lookups without paginating through all messages in a thread.
 
-**Vulnerability**: A malicious metadata key could potentially cause SQL injection.
-
-**Fix**: Replaced unsafe key interpolation with parameterized JSONB containment operator (`@>`), following the same safe pattern used in thread metadata filtering.
-
-**Before (vulnerable)**:
+**Example usage**:
 ```typescript
-conditions.push(`content->'metadata'->>'${key}' = $${paramIndex++}`);
-```
-
-**After (safe)**:
-```typescript
-conditions.push(`content::jsonb @> $${paramIndex++}::jsonb`);
-queryParams.push(JSON.stringify({ metadata: { [key]: value } }));
-```
+const result = await storage.listMessages({
+  threadId: 'thread-123',
+  filter: { metadata: { traceId: 'abc-123' } },
+  perPage: 1,
+});
