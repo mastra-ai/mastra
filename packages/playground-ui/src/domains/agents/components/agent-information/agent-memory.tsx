@@ -92,7 +92,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0 overflow-hidden">
       {/* Clone Thread Section */}
       {threadId && (
         <div className="p-4 border-b border-border1">
@@ -111,7 +111,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
-        <div className="border-b border-border1">
+        <div className="border-b border-border1 min-w-0 overflow-hidden">
           <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
         </div>
       )}

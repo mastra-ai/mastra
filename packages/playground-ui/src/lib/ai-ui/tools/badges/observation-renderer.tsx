@@ -326,9 +326,9 @@ export function ObservationRenderer({
   }
   
   return (
-    <div className={cn('text-sm', className)}>
+    <div className={cn('text-sm overflow-hidden', className)}>
       <div 
-        className={maxHeight ? 'overflow-y-auto pr-1' : undefined}
+        className={cn('break-words', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
       >
         {parsed.threads.map((thread, i) => (

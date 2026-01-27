@@ -399,7 +399,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4 overflow-hidden min-w-0 w-full">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-4 h-4 text-purple-400" />
@@ -433,9 +433,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
 
       {/* Observations Content */}
       {hasObservations && (
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0 overflow-hidden w-full">
           {/* Collapsible Observations Section */}
-          <div className="border border-border1 rounded-lg bg-surface3">
+          <div className="border border-border1 rounded-lg bg-surface3 w-full overflow-hidden">
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
@@ -464,14 +464,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               </div>
             </button>
             {isExpanded && (
-              <div className="border-t border-border1 overflow-hidden" style={{ height: '400px' }}>
-                <ScrollArea className="h-full">
+              <div className="border-t border-border1 overflow-hidden w-full" style={{ height: '400px' }}>
+                <ScrollArea className="h-full w-full">
                   <div
                     ref={observationsContentRef}
-                    className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
+                    className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs overflow-hidden w-full"
                     onClick={handleCopy}
                   >
-                    <ObservationRenderer observations={observations} maxHeight={undefined} />
+                    <ObservationRenderer observations={observations} maxHeight={undefined} className="break-words w-full overflow-hidden" />
                     {isCopied && (
                       <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
                         Copied!
