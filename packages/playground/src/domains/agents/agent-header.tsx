@@ -14,7 +14,7 @@ import {
   AgentCombobox,
 } from '@mastra/playground-ui';
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({ agentId }: { agentId: string }) {
   return (
     <Header>
       <Breadcrumb>
@@ -30,10 +30,6 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
       </Breadcrumb>
 
       <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
-
         <DividerIcon />
 
         <Button as={Link} to={`/observability?entity=${agentId}`}>
