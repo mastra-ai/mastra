@@ -20,7 +20,6 @@ export type {
   ScrollOutput,
   ScreenshotInput,
   ScreenshotOutput,
-  BrowserError,
 } from './types.js';
 
 // Schema exports (for advanced usage)

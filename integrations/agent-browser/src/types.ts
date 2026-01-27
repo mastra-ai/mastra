@@ -37,13 +37,24 @@ export const navigateInputSchema = z.object({
  * Zod schema for the navigate tool output.
  *
  * Returns navigation success status, final URL (may differ from input due to redirects),
- * and the page title.
+ * and the page title. On failure, returns unified BrowserToolError format.
  */
-export const navigateOutputSchema = z.object({
-  success: z.boolean().describe('Whether navigation succeeded'),
-  url: z.string().describe('The final URL after navigation (may differ due to redirects)'),
-  title: z.string().describe('The page title'),
-});
+export const navigateOutputSchema = z.discriminatedUnion('success', [
+  // Success case
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('The final URL after navigation (may differ due to redirects)'),
+    title: z.string().describe('The page title'),
+  }),
+  // Error case - matches BrowserToolError from errors.ts
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().describe('Whether the operation can be retried'),
+  }),
+]);
 
 /**
  * Input type for the navigate tool, inferred from the Zod schema.
@@ -279,20 +290,3 @@ export type ScreenshotInput = z.infer<typeof screenshotInputSchema>;
  */
 export type ScreenshotOutput = z.infer<typeof screenshotOutputSchema>;
 
-// ============================================================================
-// Legacy/General Types
-// ============================================================================
-
-/**
- * Structured error response for browser tool failures.
- *
- * Provides LLM-friendly error information with recovery hints.
- */
-export interface BrowserError {
-  /** Always false for error responses */
-  success: false;
-  /** Human-readable error description */
-  error: string;
-  /** Suggested recovery action for the agent */
-  hint: string;
-}
