@@ -49,7 +49,7 @@
     "@types/cors": "^2.8.19",
     "cors": "^2.8.5",
     "@ai-sdk/openai": "^2.0.62",
-    "zod": "^3.25.0",
+    "zod": "catalog:",
     "swagger-ui-express": "^5.0.1",
     "@types/swagger-ui-express": "^4.1.6"
   },

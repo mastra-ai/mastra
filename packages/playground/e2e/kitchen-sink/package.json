@@ -17,7 +17,7 @@
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
     "@mastra/mcp": "latest",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "22.19.7",

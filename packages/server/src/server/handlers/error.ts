@@ -4,10 +4,11 @@ import type { ApiError } from '../types';
 
 /**
  * Duck-typed interface for ZodError-like objects (works with both Zod v3 and v4)
+ * Note: Zod v4 uses PropertyKey[] (string | number | symbol) for path
  */
 interface ZodErrorLike {
   issues: Array<{
-    path: (string | number)[];
+    path: PropertyKey[];
     message: string;
   }>;
 }
@@ -22,7 +23,7 @@ export function formatZodError(
   context: string,
 ): { error: string; issues: Array<{ field: string; message: string }> } {
   const issues = error.issues.map(e => ({
-    field: e.path.length > 0 ? e.path.join('.') : 'root',
+    field: e.path.length > 0 ? e.path.map(p => String(p)).join('.') : 'root',
     message: e.message,
   }));
 

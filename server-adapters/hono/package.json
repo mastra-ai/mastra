@@ -47,7 +47,7 @@
     "@hono/node-server": "^1.19.6",
     "@hono/swagger-ui": "^0.5.2",
     "@ai-sdk/openai": "^2.0.62",
-    "zod": "^3.25.0"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

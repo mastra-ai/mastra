@@ -1,7 +1,8 @@
 import type { Schema } from '@internal/ai-sdk-v5';
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec';
 import type { JSONSchema7 } from 'json-schema';
-import z3, { type ZodType } from 'zod/v3';
+import z3 from 'zod/v3';
+import type {ZodType} from 'zod/v3';
 import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';

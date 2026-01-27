@@ -2,6 +2,38 @@ import type { StandardSchemaWithJSON } from '../schema/schema';
 import { standardSchemaToJSONSchema, type StandardSchemaIssue } from '../schema/standard-schema';
 
 /**
+ * Safely validates data against a Standard Schema.
+ * Catches internal Zod errors (like undefined union options) and provides better error messages.
+ *
+ * @param schema The Standard Schema to validate against
+ * @param data The data to validate
+ * @returns The validation result or throws with a descriptive error
+ */
+function safeValidate<T>(
+  schema: StandardSchemaWithJSON<T>,
+  data: unknown,
+): { value: T } | { issues: readonly StandardSchemaIssue[] } {
+  try {
+    const result = schema['~standard'].validate(data);
+    if (result instanceof Promise) {
+      throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+    }
+    return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
+  } catch (err) {
+    // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"
+    // This happens when a union schema has undefined options
+    if (err instanceof TypeError && err.message.includes("Cannot read properties of undefined")) {
+      throw new Error(
+        `Schema validation failed due to an invalid schema definition. ` +
+        `This often happens when a union schema (z.union or z.or) has undefined options. ` +
+        `Please check that all schema options are properly defined. Original error: ${err.message}`
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * Formatted validation errors structure.
  * Contains `errors` array for messages at this level, and `fields` for nested field errors.
  */
@@ -107,11 +139,7 @@ export function validateToolSuspendData<T = unknown>(
   }
 
   // Validate the input using standard schema interface
-  const validation = schema['~standard'].validate(suspendData);
-
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(schema, suspendData);
 
   if ('value' in validation) {
     return { data: validation.value };
@@ -244,11 +272,7 @@ export function validateToolInput<T = unknown>(
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
   // Validate the normalized input
-  const validation = schema['~standard'].validate(normalizedInput);
-
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(schema, normalizedInput);
 
   if ('value' in validation) {
     return { data: validation.value };
@@ -286,10 +310,7 @@ export function validateToolOutput<T = unknown>(
   }
 
   // Validate the output using standard schema interface
-  const validation = schema['~standard'].validate(output);
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(schema, output);
 
   if ('value' in validation) {
     return { data: validation.value };

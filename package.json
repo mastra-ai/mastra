@@ -21,7 +21,8 @@
     "turbo": "^2.5.8",
     "typescript": "catalog:",
     "vite": "^7.3.0",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "private": true,
   "scripts": {
