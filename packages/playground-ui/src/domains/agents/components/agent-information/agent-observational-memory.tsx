@@ -301,7 +301,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   }, [record]);
 
   const hasObservations = Boolean(observations);
-  const tokenCount = statusData?.observationalMemory?.tokenCount;
+  // Use current observation token count, not cumulative total
+  const tokenCount = statusData?.observationalMemory?.observationTokenCount;
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: observations,
