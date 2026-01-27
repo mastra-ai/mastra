@@ -24,6 +24,7 @@
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/fastembed": "link:../../packages/fastembed",
       "mastra": "link:../../packages/cli"
     }
   },
