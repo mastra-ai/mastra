@@ -59,10 +59,10 @@ Plans:
   1. Agent can capture screenshot of current viewport
   2. Agent can capture full-page screenshot
   3. Screenshot returns base64 data with dimensions for multimodal use
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: [TBD - defined during plan-phase]
+- [ ] 03-01-PLAN.md - Screenshot tool with viewport, full-page, and element capture
 
 ## Requirement Coverage
 
@@ -90,7 +90,7 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 2/2 | ✓ Complete | 2026-01-26 |
 | 2. Core Actions | 3/3 | ✓ Complete | 2026-01-26 |
-| 3. Screenshot | 0/TBD | Not started | - |
+| 3. Screenshot | 0/1 | Ready | - |
 
 ---
 
@@ -99,3 +99,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 *Phase 1 completed: 2026-01-26*
 *Phase 2 planned: 2026-01-26*
 *Phase 2 completed: 2026-01-26*
+*Phase 3 planned: 2026-01-26*
