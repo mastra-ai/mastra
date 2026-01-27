@@ -1,6 +1,7 @@
 import { BrowserManager } from 'agent-browser/dist/browser.js';
 import type { ToolAction } from '@mastra/core/tools';
 
+import { ScreencastStream, type ScreencastOptions } from './screencast/index.js';
 import { createClickTool } from './tools/click.js';
 import { createNavigateTool } from './tools/navigate.js';
 import { createScreenshotTool } from './tools/screenshot.js';
@@ -154,5 +155,67 @@ export class BrowserToolset {
         this.browserManager = null;
       }
     }
+  }
+
+  /**
+   * Start screencast streaming. Returns a stream object with event emitter interface.
+   * If browser not yet launched, waits for launch before starting.
+   *
+   * @param options - Screencast configuration (format, quality, dimensions)
+   * @returns Promise resolving to ScreencastStream with event emitter interface
+   *
+   * @example
+   * ```typescript
+   * const stream = await browserTools.startScreencast({ quality: 80 });
+   * stream.on('frame', (frame) => {
+   *   console.log(`Frame: ${frame.viewport.width}x${frame.viewport.height}`);
+   * });
+   * stream.on('stop', (reason) => console.log('Stopped:', reason));
+   * // Later...
+   * await stream.stop();
+   * ```
+   */
+  async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
+    const browser = await this.getBrowser();
+    const stream = new ScreencastStream(browser, options);
+    await stream.start();
+    return stream;
+  }
+
+  /**
+   * Inject a mouse event via CDP passthrough.
+   * Waits for browser to be ready if not launched.
+   *
+   * @param event - CDP-compatible mouse event parameters
+   */
+  async injectMouseEvent(event: {
+    type: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel';
+    x: number;
+    y: number;
+    button?: 'left' | 'right' | 'middle' | 'none';
+    clickCount?: number;
+    deltaX?: number;
+    deltaY?: number;
+    modifiers?: number;
+  }): Promise<void> {
+    const browser = await this.getBrowser();
+    await browser.injectMouseEvent(event);
+  }
+
+  /**
+   * Inject a keyboard event via CDP passthrough.
+   * Waits for browser to be ready if not launched.
+   *
+   * @param event - CDP-compatible keyboard event parameters
+   */
+  async injectKeyboardEvent(event: {
+    type: 'keyDown' | 'keyUp' | 'char';
+    key?: string;
+    code?: string;
+    text?: string;
+    modifiers?: number;
+  }): Promise<void> {
+    const browser = await this.getBrowser();
+    await browser.injectKeyboardEvent(event);
   }
 }
