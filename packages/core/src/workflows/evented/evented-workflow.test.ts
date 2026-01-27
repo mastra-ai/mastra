@@ -1848,7 +1848,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should handle custom event emission using writer - evented runtime does not expose writer in step context', async () => {
+    it('should handle custom event emission using writer', async () => {
       const getUserInput = createStep({
         id: 'getUserInput',
         inputSchema: z.object({ input: z.string() }),
@@ -1935,7 +1935,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should handle writer.custom during resume operations - evented runtime does not expose writer in step context', async () => {
+    it('should handle writer.custom during resume operations', async () => {
       let customEvents: StreamEvent[] = [];
 
       const stepWithWriter = createStep({
