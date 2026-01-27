@@ -3,6 +3,7 @@ packages:
   - packages/*
   - deployers/*
   - stores/*
+  - sources/*
   - voice/*
   - workflows/*
   - server-adapters/*
