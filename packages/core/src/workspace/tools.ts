@@ -10,8 +10,8 @@ import { createTool } from '../tools';
 import { WORKSPACE_TOOLS } from './constants';
 import type { WorkspaceToolName, WorkspaceToolsConfig } from './constants';
 import { FileNotFoundError, FileReadRequiredError } from './errors';
-import { InMemoryFileReadTracker } from './file-read-tracker';
-import type { FileReadTracker } from './file-read-tracker';
+import { InMemoryFileReadTracker } from './filesystem';
+import type { FileReadTracker } from './filesystem';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,

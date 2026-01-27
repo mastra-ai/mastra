@@ -4,8 +4,8 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { WORKSPACE_TOOLS } from './constants';
-import { LocalFilesystem } from './local-filesystem';
-import { LocalSandbox } from './local-sandbox';
+import { LocalFilesystem } from './filesystem';
+import { LocalSandbox } from './sandbox';
 import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 

@@ -7,7 +7,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { FileNotFoundError } from './errors';
+import { FileNotFoundError } from '../errors';
 
 // =============================================================================
 // Types

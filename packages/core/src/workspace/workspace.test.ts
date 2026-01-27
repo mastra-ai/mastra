@@ -9,8 +9,8 @@ import {
   SandboxNotAvailableError,
   SearchNotAvailableError,
 } from './errors';
-import { LocalFilesystem } from './local-filesystem';
-import { LocalSandbox } from './local-sandbox';
+import { LocalFilesystem } from './filesystem';
+import { LocalSandbox } from './sandbox';
 import { Workspace } from './workspace';
 
 // =============================================================================

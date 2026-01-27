@@ -9,8 +9,8 @@ export {
 } from './workspace';
 
 // Built-in Providers
-export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
-export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
+export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
+export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Errors
 export {
@@ -69,8 +69,8 @@ export type {
 export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 
 // Native Sandbox
-export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './native-sandbox';
-export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from './native-sandbox';
+export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './sandbox';
+export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from './sandbox';
 
 // Skills
 export type {

@@ -24,7 +24,7 @@
  * ```
  */
 
-import type { Lifecycle, ProviderStatus } from './lifecycle';
+import type { Lifecycle, ProviderStatus } from '../lifecycle';
 
 // =============================================================================
 // Core Types

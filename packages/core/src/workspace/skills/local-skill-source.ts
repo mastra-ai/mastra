@@ -21,7 +21,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { fsExists, fsStat, isTextFile } from '../fs-utils';
+import { fsExists, fsStat, isTextFile } from '../filesystem';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 
 /**

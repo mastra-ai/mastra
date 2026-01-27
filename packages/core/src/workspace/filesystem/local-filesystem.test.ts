@@ -11,7 +11,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from './errors';
+} from '../errors';
 import { LocalFilesystem } from './local-filesystem';
 
 describe('LocalFilesystem', () => {
