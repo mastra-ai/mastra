@@ -30,6 +30,8 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
+
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
   #indexes?: MongoDBIndexConfig[];

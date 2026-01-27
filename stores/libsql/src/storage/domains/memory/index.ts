@@ -34,6 +34,8 @@ import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
+
   #client: Client;
   #db: LibSQLDB;
 

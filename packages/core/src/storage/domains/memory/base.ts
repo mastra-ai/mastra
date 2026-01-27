@@ -20,6 +20,13 @@ import type {
 import { StorageDomain } from '../base';
 
 export abstract class MemoryStorage extends StorageDomain {
+  /**
+   * Whether this storage adapter supports Observational Memory.
+   * Adapters that implement OM methods should set this to true.
+   * Defaults to false for backwards compatibility with custom adapters.
+   */
+  readonly supportsObservationalMemory?: boolean = false;
+
   constructor() {
     super({
       component: 'STORAGE',

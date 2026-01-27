@@ -1518,6 +1518,13 @@ ${
         );
       }
 
+      if (!memoryStore.supportsObservationalMemory) {
+        throw new Error(
+          `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
+            `Please use a storage adapter that supports observational memory (libsql, pg, mongodb) or disable observational memory.`,
+        );
+      }
+
       processors.push(
         new ObservationalMemory({
           storage: memoryStore,

@@ -63,6 +63,8 @@ function inPlaceholders(count: number, startIndex = 1): string {
 }
 
 export class MemoryPG extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
+
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
