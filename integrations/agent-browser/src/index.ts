@@ -18,6 +18,8 @@ export type {
   TypeOutput,
   ScrollInput,
   ScrollOutput,
+  ScreenshotInput,
+  ScreenshotOutput,
   BrowserError,
 } from './types.js';
 
@@ -33,4 +35,6 @@ export {
   typeOutputSchema,
   scrollInputSchema,
   scrollOutputSchema,
+  screenshotInputSchema,
+  screenshotOutputSchema,
 } from './types.js';

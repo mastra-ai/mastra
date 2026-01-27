@@ -3,6 +3,7 @@ import type { ToolAction } from '@mastra/core/tools';
 
 import { createClickTool } from './tools/click.js';
 import { createNavigateTool } from './tools/navigate.js';
+import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollTool } from './tools/scroll.js';
 import { createSnapshotTool } from './tools/snapshot.js';
 import { createTypeTool } from './tools/type.js';
@@ -63,6 +64,7 @@ export class BrowserToolset {
       browser_click: createClickTool(() => this.getBrowser(), this.config.timeout),
       browser_type: createTypeTool(() => this.getBrowser(), this.config.timeout),
       browser_scroll: createScrollTool(() => this.getBrowser()),
+      browser_screenshot: createScreenshotTool(() => this.getBrowser(), 30_000), // 30s timeout for screenshots
     };
   }
 
