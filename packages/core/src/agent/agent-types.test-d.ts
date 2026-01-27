@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
+import { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
+import { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
 
@@ -82,6 +84,52 @@ describe('Agent Type Tests', () => {
 
       // After fix: SchemaType is `OutputSchema` (accepts Zod schemas, JSONSchema7, etc.)
       expectTypeOf<SchemaType>().toExtend<NonNullable<OutputSchema<any>>>();
+    });
+  });
+
+  describe('RequestContext type variance', () => {
+    // Define a custom context type for testing
+    interface CustomContext {
+      userId: string;
+      sessionId: string;
+    }
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'Test agent',
+      model: { provider: 'OPEN_AI', name: 'gpt-4', toolChoice: 'auto' },
+    });
+
+    const messages = [{ role: 'user' as const, content: 'Hello' }];
+
+    it('should accept typed RequestContext<T> in agent.generate()', () => {
+      const typedContext = new RequestContext<CustomContext>();
+      typedContext.set({ userId: '123', sessionId: 'abc' });
+
+      // This should compile without errors
+      expectTypeOf(agent.generate(messages, { requestContext: typedContext })).toEqualTypeOf<Promise<any>>();
+    });
+
+    it('should accept untyped RequestContext in agent.generate() for backward compatibility', () => {
+      const untypedContext = new RequestContext();
+
+      // This should compile without errors (backward compatibility)
+      expectTypeOf(agent.generate(messages, { requestContext: untypedContext })).toEqualTypeOf<Promise<any>>();
+    });
+
+    it('should accept typed RequestContext<T> in agent.stream()', () => {
+      const typedContext = new RequestContext<CustomContext>();
+      typedContext.set({ userId: '123', sessionId: 'abc' });
+
+      // This should compile without errors
+      expectTypeOf(agent.stream(messages, { requestContext: typedContext })).toEqualTypeOf<Promise<any>>();
+    });
+
+    it('should accept untyped RequestContext in agent.stream() for backward compatibility', () => {
+      const untypedContext = new RequestContext();
+
+      // This should compile without errors (backward compatibility)
+      expectTypeOf(agent.stream(messages, { requestContext: untypedContext })).toEqualTypeOf<Promise<any>>();
     });
   });
 });
