@@ -101,7 +101,7 @@ export interface LocalSandboxOptions {
   /**
    * Environment variables to set for command execution.
    * By default, no host environment variables are inherited.
-   * Pass specific variables you need (e.g., PATH, HOME) or spread process.env
+   * Pass specific variables you need (e.g., PATH, HOME) or pass process.env
    * if you want all host variables.
    *
    * @example
@@ -110,10 +110,10 @@ export interface LocalSandboxOptions {
    * env: { PATH: process.env.PATH, NODE_ENV: 'production' }
    *
    * // Full host environment (less secure)
-   * env: { ...process.env }
+   * env: process.env
    * ```
    */
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
   /**
@@ -165,7 +165,7 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
-  private readonly env: Record<string, string>;
+  private readonly env: NodeJS.ProcessEnv;
   private readonly timeout: number;
   private readonly _isolation: IsolationBackend;
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
@@ -227,7 +227,7 @@ export class LocalSandbox implements WorkspaceSandbox {
    * Build the environment object for execution.
    * Merges the sandbox's configured env with any additional env from the command.
    */
-  private buildEnv(additionalEnv?: Record<string, string>): Record<string, string> {
+  private buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     return { ...this.env, ...additionalEnv };
   }
 

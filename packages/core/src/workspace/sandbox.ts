@@ -60,7 +60,7 @@ export interface ExecuteCommandOptions {
   /** Timeout in milliseconds */
   timeout?: number;
   /** Environment variables */
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   /** Working directory */
   cwd?: string;
   /** Stream output instead of buffering */
