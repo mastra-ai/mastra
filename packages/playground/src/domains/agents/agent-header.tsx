@@ -12,6 +12,7 @@ import {
   AgentIcon,
   AgentCombobox,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   return (
