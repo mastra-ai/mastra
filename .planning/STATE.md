@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 2 of 3 (Core Actions)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-01-27 — Completed 02-01-PLAN.md
+Last activity: 2026-01-26 — Completed 02-02-PLAN.md
 
-Progress: [========------------] 40% (3/7 estimated plans)
+Progress: [==========----------] 50% (4/8 estimated plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 3 min
-- Total execution time: 8 min
+- Total execution time: 12 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure | 2 | 6 min | 3 min |
-| 02-core-actions | 1 | 2 min | 2 min |
+| 02-core-actions | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 4 min, 2 min
+- Last 5 plans: 2 min, 4 min, 2 min, 4 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -53,6 +53,8 @@ Recent decisions affecting current work:
 | Default waitUntil to domcontentloaded | 01-02 | Faster results while ensuring DOM ready |
 | Retryable codes: timeout, element_blocked | 02-01 | These errors can be resolved with retry/wait |
 | Transform refs from [ref=e1] to @e1 | 02-01 | LLM-friendly format for tool usage |
+| Use fill() not type() for text input | 02-02 | type() is deprecated, fill() is instant and reliable |
+| Return field value after typing | 02-02 | Agent can verify input was accepted |
 
 ### Pending Todos
 
@@ -64,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T04:19:50Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-01-26T21:19:00Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
