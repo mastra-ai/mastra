@@ -80,8 +80,8 @@ export const snapshotInputSchema = z.object({
     .boolean()
     .optional()
     .default(true)
-    .describe('Only show interactive elements (buttons, links, inputs)'),
-  maxElements: z.number().optional().default(50).describe('Maximum elements to return'),
+    .describe('Only show interactive elements (buttons, links, inputs). Set false for forms with radio/checkboxes.'),
+  maxElements: z.number().optional().default(50).describe('Maximum elements to include in output'),
 });
 
 /**
@@ -214,7 +214,7 @@ export const scrollInputSchema = z.object({
     .optional()
     .default('page')
     .describe('Amount to scroll: "page", "half", or number of pixels'),
-  ref: z.string().optional().describe('Element ref to scroll within (omit for viewport)'),
+  ref: z.string().optional().describe('Element ref to scroll within (omit for viewport scroll)'),
 });
 
 /**
