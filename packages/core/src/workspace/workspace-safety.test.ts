@@ -299,13 +299,13 @@ describe('Workspace Safety Features', () => {
         }),
       });
 
-      expect(workspace.readOnly).toBe(true);
+      expect(workspace.filesystem?.readOnly).toBe(true);
 
       const workspace2 = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
 
-      expect(workspace2.readOnly).toBe(false);
+      expect(workspace2.filesystem?.readOnly).toBe(undefined);
     });
   });
 

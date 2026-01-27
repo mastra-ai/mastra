@@ -79,7 +79,7 @@ function resolveToolConfig(
 export function createWorkspaceTools(workspace: Workspace) {
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
-  const isReadOnly = workspace.readOnly;
+  const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
   // Create a shared file read tracker for requireReadBeforeWrite enforcement
   // This is only used by tools, not by direct workspace method calls

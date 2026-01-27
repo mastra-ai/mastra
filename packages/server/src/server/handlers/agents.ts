@@ -237,7 +237,7 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     }
 
     const tools: string[] = [];
-    const isReadOnly = workspace.readOnly ?? false;
+    const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
     // Filesystem tools
     if (workspace.filesystem) {

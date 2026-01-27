@@ -354,14 +354,6 @@ export class Workspace {
   }
 
   /**
-   * Whether the workspace is in read-only mode.
-   * Reads from the filesystem's readOnly property.
-   */
-  get readOnly(): boolean {
-    return this._fs?.readOnly ?? false;
-  }
-
-  /**
    * Get the per-tool configuration for this workspace.
    * Returns undefined if no tools config was provided.
    */
