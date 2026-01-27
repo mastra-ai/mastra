@@ -872,6 +872,8 @@ Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and 
 
 For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`id\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
 
+For the \`url\` it's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting and not the individual chat endpoints.
+
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
@@ -888,7 +890,7 @@ const agent = new Agent({
 
 ### Example: LMStudio
 
-After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. It's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting. In the case of LMStudio this will be \`http://localhost:1234/v1\`.
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
