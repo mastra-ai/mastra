@@ -9,9 +9,9 @@ import { z } from 'zod';
 import { createTool } from '../tools';
 import { WORKSPACE_TOOLS } from './constants';
 import type { WorkspaceToolName, WorkspaceToolsConfig } from './constants';
+import { FileNotFoundError, FileReadRequiredError } from './errors';
 import { InMemoryFileReadTracker } from './file-read-tracker';
 import type { FileReadTracker } from './file-read-tracker';
-import { FileReadRequiredError } from './filesystem';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -202,12 +202,16 @@ export function createWorkspaceTools(workspace: Workspace) {
         execute: async ({ path, content, overwrite }) => {
           // Check read-before-write requirement (only for existing files)
           if (readTracker && writeFileConfig.requireReadBeforeWrite) {
-            const exists = await workspace.exists(path);
-            if (exists) {
+            try {
               const stat = await workspace.filesystem!.stat(path);
               const check = readTracker.needsReRead(path, stat.modifiedAt);
               if (check.needsReRead) {
                 throw new FileReadRequiredError(path, check.reason!);
+              }
+            } catch (error) {
+              // File doesn't exist - that's fine, no read-before-write check needed for new files
+              if (!(error instanceof FileNotFoundError)) {
+                throw error;
               }
             }
           }
@@ -448,15 +452,15 @@ Examples:
           type: z.enum(['file', 'directory', 'none']).describe('The type of the path if it exists'),
         }),
         execute: async ({ path }) => {
-          const exists = await workspace.exists(path);
-          if (!exists) {
+          try {
+            const stat = await workspace.filesystem!.stat(path);
+            return {
+              exists: true,
+              type: stat.type,
+            };
+          } catch {
             return { exists: false, type: 'none' as const };
           }
-          const isFile = await workspace.filesystem!.isFile(path);
-          return {
-            exists: true,
-            type: isFile ? ('file' as const) : ('directory' as const),
-          };
         },
       });
     }

@@ -7,6 +7,15 @@
 
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
+import {
+  FileNotFoundError,
+  DirectoryNotFoundError,
+  FileExistsError,
+  IsDirectoryError,
+  NotDirectoryError,
+  DirectoryNotEmptyError,
+  PermissionError,
+} from './errors';
 import type {
   WorkspaceFilesystem,
   FileContent,
@@ -19,15 +28,7 @@ import type {
   CopyOptions,
   FilesystemSafetyOptions,
 } from './filesystem';
-import {
-  FileNotFoundError,
-  DirectoryNotFoundError,
-  FileExistsError,
-  IsDirectoryError,
-  NotDirectoryError,
-  DirectoryNotEmptyError,
-  PermissionError,
-} from './filesystem';
+import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
 
 /**
  * Local filesystem provider configuration.
@@ -98,26 +99,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return Buffer.from(content, 'utf-8');
   }
 
-  private getMimeType(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      txt: 'text/plain',
-      html: 'text/html',
-      css: 'text/css',
-      js: 'application/javascript',
-      ts: 'application/typescript',
-      json: 'application/json',
-      xml: 'application/xml',
-      md: 'text/markdown',
-      py: 'text/x-python',
-      rb: 'text/x-ruby',
-      go: 'text/x-go',
-      rs: 'text/x-rust',
-      sh: 'text/x-sh',
-    };
-    return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
-  }
-
   private resolvePath(inputPath: string): string {
     const cleanedPath = inputPath.replace(/^\/+/, '');
     const normalizedInput = nodePath.normalize(cleanedPath);
@@ -152,7 +133,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       return await fs.readFile(absolutePath);
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(inputPath);
       }
       throw error;
@@ -197,7 +178,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       await fs.unlink(absolutePath);
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         if (!options?.force) {
           throw new FileNotFoundError(inputPath);
         }
@@ -232,7 +213,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError || error instanceof FileExistsError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -287,7 +268,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
     } catch (error: unknown) {
       if (error instanceof FileExistsError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -300,7 +281,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     try {
       await fs.mkdir(absolutePath, { recursive: options?.recursive ?? true });
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
+      if (isEexistError(error)) {
         const stats = await fs.stat(absolutePath);
         if (!stats.isDirectory()) {
           throw new FileExistsError(inputPath);
@@ -333,7 +314,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       if (error instanceof NotDirectoryError || error instanceof DirectoryNotEmptyError) {
         throw error;
       }
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         if (!options?.force) {
           throw new DirectoryNotFoundError(inputPath);
         }
@@ -424,7 +405,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       return result;
     } catch (error: unknown) {
       if (error instanceof NotDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new DirectoryNotFoundError(inputPath);
       }
       throw error;
@@ -433,52 +414,16 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async exists(inputPath: string): Promise<boolean> {
     const absolutePath = this.resolvePath(inputPath);
-    try {
-      await fs.access(absolutePath);
-      return true;
-    } catch {
-      return false;
-    }
+    return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
     const absolutePath = this.resolvePath(inputPath);
-
-    try {
-      const stats = await fs.stat(absolutePath);
-      return {
-        name: nodePath.basename(absolutePath),
-        path: this.toRelativePath(absolutePath),
-        type: stats.isDirectory() ? 'directory' : 'file',
-        size: stats.size,
-        createdAt: stats.birthtime,
-        modifiedAt: stats.mtime,
-        mimeType: stats.isFile() ? this.getMimeType(absolutePath) : undefined,
-      };
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-        throw new FileNotFoundError(inputPath);
-      }
-      throw error;
-    }
-  }
-
-  async isFile(inputPath: string): Promise<boolean> {
-    try {
-      const stats = await this.stat(inputPath);
-      return stats.type === 'file';
-    } catch {
-      return false;
-    }
-  }
-
-  async isDirectory(inputPath: string): Promise<boolean> {
-    try {
-      const stats = await this.stat(inputPath);
-      return stats.type === 'directory';
-    } catch {
-      return false;
-    }
+    const result = await fsStat(absolutePath, inputPath);
+    return {
+      ...result,
+      path: this.toRelativePath(absolutePath),
+    };
   }
 
   async init(): Promise<void> {
