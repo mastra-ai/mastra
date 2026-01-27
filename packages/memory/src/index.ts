@@ -324,12 +324,10 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
-
-    // Execute storage deletion and vector cleanup in parallel
-    await Promise.all([
-      memoryStore.deleteThread({ threadId }),
-      this.vector ? this.deleteThreadVectors(threadId) : Promise.resolve(),
-    ]);
+    await memoryStore.deleteThread({ threadId });
+    if (this.vector) {
+      await this.deleteThreadVectors(threadId);
+    }
   }
 
   /**
@@ -1236,10 +1234,10 @@ ${
     // Delete from storage and vector store in parallel
     const memoryStore = await this.getMemoryStore();
 
-    await Promise.all([
-      memoryStore.deleteMessages(messageIds),
-      this.vector && messageIds.length > 0 ? this.deleteMessageVectors(messageIds) : Promise.resolve(),
-    ]);
+    await memoryStore.deleteMessages(messageIds);
+    if (this.vector && messageIds.length > 0) {
+      await this.deleteMessageVectors(messageIds);
+    }
   }
 
   /**
