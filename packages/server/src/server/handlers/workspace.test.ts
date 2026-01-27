@@ -11,7 +11,6 @@ import {
   WORKSPACE_FS_STAT_ROUTE,
   WORKSPACE_SEARCH_ROUTE,
   WORKSPACE_INDEX_ROUTE,
-  WORKSPACE_UNINDEX_ROUTE,
   WORKSPACE_LIST_SKILLS_ROUTE,
   WORKSPACE_GET_SKILL_ROUTE,
   WORKSPACE_LIST_SKILL_REFERENCES_ROUTE,
@@ -94,7 +93,6 @@ function createMockWorkspace(
     canHybrid: options.canHybrid ?? false,
     search: vi.fn().mockResolvedValue([]),
     index: vi.fn().mockResolvedValue(undefined),
-    unindex: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -500,21 +498,6 @@ describe('Workspace Handlers', () => {
       } catch (e) {
         expect((e as HTTPException).status).toBe(400);
       }
-    });
-  });
-
-  describe('WORKSPACE_UNINDEX_ROUTE', () => {
-    it('should unindex content', async () => {
-      const workspace = createMockWorkspace({ canBM25: true });
-      const mastra = createMockMastra(workspace);
-
-      const result = await WORKSPACE_UNINDEX_ROUTE.handler({
-        mastra,
-        path: '/doc.txt',
-      });
-
-      expect(result.success).toBe(true);
-      expect(workspace.unindex).toHaveBeenCalledWith('/doc.txt');
     });
   });
 

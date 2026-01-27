@@ -50,3 +50,67 @@ export type WorkspaceToolName =
   | (typeof WORKSPACE_TOOLS.FILESYSTEM)[keyof typeof WORKSPACE_TOOLS.FILESYSTEM]
   | (typeof WORKSPACE_TOOLS.SEARCH)[keyof typeof WORKSPACE_TOOLS.SEARCH]
   | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX];
+
+// =============================================================================
+// Tool Configuration Types
+// =============================================================================
+
+/**
+ * Configuration for a single workspace tool.
+ * All fields are optional; unspecified fields inherit from top-level defaults.
+ */
+export interface WorkspaceToolConfig {
+  /** Whether the tool is enabled (default: true) */
+  enabled?: boolean;
+
+  /** Whether the tool requires user approval before execution (default: false) */
+  requireApproval?: boolean;
+
+  /**
+   * For write tools only: require reading a file before writing to it.
+   * Prevents accidental overwrites when the agent hasn't seen the current content.
+   */
+  requireReadBeforeWrite?: boolean;
+}
+
+/**
+ * Configuration for workspace tools.
+ *
+ * Supports top-level defaults that apply to all tools, plus per-tool overrides.
+ * Per-tool settings take precedence over top-level defaults.
+ *
+ * Default behavior (when no config provided):
+ * - All tools are enabled
+ * - No approval required
+ *
+ * @example Top-level defaults with per-tool overrides
+ * ```typescript
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './data' }),
+ *   tools: {
+ *     // Top-level defaults apply to all tools
+ *     enabled: true,
+ *     requireApproval: false,
+ *
+ *     // Per-tool overrides
+ *     mastra_workspace_write_file: {
+ *       requireApproval: true,
+ *       requireReadBeforeWrite: true,
+ *     },
+ *     mastra_workspace_delete_file: {
+ *       enabled: false,
+ *     },
+ *     mastra_workspace_execute_command: {
+ *       requireApproval: true,
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export type WorkspaceToolsConfig = {
+  /** Default: whether all tools are enabled (default: true if not specified) */
+  enabled?: boolean;
+
+  /** Default: whether all tools require user approval (default: false if not specified) */
+  requireApproval?: boolean;
+} & Partial<Record<WorkspaceToolName, WorkspaceToolConfig>>;

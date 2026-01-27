@@ -3,7 +3,7 @@
  *
  * All Zod schemas for workspace operations including:
  * - Filesystem operations (read, write, list, delete, mkdir, stat)
- * - Search operations (search, index, unindex)
+ * - Search operations (search, index)
  * - Skills operations (list, get, search, references)
  */
 
@@ -153,15 +153,6 @@ export const indexBodySchema = z.object({
 });
 
 export const indexResponseSchema = z.object({
-  success: z.boolean(),
-  path: z.string(),
-});
-
-export const unindexQuerySchema = z.object({
-  path: z.string().describe('Path to unindex'),
-});
-
-export const unindexResponseSchema = z.object({
   success: z.boolean(),
   path: z.string(),
 });
