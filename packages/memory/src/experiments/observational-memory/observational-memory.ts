@@ -439,7 +439,6 @@ export interface ObservationalMemoryConfig {
 interface ResolvedObserverConfig {
   model: MastraModelConfig;
   observationThreshold: number | ThresholdRange;
-  bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
@@ -448,7 +447,6 @@ interface ResolvedObserverConfig {
 interface ResolvedReflectorConfig {
   model: MastraModelConfig;
   reflectionThreshold: number | ThresholdRange;
-  bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
 }
@@ -661,8 +659,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.observerRecognizePatterns = config.observer?.recognizePatterns ?? false;
-    this.reflectorRecognizePatterns = config.reflector?.recognizePatterns ?? false;
+    // Pattern recognition is disabled - kept for potential future use
+    this.observerRecognizePatterns = false;
+    this.reflectorRecognizePatterns = false;
     this.observeFutureOnly = config.observeFutureOnly ?? false;
 
     // Resolve observer config with defaults
@@ -670,7 +669,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
       observationThreshold:
         config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
-      bufferEvery: config.observer?.bufferEvery,
       modelSettings: {
         temperature:
           config.observer?.modelSettings?.temperature ??
@@ -688,7 +686,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       model: config.reflector?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
       reflectionThreshold:
         config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
-      bufferEvery: config.reflector?.bufferEvery,
       modelSettings: {
         temperature:
           config.reflector?.modelSettings?.temperature ??

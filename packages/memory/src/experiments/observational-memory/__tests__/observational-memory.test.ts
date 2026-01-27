@@ -3287,7 +3287,6 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       instructions: 'You are a helpful assistant. Process and store conversation history.',
       model: mockAgentModel,
       inputProcessors: [om],
-      outputProcessors: [messageHistory, om],
     });
 
     // 5. Sort sessions chronologically (oldest first) - exactly like prepare.ts
@@ -3376,7 +3375,6 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       instructions: 'You are a helpful assistant. Answer questions based on the conversation history.',
       model: 'google/gemini-2.5-flash',
       inputProcessors: [om],
-      outputProcessors: [messageHistory, om],
     });
 
     const result = await evalAgent.generate(questionData.question, {
@@ -3445,8 +3443,7 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         name: 'Test Agent',
         instructions: 'You are a helpful assistant.',
         model: mockAgentModel,
-        inputProcessors: [messageHistory, om],
-        outputProcessors: [messageHistory, om], // MessageHistory must run first to save messages before OM observes
+        inputProcessors: [om],
       });
 
       // Process 5 random sessions before the answer session to build context
@@ -3499,8 +3496,7 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         name: 'Eval Agent',
         instructions: 'You are a helpful assistant. Answer questions based on conversation history.',
         model: 'google/gemini-2.5-flash',
-        inputProcessors: [messageHistory, om],
-        outputProcessors: [messageHistory, om], // MessageHistory must run first to save messages before OM observes
+        inputProcessors: [om],
       });
 
       const result = await evalAgent.generate(questionData.question, {
@@ -3564,7 +3560,6 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           'You are a helpful assistant. Use the observational memory provided to answer questions about the user.',
         model: 'google/gemini-2.5-flash',
         inputProcessors: [om],
-        outputProcessors: [om],
       });
 
       // Ask the question - agent should use injected observations
@@ -3588,7 +3583,8 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 // Unit Tests: Pattern Toggles and observeFutureOnly
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('Pattern Toggles', () => {
+// Pattern recognition feature is disabled - tests skipped
+describe.skip('Pattern Toggles', () => {
   let storage: InMemoryMemory;
   const threadId = 'test-thread';
   const resourceId = 'test-resource';

@@ -82,16 +82,6 @@ export interface ObserverConfig {
   observationThreshold?: number | ThresholdRange;
 
   /**
-   * Buffer observations in background every N tokens.
-   * This prevents blocking when threshold is hit.
-   * Must be less than observationThreshold (or observationThreshold.max).
-   *
-   * When enabled, observations are created asynchronously at intervals
-   * and only activated when the threshold is reached.
-   */
-  bufferEvery?: number;
-
-  /**
    * Model settings for the Observer agent.
    * @default { temperature: 0.3, maxOutputTokens: 100_000 }
    */
@@ -102,14 +92,6 @@ export interface ObserverConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 215 } } }
    */
   providerOptions?: ProviderOptions;
-
-  /**
-   * Whether to extract and track patterns (recurring themes).
-   * Patterns help with counting and recalling related items.
-   *
-   * @default false
-   */
-  recognizePatterns?: boolean;
 
   /**
    * Maximum tokens per batch when observing multiple threads.
@@ -147,13 +129,6 @@ export interface ReflectorConfig {
   reflectionThreshold?: number | ThresholdRange;
 
   /**
-   * Buffer reflections in background every N tokens.
-   * This prevents blocking when threshold is hit.
-   * Must be less than reflectionThreshold (or reflectionThreshold.max).
-   */
-  bufferEvery?: number;
-
-  /**
    * Model settings for the Reflector agent.
    * @default { temperature: 0.3, maxOutputTokens: 100_000 }
    */
@@ -164,14 +139,6 @@ export interface ReflectorConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: ProviderOptions;
-
-  /**
-   * Whether to extract and consolidate patterns during reflection.
-   * Patterns help with counting and recalling related items.
-   *
-   * @default false
-   */
-  recognizePatterns?: boolean;
 }
 
 /**
