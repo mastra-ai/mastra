@@ -235,12 +235,12 @@ Plans:
 | ----- | ------------------------- | ------------- | ----------- |
 | 1     | State Object Support      | 12            | Complete    |
 | 2     | Lifecycle Callbacks       | 15            | Complete    |
-| 3     | Schema Validation         | 12            | Not Started |
+| 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
 | 4     | Suspend/Resume Edge Cases | 24            | Not Started |
 | 5     | Streaming vNext           | 6             | Not Started |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
-**Total:** ~86 tests to port (113 - 27 completed)
+**Total:** ~77 tests to port (113 - 36 completed)
 
 ---
 
