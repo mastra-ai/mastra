@@ -938,21 +938,10 @@ kbd {
   }
 
   table code {
-    border: 1px solid var(--border-secondary);
-    border-radius: var(--ifm-global-radius);
-    background: transparent;
-    padding-inline: 0.62rem;
-    padding-block: 0.31rem 0.44rem;
-    font-size: 0.875rem;
-    height: 1.625rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: fit-content;
-  }
-
-  [data-theme='dark'] table code {
-    border-color: var(--border-code);
   }
 
   /* ==================== ADMONITIONS ==================== */
