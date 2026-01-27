@@ -4,18 +4,29 @@ import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
+import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
-import { emitFinishEvent } from '../stream-adapter';
+import { emitFinishEvent, emitChunkEvent } from '../stream-adapter';
 import type {
+  DurableToolCallInput,
   DurableAgenticWorkflowInput,
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
   SerializableScorersConfig,
 } from '../types';
+import type { ToolExecutionError } from './shared';
+import {
+  executeDurableToolCalls,
+  modelConfigSchema,
+  modelListEntrySchema,
+  durableAgenticOutputSchema,
+  baseIterationStateSchema,
+  createBaseIterationStateUpdate,
+} from './shared';
 import { createDurableLLMExecutionStep, createDurableLLMMappingStep } from './steps';
 
 /**
@@ -27,7 +38,8 @@ export interface DurableAgenticWorkflowOptions {
 }
 
 /**
- * Input schema for the durable agentic workflow
+ * Input schema for the durable agentic workflow.
+ * Extends base schema with model list for fallback support.
  */
 const durableAgenticInputSchema = z.object({
   runId: z.string(),
@@ -35,74 +47,24 @@ const durableAgenticInputSchema = z.object({
   agentName: z.string().optional(),
   messageListState: z.any(),
   toolsMetadata: z.array(z.any()),
-  modelConfig: z.object({
-    provider: z.string(),
-    modelId: z.string(),
-    specificationVersion: z.string().optional(),
-    settings: z.record(z.any()).optional(),
-  }),
+  modelConfig: modelConfigSchema,
   // Model list for fallback support (when agent configured with array of models)
-  modelList: z
-    .array(
-      z.object({
-        id: z.string(),
-        config: z.object({
-          provider: z.string(),
-          modelId: z.string(),
-          specificationVersion: z.string().optional(),
-          originalConfig: z.union([z.string(), z.record(z.any())]).optional(),
-        }),
-        maxRetries: z.number(),
-        enabled: z.boolean(),
-      }),
-    )
-    .optional(),
+  modelList: z.array(modelListEntrySchema).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
 });
 
-/**
- * Output schema for the durable agentic workflow
- */
-const durableAgenticOutputSchema = z.object({
-  messageListState: z.any(),
-  messageId: z.string(),
-  stepResult: z.any(),
-  output: z.object({
-    text: z.string().optional(),
-    usage: z.any(),
-    steps: z.array(z.any()),
-  }),
-  state: z.any(),
-});
+// Re-export shared output schema (identical across implementations)
+// Note: durableAgenticOutputSchema is imported from shared
 
 /**
- * Schema for the iteration state that flows through the dowhile loop
+ * Schema for the iteration state that flows through the dowhile loop.
+ * Extends base schema with model list for fallback support.
  */
-const iterationStateSchema = z.object({
-  // Original input fields
-  runId: z.string(),
-  agentId: z.string(),
-  agentName: z.string().optional(),
-  messageListState: z.any(),
-  toolsMetadata: z.array(z.any()),
-  modelConfig: z.any(),
+const iterationStateSchema = baseIterationStateSchema.extend({
   // Model list for fallback support
   modelList: z.array(z.any()).optional(),
-  options: z.any(),
-  state: z.any(),
-  messageId: z.string(),
-  // Iteration tracking
-  iterationCount: z.number(),
-  accumulatedSteps: z.array(z.any()),
-  accumulatedUsage: z.object({
-    inputTokens: z.number(),
-    outputTokens: z.number(),
-    totalTokens: z.number(),
-  }),
-  // Last step result for continuation check
-  lastStepResult: z.any().optional(),
 });
 
 type IterationState = z.infer<typeof iterationStateSchema>;
@@ -162,7 +124,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     .then(llmExecutionStep)
     // Step 2: Execute tool calls (if any)
     .map(
-      async ({ inputData, getInitData, mastra }) => {
+      async params => {
+        const { inputData, getInitData, mastra } = params;
         const llmOutput = inputData as DurableLLMStepOutput;
         const initData = getInitData() as IterationState;
 
@@ -195,61 +158,52 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           }
         }
 
-        // Execute tool calls
-        const toolResults: DurableToolCallOutput[] = [];
+        // Access pubsub via symbol for emitting tool-result chunks
+        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
-        for (const toolCall of llmOutput.toolCalls) {
-          // If tool was already executed by provider, use that result
-          if (toolCall.providerExecuted && toolCall.output !== undefined) {
-            toolResults.push({
-              ...toolCall,
-              result: toolCall.output,
-            });
-            continue;
-          }
+        // Execute tool calls using shared function with pubsub hooks
+        const toolResults = await executeDurableToolCalls({
+          toolCalls: llmOutput.toolCalls,
+          tools,
+          runId: initData.runId,
+          agentId: initData.agentId,
+          messageId: initData.messageId,
+          state: llmOutput.state,
 
-          // Resolve the tool
-          const tool = tools[toolCall.toolName];
-
-          if (!tool) {
-            toolResults.push({
-              ...toolCall,
-              error: {
-                name: 'ToolNotFoundError',
-                message: `Tool ${toolCall.toolName} not found`,
-              },
-            });
-            continue;
-          }
-
-          // Execute the tool
-          try {
-            if (tool.execute) {
-              const result = await tool.execute(toolCall.args, {
-                toolCallId: toolCall.toolCallId,
-                messages: [],
-              });
-              toolResults.push({
-                ...toolCall,
-                result,
-              });
-            } else {
-              toolResults.push({
-                ...toolCall,
-                result: undefined,
+          // Emit tool-result chunk on success so client stream receives it
+          onToolResult: async (toolCall: DurableToolCallInput, result: unknown) => {
+            if (pubsub) {
+              await emitChunkEvent(pubsub, initData.runId, {
+                type: 'tool-result',
+                runId: initData.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                  result,
+                },
               });
             }
-          } catch (error) {
-            toolResults.push({
-              ...toolCall,
-              error: {
-                name: 'ToolExecutionError',
-                message: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-              },
-            });
-          }
-        }
+          },
+
+          // Emit tool-error chunk on failure so client stream receives it
+          onToolError: async (toolCall: DurableToolCallInput, error: ToolExecutionError) => {
+            if (pubsub) {
+              await emitChunkEvent(pubsub, initData.runId, {
+                type: 'tool-error',
+                runId: initData.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                  error,
+                },
+              });
+            }
+          },
+        });
 
         return {
           llmOutput,
@@ -264,43 +218,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     )
     // Step 3: Map tool results back to state
     .then(llmMappingStep)
-    // Step 4: Map back to iteration state format
+    // Step 4: Map back to iteration state format using shared function
     .map(
       async ({ inputData, getInitData }) => {
         const executionOutput = inputData as DurableAgenticExecutionOutput;
         const initData = getInitData() as IterationState;
 
-        // Accumulate usage
-        const newUsage = {
-          inputTokens: initData.accumulatedUsage.inputTokens + (executionOutput.output.usage?.inputTokens || 0),
-          outputTokens: initData.accumulatedUsage.outputTokens + (executionOutput.output.usage?.outputTokens || 0),
-          totalTokens: initData.accumulatedUsage.totalTokens + (executionOutput.output.usage?.totalTokens || 0),
-        };
+        // Use shared function for base state update
+        const baseUpdate = createBaseIterationStateUpdate({
+          currentState: initData,
+          executionOutput,
+        });
 
-        // Build step record
-        const stepRecord = {
-          text: executionOutput.output.text,
-          toolCalls: executionOutput.output.toolCalls,
-          toolResults: executionOutput.toolResults,
-          usage: executionOutput.output.usage,
-          finishReason: executionOutput.stepResult.reason,
-        };
-
+        // Extend with core-specific fields
         const newIterationState: IterationState = {
-          runId: initData.runId,
-          agentId: initData.agentId,
-          agentName: initData.agentName,
-          messageListState: executionOutput.messageListState,
-          toolsMetadata: initData.toolsMetadata,
-          modelConfig: initData.modelConfig,
+          ...baseUpdate,
           modelList: initData.modelList,
-          options: initData.options,
-          state: executionOutput.state,
-          messageId: executionOutput.messageId,
-          iterationCount: initData.iterationCount + 1,
-          accumulatedSteps: [...initData.accumulatedSteps, stepRecord],
-          accumulatedUsage: newUsage,
-          lastStepResult: executionOutput.stepResult,
         };
 
         return newIterationState;

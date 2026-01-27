@@ -47,6 +47,16 @@ export {
   type DurableAgentStreamResult,
 } from './durable-agent';
 
+// Evented Agent factory (like createInngestAgent but for built-in workflow engine)
+export {
+  createEventedAgent,
+  isEventedAgent,
+  type CreateEventedAgentOptions,
+  type EventedAgent,
+  type EventedAgentStreamOptions,
+  type EventedAgentStreamResult,
+} from './create-evented-agent';
+
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 
@@ -125,3 +135,29 @@ export {
   createDurableToolCallStep,
   createDurableLLMMappingStep,
 } from './workflows/steps';
+
+// Shared workflow utilities
+export {
+  executeDurableToolCalls,
+  modelConfigSchema,
+  modelListEntrySchema,
+  accumulatedUsageSchema,
+  durableAgenticOutputSchema,
+  baseDurableAgenticInputSchema,
+  baseIterationStateSchema,
+  calculateAccumulatedUsage,
+  buildStepRecord,
+  createBaseIterationStateUpdate,
+} from './workflows/shared';
+export type {
+  ToolExecutionContext,
+  ToolExecutionError,
+  BaseIterationState,
+  AccumulatedUsage,
+  IterationStateUpdateInput,
+  StepRecord,
+} from './workflows/shared';
+
+// Workflow executors
+export { LocalWorkflowExecutor, localExecutor, EventedWorkflowExecutor, eventedExecutor } from './executors';
+export type { WorkflowExecutor, WorkflowExecutionResult } from './executors';

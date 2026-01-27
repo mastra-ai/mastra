@@ -6,6 +6,8 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
 import type { AgentConfig, ToolsInput } from '../types';
 
+import { localExecutor } from './executors';
+import type { WorkflowExecutor } from './executors';
 import { prepareForDurableExecution } from './preparation';
 import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream } from './stream-adapter';
@@ -88,6 +90,15 @@ export interface DurableAgentConfig<
    * across process boundaries and execution engine replays.
    */
   pubsub: PubSub;
+
+  /**
+   * Workflow executor for running the durable workflow.
+   * Defaults to LocalWorkflowExecutor (direct execution).
+   *
+   * Use EventedWorkflowExecutor for fire-and-forget execution
+   * with EventedExecutionEngine.
+   */
+  executor?: WorkflowExecutor;
 }
 
 /**
@@ -146,6 +157,9 @@ export class DurableAgent<
   /** PubSub instance for streaming events */
   readonly #pubsub: PubSub;
 
+  /** Workflow executor for running the durable workflow */
+  readonly #executor: WorkflowExecutor;
+
   /** Registry for per-run non-serializable state */
   readonly #runRegistry: ExtendedRunRegistry;
 
@@ -157,16 +171,17 @@ export class DurableAgent<
   /** Pending initialization promise */
   #initPromise: Promise<void> | null = null;
   /** Agent config stored for deferred initialization */
-  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub'>;
+  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub' | 'executor'>;
 
   /**
    * Create a new DurableAgent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { pubsub, ...agentConfig } = config;
+    const { pubsub, executor, ...agentConfig } = config;
 
     this.#agentConfig = agentConfig;
     this.#pubsub = pubsub;
+    this.#executor = executor ?? localExecutor;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#agent = null; // Agent will be initialized lazily on first use
   }
@@ -317,7 +332,7 @@ export class DurableAgent<
   }
 
   /**
-   * Execute the durable workflow.
+   * Execute the durable workflow using the configured executor.
    * This is called asynchronously after stream() returns.
    */
   async #executeWorkflow(runId: string, workflowInput: any): Promise<void> {
@@ -325,21 +340,10 @@ export class DurableAgent<
       throw new Error('Workflow not initialized');
     }
 
-    try {
-      // Create a run and start it, passing our pubsub for streaming
-      const run = await this.#workflow.createRun({ runId, pubsub: this.#pubsub });
-      const result = await run.start({ inputData: workflowInput });
+    const result = await this.#executor.execute(this.#workflow, workflowInput, this.#pubsub, runId);
 
-      // Check for errors in result
-      if (result?.status === 'failed') {
-        const error = new Error((result as any).error?.message || 'Workflow execution failed');
-        await this.#emitError(runId, error);
-        return;
-      }
-
-      // Success - finish event should have been emitted by the workflow steps
-    } catch (error) {
-      await this.#emitError(runId, error as Error);
+    if (!result.success && result.error) {
+      await this.#emitError(runId, result.error);
     }
   }
 
@@ -399,13 +403,12 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    // Resume the workflow
+    // Resume the workflow using the executor
     if (this.#workflow) {
-      (async () => {
-        const run = await this.#workflow!.createRun({ runId, pubsub: this.#pubsub });
-        await run.resume({ resumeData });
-      })().catch((error: Error) => {
-        void this.#emitError(runId, error);
+      void this.#executor.resume(this.#workflow, this.#pubsub, runId, resumeData).then(result => {
+        if (!result.success && result.error) {
+          void this.#emitError(runId, result.error);
+        }
       });
     }
 

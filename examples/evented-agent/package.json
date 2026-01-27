@@ -1,0 +1,36 @@
+{
+  "name": "evented-agent-example",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example showing durable agents with the built-in evented workflow engine",
+  "main": "index.js",
+  "scripts": {
+    "mastra:dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "dependencies": {
+    "@hono/node-server": "^1.19.8",
+    "@mastra/core": "1.0.0-beta.20",
+    "@mastra/deployer": "1.0.0-beta.20",
+    "@mastra/libsql": "1.0.0-beta.11",
+    "@mastra/loggers": "1.0.0-beta.4",
+    "@mastra/observability": "1.0.0-beta.10",
+    "mastra": "1.0.0-beta.13",
+    "zod": "^3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/deployer": "link:../../packages/deployer",
+      "@mastra/server": "link:../../packages/server",
+      "mastra": "link:../../packages/cli"
+    }
+  }
+}
