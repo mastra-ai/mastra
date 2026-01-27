@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 7 of 8 (CSV Import) — COMPLETE
-Plan: 4 of 4 in phase 7
-Status: Phase 7 verified (6/6 must-haves)
-Last activity: 2026-01-27 — Phase 7 execution complete, verified
+Plan: 5 of 5 in phase 7 (includes gap closure)
+Status: Phase 7 verified + gap closed
+Last activity: 2026-01-27 — Completed 07-05 gap closure (column mapping fix)
 
 Progress: [████████░░] 88%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 27
+- Total plans completed: 28
 - Average duration: 4 min
 - Total execution time: 1.6 hours
 
@@ -33,10 +33,10 @@ Progress: [████████░░] 88%
 | 04-scorer-targets | 1 | 3 min | 3 min |
 | 05-run-analytics | 1 | 4 min | 4 min |
 | 06-playground-integration | 12 | 48 min | 4 min |
-| 07-csv-import | 4 | 9 min | 2 min |
+| 07-csv-import | 5 | 10 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (2 min), 07-02 (2 min), 07-03 (3 min), 07-04 (2 min)
+- Last 5 plans: 07-02 (2 min), 07-03 (3 min), 07-04 (2 min), 07-05 (1 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -89,6 +89,7 @@ Recent decisions affecting current work:
 - Sequential CSV import with progress tracking (not batched)
 - Import CSV button uses outline variant to distinguish from Add Item primary action
 - Optional action props pattern: only render UI when callback provided
+- useEffect rebuilds entire mapping on headers change (not incremental merge)
 
 ### Pending Todos
 
@@ -101,5 +102,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Phase 7 complete — all 4 plans executed, verified
+Stopped at: Completed 07-05 gap closure (column mapping fix)
 Resume file: None
