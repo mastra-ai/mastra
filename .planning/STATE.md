@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Agents can browse and interact with real websites to gather information that requires JavaScript rendering or user interaction.
-**Current focus:** Milestone complete - all phases verified
+**Current focus:** All gap closure phases complete
 
 ## Current Position
 
-Phase: 5 of 6 (Schema Consolidation)
-Plan: 2 of 2 in current phase
+Phase: 6 of 6 (Browser Lifecycle Locking)
+Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-27 — Completed 05-02-PLAN.md
+Last activity: 2026-01-27 — Completed 06-01-PLAN.md
 
-Progress: [================....] 82% (9/11 plans)
+Progress: [====================] 100% (11/11 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 11
 - Average duration: 4 min
-- Total execution time: 34 min
+- Total execution time: 40 min
 
 **By Phase:**
 
@@ -32,9 +32,10 @@ Progress: [================....] 82% (9/11 plans)
 | 03-screenshot | 1 | 4 min | 4 min |
 | 04-navigate-error-consistency | 1 | 2 min | 2 min |
 | 05-schema-consolidation | 2 | 12 min | 6 min |
+| 06-browser-lifecycle-locking | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 6 plans: 4 min, 4 min, 4 min, 2 min, 10 min, 2 min
+- Last 6 plans: 4 min, 2 min, 10 min, 2 min, 3 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 | Remove BrowserError completely | 04-01 | Use BrowserToolError from errors.ts as canonical source |
 | Schemas in types.ts as single source of truth | 05-01 | Eliminate duplication, prevent drift |
 | Optional fields for success/error union | 05-01 | Flat object supports both cases without discriminator |
+| Singleton Promise pattern for getBrowser | 06-01 | Prevents concurrent browser launches via synchronous promise assignment |
+| Reset launchPromise on failure | 06-01 | Allows retry on next getBrowser() call |
+| Clear launchPromise at start of close() | 06-01 | Ensures close() -> getBrowser() starts fresh launch |
 
 ### Pending Todos
 
@@ -79,14 +83,14 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed Phase 5 (05-02-PLAN.md)
+Stopped at: Completed Phase 6 (06-01-PLAN.md)
 Resume file: None
 
-## Gap Closure In Progress
+## Gap Closure Complete
 
 Core phases 1-3 complete. Gap closure phases from audit:
 - Phase 4: Navigate error consistency - COMPLETE
 - Phase 5: Schema consolidation - COMPLETE
-- Phase 6: Browser lifecycle locking - Ready
+- Phase 6: Browser lifecycle locking - COMPLETE
 
-Next: Execute Phase 6, then re-audit.
+All 11 plans executed successfully. Ready for final audit verification.
