@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 07-csv-import
 source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md, 07-04-SUMMARY.md]
 started: 2026-01-27T05:30:00Z
@@ -82,7 +82,10 @@ skipped: 5
   reason: "User reported: I see 4 drop zones but I do not see any CSV columns start anywhere"
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "useColumnMapping hook's useState initializer runs once with empty headers array, never updates when headers prop changes after CSV parse"
+  artifacts:
+    - path: "packages/playground-ui/src/domains/datasets/hooks/use-column-mapping.ts"
+      issue: "Missing useEffect to sync mapping with headers prop changes"
+  missing:
+    - "Add useEffect that rebuilds mapping object when headers array reference changes"
+  debug_session: ".planning/debug/csv-columns-not-appearing.md"

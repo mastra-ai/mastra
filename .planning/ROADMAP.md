@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Scorer Targets** - Run datasets against scorers for LLM-as-judge alignment ✓
 - [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
 - [x] **Phase 6: Playground Integration** - Datasets UI with run triggering and results ✓
-- [x] **Phase 7: CSV Import** - Bulk item creation from CSV files ✓
+- [ ] **Phase 7: CSV Import** - Bulk item creation from CSV files (gap closure)
 - [ ] **Phase 8: Item Selection** - Run subsets via itemIds parameter
 
 ## Phase Details
@@ -142,13 +142,14 @@ Plans:
   4. Invalid rows are reported with line numbers and error messages
   5. Successful import auto-increments dataset version
   6. Import works from playground UI (CLI deferred)
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 - [x] 07-01-PLAN.md — PapaParse installation + CSV parsing/validation utilities
 - [x] 07-02-PLAN.md — Drag-drop column mapping component with state hook
 - [x] 07-03-PLAN.md — Multi-step CSV import dialog (upload → preview → map → validate → import)
 - [x] 07-04-PLAN.md — Integration into dataset detail page items list
+- [ ] 07-05-PLAN.md — Gap closure: fix useColumnMapping headers sync
 
 ### Phase 8: Item Selection
 **Goal**: Run subsets of dataset for quick iteration via UI selection
@@ -179,5 +180,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Scorer Targets | 1/1 | ✓ Complete | 2026-01-24 |
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
 | 6. Playground Integration | 12/12 | ✓ Complete | 2026-01-26 |
-| 7. CSV Import | 4/4 | ✓ Complete | 2026-01-27 |
+| 7. CSV Import | 4/5 | Gap closure | 2026-01-27 |
 | 8. Item Selection | 0/TBD | Not started | - |
