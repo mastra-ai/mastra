@@ -95,7 +95,6 @@ export interface CopyOptions {
 
 /**
  * Safety options that can be configured per-filesystem.
- * These options control how the filesystem behaves with regard to write operations.
  */
 export interface FilesystemSafetyOptions {
   /**
@@ -105,30 +104,6 @@ export interface FilesystemSafetyOptions {
    * @default false
    */
   readOnly?: boolean;
-
-  /**
-   * Require files to be read before they can be written to.
-   * If enabled, writeFile will throw an error if:
-   * - The file exists but was never read in this session
-   * - The file was modified since the last read
-   *
-   * New files (that don't exist yet) can be written without reading.
-   *
-   * @default true
-   */
-  requireReadBeforeWrite?: boolean;
-
-  /**
-   * Require approval for filesystem operations.
-   * - 'all': Require approval for all filesystem operations (read, write, list, delete, mkdir)
-   * - 'write': Require approval only for write operations (write, delete, mkdir)
-   * - 'none': No approval required
-   *
-   * This setting is used by workspace tools to set the `requireApproval` flag.
-   *
-   * @default 'none'
-   */
-  requireApproval?: 'all' | 'write' | 'none';
 }
 
 // =============================================================================

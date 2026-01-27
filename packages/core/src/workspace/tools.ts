@@ -415,41 +415,55 @@ Examples:
       });
     }
 
-    // Delete file tool (only if not in readonly mode)
-    const deleteFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE);
-    if (!isReadOnly && deleteFileConfig.enabled) {
-      tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE] = createTool({
-        id: WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE,
-        description: 'Delete a file from the workspace filesystem',
-        requireApproval: deleteFileConfig.requireApproval,
+    // Delete tool (only if not in readonly mode)
+    const deleteConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+    if (!isReadOnly && deleteConfig.enabled) {
+      tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
+        description: 'Delete a file or directory from the workspace filesystem',
+        requireApproval: deleteConfig.requireApproval,
         inputSchema: z.object({
-          path: z.string().describe('The path to the file to delete'),
-          force: z.boolean().optional().default(false).describe('Whether to ignore errors if the file does not exist'),
+          path: z.string().describe('The path to the file or directory to delete'),
+          recursive: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe(
+              'If true, delete directories and their contents recursively. Required for non-empty directories.',
+            ),
         }),
         outputSchema: z.object({
           success: z.boolean(),
           path: z.string(),
         }),
-        execute: async ({ path, force }) => {
-          await workspace.filesystem!.deleteFile(path, { force });
+        execute: async ({ path, recursive }) => {
+          const stat = await workspace.filesystem!.stat(path);
+          if (stat.type === 'directory') {
+            await workspace.filesystem!.rmdir(path, { recursive, force: recursive });
+          } else {
+            await workspace.filesystem!.deleteFile(path);
+          }
           return { success: true, path };
         },
       });
     }
 
-    // File exists tool
-    const fileExistsConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS);
-    if (fileExistsConfig.enabled) {
-      tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS] = createTool({
-        id: WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS,
-        description: 'Check if a file or directory exists in the workspace',
-        requireApproval: fileExistsConfig.requireApproval,
+    // File stat tool
+    const fileStatConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+    if (fileStatConfig.enabled) {
+      tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT] = createTool({
+        id: WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT,
+        description:
+          'Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.',
+        requireApproval: fileStatConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to check'),
         }),
         outputSchema: z.object({
           exists: z.boolean().describe('Whether the path exists'),
           type: z.enum(['file', 'directory', 'none']).describe('The type of the path if it exists'),
+          size: z.number().optional().describe('Size in bytes (for files)'),
+          modifiedAt: z.string().optional().describe('Last modification time (ISO string)'),
         }),
         execute: async ({ path }) => {
           try {
@@ -457,6 +471,8 @@ Examples:
             return {
               exists: true,
               type: stat.type,
+              size: stat.size,
+              modifiedAt: stat.modifiedAt.toISOString(),
             };
           } catch {
             return { exists: false, type: 'none' as const };

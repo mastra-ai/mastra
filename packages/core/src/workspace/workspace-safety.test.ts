@@ -309,50 +309,6 @@ describe('Workspace Safety Features', () => {
     });
   });
 
-  describe('getSafetyConfig', () => {
-    it('should return safety config from filesystem provider', () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({
-          basePath: tempDir,
-          safety: {
-            requireReadBeforeWrite: false,
-            readOnly: true,
-            requireApproval: 'write',
-          },
-        }),
-      });
-
-      const config = workspace.getSafetyConfig();
-      expect(config.requireReadBeforeWrite).toBe(false);
-      expect(config.readOnly).toBe(true);
-      expect(config.requireFilesystemApproval).toBe('write');
-    });
-
-    it('should return safety config from sandbox provider', () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({
-          workingDirectory: tempDir,
-          safety: { requireApproval: 'commands' },
-        }),
-      });
-
-      const config = workspace.getSafetyConfig();
-      expect(config.requireSandboxApproval).toBe('commands');
-    });
-
-    it('should return default values when no safety config provided', () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-      });
-
-      const config = workspace.getSafetyConfig();
-      expect(config.readOnly).toBe(false);
-      expect(config.requireReadBeforeWrite).toBe(true);
-      expect(config.requireFilesystemApproval).toBe('none');
-      expect(config.requireSandboxApproval).toBe('all');
-    });
-  });
-
   describe('createWorkspaceTools with safety config', () => {
     it('should exclude write tools in readonly mode', async () => {
       const workspace = new Workspace({
@@ -369,12 +325,12 @@ describe('Workspace Safety Features', () => {
       // Read tools should be present
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeDefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.SEARCH.SEARCH]).toBeDefined();
 
       // Write tools should be absent (including index which writes to search index)
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeUndefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR]).toBeUndefined();
       expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeUndefined();
 
@@ -394,7 +350,7 @@ describe('Workspace Safety Features', () => {
       const tools = createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeDefined();
 
@@ -415,8 +371,8 @@ describe('Workspace Safety Features', () => {
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeDefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeDefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_EXISTS]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.SEARCH.SEARCH]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeDefined();
@@ -481,8 +437,8 @@ describe('Workspace Safety Features', () => {
           [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
             requireApproval: false,
           },
-          // Override: delete_file is disabled
-          [WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]: {
+          // Override: delete is disabled
+          [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
             enabled: false,
           },
         },
@@ -497,8 +453,8 @@ describe('Workspace Safety Features', () => {
       // write_file should require approval (top-level default)
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].requireApproval).toBe(true);
 
-      // delete_file should be disabled
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeUndefined();
+      // delete should be disabled
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeUndefined();
 
       // sandbox tool should require approval (top-level default)
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
@@ -532,7 +488,7 @@ describe('Workspace Safety Features', () => {
 
       // All other tools should be disabled
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
-      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeUndefined();
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeUndefined();
 
       await workspace.destroy();

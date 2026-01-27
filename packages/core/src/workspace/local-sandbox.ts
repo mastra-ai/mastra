@@ -10,14 +10,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
-import type {
-  WorkspaceSandbox,
-  SandboxStatus,
-  SandboxInfo,
-  ExecuteCommandOptions,
-  CommandResult,
-  SandboxSafetyOptions,
-} from './sandbox';
+import type { WorkspaceSandbox, SandboxStatus, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { SandboxNotReadyError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
@@ -103,11 +96,6 @@ export interface LocalSandboxOptions {
   inheritEnv?: boolean;
   /** Default timeout for operations in ms (default: 30000) */
   timeout?: number;
-  /**
-   * Safety options for this sandbox.
-   * Controls approval requirements for command execution.
-   */
-  safety?: SandboxSafetyOptions;
 }
 
 /**
@@ -133,7 +121,6 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
-  readonly safety?: SandboxSafetyOptions;
 
   private _status: SandboxStatus = 'stopped';
   private readonly _workingDirectory: string;
@@ -161,7 +148,6 @@ export class LocalSandbox implements WorkspaceSandbox {
     this.env = options.env ?? {};
     this._inheritEnv = options.inheritEnv ?? false;
     this.timeout = options.timeout ?? 30000;
-    this.safety = options.safety;
   }
 
   private generateId(): string {

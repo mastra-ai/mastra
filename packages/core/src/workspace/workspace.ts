@@ -382,27 +382,6 @@ export class Workspace {
   }
 
   /**
-   * Get the effective safety configuration for this workspace.
-   * Reads safety settings from the configured providers.
-   *
-   * @deprecated Use getToolsConfig() for per-tool settings.
-   * Only `readOnly` should remain at the provider level.
-   */
-  getSafetyConfig(): {
-    readOnly: boolean;
-    requireReadBeforeWrite: boolean;
-    requireFilesystemApproval: 'all' | 'write' | 'none';
-    requireSandboxApproval: 'all' | 'commands' | 'none';
-  } {
-    return {
-      readOnly: this._fs?.safety?.readOnly ?? false,
-      requireReadBeforeWrite: this._fs?.safety?.requireReadBeforeWrite ?? true,
-      requireFilesystemApproval: this._fs?.safety?.requireApproval ?? 'none',
-      requireSandboxApproval: this._sandbox?.safety?.requireApproval ?? 'all',
-    };
-  }
-
-  /**
    * Assert that the workspace is writable (not in read-only mode).
    * @throws {WorkspaceReadOnlyError} if workspace is read-only
    */

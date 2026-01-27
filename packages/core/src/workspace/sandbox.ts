@@ -74,27 +74,6 @@ export interface ExecuteCommandOptions {
 }
 
 // =============================================================================
-// Sandbox Safety Options
-// =============================================================================
-
-/**
- * Safety options that can be configured per-sandbox.
- * These options control how the sandbox behaves with regard to execution approval.
- */
-export interface SandboxSafetyOptions {
-  /**
-   * Require approval for sandbox command execution.
-   * - 'all': Require approval for all sandbox operations (commands, package installs)
-   * - 'none': No approval required
-   *
-   * This setting is used by workspace tools to set the `requireApproval` flag.
-   *
-   * @default 'all'
-   */
-  requireApproval?: 'all' | 'none';
-}
-
-// =============================================================================
 // Sandbox Interface
 // =============================================================================
 
@@ -119,12 +98,6 @@ export interface WorkspaceSandbox {
 
   /** Current status */
   readonly status: SandboxStatus;
-
-  /**
-   * Safety configuration for this sandbox.
-   * Optional - if not provided, defaults apply.
-   */
-  readonly safety?: SandboxSafetyOptions;
 
   // ---------------------------------------------------------------------------
   // Command Execution
