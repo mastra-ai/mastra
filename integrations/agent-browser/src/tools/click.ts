@@ -1,37 +1,8 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import type { BrowserManager } from 'agent-browser/dist/browser.js';
 
-import { type BrowserToolError, createError } from '../errors.js';
-
-/**
- * Zod schema for click tool input parameters.
- */
-const clickInputSchema = z.object({
-  ref: z.string().describe('Element ref from snapshot (e.g., @e5)'),
-  button: z
-    .enum(['left', 'right', 'middle'])
-    .optional()
-    .default('left')
-    .describe('Mouse button to click with'),
-});
-
-/**
- * Zod schema for click tool output.
- */
-const clickOutputSchema = z.object({
-  success: z.boolean().describe('Whether the click succeeded'),
-});
-
-/**
- * Input type for the click tool.
- */
-export type ClickInput = z.infer<typeof clickInputSchema>;
-
-/**
- * Output type for the click tool.
- */
-export type ClickOutput = z.infer<typeof clickOutputSchema>;
+import { type BrowserToolError } from '../errors.js';
+import { clickInputSchema, clickOutputSchema, type ClickOutput } from '../types.js';
 
 /**
  * Creates a click tool that clicks on elements using ref identifiers.
@@ -62,11 +33,15 @@ export function createClickTool(getBrowser: () => Promise<BrowserManager>, defau
       const locator = browser.getLocatorFromRef(input.ref);
 
       if (!locator) {
-        return createError(
-          'stale_ref',
-          `Ref ${input.ref} not found. The page may have changed.`,
-          'Take a new snapshot to get current element refs.',
-        );
+        const page = browser.getPage();
+        return {
+          success: false,
+          code: 'stale_ref',
+          message: `Ref ${input.ref} not found. The page has changed.`,
+          url: page.url(),
+          hint: 'IMPORTANT: Take a new snapshot NOW to see the current page state and get fresh refs.',
+          canRetry: false,
+        };
       }
 
       try {
@@ -75,30 +50,53 @@ export function createClickTool(getBrowser: () => Promise<BrowserManager>, defau
           timeout: defaultTimeout,
         });
 
-        return { success: true };
+        // Get current URL after click to help agent understand page state
+        const page = browser.getPage();
+        const url = page.url();
+
+        return {
+          success: true,
+          url,
+          hint: 'Take a new snapshot to see updated page state and get fresh refs.',
+        };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const page = browser.getPage();
+        const url = page.url();
 
         // Element is blocked by another element (modal, overlay, etc.)
-        if (message.includes('intercepts pointer events')) {
-          return createError(
-            'element_blocked',
-            `Element ${input.ref} is blocked by another element.`,
-            'Dismiss any modals or overlays covering the element.',
-          );
+        if (errorMsg.includes('intercepts pointer events')) {
+          return {
+            success: false,
+            code: 'element_blocked',
+            message: `Element ${input.ref} is blocked by another element (modal/overlay).`,
+            url,
+            hint: 'Take a new snapshot to see what is blocking. Dismiss any modals or scroll the element into view.',
+            canRetry: true,
+          };
         }
 
         // Operation timed out
-        if (message.includes('Timeout')) {
-          return createError(
-            'timeout',
-            `Click on ${input.ref} timed out.`,
-            'Element may be loading. Wait and try again.',
-          );
+        if (errorMsg.includes('Timeout')) {
+          return {
+            success: false,
+            code: 'timeout',
+            message: `Click on ${input.ref} timed out.`,
+            url,
+            hint: 'Take a new snapshot - the element may have moved or the page may have changed.',
+            canRetry: true,
+          };
         }
 
         // Generic browser error
-        return createError('browser_error', `Click failed: ${message}`);
+        return {
+          success: false,
+          code: 'browser_error',
+          message: `Click failed: ${errorMsg}`,
+          url,
+          hint: 'Take a new snapshot to see the current page state.',
+          canRetry: false,
+        };
       }
     },
   });
