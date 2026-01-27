@@ -1,0 +1,4 @@
+{
+  "setup": ["pnpm install", "cp \"$SUPERSET_ROOT_PATH/.env.local\" .env.local", "nohup pnpm build > /dev/null 2>&1 &"],
+  "teardown": []
+}
