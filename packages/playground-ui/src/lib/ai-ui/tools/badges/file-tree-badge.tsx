@@ -107,9 +107,7 @@ export const FileTreeBadge = ({
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
             List Files <span className="text-icon6 font-normal ml-1">{path}</span>
-            {argsDisplay.length > 0 && (
-              <span className="text-icon4 font-normal ml-1">({argsDisplay.join(', ')})</span>
-            )}
+            {argsDisplay.length > 0 && <span className="text-icon4 font-normal ml-1">({argsDisplay.join(', ')})</span>}
           </Badge>
         </button>
 
