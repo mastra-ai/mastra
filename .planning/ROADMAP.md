@@ -92,10 +92,11 @@ Plans:
   4. scroll.ts imports schemas from types.ts (no local definitions)
   5. screenshot.ts imports schemas from types.ts (no local definitions)
   6. All schema exports from types.ts remain intact
-**Plans**: 1 plan
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md - Consolidate schemas to types.ts
+- [ ] 05-01-PLAN.md - Update types.ts and consolidate snapshot/click
+- [ ] 05-02-PLAN.md - Consolidate type/scroll/screenshot
 
 ### Phase 6: Browser Lifecycle Locking
 **Goal**: Concurrent getBrowser() calls share single browser instance
@@ -139,7 +140,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Core Actions | 3/3 | ✓ Complete | 2026-01-26 |
 | 3. Screenshot | 1/1 | ✓ Complete | 2026-01-26 |
 | 4. Navigate Error Consistency | 1/1 | ✓ Complete | 2026-01-27 |
-| 5. Schema Consolidation | 0/1 | Pending | — |
+| 5. Schema Consolidation | 0/2 | Pending | — |
 | 6. Browser Lifecycle Locking | 0/1 | Pending | — |
 
 ---
