@@ -309,6 +309,39 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     copyMessage: 'Observations copied!',
   });
 
+  // Ref for the observations scroll container
+  const observationsContentRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to the most recent date section when observations change
+  useEffect(() => {
+    if (!observations || !observationsContentRef.current || !isExpanded) return;
+    
+    // Find all date headers (elements with "Date:" text pattern)
+    const container = observationsContentRef.current;
+    const dateHeaders = container.querySelectorAll<HTMLElement>('[class*="sticky"]');
+    
+    if (dateHeaders.length > 0) {
+      // Get the last (most recent) date section
+      const lastDateHeader = dateHeaders[dateHeaders.length - 1];
+      const scrollContainer = container.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
+      
+      if (scrollContainer && lastDateHeader) {
+        // Calculate position to scroll so date header is at top
+        const containerTop = container.getBoundingClientRect().top;
+        const headerTop = lastDateHeader.getBoundingClientRect().top;
+        const offsetFromTop = headerTop - containerTop;
+        
+        // Use requestAnimationFrame for smooth scrolling after render
+        requestAnimationFrame(() => {
+          scrollContainer.scrollTo({
+            top: offsetFromTop,
+            behavior: 'smooth'
+          });
+        });
+      }
+    }
+  }, [observations, isExpanded]);
+
   // Format relative time
   const formatRelativeTime = (date: Date | string | null | undefined) => {
     if (!date) return 'Never';
@@ -425,8 +458,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             </button>
             {isExpanded && (
               <div className="border-t border-border1 overflow-hidden" style={{ height: '400px' }}>
-                <ScrollArea className="h-full" autoScroll>
+                <ScrollArea className="h-full">
                   <div
+                    ref={observationsContentRef}
                     className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                     onClick={handleCopy}
                   >
