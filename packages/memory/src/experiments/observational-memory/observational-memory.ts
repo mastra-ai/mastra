@@ -2866,7 +2866,7 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
 
     // First, get all threads for this resource to access their per-thread lastObservedAt
-    const { threads: allThreads } = await this.storage.listThreadsByResourceId({ resourceId });
+    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
     for (const thread of allThreads) {

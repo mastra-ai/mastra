@@ -1,6 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,
@@ -158,6 +158,8 @@ export class QdrantVector extends MastraVector {
    * @param vectorName - Optional name of the vector space when using named vectors.
    */
   async upsert({ indexName, vectors, metadata, ids, vectorName }: QdrantUpsertVectorParams): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('QDRANT', vectors, metadata, ids);
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     // Validate vector name if provided
@@ -437,7 +439,7 @@ export class QdrantVector extends MastraVector {
       return {
         dimension: config.params.vectors?.size as number,
         count: points_count || 0,
-        // @ts-expect-error
+        // @ts-expect-error - Object.keys returns string[] but DISTANCE_MAPPING keys are typed
         metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
       };
     } catch (error) {

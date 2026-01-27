@@ -32,7 +32,7 @@ import type { OutputSchema } from '../stream';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
@@ -57,13 +57,7 @@ type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT = {}> = {
-  /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
-
-  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraModelConfig;
-
+type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
@@ -94,8 +88,18 @@ export type StructuredOutputOptions<OUTPUT = {}> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptions<OUTPUT>, 'model'> & {
+export type StructuredOutputOptions<OUTPUT = {}> = {
+  /** Zod schema to validate the output against */
+  schema: NonNullable<OutputSchema<OUTPUT>>;
+
+  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
+  model?: MastraModelConfig;
+} & StructuredOutputOptionsBase<OUTPUT>;
+
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase & {
   model?: ModelRouterModelId | OpenAICompatibleConfig;
+  /** Zod schema to validate the output against */
+  schema: NonNullable<OutputSchema<OUTPUT>>;
 };
 
 /**
@@ -218,7 +222,7 @@ export interface AgentConfig<
   /**
    * Voice settings for speech input and output.
    */
-  voice?: CompositeVoice;
+  voice?: MastraVoice;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or

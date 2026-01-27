@@ -45,7 +45,7 @@ import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
@@ -139,7 +139,7 @@ export class Agent<
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
-  #voice: CompositeVoice;
+  #voice: MastraVoice;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -272,7 +272,7 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
-    // @ts-ignore Flag for agent network messages
+    // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
@@ -553,6 +553,42 @@ export class Agent<
     }
 
     return null;
+  }
+
+  /**
+   * Returns only the user-configured input processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listInputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `inputProcessors` option.
+   */
+  public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    if (!this.#inputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+  }
+
+  /**
+   * Returns only the user-configured output processors, excluding memory-derived processors.
+   * Useful for scenarios where memory processors should not be applied (e.g., network routing agents).
+   *
+   * Unlike `listOutputProcessors()` which includes both memory and configured processors,
+   * this method returns only what was explicitly configured via the `outputProcessors` option.
+   */
+  public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+    if (!this.#outputProcessors) return [];
+
+    const configuredProcessors =
+      typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors;
+
+    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
   }
 
   /**
@@ -2198,6 +2234,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
+          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema,
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2208,6 +2245,7 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
+              // @ts-expect-error - zod types mismatch between v3 and v4
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
@@ -2219,7 +2257,7 @@ export class Agent<
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          // @ts-ignore
+          // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;

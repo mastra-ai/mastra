@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 
 import { ConvexAdminClient } from '../client';
 import type { EqualityFilter } from '../types';
@@ -52,6 +52,30 @@ export class ConvexDB extends MastraBase {
 
   async hasColumn(_table: string, _column: string): Promise<boolean> {
     return true;
+  }
+
+  async createTable({
+    tableName,
+    schema: _schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
+    // No-op for Convex; schema is managed server-side via schema.ts
+    this.logger.debug(`ConvexDB: createTable called for ${tableName} (schema managed server-side)`);
+  }
+
+  async alterTable({
+    tableName,
+    schema: _schema,
+    ifNotExists: _ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // No-op for Convex; schema is managed server-side via schema.ts
+    this.logger.debug(`ConvexDB: alterTable called for ${tableName} (schema managed server-side)`);
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {

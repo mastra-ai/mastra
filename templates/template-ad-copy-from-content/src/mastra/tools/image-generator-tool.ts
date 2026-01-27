@@ -64,7 +64,7 @@ export const imageGeneratorTool = createTool({
     }),
   }),
   execute: async input => {
-    const { prompt, style, platform, size } = input;
+    const { prompt, style, platform, size = '480x480' } = input;
 
     console.log(`🎨 Generating image with DALL-E 3 via AI package: "${prompt.substring(0, 50)}..."`);
 
@@ -94,7 +94,7 @@ export const imageGeneratorTool = createTool({
       const imageBuffer = Buffer.from(image.base64, 'base64');
 
       // Upload to cloud storage and get public URL
-      const publicImageUrl = await uploadImageToStorage(imageBuffer, image.mimeType);
+      const publicImageUrl = await uploadImageToStorage(imageBuffer, image.mediaType);
 
       return {
         imageUrl: publicImageUrl,

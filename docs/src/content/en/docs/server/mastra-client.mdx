@@ -6,12 +6,9 @@ packages:
   - "@mastra/core"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # Mastra Client SDK
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/server/mastra-server) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/server/mastra-server) from your client environment.
 
 ## Prerequisites
 
@@ -29,36 +26,9 @@ The Mastra Client SDK is designed for browser environments and uses the native `
 
 To use the Mastra Client SDK, install the required dependencies:
 
-<Tabs>
-  <TabItem value="npm" label="npm">
-
-    ```bash copy
-    npm install @mastra/client-js@beta
-    ```
-
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-
-    ```bash copy
-    pnpm add @mastra/client-js@beta
-    ```
-
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-
-    ```bash copy
-    yarn add @mastra/client-js@beta
-    ```
-
-  </TabItem>
-  <TabItem value="bun" label="bun">
-
-    ```bash copy
-    bun add @mastra/client-js@beta
-    ```
-
-  </TabItem>
-</Tabs>
+```bash npm2yarn
+npm install @mastra/client-js@latest
+```
 
 ### Initialize the `MastraClient`
 
@@ -76,13 +46,13 @@ export const mastraClient = new MastraClient({
 
 The Mastra Client SDK exposes all resources served by the Mastra Server
 
-- **[Agents](/reference/v1/client-js/agents)**: Generate responses and stream conversations.
-- **[Memory](/reference/v1/client-js/memory)**: Manage conversation threads and message history.
-- **[Tools](/reference/v1/client-js/tools)**: Executed and managed tools.
-- **[Workflows](/reference/v1/client-js/workflows)**: Trigger workflows and track their execution.
-- **[Vectors](/reference/v1/client-js/vectors)**: Use vector embeddings for semantic search.
-- **[Logs](/reference/v1/client-js/logs)**: View logs and debug system behavior.
-- **[Telemetry](/reference/v1/client-js/telemetry)**: Monitor app performance and trace activity.
+- **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
+- **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
+- **[Tools](/reference/client-js/tools)**: Executed and managed tools.
+- **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
+- **[Vectors](/reference/client-js/vectors)**: Use vector embeddings for semantic search.
+- **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
+- **[Telemetry](/reference/client-js/telemetry)**: Monitor app performance and trace activity.
 
 ## Generating responses
 
@@ -106,7 +76,7 @@ const testAgent = async () => {
 
 :::info
 
-You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/v1/client-js/agents#generate) for more information.
+You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/client-js/agents#generate) for more information.
 
 :::
 
@@ -136,7 +106,7 @@ const testAgent = async () => {
 
 :::info
 
-You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/v1/client-js/agents#stream) for more information.
+You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/client-js/agents#stream) for more information.
 
 :::
 
@@ -159,7 +129,7 @@ export const mastraClient = new MastraClient({
 
 :::info
 
-Visit [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+Visit [MastraClient](/reference/client-js/mastra-client) for more configuration options.
 
 :::
 
@@ -267,7 +237,7 @@ export async function action() {
 
 ## Best practices
 
-1. **Error Handling**: Implement proper [error handling](/reference/v1/client-js/error-handling) for development scenarios.
+1. **Error Handling**: Implement proper [error handling](/reference/client-js/error-handling) for development scenarios.
 2. **Environment Variables**: Use environment variables for configuration.
-3. **Debugging**: Enable detailed [logging](/reference/v1/client-js/logs) when needed.
-4. **Performance**: Monitor application performance, [telemetry](/reference/v1/client-js/telemetry) and traces.
+3. **Debugging**: Enable detailed [logging](/reference/client-js/logs) when needed.
+4. **Performance**: Monitor application performance, [telemetry](/reference/client-js/telemetry) and traces.

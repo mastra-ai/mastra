@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Focus on core framework packages, integrations, and documentation. Only include examples when the user specifically asks about them.
 
-**UI Development**: When working on UI-related tasks, code modifications should be made in the `packages/playground/` and `packages/playground-ui/` packages. These packages contain the user interface components and follow specific development standards outlined in their respective CLAUDE.md files.
-
 ## Development Commands
 
 ### Setup and Build
@@ -53,8 +51,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API reference**: Generated from code comments and exported types
 - **Package READMEs**: Each package/integration has its own README.md
 - **Development guide**: `DEVELOPMENT.md` - Setup and contribution instructions
-- **Playground guidelines**: `packages/playground/CLAUDE.md` - Development standards for the playground application
-- **Playground UI guidelines**: `packages/playground-ui/CLAUDE.md` - Component and frontend standards for the playground UI package
 
 ### Documentation Guidelines
 

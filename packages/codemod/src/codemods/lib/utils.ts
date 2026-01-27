@@ -3,30 +3,88 @@
 import type { Collection, JSCodeshift } from 'jscodeshift';
 
 /**
+ * Finds all local names (including aliases) used to import a specific class from a module.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param className - Name of the class to find imports for
+ * @param moduleName - Module to search for imports from (e.g., '@mastra/memory')
+ * @returns Set of local names used for the class (includes aliases)
+ */
+export function findImportAliases(
+  j: JSCodeshift,
+  root: Collection<any>,
+  className: string,
+  moduleName: string,
+): Set<string> {
+  const aliases = new Set<string>();
+
+  root.find(j.ImportDeclaration).forEach(path => {
+    const source = path.value.source.value;
+    if (typeof source !== 'string' || source !== moduleName) return;
+
+    if (!path.value.specifiers) return;
+
+    path.value.specifiers.forEach((specifier: any) => {
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        specifier.imported.type === 'Identifier' &&
+        specifier.imported.name === className
+      ) {
+        // Use the local name (which could be an alias or the original name)
+        const localName = specifier.local?.name || className;
+        aliases.add(localName);
+      }
+    });
+  });
+
+  return aliases;
+}
+
+/**
  * Efficiently tracks instances of a specific class by finding all `new ClassName()` expressions
  * and extracting the variable names they're assigned to.
  *
  * @param j - JSCodeshift API
  * @param root - Root collection
  * @param className - Name of the class to track
+ * @param moduleName - Optional module name to also track aliased imports from
  * @returns Set of variable names that are instances of the class
  */
-export function trackClassInstances(j: JSCodeshift, root: Collection<any>, className: string): Set<string> {
+export function trackClassInstances(
+  j: JSCodeshift,
+  root: Collection<any>,
+  className: string,
+  moduleName?: string,
+): Set<string> {
   const instances = new Set<string>();
 
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: className,
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        instances.add(parent.id.name);
-      }
-    });
+  // Find all names that refer to this class
+  let classNames: Set<string>;
+
+  if (moduleName) {
+    // When moduleName is specified, only track usages if the class is actually imported from that module
+    const aliases = findImportAliases(j, root, className, moduleName);
+    if (aliases.size === 0) {
+      // Class is not imported from the specified module, skip transformation
+      return instances;
+    }
+    classNames = aliases;
+  } else {
+    // When no moduleName is specified, use the className directly
+    classNames = new Set<string>([className]);
+  }
+
+  root.find(j.NewExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'Identifier') return;
+    if (!classNames.has(callee.name)) return;
+
+    const parent = path.parent.value;
+    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+      instances.add(parent.id.name);
+    }
+  });
 
   return instances;
 }

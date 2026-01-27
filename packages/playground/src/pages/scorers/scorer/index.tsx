@@ -19,7 +19,6 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
-  HeaderGroup,
   ScorerCombobox,
   toast,
   Spinner,
@@ -59,9 +58,11 @@ export default function Scorer() {
   });
 
   const agentOptions: EntityOptions[] =
-    scorer?.agentIds?.map(agentId => {
-      return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
-    }) || [];
+    scorer?.agentIds
+      ?.filter(agentId => agents[agentId])
+      .map(agentId => {
+        return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
+      }) || [];
 
   const workflowOptions: EntityOptions[] =
     scorer?.workflowIds?.map(workflowId => {
@@ -108,7 +109,7 @@ export default function Scorer() {
   if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
-    scorer?.agentIds.map(agentId => {
+    scorer?.agentIds?.map(agentId => {
       return {
         name: agentId,
         id: Object.entries(agents).find(([_, value]) => value.name === agentId)?.[0],
@@ -116,7 +117,7 @@ export default function Scorer() {
     }) || [];
 
   const scorerWorkflows =
-    scorer?.workflowIds.map(workflowId => {
+    scorer?.workflowIds?.map(workflowId => {
       return {
         name: workflowId,
         id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
@@ -160,22 +161,19 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`} isCurrent>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              <ScorerCombobox value={scorerId} variant="ghost" />
+            </Crumb>
           </Breadcrumb>
 
-          <HeaderGroup>
-            <div className="w-48">
-              <ScorerCombobox value={scorerId} />
-            </div>
-          </HeaderGroup>
-
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
+            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />
               </Icon>

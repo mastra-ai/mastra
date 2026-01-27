@@ -48,6 +48,7 @@ const mainNavigation: NavSection[] = [
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'MCP Servers',
@@ -121,7 +122,7 @@ const secondNavigation: NavSection = {
   links: [
     {
       name: 'Mastra APIs',
-      url: 'http://localhost:4111/swagger-ui',
+      url: '/swagger-ui',
       icon: <EarthIcon />,
       isOnMastraPlatform: false,
     },

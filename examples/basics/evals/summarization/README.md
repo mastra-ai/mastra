@@ -4,7 +4,7 @@ This example demonstrates how to use Mastra's Summarization metric to evaluate h
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 

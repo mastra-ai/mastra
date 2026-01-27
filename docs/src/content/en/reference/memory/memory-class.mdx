@@ -40,7 +40,7 @@ export const agent = new Agent({
   content={[
     {
       name: "storage",
-      type: "MastraStorage",
+      type: "MastraCompositeStore",
       description:
         'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
       isOptional: true,
@@ -210,14 +210,14 @@ export const agent = new Agent({
 
 ### Related
 
-- [Getting Started with Memory](/docs/v1/memory/overview)
-- [Semantic Recall](/docs/v1/memory/semantic-recall)
-- [Working Memory](/docs/v1/memory/working-memory)
-- [Memory Processors](/docs/v1/memory/memory-processors)
-- [createThread](/reference/v1/memory/createThread)
-- [recall](/reference/v1/memory/recall)
-- [getThreadById](/reference/v1/memory/getThreadById)
-- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
-- [deleteMessages](/reference/v1/memory/deleteMessages)
-- [cloneThread](/reference/v1/memory/cloneThread)
-- [Clone Utility Methods](/reference/v1/memory/clone-utilities)
+- [Getting Started with Memory](/docs/memory/overview)
+- [Semantic Recall](/docs/memory/semantic-recall)
+- [Working Memory](/docs/memory/working-memory)
+- [Memory Processors](/docs/memory/memory-processors)
+- [createThread](/reference/memory/createThread)
+- [recall](/reference/memory/recall)
+- [getThreadById](/reference/memory/getThreadById)
+- [listThreads](/reference/memory/listThreads)
+- [deleteMessages](/reference/memory/deleteMessages)
+- [cloneThread](/reference/memory/cloneThread)
+- [Clone Utility Methods](/reference/memory/clone-utilities)

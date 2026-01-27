@@ -15,6 +15,10 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'role') return 'user';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
 
+  // Version comparison query params (from/to are version IDs)
+  if (field === 'from') return 'test-version-1';
+  if (field === 'to') return 'test-version-id';
+
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
   if (field.includes('tool')) return 'test-tool';
@@ -164,7 +168,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
 export function getDefaultValidPathParams(route: ServerRoute): Record<string, any> {
   const params: Record<string, any> = {};
 
-  if (route.path.includes(':agentId')) params.agentId = 'test-agent';
+  // For stored agent routes (versions), use 'test-stored-agent' to match test context
+  // For regular agent routes, use 'test-agent'
+  if (route.path.includes(':agentId') && route.path.includes('/stored/agents/')) {
+    params.agentId = 'test-stored-agent';
+  } else if (route.path.includes(':agentId')) {
+    params.agentId = 'test-agent';
+  }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
@@ -183,8 +193,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
-
   // MCP route params - need to get actual server ID from test context
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';

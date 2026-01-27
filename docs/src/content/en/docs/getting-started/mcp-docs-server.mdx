@@ -7,7 +7,7 @@ import YouTube from "@site/src/components/YouTube-player";
 
 # Mastra Docs Server
 
-The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, Codex or any tool that supports MCP.
+The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
 These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
 
@@ -19,19 +19,19 @@ In this guide you'll learn how to add Mastra's MCP server to your AI tooling.
 
 ### create-mastra
 
-During the interactive [create-mastra](/reference/v1/cli/create-mastra) wizard, choose one of your tools in the MCP step.
+During the interactive [create-mastra](/reference/cli/create-mastra) wizard, choose one of your tools in the MCP step.
 
 ### Manual setup
 
 If there are no specific instructions for your tool below, you may be able to add the MCP server with this common JSON configuration anyways.
 
-```json
+```json title="mcp.json"
 {
   "mcpServers": {
     "mastra": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@beta"]
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
     }
   }
 }
@@ -42,8 +42,10 @@ If there are no specific instructions for your tool below, you may be able to ad
 Install using the terminal command:
 
 ```bash
-claude mcp add mastra -- npx -y @mastra/mcp-docs-server@beta
+claude mcp add --scope project mastra -- npx -y @mastra/mcp-docs-server@latest
 ```
+
+This creates a project-scoped `.mcp.json` file if one doesn't already exist. You can use the same command when using Claude Code as a [Visual Studio Code extension](https://code.claude.com/docs/en/vs-code#connect-to-external-tools-with-mcp).
 
 [More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
 
@@ -51,8 +53,8 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server@beta
 
 1. Register it from the terminal:
 
-   ```bash copy
-   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@beta
+   ```bash
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@latest
    ```
 
 2. Run `codex mcp list` to confirm the server shows as `enabled`.
@@ -67,11 +69,7 @@ Install by clicking the button below:
 
 If you followed the automatic installation, you'll see a popup when you open cursor in the bottom left corner to prompt you to enable the Mastra Docs MCP Server.
 
-<img
-  src="/img/enable-mastra-docs-cursor.png"
-  alt="Diagram showing cursor prompt to enable Mastra docs MCP server"
-  width={800}
-/>
+![Popup inside Cursor showing: "New MCP server detected: mastra". The user can "Skip" or "Enable" it as an action.](/img/enable-mastra-docs-cursor.png)
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
@@ -80,47 +78,34 @@ If you followed the automatic installation, you'll see a popup when you open cur
 Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
 
 1. Open your Antigravity MCP configuration file:
-   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
-   - You can access it through the MCP Store interface in Antigravity
+    - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
+    - You can access it through the MCP Store interface in Antigravity
 
-   <img
-     src="/img/antigravity_mcp_server.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+    ![The Antigravity MCP store. At the top is a search bar and below a list of available MCP servers. On the very top right is a dropdown menu.](/img/antigravity_mcp_server.png)
 
-2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
-   <img
-     src="/img/antigravity_managed_mcp.png"
-     alt="Antigravity interface showing configured Mastra MCP server"
-     width={800}
-     className="rounded-lg"
-   />
+1. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.
 
-3. Add the Mastra MCP server configuration:
+    ![The Antigravity MCP store showing the Manage MCP Servers option and the View raw config button.](/img/antigravity_managed_mcp.png)
 
-```json copy
-{
-  "mcpServers": {
-    "mastra-docs": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@mastra/mcp-docs-server"
-      ]
+1. Add the Mastra MCP server configuration:
+
+    ```json
+    {
+      "mcpServers": {
+        "mastra-docs": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "@mastra/mcp-docs-server"
+          ]
+        }
+      }
     }
-  }
-}
-```
+    ```
 
-4. Save the configuration and restart Antigravity
-    <img
-      src="/img/antigravity_final_interface_mcp.png"
-      alt="Antigravity interface showing configured Mastra MCP server"
-      width={800}
-      className="rounded-lg"
-   />
+1. Save the configuration and restart Antigravity
+
+    ![The UI shows that the MCP server is enabled. You can also toggle individual tools.](/img/antigravity_final_interface_mcp.png)
 
 Once configured, the Mastra MCP server exposes the following to Antigravity agents:
 - Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
@@ -137,13 +122,13 @@ The MCP server will appear in Antigravity's MCP Store, where you can manage its 
 1. Create a `.vscode/mcp.json` file in your workspace
 2. Insert the following configuration:
 
-   ```json copy
+   ```json title=".vscode/mcp.json"
    {
      "servers": {
        "mastra": {
          "type": "stdio",
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server@beta"]
+         "args": ["-y", "@mastra/mcp-docs-server@latest"]
        }
      }
    }
@@ -155,30 +140,15 @@ Once you installed the MCP server, you can use it like so:
 2. Navigate to MCP settings.
 3. Click "enable" on the Chat > MCP option.
 
-   <img
-     src="/img/vscode-mcp-setting.png"
-     alt="Settings page of VSCode to enable MCP"
-     width={800}
-     className="rounded-lg"
-   />
+    ![Entry in VSCode's settings page. The option is called "Chat > MCP: Enabled (Preview)". The description says: "Enables integration with Model Context Protocol servers to provide additional tools and functionality."](/img/vscode-mcp-setting.png)
 
 MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
 
-<img
-  src="/img/vscode-start-mcp.png"
-  alt="Settings page of VSCode to enable MCP"
-  width={800}
-  className="rounded-lg"
-/>
+![A screenshot of the mcp.json file showing the start button in the editor](/img/vscode-start-mcp.png)
 
 After starting the MCP server, click the tools button in the Copilot pane to see available tools.
 
-<img
-  src="/img/vscode-mcp-running.png"
-  alt="Tools page of VSCode to see available tools"
-  width={800}
-  className="rounded-lg"
-/>
+![Tools page of VSCode to see available tools](/img/vscode-mcp-running.png)
 
 [More info on using MCP servers with Visual Studio Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
@@ -187,12 +157,12 @@ After starting the MCP server, click the tools button in the Copilot pane to see
 1. Open `~/.codeium/windsurf/mcp_config.json` in your editor
 2. Insert the following configuration:
 
-   ```json copy
+   ```json title="~/.codeium/windsurf/mcp_config.json"
    {
      "mcpServers": {
        "mastra": {
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server@beta"]
+         "args": ["-y", "@mastra/mcp-docs-server@latest"]
        }
      }
    }
@@ -201,6 +171,41 @@ After starting the MCP server, click the tools button in the Copilot pane to see
 3. Save the configuration and restart Windsurf
 
 [More info on using MCP servers with Windsurf](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
+
+### OpenCode
+
+You can define MCP servers in your [OpenCode configuration](https://opencode.ai/docs/config/) under `mcp`. Create an `opencode.jsonc` file in your project root with the following content:
+
+```json title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mastra": {
+      "type": "local",
+      "command": ["npx", "-y", "@mastra/mcp-docs-server@latest"],
+      "enabled": true,
+    },
+  },
+}
+```
+
+[More info on using MCP servers with OpenCode](https://opencode.ai/docs/mcp-servers)
+
+### Zed
+
+1. Open `~/.config/zed/settings.json` in your editor
+2. Insert the following configuration:
+
+```json title="~/.config/zed/settings.json"
+{
+  "context_servers": {
+    "Mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
 
 ## Usage
 

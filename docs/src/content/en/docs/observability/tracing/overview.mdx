@@ -73,29 +73,29 @@ Exporters determine where your trace data is sent and how it's stored. They inte
 
 Mastra provides two built-in exporters:
 
-- **[Default](/docs/v1/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
-- **[Cloud](/docs/v1/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
+- **[Default](/docs/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
+- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
 
 ### External Exporters
 
 In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
 
-- **[Arize](/docs/v1/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
-- **[Braintrust](/docs/v1/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
-- **[Datadog](/docs/v1/observability/tracing/exporters/datadog)** - Sends traces to Datadog APM via OTLP for full-stack observability with AI tracing
-- **[Laminar](/docs/v1/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
-- **[Langfuse](/docs/v1/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
-- **[LangSmith](/docs/v1/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
-- **[PostHog](/docs/v1/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
-- **[Sentry](/docs/v1/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
-- **[OpenTelemetry](/docs/v1/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
+- **[Arize](/docs/observability/tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
+- **[Braintrust](/docs/observability/tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
+- **[Datadog](/docs/observability/tracing/exporters/datadog)** - Sends traces to Datadog APM via OTLP for full-stack observability with AI tracing
+- **[Laminar](/docs/observability/tracing/exporters/laminar)** - Sends traces to Laminar via OTLP/HTTP (protobuf) with Laminar-native span attributes + scorer support
+- **[Langfuse](/docs/observability/tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
+- **[LangSmith](/docs/observability/tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
+- **[PostHog](/docs/observability/tracing/exporters/posthog)** - Sends traces to PostHog for AI analytics and product insights
+- **[Sentry](/docs/observability/tracing/exporters/sentry)** - Sends traces to Sentry for AI tracing and monitoring using OpenTelemetry semantic conventions
+- **[OpenTelemetry](/docs/observability/tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, MLflow, New Relic, SigNoz, Traceloop, Zipkin, and others!
 
 ## Bridges
 
 Bridges provide bidirectional integration with external tracing systems. Unlike exporters that send trace data to external platforms, bridges create native spans in external systems and inherit context from them. This enables Mastra operations to participate in existing distributed traces.
 
-- **[OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
+- **[OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel)** - Integrate with existing OpenTelemetry infrastructure
 
 ### Bridges vs Exporters
 
@@ -541,7 +541,7 @@ const result = await agent.generate([{ role: "user", content: "Sensitive operati
 
 :::tip
 
-For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 :::
 
@@ -633,7 +633,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in Processors
 
-- [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
 #### Creating Custom Processors
 
@@ -1103,26 +1103,26 @@ Mastra automatically creates spans for:
 
 ### Reference Documentation
 
-- [Configuration API](/reference/v1/observability/tracing/configuration) - ObservabilityConfig details
-- [Tracing Classes](/reference/v1/observability/tracing/instances) - Core classes and methods
-- [Span Interfaces](/reference/v1/observability/tracing/spans) - Span types and lifecycle
-- [Type Definitions](/reference/v1/observability/tracing/interfaces) - Complete interface reference
+- [Configuration API](/reference/observability/tracing/configuration) - ObservabilityConfig details
+- [Tracing Classes](/reference/observability/tracing/instances) - Core classes and methods
+- [Span Interfaces](/reference/observability/tracing/spans) - Span types and lifecycle
+- [Type Definitions](/reference/observability/tracing/interfaces) - Complete interface reference
 
 ### Exporters
 
-- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
-- [ConsoleExporter](/reference/v1/observability/tracing/exporters/console-exporter) - Debug output
-- [Arize](/reference/v1/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
-- [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
-- [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/docs/v1/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
-- [OpenTelemetry](/reference/v1/observability/tracing/exporters/otel) - OTEL-compatible platforms
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
+- [Arize](/reference/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
+- [MLflow](/docs/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
+- [OpenTelemetry](/reference/observability/tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Bridges
 
-- [OpenTelemetry Bridge](/reference/v1/observability/tracing/bridges/otel) - OTEL context integration
+- [OpenTelemetry Bridge](/reference/observability/tracing/bridges/otel) - OTEL context integration
 
 ### Processors
 
-- [Sensitive Data Filter](/docs/v1/observability/tracing/processors/sensitive-data-filter) - Data redaction
+- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) - Data redaction

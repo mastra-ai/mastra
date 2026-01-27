@@ -18,7 +18,7 @@ Each tool typically defines:
 
 ## Creating Tools
 
-In Mastra, you create tools using the [`createTool`](/reference/v1/tools/create-tool) function from the `@mastra/core/tools` package.
+In Mastra, you create tools using the [`createTool`](/reference/tools/create-tool) function from the `@mastra/core/tools` package.
 
 ```typescript title="src/mastra/tools/weatherInfo.ts"
 import { createTool } from "@mastra/core/tools";
@@ -54,11 +54,11 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 
 ## Adding Tools to an Agent
 
-To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools with Agents](/docs/v1/agents/using-tools#adding-tools-to-an-agent).
+To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools with Agents](/docs/agents/using-tools#adding-tools-to-an-agent).
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/tools/test-tool.ts"
 export type UserTier = {
@@ -80,10 +80,10 @@ export const testTool = createTool({
 
 :::info
 
-Visit [Request Context](/docs/v1/server/request-context) for more information.
+Visit [Request Context](/docs/server/request-context) for more information.
 
 :::
 
 ## Testing with Studio
 
-Use [Studio](/docs/v1/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
+Use [Studio](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.

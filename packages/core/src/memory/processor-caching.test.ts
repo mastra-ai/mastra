@@ -36,8 +36,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
     // Mock memory store
     mockMemoryStore = {
       getThreadById: vi.fn().mockResolvedValue(null),
-      getThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
-      listThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
+      listThreads: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
       saveThread: vi.fn().mockImplementation(({ thread }) => Promise.resolve(thread)),
       deleteThread: vi.fn().mockResolvedValue(undefined),
       listMessages: vi.fn().mockResolvedValue({ messages: [] }),

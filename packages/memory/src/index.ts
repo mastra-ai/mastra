@@ -14,8 +14,8 @@ import type {
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
-  StorageListThreadsByResourceIdOutput,
-  StorageListThreadsByResourceIdInput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   MemoryStorage,
   StorageCloneThreadInput,
@@ -243,11 +243,9 @@ export class Memory extends MastraMemory {
     return memoryStore.getThreadById({ threadId });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.listThreadsByResourceId(args);
+    return memoryStore.listThreads(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -584,7 +582,7 @@ ${workingMemory}`;
     const promise = embedFn({
       values: chunks,
       maxRetries: 3,
-      // @ts-ignore
+      // @ts-expect-error - embedder type mismatch
       model: this.embedder,
       ...(this.embedderOptions || {}),
     });
@@ -1441,8 +1439,8 @@ ${
     }
 
     // List all threads for the resource and filter for clones
-    const { threads } = await this.listThreadsByResourceId({
-      resourceId: targetResourceId,
+    const { threads } = await this.listThreads({
+      filter: { resourceId: targetResourceId },
       perPage: false, // Get all threads
     });
 

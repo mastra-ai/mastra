@@ -1104,7 +1104,6 @@ export class EventedWorkflow<
           waitingPaths: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });

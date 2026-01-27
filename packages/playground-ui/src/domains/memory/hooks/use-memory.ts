@@ -165,6 +165,7 @@ export const useObservationalMemory = ({
     retry: false,
     refetchOnWindowFocus: false,
     refetchInterval: isActive ? 2000 : false, // Poll every 2 seconds when active
+    placeholderData: previousData => previousData, // Keep previous data during refetch to prevent skeleton flash
   });
 };
 
@@ -204,6 +205,7 @@ export const useMemoryWithOMStatus = ({
     retry: false,
     refetchOnWindowFocus: false,
     refetchInterval: isActive && pollWhenActive ? 2000 : false, // Poll every 2 seconds when active
+    placeholderData: previousData => previousData, // Keep previous data during refetch to prevent skeleton flash
   });
 
   // Update isActive state when data changes

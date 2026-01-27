@@ -2,7 +2,7 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
@@ -215,7 +215,7 @@ type MastraService = Service<Record<string, any>> & {
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class DynamoDBStore extends MastraStorage {
+export class DynamoDBStore extends MastraCompositeStore {
   private tableName: string;
   private client: DynamoDBDocumentClient;
   private service: MastraService;

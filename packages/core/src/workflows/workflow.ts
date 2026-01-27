@@ -172,33 +172,28 @@ export function createStep<
 >;
 
 /**
+ * Creates a step from an agent (defaults to { text: string } output)
+ */
+export function createStep<TStepId extends string>(
+  agent: Agent<TStepId, any>,
+  agentOptions?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
+    structuredOutput?: never;
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
+): Step<TStepId, unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>;
+
+/**
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
-  agentOptions: AgentStepOptions<TStepOutput> & {
+  agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
     structuredOutput: { schema: OutputSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
-
-/**
- * Creates a step from an agent (defaults to { text: string } output)
- */
-export function createStep<
-  TStepId extends string,
-  TStepInput extends { prompt: string },
-  TStepOutput extends { text: string },
-  TResume,
-  TSuspend,
->(
-  agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions<TStepOutput> & {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
-): Step<TStepId, unknown, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool
@@ -1490,7 +1485,6 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
-      // @ts-ignore
       const mappingStep: any = createStep({
         id:
           stepOptions?.id ||
@@ -1674,7 +1668,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
-      // @ts-ignore
       conditions: steps.map(([cond]) => cond),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
@@ -1725,7 +1718,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
-      // @ts-ignore
       condition,
       loopType: 'dowhile',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -1753,7 +1745,6 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
-      // @ts-ignore
       condition,
       loopType: 'dountil',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -1918,7 +1909,7 @@ export class Workflow<
           runId: runIdToUse,
           status: 'pending',
           value: {},
-          // @ts-ignore
+          // @ts-expect-error - context type mismatch
           context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
           activePaths: [],
           activeStepsPath: {},
@@ -1928,7 +1919,6 @@ export class Workflow<
           waitingPaths: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });
@@ -2123,7 +2113,7 @@ export class Workflow<
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-ignore
+        // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         await suspend(
           {
@@ -3025,7 +3015,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async (event: any) => {
           const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
           // Check if this is a custom event (has 'data' property instead of 'payload')
@@ -3152,7 +3141,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async (event: any) => {
           const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
           // Check if this is a custom event (has 'data' property instead of 'payload')
@@ -3485,7 +3473,7 @@ export class Run<
           steps,
           stepResults,
           resumePayload: resumeDataToUse,
-          // @ts-ignore
+          // @ts-expect-error - context type mismatch
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
           label: params.label,
@@ -3821,7 +3809,6 @@ export class Run<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,

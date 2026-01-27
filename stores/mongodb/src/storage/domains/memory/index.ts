@@ -17,8 +17,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   ObservationalMemoryRecord,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -710,30 +710,63 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
 
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
+    const perPage = normalizePerPage(perPageInput, 100);
 
-      const perPage = normalizePerPage(perPageInput, 100);
+    // Validate metadata keys to prevent prototype pollution and ensure safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    try {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const collection = await this.getCollection(TABLE_THREADS);
 
-      const query = { resourceId };
+      // Build MongoDB query object
+      const query: any = {};
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        query.resourceId = filter.resourceId;
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // MongoDB properly escapes dot notation keys in the driver
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query[`metadata.${key}`] = value;
+        }
+      }
+
       const total = await collection.countDocuments(query);
 
       if (perPage === 0) {
@@ -775,10 +808,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId: args.resourceId },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

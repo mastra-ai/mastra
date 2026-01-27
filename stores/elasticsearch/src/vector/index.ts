@@ -13,7 +13,7 @@ import type {
   UpsertVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -241,6 +241,9 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
   async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
+    // Validate input parameters and vector values
+    validateUpsert('ELASTICSEARCH', vectors, metadata, ids, true);
+
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
@@ -372,6 +375,9 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     topK = 10,
     includeVector = false,
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
+    // Validate topK parameter
+    validateTopK('ELASTICSEARCH', topK);
+
     try {
       const translatedFilter = this.transformFilter(filter);
 

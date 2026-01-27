@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
@@ -38,7 +38,7 @@ export type { MongoDBDomainConfig } from './db';
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class MongoDBStore extends MastraStorage {
+export class MongoDBStore extends MastraCompositeStore {
   #connector: MongoDBConnector;
 
   stores: StorageDomains;

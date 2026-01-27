@@ -17,8 +17,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   ThreadOrderBy,
   ThreadSortDirection,
   StorageCloneThreadInput,
@@ -90,22 +90,40 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent prototype pollution and ensure safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
       );
     }
 
@@ -116,20 +134,43 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.#db.scanKeys(pattern);
 
+      // Return early if no keys found to avoid "Pipeline is empty" error
+      if (keys.length === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
       for (let i = 0; i < results.length; i++) {
         const thread = results[i] as StorageThreadType | null;
-        if (thread && thread.resourceId === resourceId) {
-          allThreads.push({
-            ...thread,
-            createdAt: ensureDate(thread.createdAt)!,
-            updatedAt: ensureDate(thread.updatedAt)!,
-            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          });
+        if (!thread) continue;
+
+        // Apply resourceId filter if provided
+        if (filter?.resourceId && thread.resourceId !== filter.resourceId) {
+          continue;
         }
+
+        // Apply metadata filters if provided (AND logic)
+        if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+          const threadMetadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata;
+          const matches = Object.entries(filter.metadata).every(([key, value]) => threadMetadata?.[key] === value);
+          if (!matches) continue;
+        }
+
+        allThreads.push({
+          ...thread,
+          createdAt: ensureDate(thread.createdAt)!,
+          updatedAt: ensureDate(thread.updatedAt)!,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        });
       }
 
       // Apply sorting with parameters
@@ -151,11 +192,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
             perPage,
           },

@@ -193,8 +193,7 @@ export type PathsToStringProps<T> =
       ? {
           [K in keyof T]: T[K] extends object
             ? K extends string
-              ? // @ts-ignore
-                  K | `${K}.${PathsToStringProps<T[K]>}`
+              ? K | `${K}.${PathsToStringProps<T[K]>}`
               : never
             : K extends string
               ? K

@@ -41,7 +41,7 @@ Store your service account JSON file securely and never commit it to version con
 Before you can use the `MastraAuthFirebase` class you have to install the `@mastra/auth-firebase` package.
 
 ```bash
-npm install @mastra/auth-firebase@beta
+npm install @mastra/auth-firebase@latest
 ```
 
 ## Usage examples
@@ -118,7 +118,7 @@ const firebaseAuth = new MastraAuthFirebase({
 
 :::info
 
-Visit [MastraAuthFirebase](/reference/v1/auth/firebase) for all available configuration options.
+Visit [MastraAuthFirebase](/reference/auth/firebase) for all available configuration options.
 
 :::
 
@@ -210,7 +210,7 @@ export const createMastraClient = (idToken: string) => {
 
 The ID token must be prefixed with `Bearer` in the Authorization header.
 
-Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
 
 :::
 
@@ -221,7 +221,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 <Tabs>
   <TabItem value="react" label="React">
 
-    ```tsx title="src/components/test-agent.tsx" copy
+    ```tsx title="src/components/test-agent.tsx"
     "use client";
 
     import { useAuthState } from 'react-firebase-hooks/auth';
@@ -255,7 +255,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
   </TabItem>
   <TabItem value="nodejs" label="Node.js">
 
-    ```typescript title="server.js" copy
+    ```typescript title="server.js"
     const express = require('express');
     const admin = require('firebase-admin');
     const { MastraClient } = require('@mastra/client-js');
@@ -297,7 +297,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
   </TabItem>
   <TabItem value="curl" label="cURL">
 
-    ```bash copy
+    ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer <your-firebase-id-token>" \

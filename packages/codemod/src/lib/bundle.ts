@@ -26,6 +26,7 @@ export const BUNDLE = [
   'v1/workflow-run-count',
   'v1/workflow-list-runs',
   'v1/workflow-stream-vnext',
+  'v1/workflow-get-init-data',
   'v1/memory-query-to-recall',
   'v1/memory-vector-search-param',
   'v1/memory-message-v2-type',
@@ -35,6 +36,7 @@ export const BUNDLE = [
   'v1/storage-postgres-schema-name',
   'v1/storage-get-messages-paginated',
   'v1/storage-list-workflow-runs',
+  'v1/storage-list-threads-by-resource-to-list-threads',
   'v1/vector-pg-constructor',
   'v1/client-msg-function-args',
 ];

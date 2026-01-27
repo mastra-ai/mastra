@@ -23,8 +23,7 @@ export const webSearchTool = createTool({
       }
 
       console.log(`Searching web for: "${query}"`);
-      const { results } = await exa.searchAndContents(query, {
-        livecrawl: 'always',
+      const { results } = await exa.search(query, {
         numResults: 2,
       });
 

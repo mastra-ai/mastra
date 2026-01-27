@@ -10,30 +10,80 @@ packages:
 
 The Cloudflare D1 storage implementation provides a serverless SQL database solution using Cloudflare D1, supporting relational operations and transactional consistency.
 
+:::warning[Observability Not Supported]
+Cloudflare D1 storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to D1, and Mastra Studio's observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
 ## Installation
 
-```bash
-npm install @mastra/cloudflare-d1@beta
+```bash npm2yarn
+npm install @mastra/cloudflare-d1@latest
 ```
 
 ## Usage
 
+### Using with Cloudflare Workers
+
+When using D1Store in a Cloudflare Worker, you need to access the D1 binding from the worker's `env` parameter at runtime. The `D1Database` in your type definition is only for TypeScript type checking—the actual binding is provided by the Workers runtime.
+
+```typescript
+import { D1Store } from "@mastra/cloudflare-d1";
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+type Env = {
+  D1Database: D1Database; // TypeScript type definition
+};
+
+// Factory function to create Mastra with D1 binding
+function createMastra(env: Env) {
+  const storage = new D1Store({
+    binding: env.D1Database, // ✅ Access the actual binding from env
+    tablePrefix: "dev_", // Optional: isolate tables per environment
+  });
+
+  return new Mastra({
+    storage,
+    deployer: new CloudflareDeployer({
+      name: "my-worker",
+      d1_databases: [
+        { 
+          binding: "D1Database", // Must match the property name in Env type
+          database_name: "your-database-name", 
+          database_id: "your-database-id" 
+        }
+      ],
+    }),
+  });
+}
+
+// Cloudflare Worker export
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const mastra = createMastra(env);
+    
+    // Your handler logic here
+    return new Response("Hello from Mastra with D1!");
+  }
+};
+```
+
+:::tip[Important: Understanding D1 Bindings]
+In the `Env` type definition, `D1Database: D1Database` serves two purposes:
+- The **property name** (`D1Database`) must match the `binding` name in your `wrangler.toml`
+- The **type** (`: D1Database`) is from `@cloudflare/workers-types` for TypeScript type checking
+
+At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You cannot use `D1Database` directly outside of the worker's context.
+:::
+
+### Using with REST API
+
+For non-Workers environments (Node.js, serverless functions, etc.), use the REST API approach:
+
 ```typescript
 import { D1Store } from "@mastra/cloudflare-d1";
 
-type Env = {
-  // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
-  D1Database: D1Database;
-};
-
-// --- Example 1: Using Workers Binding ---
-const storageWorkers = new D1Store({
-  binding: D1Database, // D1Database binding provided by the Workers runtime
-  tablePrefix: "dev_", // Optional: isolate tables per environment
-});
-
-// --- Example 2: Using REST API ---
-const storageRest = new D1Store({
+const storage = new D1Store({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
@@ -41,13 +91,29 @@ const storageRest = new D1Store({
 });
 ```
 
-And add the following to your `wrangler.toml` or `wrangler.jsonc` file:
+### Wrangler Configuration
 
-```
+Add the D1 database binding to your `wrangler.toml`:
+
+```toml
 [[d1_databases]]
-binding = "D1Database"
-database_name = "db-name"
-database_id = "db-id"
+binding = "D1Database"  # Must match the property name in your Env type
+database_name = "your-database-name"
+database_id = "your-database-id"
+```
+
+Or in `wrangler.jsonc`:
+
+```jsonc
+{
+  "d1_databases": [
+    {
+      "binding": "D1Database",
+      "database_name": "your-database-name",
+      "database_id": "your-database-id"
+    }
+  ]
+}
 ```
 
 ## Parameters
@@ -106,13 +172,25 @@ When you pass storage to the Mastra class, `init()` is called automatically befo
 import { Mastra } from "@mastra/core";
 import { D1Store } from "@mastra/cloudflare-d1";
 
-const storage = new D1Store({
-  binding: D1Database,
-});
+type Env = {
+  D1Database: D1Database;
+};
 
-const mastra = new Mastra({
-  storage, // init() is called automatically
-});
+// In a Cloudflare Worker
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const storage = new D1Store({
+      binding: env.D1Database, // ✅ Use env.D1Database
+    });
+
+    const mastra = new Mastra({
+      storage, // init() is called automatically
+    });
+    
+    // Your handler logic here
+    return new Response("Success");
+  }
+};
 ```
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
@@ -120,17 +198,28 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 ```typescript
 import { D1Store } from "@mastra/cloudflare-d1";
 
-const storage = new D1Store({
-  id: 'd1-storage',
-  binding: D1Database,
-});
+type Env = {
+  D1Database: D1Database;
+};
 
-// Required when using storage directly
-await storage.init();
+// In a Cloudflare Worker
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const storage = new D1Store({
+      id: 'd1-storage',
+      binding: env.D1Database, // ✅ Use env.D1Database
+    });
 
-// Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore('memory');
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+    // Required when using storage directly
+    await storage.init();
+
+    // Access domain-specific stores via getStore()
+    const memoryStore = await storage.getStore('memory');
+    const thread = await memoryStore?.getThreadById({ threadId: "..." });
+    
+    return new Response("Success");
+  }
+};
 ```
 
 :::warning

@@ -2010,7 +2010,7 @@ describe('MessageList', () => {
       ];
       const newUIMessages5 = appendResponseMessages({
         messages: newUIMessages3,
-        // @ts-ignore
+        // @ts-expect-error - testing response message format
         responseMessages: responseMessages2,
       });
 

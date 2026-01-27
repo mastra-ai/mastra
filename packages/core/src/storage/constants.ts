@@ -10,6 +10,7 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
 /**
@@ -24,7 +25,8 @@ export type CORE_TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_AGENT_VERSIONS;
 
 /**
  * All table names including optional/experimental tables.
@@ -107,13 +109,27 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
   workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
   agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  integrationTools: { type: 'jsonb', nullable: true }, // Specific integration tool IDs (provider_toolkit_tool format)
   inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
   outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
   memory: { type: 'jsonb', nullable: true }, // Memory configuration
   scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
+  activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  agentId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: true }, // Vanity name
+  snapshot: { type: 'jsonb', nullable: false }, // Full agent config
+  changedFields: { type: 'jsonb', nullable: true }, // Array of field names
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
@@ -205,5 +221,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
   [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };

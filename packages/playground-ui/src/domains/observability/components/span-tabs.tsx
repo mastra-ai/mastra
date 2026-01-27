@@ -14,6 +14,7 @@ import { CircleGaugeIcon } from 'lucide-react';
 import type { ListScoresResponse } from '@mastra/core/evals';
 import type { GetScorerResponse } from '@mastra/client-js';
 import { SpanRecord } from '@mastra/core/storage';
+import { EntityType } from '@mastra/core/observability';
 
 type SpanTabsProps = {
   trace?: SpanRecord;
@@ -45,9 +46,9 @@ export function SpanTabs({
   const { Link } = useLinkComponent();
 
   let entityType;
-  if (span?.attributes?.agentId) {
+  if (span?.attributes?.agentId || span?.entityType === EntityType.AGENT) {
     entityType = 'Agent';
-  } else if (span?.attributes?.workflowId) {
+  } else if (span?.attributes?.workflowId || span?.entityType === EntityType.WORKFLOW_RUN) {
     entityType = 'Workflow';
   }
 
