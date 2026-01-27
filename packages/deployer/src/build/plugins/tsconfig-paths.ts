@@ -124,6 +124,12 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
           return null;
         }
 
+        // Only resolve aliases for absolute filesystem paths to prevent infinite traversal
+        // Virtual module IDs and relative paths should be handled by other resolvers
+        if (!path.isAbsolute(importer)) {
+          return null;
+        }
+
         const moduleName = resolveAlias(request, importer);
         // No tsconfig alias found, so we need to resolve it normally
         if (!moduleName) {
