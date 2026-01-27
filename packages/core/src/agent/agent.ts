@@ -3299,7 +3299,16 @@ export class Agent<
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     return this.resumeNetwork({ approved: false }, options);
   }
+  // Overload 1: Typed RequestContext support
+  async generate<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    options?: Omit<AgentExecutionOptions<OUTPUT>, 'requestContext'> & {
+      requestContext?: RequestContext<any>;
+    },
+  ): Promise<FullOutput<OUTPUT>>;
+  // Overload 2: Default (backward compatible)
   async generate(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<FullOutput<TOutput>>;
+  // Overload 3: Structured output
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
@@ -3317,6 +3326,7 @@ export class Agent<
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
+      requestContext?: RequestContext<any>;
     },
   ): Promise<FullOutput<any>> {
     const defaultOptions = await this.getDefaultOptions({
@@ -3392,22 +3402,34 @@ export class Agent<
     return fullOutput;
   }
 
+  // Overload 1: Typed RequestContext support
+  async stream<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: Omit<AgentStreamOptions<OUTPUT>, 'requestContext'> & {
+      requestContext?: RequestContext<any>;
+    },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  // Overload 2: Structured output
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
+  // Overload 3: Catch-all for generics
   async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
+  // Overload 4: Default (backward compatible)
   async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT> & {
+      requestContext?: RequestContext<any>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
