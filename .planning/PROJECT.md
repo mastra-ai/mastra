@@ -28,7 +28,9 @@ Agents can browse and interact with real websites to gather information that req
 
 ### Active
 
-(None — see next milestone)
+- [ ] Live browser screencast streams to Studio during tool execution — v1.1
+- [ ] Snapshot history captured for session replay — v1.1
+- [ ] Browser view renders inline with agent chat in Studio — v1.1
 
 ### Out of Scope
 
@@ -39,6 +41,16 @@ Agents can browse and interact with real websites to gather information that req
 - Multi-tab support — v2
 - PDF capture — v2
 - Testing/QA use cases — research focus for v1
+
+## Current Milestone: v1.1 Browser Live View
+
+**Goal:** Enable users to watch browser agents work in real-time from within Mastra Studio.
+
+**Target features:**
+- Live screencast of browser viewport streaming to Studio
+- Snapshot history for session replay
+- Browser view inline with agent chat panel
+- View-only (no user interaction with browser from UI)
 
 ## Context
 
@@ -81,4 +93,4 @@ Agents can browse and interact with real websites to gather information that req
 | BrowserToolError unified interface | Consistent error handling with recovery hints | Good |
 
 ---
-*Last updated: 2026-01-27 after v1.0 milestone*
+*Last updated: 2026-01-27 after v1.1 milestone start*
