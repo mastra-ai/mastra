@@ -13,8 +13,7 @@ export default function MobileSidebarToggle(): ReactNode {
       aria-label={translate({
         id: 'theme.docs.sidebar.toggleSidebarButtonAriaLabel',
         message: 'Toggle navigation bar',
-        description:
-          'The ARIA label for hamburger menu button of mobile navigation',
+        description: 'The ARIA label for hamburger menu button of mobile navigation',
       })}
       type="button"
       aria-expanded={shown}
@@ -28,13 +27,7 @@ export default function MobileSidebarToggle(): ReactNode {
 
 function HamburgerDefault() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
       <rect
         x="1"
         y="7.5"
@@ -44,10 +37,7 @@ function HamburgerDefault() {
         style={{
           transformOrigin: 'center',
         }}
-        className={cn(
-          'ease-ease-out-quad transition-transform duration-150',
-          'translate-y-[-3.5px]',
-        )}
+        className={cn('ease-ease-out-quad transition-transform duration-150', 'translate-y-[-3.5px]')}
       ></rect>
       <rect
         x="1"
@@ -58,10 +48,7 @@ function HamburgerDefault() {
         style={{
           transformOrigin: 'center',
         }}
-        className={cn(
-          'ease-ease-out-quad transition-transform duration-150',
-          'translate-y-[3.5px]',
-        )}
+        className={cn('ease-ease-out-quad transition-transform duration-150', 'translate-y-[3.5px]')}
       ></rect>
     </svg>
   )

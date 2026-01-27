@@ -10,14 +10,7 @@ interface ValidationConfig {
 
 const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
-  skipPaths: [
-    'guides/',
-    'docs/community/',
-    'docs/getting-started/',
-    'docs/mastra-cloud/',
-    'docs/index.mdx',
-    'models/',
-  ],
+  skipPaths: ['guides/', 'docs/community/', 'docs/getting-started/', 'docs/mastra-cloud/', 'docs/index.mdx', 'models/'],
   packagePattern: /^@mastra\/[\w-]+$/,
   concurrency: 50,
 }
@@ -40,11 +33,7 @@ interface ParsedFrontMatter {
 }
 
 interface ValidationError {
-  type:
-    | 'missing_frontmatter'
-    | 'missing_packages'
-    | 'invalid_packages'
-    | 'parse_error'
+  type: 'missing_frontmatter' | 'missing_packages' | 'invalid_packages' | 'parse_error'
   message: string
   lineNumber?: number
 }
@@ -110,10 +99,7 @@ function extractFrontMatterBounds(content: string): FrontMatterBounds | null {
   }
 }
 
-function parseFrontMatterYAML(
-  content: string,
-  startLine: number,
-): ParsedFrontMatter {
+function parseFrontMatterYAML(content: string, startLine: number): ParsedFrontMatter {
   const lines = content.split('\n')
   const result: ParsedFrontMatter = {}
 
@@ -163,9 +149,7 @@ function parseFrontMatterYAML(
 }
 
 function shouldSkipPath(relativePath: string, skipPaths: string[]): boolean {
-  return skipPaths.some(
-    skipPath => relativePath.startsWith(skipPath) || relativePath === skipPath,
-  )
+  return skipPaths.some(skipPath => relativePath.startsWith(skipPath) || relativePath === skipPath)
 }
 
 function validatePackagesField(
@@ -207,11 +191,7 @@ function validatePackagesField(
   return errors
 }
 
-function validateFileContent(
-  content: string,
-  relativePath: string,
-  config: ValidationConfig,
-): FileValidationResult {
+function validateFileContent(content: string, relativePath: string, config: ValidationConfig): FileValidationResult {
   const normalized = normalizeContent(content)
   const bounds = extractFrontMatterBounds(normalized)
 
@@ -229,15 +209,8 @@ function validateFileContent(
     }
   }
 
-  const parsed = parseFrontMatterYAML(
-    bounds.rawContent,
-    bounds.contentStartLine,
-  )
-  const errors = validatePackagesField(
-    parsed.packages,
-    parsed.packagesFieldLine,
-    config,
-  )
+  const parsed = parseFrontMatterYAML(bounds.rawContent, bounds.contentStartLine)
+  const errors = validatePackagesField(parsed.packages, parsed.packagesFieldLine, config)
 
   return {
     file: relativePath,
@@ -246,11 +219,7 @@ function validateFileContent(
   }
 }
 
-async function collectMDXFiles(
-  dirPath: string,
-  sourceDir: string,
-  config: ValidationConfig,
-): Promise<string[]> {
+async function collectMDXFiles(dirPath: string, sourceDir: string, config: ValidationConfig): Promise<string[]> {
   const files: string[] = []
 
   async function traverse(currentPath: string): Promise<void> {
@@ -265,9 +234,7 @@ async function collectMDXFiles(
           promises.push(traverse(fullPath))
         }
       } else if (entry.name.endsWith('.mdx')) {
-        const relativePath = path
-          .relative(sourceDir, fullPath)
-          .replaceAll('\\', '/')
+        const relativePath = path.relative(sourceDir, fullPath).replaceAll('\\', '/')
 
         if (!shouldSkipPath(relativePath, config.skipPaths)) {
           files.push(fullPath)
@@ -282,10 +249,7 @@ async function collectMDXFiles(
   return files
 }
 
-async function validateAllFiles(
-  sourceDir: string,
-  config: ValidationConfig,
-): Promise<ValidationSummary> {
+async function validateAllFiles(sourceDir: string, config: ValidationConfig): Promise<ValidationSummary> {
   const files = await collectMDXFiles(sourceDir, sourceDir, config)
   const results: FileValidationResult[] = []
 
@@ -295,9 +259,7 @@ async function validateAllFiles(
 
     const batchResults = await Promise.all(
       batch.map(async fullPath => {
-        const relativePath = path
-          .relative(sourceDir, fullPath)
-          .replaceAll('\\', '/')
+        const relativePath = path.relative(sourceDir, fullPath).replaceAll('\\', '/')
 
         try {
           const content = await fs.readFile(fullPath, 'utf-8')
@@ -332,26 +294,16 @@ async function validateAllFiles(
 
 function formatError(result: FileValidationResult): string[] {
   return result.errors.map(error => {
-    const location = error.lineNumber
-      ? `${result.file}:${error.lineNumber}`
-      : result.file
+    const location = error.lineNumber ? `${result.file}:${error.lineNumber}` : result.file
     return `  ${location}: ${error.message}`
   })
 }
 
 function printResults(summary: ValidationSummary): void {
-  const missingFrontmatter = summary.results.filter(r =>
-    r.errors.some(e => e.type === 'missing_frontmatter'),
-  )
-  const missingPackages = summary.results.filter(r =>
-    r.errors.some(e => e.type === 'missing_packages'),
-  )
-  const invalidPackages = summary.results.filter(r =>
-    r.errors.some(e => e.type === 'invalid_packages'),
-  )
-  const parseErrors = summary.results.filter(r =>
-    r.errors.some(e => e.type === 'parse_error'),
-  )
+  const missingFrontmatter = summary.results.filter(r => r.errors.some(e => e.type === 'missing_frontmatter'))
+  const missingPackages = summary.results.filter(r => r.errors.some(e => e.type === 'missing_packages'))
+  const invalidPackages = summary.results.filter(r => r.errors.some(e => e.type === 'invalid_packages'))
+  const parseErrors = summary.results.filter(r => r.errors.some(e => e.type === 'parse_error'))
 
   if (missingFrontmatter.length > 0) {
     console.log('Missing frontmatter:')
@@ -416,9 +368,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(error => {
-  console.error(
-    'Unhandled error:',
-    error instanceof Error ? error.message : error,
-  )
+  console.error('Unhandled error:', error instanceof Error ? error.message : error)
   process.exit(1)
 })

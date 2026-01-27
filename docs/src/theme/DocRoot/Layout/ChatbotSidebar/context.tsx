@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useState,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 
 export interface ChatbotSidebarContextValue {
   /**
@@ -29,9 +23,7 @@ export interface ChatbotSidebarContextValue {
   close: () => void
 }
 
-const ChatbotSidebarContext = createContext<
-  ChatbotSidebarContextValue | undefined
->(undefined)
+const ChatbotSidebarContext = createContext<ChatbotSidebarContextValue | undefined>(undefined)
 
 interface ChatbotSidebarProviderProps {
   children: ReactNode
@@ -46,10 +38,7 @@ interface ChatbotSidebarProviderProps {
  * Wrap your layout with this provider to enable chatbot sidebar state access
  * from any child component.
  */
-export function ChatbotSidebarProvider({
-  children,
-  defaultHidden = true,
-}: ChatbotSidebarProviderProps) {
+export function ChatbotSidebarProvider({ children, defaultHidden = true }: ChatbotSidebarProviderProps) {
   const [isHidden, setIsHidden] = useState(defaultHidden)
 
   const toggle = useCallback(() => {
@@ -72,11 +61,7 @@ export function ChatbotSidebarProvider({
     close,
   }
 
-  return (
-    <ChatbotSidebarContext.Provider value={value}>
-      {children}
-    </ChatbotSidebarContext.Provider>
-  )
+  return <ChatbotSidebarContext.Provider value={value}>{children}</ChatbotSidebarContext.Provider>
 }
 
 /**
@@ -99,9 +84,7 @@ export function ChatbotSidebarProvider({
 export function useChatbotSidebar(): ChatbotSidebarContextValue {
   const context = useContext(ChatbotSidebarContext)
   if (context === undefined) {
-    throw new Error(
-      'useChatbotSidebar must be used within a ChatbotSidebarProvider',
-    )
+    throw new Error('useChatbotSidebar must be used within a ChatbotSidebarProvider')
   }
   return context
 }

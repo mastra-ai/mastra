@@ -20,8 +20,7 @@ import { type ReactNode } from 'react'
 */
 function useSyntheticTitle(): string | null {
   const { metadata, frontMatter, contentTitle } = useDoc()
-  const shouldRender =
-    !frontMatter.hide_title && typeof contentTitle === 'undefined'
+  const shouldRender = !frontMatter.hide_title && typeof contentTitle === 'undefined'
   if (!shouldRender) {
     return null
   }
@@ -31,9 +30,7 @@ function useSyntheticTitle(): string | null {
 export default function DocItemContent({ children }: Props): ReactNode {
   const syntheticTitle = useSyntheticTitle()
   return (
-    <div
-      className={cn(ThemeClassNames.docs.docMarkdown, 'markdown @container')}
-    >
+    <div className={cn(ThemeClassNames.docs.docMarkdown, 'markdown @container')}>
       {syntheticTitle && (
         <header>
           <Heading as="h1">{syntheticTitle}</Heading>

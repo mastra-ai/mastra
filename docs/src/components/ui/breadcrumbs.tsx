@@ -24,13 +24,7 @@ export function BreadcrumbsItemLink({
   )
 }
 
-export function BreadcrumbsItem({
-  children,
-  active,
-}: {
-  children: ReactNode
-  active?: boolean
-}): ReactNode {
+export function BreadcrumbsItem({ children, active }: { children: ReactNode; active?: boolean }): ReactNode {
   return (
     <li
       className={clsx('breadcrumbs__item', {

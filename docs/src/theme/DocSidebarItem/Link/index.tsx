@@ -22,9 +22,7 @@ function LinkLabel({ label, item }: { label: string; item: any }) {
       <span title={label} className={styles.linkLabel}>
         {label}
       </span>
-      {badgeType && (
-        <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />
-      )}
+      {badgeType && <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />}
     </>
   )
 }
@@ -52,13 +50,9 @@ export default function DocSidebarItemLink({
       key={label}
     >
       <Link
-        className={clsx(
-          'menu__link',
-          !isInternalLink && styles.menuExternalLink,
-          {
-            'menu__link--active': isActive,
-          },
-        )}
+        className={clsx('menu__link', !isInternalLink && styles.menuExternalLink, {
+          'menu__link--active': isActive,
+        })}
         autoAddBaseUrl={autoAddBaseUrl}
         aria-current={isActive ? 'page' : undefined}
         to={href}

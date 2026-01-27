@@ -35,11 +35,7 @@ async function runContentWorkflow() {
 
     if (result.status === 'success') {
       console.log('✅ Success!')
-      console.log(
-        '📊 Reading time:',
-        result.result.metadata.readingTime,
-        'minutes',
-      )
+      console.log('📊 Reading time:', result.result.metadata.readingTime, 'minutes')
       console.log('🎯 Difficulty:', result.result.metadata.difficulty)
       console.log('📅 Processed at:', result.result.metadata.processedAt)
     }

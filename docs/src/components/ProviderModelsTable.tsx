@@ -1,49 +1,39 @@
 import * as React from 'react'
 import { X as Cross, CircleCheck as Check } from 'lucide-react'
 
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ ...props }, ref) => (
+const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ ...props }, ref) => (
   <div className="relative w-full overflow-auto">
     <table ref={ref} {...props} />
   </div>
 ))
 
-const TableHeader = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ ...props }, ref) => <thead ref={ref} {...props} />)
+const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ ...props }, ref) => <thead ref={ref} {...props} />,
+)
 
-const TableBody = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ ...props }, ref) => <tbody ref={ref} {...props} />)
+const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ ...props }, ref) => <tbody ref={ref} {...props} />,
+)
 
-const TableFooter = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ ...props }, ref) => <tfoot ref={ref} {...props} />)
+const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ ...props }, ref) => <tfoot ref={ref} {...props} />,
+)
 
-const TableRow = React.forwardRef<
-  HTMLTableRowElement,
-  React.HTMLAttributes<HTMLTableRowElement>
->(({ ...props }, ref) => <tr ref={ref} {...props} />)
+const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
+  ({ ...props }, ref) => <tr ref={ref} {...props} />,
+)
 
-const TableHead = React.forwardRef<
-  HTMLTableCellElement,
-  React.ThHTMLAttributes<HTMLTableCellElement>
->(({ ...props }, ref) => <th ref={ref} {...props} />)
+const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
+  ({ ...props }, ref) => <th ref={ref} {...props} />,
+)
 
-const TableCell = React.forwardRef<
-  HTMLTableCellElement,
-  React.TdHTMLAttributes<HTMLTableCellElement>
->(({ ...props }, ref) => <td ref={ref} {...props} />)
+const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
+  ({ ...props }, ref) => <td ref={ref} {...props} />,
+)
 
-const TableCaption = React.forwardRef<
-  HTMLTableCaptionElement,
-  React.HTMLAttributes<HTMLTableCaptionElement>
->(({ ...props }, ref) => <caption ref={ref} {...props} />)
+const TableCaption = React.forwardRef<HTMLTableCaptionElement, React.HTMLAttributes<HTMLTableCaptionElement>>(
+  ({ ...props }, ref) => <caption ref={ref} {...props} />,
+)
 
 interface ModelData {
   model: string
@@ -68,12 +58,7 @@ interface ProviderModelsTableProps {
 function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
   // Check if we have extended data
   const hasExtendedData = models.some(
-    m =>
-      m.audioInput ||
-      m.videoInput ||
-      m.reasoning ||
-      m.contextWindow ||
-      m.inputCost,
+    m => m.audioInput || m.videoInput || m.reasoning || m.contextWindow || m.inputCost,
   )
 
   const formatTokens = (tokens: number | null | undefined) => {
@@ -119,9 +104,7 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
             <TableCell>
               <code>{model.model}</code>
             </TableCell>
-            {hasExtendedData && (
-              <TableCell>{formatTokens(model.contextWindow)}</TableCell>
-            )}
+            {hasExtendedData && <TableCell>{formatTokens(model.contextWindow)}</TableCell>}
             <TableCell className="text-center">
               {model.toolUsage ? (
                 <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />

@@ -6,10 +6,7 @@ import { useChatbotSidebar } from '../ChatbotSidebar/context'
 
 import styles from './styles.module.css'
 
-export default function DocRootLayoutMain({
-  hiddenSidebarContainer,
-  children,
-}: Props): ReactNode {
+export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: Props): ReactNode {
   const sidebar = useDocsSidebar()
   const { isHidden: hiddenChatbotSidebar } = useChatbotSidebar()
 

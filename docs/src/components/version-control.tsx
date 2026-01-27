@@ -9,12 +9,7 @@ import { Check } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation } from '@docusaurus/router'
 import { cn } from '../lib/utils'
-import {
-  LabelFilledIcon,
-  LabelOutlineIcon,
-  TriggerIcon,
-  VersionLabel,
-} from './icons/icon'
+import { LabelFilledIcon, LabelOutlineIcon, TriggerIcon, VersionLabel } from './icons/icon'
 
 import FeatureVersioning from '../../feature-versioning.json'
 
@@ -123,8 +118,7 @@ export default function VersionControl({
           // Get the base path without version prefix for checking FeatureVersioning
           const basePath = pathname.replace(/^(\/docs)\/v0/, '$1')
           // Check if page is exclusive to a specific version
-          const exclusiveVersion =
-            FeatureVersioning[basePath as keyof typeof FeatureVersioning]
+          const exclusiveVersion = FeatureVersioning[basePath as keyof typeof FeatureVersioning]
           // Page exists if it's not exclusive to another version
           const exists = !exclusiveVersion || exclusiveVersion === version.value
 
@@ -138,21 +132,12 @@ export default function VersionControl({
               )}
             >
               {exists ? (
-                <a
-                  href={href}
-                  className="flex w-full items-center justify-between no-underline!"
-                >
+                <a href={href} className="flex w-full items-center justify-between no-underline!">
                   <div className="inline-flex gap-2 text-black dark:text-white">
-                    {version.value === 'v1' ? (
-                      <LabelOutlineIcon />
-                    ) : (
-                      <LabelFilledIcon />
-                    )}
+                    {version.value === 'v1' ? <LabelOutlineIcon /> : <LabelFilledIcon />}
                     <span>{version.label}</span>
                   </div>
-                  {isActive && (
-                    <Check className="size-4 text-(--mastra-green-accent-2)" />
-                  )}
+                  {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
                 </a>
               ) : (
                 <div>

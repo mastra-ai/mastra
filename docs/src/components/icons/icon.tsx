@@ -1,11 +1,6 @@
 export function TriggerIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="32"
-      height="32"
-      viewBox="0 0 32 32"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
       <g fill="currentColor">
         <path
           fill="currentColor"
@@ -22,12 +17,7 @@ export function TriggerIcon() {
 
 export function VersionLabel() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
       <g fill="currentColor">
         <path
           d="M1.75 4.25H7.336C7.601 4.25 7.856 4.355 8.043 4.543L13.836 10.336C14.617 11.117 14.617 12.383 13.836 13.164L10.664 16.336C9.883 17.117 8.617 17.117 7.836 16.336L2.043 10.543C1.855 10.355 1.75 10.101 1.75 9.836V4.25Z"
@@ -65,13 +55,7 @@ export function VersionLabel() {
 
 export function LabelOutlineIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      className="size-4"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" className="size-4">
       <g fill="currentColor">
         <path
           d="M3.25,2.25h4.922c.53,0,1.039,.211,1.414,.586l5.75,5.75c.781,.781,.781,2.047,0,2.828l-3.922,3.922c-.781,.781-2.047,.781-2.828,0L2.836,9.586c-.375-.375-.586-.884-.586-1.414V3.25c0-.552,.448-1,1-1Z"
@@ -82,14 +66,7 @@ export function LabelOutlineIcon() {
           strokeLinejoin="round"
           strokeWidth="1"
         ></path>
-        <circle
-          cx="6.25"
-          cy="6.25"
-          r="1.25"
-          fill="currentColor"
-          data-stroke="none"
-          stroke="none"
-        ></circle>
+        <circle cx="6.25" cy="6.25" r="1.25" fill="currentColor" data-stroke="none" stroke="none"></circle>
       </g>
     </svg>
   )
@@ -97,13 +74,7 @@ export function LabelOutlineIcon() {
 
 export function LabelFilledIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      className="size-4"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" className="size-4">
       <g fill="currentColor">
         <path
           d="M3.25 2.25H8.172C8.702 2.25 9.211 2.461 9.586 2.836L15.336 8.586C16.117 9.367 16.117 10.633 15.336 11.414L11.414 15.336C10.633 16.117 9.367 16.117 8.586 15.336L2.836 9.586C2.461 9.211 2.25 8.702 2.25 8.172V3.25C2.25 2.698 2.698 2.25 3.25 2.25Z"

@@ -22,13 +22,7 @@ function CloseButton() {
       className="clean-btn navbar-sidebar__close"
       onClick={() => mobileSidebar.toggle()}
     >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
         <rect
           x="1"
           y="7.5"
@@ -38,10 +32,7 @@ function CloseButton() {
           style={{
             transformOrigin: 'center',
           }}
-          className={cn(
-            'ease-ease-out-quad transition-transform duration-150',
-            'rotate-45',
-          )}
+          className={cn('ease-ease-out-quad transition-transform duration-150', 'rotate-45')}
         ></rect>
         <rect
           x="1"
@@ -52,10 +43,7 @@ function CloseButton() {
           style={{
             transformOrigin: 'center',
           }}
-          className={cn(
-            'ease-ease-out-quad transition-transform duration-150',
-            '-rotate-45',
-          )}
+          className={cn('ease-ease-out-quad transition-transform duration-150', '-rotate-45')}
         ></rect>
       </svg>
     </Button>

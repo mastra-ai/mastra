@@ -8,12 +8,7 @@ import { disableTransitions } from '@site/src/utils/disableTransitions'
 
 import type { Props } from '@theme/ColorModeToggle'
 
-function ColorModeToggle({
-  className,
-  buttonClassName,
-  value,
-  onChange,
-}: Props): React.JSX.Element {
+function ColorModeToggle({ className, buttonClassName, value, onChange }: Props): React.JSX.Element {
   const isBrowser = useIsBrowser()
 
   const title = translate(

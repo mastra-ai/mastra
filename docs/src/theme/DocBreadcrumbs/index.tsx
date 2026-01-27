@@ -6,10 +6,7 @@ import { useHomePageRoute } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import HomeBreadcrumbItem from '@theme/DocBreadcrumbs/Items/Home'
 import DocBreadcrumbsStructuredData from '@theme/DocBreadcrumbs/StructuredData'
-import {
-  BreadcrumbsItemLink,
-  BreadcrumbsItem,
-} from '@site/src/components/ui/breadcrumbs'
+import { BreadcrumbsItemLink, BreadcrumbsItem } from '@site/src/components/ui/breadcrumbs'
 import BrowserOnly from '@docusaurus/BrowserOnly'
 
 import styles from './styles.module.css'
@@ -27,10 +24,7 @@ export default function DocBreadcrumbs(): ReactNode {
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
       <DocBreadcrumbsStructuredData breadcrumbs={breadcrumbs} />
       <nav
-        className={clsx(
-          ThemeClassNames.docs.docBreadcrumbs,
-          styles.breadcrumbsContainer,
-        )}
+        className={clsx(ThemeClassNames.docs.docBreadcrumbs, styles.breadcrumbsContainer)}
         aria-label={translate({
           id: 'theme.docs.breadcrumbs.navAriaLabel',
           message: 'Breadcrumbs',
@@ -41,10 +35,7 @@ export default function DocBreadcrumbs(): ReactNode {
           {homePageRoute && <HomeBreadcrumbItem />}
           {breadcrumbs.map((item, idx) => {
             const isLast = idx === breadcrumbs.length - 1
-            const href =
-              item.type === 'category' && item.linkUnlisted
-                ? undefined
-                : item.href
+            const href = item.type === 'category' && item.linkUnlisted ? undefined : item.href
             return (
               <BreadcrumbsItem key={idx} active={isLast}>
                 <BreadcrumbsItemLink href={href} isLast={isLast}>

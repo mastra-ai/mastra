@@ -31,8 +31,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
     setActiveTab(sluggify(tab))
   }
 
-  const currentItems =
-    items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? []
+  const currentItems = items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? []
 
   return (
     <div className="card__grid">
@@ -43,8 +42,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
             key={title}
             className={cn(
               'w-fit rounded-full bg-(--mastra-surface-3) px-3 py-1 text-sm text-(--mastra-text-quaternary) capitalize transition-colors',
-              activeTab === sluggify(title) &&
-                'bg-(--mastra-text-primary) text-white dark:bg-gray-100 dark:text-black',
+              activeTab === sluggify(title) && 'bg-(--mastra-text-primary) text-white dark:bg-gray-100 dark:text-black',
             )}
           >
             {title}

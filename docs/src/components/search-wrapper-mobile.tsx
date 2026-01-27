@@ -1,9 +1,4 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-} from '@headlessui/react'
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import { useState } from 'react'
 import { CustomSearch } from './custom-search'
 import { Button } from './ui/button'
@@ -69,12 +64,7 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
 
   return (
     <>
-      <Button
-        onClick={open}
-        size="sm"
-        variant="ghost"
-        className="text-icons-3 block w-fit cursor-pointer md:hidden"
-      >
+      <Button onClick={open} size="sm" variant="ghost" className="text-icons-3 block w-fit cursor-pointer md:hidden">
         <SearchIcon />
       </Button>
       <Dialog
@@ -97,10 +87,7 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
               <div className="w-full">
                 {isAgentMode ? null : (
                   <div className="p-2.5">
-                    <CustomSearch
-                      searchOptions={searchOptions}
-                      closeModal={close}
-                    />
+                    <CustomSearch searchOptions={searchOptions} closeModal={close} />
                   </div>
                 )}
               </div>

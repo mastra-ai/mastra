@@ -29,10 +29,7 @@ function useDocTOC() {
 
   const mobile = canRender ? <DocItemTOCMobile /> : undefined
 
-  const desktop =
-    canRender && (windowSize === 'desktop' || windowSize === 'ssr') ? (
-      <DocItemTOCDesktop />
-    ) : undefined
+  const desktop = canRender && (windowSize === 'desktop' || windowSize === 'ssr') ? <DocItemTOCDesktop /> : undefined
 
   return {
     hidden,

@@ -76,24 +76,17 @@ export const SchemaTable: React.FC<SchemaTableProps> = ({ columns = [] }) => {
     <div className="mb-4 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
       <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {columns.map((column, index) => (
-          <div
-            key={index}
-            className="flex flex-col gap-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-          >
+          <div key={index} className="flex flex-col gap-1 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-900">
             <div className="flex flex-row items-start gap-2">
               <div className="font-mono text-sm font-medium">{column.name}</div>
-              <div className="font-mono text-sm text-zinc-500">
-                {column.type}
-              </div>
+              <div className="font-mono text-sm text-zinc-500">{column.type}</div>
             </div>
             {renderConstraints(column.constraints)}
             <div className="text-sm text-zinc-400">
               <MDXText>{column.description ?? ''}</MDXText>
               {column.example && (
                 <div className="mt-1 flex flex-col gap-1">
-                  <MDXExample>
-                    {JSON.stringify(column.example, null, 2)}
-                  </MDXExample>
+                  <MDXExample>{JSON.stringify(column.example, null, 2)}</MDXExample>
                 </div>
               )}
             </div>

@@ -21,11 +21,7 @@ export function SidebarBadge({ type }: SidebarBadgeProps) {
     }
   }
 
-  return (
-    <span className={`${styles.badge} ${styles[`badge--${type}`]}`}>
-      {getLabel(type)}
-    </span>
-  )
+  return <span className={`${styles.badge} ${styles[`badge--${type}`]}`}>{getLabel(type)}</span>
 }
 
 export default SidebarBadge

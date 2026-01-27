@@ -14,11 +14,7 @@ import styles from './styles.module.css'
 // See https://github.com/facebook/docusaurus/issues/3414
 function ResetOnSidebarChange({ children }: { children: ReactNode }) {
   const sidebar = useDocsSidebar()
-  return (
-    <React.Fragment key={sidebar?.name ?? 'noSidebar'}>
-      {children}
-    </React.Fragment>
-  )
+  return <React.Fragment key={sidebar?.name ?? 'noSidebar'}>{children}</React.Fragment>
 }
 
 export default function DocRootLayoutSidebar({
@@ -59,18 +55,8 @@ export default function DocRootLayoutSidebar({
       }}
     >
       <ResetOnSidebarChange>
-        <div
-          className={clsx(
-            styles.sidebarViewport,
-            hiddenSidebar && styles.sidebarViewportHidden,
-          )}
-        >
-          <DocSidebar
-            sidebar={sidebar}
-            path={pathname}
-            onCollapse={toggleSidebar}
-            isHidden={hiddenSidebar}
-          />
+        <div className={clsx(styles.sidebarViewport, hiddenSidebar && styles.sidebarViewportHidden)}>
+          <DocSidebar sidebar={sidebar} path={pathname} onCollapse={toggleSidebar} isHidden={hiddenSidebar} />
           {hiddenSidebar && <ExpandButton toggleSidebar={toggleSidebar} />}
         </div>
       </ResetOnSidebarChange>

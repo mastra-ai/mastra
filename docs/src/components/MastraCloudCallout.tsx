@@ -6,11 +6,9 @@ export function MastraCloudCallout() {
   return (
     <Admonition type="tip" title="Mastra Cloud">
       <p>
-        Deploy and monitor your Mastra applications with{' '}
-        <Link to="https://mastra.ai/cloud">Mastra Cloud</Link>. Get automated
-        deployments, detailed observability, and a built-in{' '}
-        <Link to="/docs/getting-started/studio">Studio</Link> for testing agents
-        and workflows.
+        Deploy and monitor your Mastra applications with <Link to="https://mastra.ai/cloud">Mastra Cloud</Link>. Get
+        automated deployments, detailed observability, and a built-in{' '}
+        <Link to="/docs/getting-started/studio">Studio</Link> for testing agents and workflows.
       </p>
     </Admonition>
   )

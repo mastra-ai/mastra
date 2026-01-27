@@ -86,9 +86,7 @@ const config: Config = {
         routeBasePath: 'models',
         sidebarPath: './src/content/en/models/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-        remarkPlugins: [
-          [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
-        ],
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
     [
@@ -99,9 +97,7 @@ const config: Config = {
         routeBasePath: 'guides',
         sidebarPath: './src/content/en/guides/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-        remarkPlugins: [
-          [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
-        ],
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
     [
@@ -112,9 +108,7 @@ const config: Config = {
         routeBasePath: 'reference',
         sidebarPath: './src/content/en/reference/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-        remarkPlugins: [
-          [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
-        ],
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
   ],
@@ -130,9 +124,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-          remarkPlugins: [
-            [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
-          ],
+          remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
         },
         blog: false,
         theme: {

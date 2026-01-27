@@ -23,9 +23,7 @@ export default function DocRootLayout({ children }: Props): ReactNode {
             setHiddenSidebarContainer={setHiddenSidebarContainer}
           />
         )}
-        <DocRootLayoutMain hiddenSidebarContainer={hiddenSidebarContainer}>
-          {children}
-        </DocRootLayoutMain>
+        <DocRootLayoutMain hiddenSidebarContainer={hiddenSidebarContainer}>{children}</DocRootLayoutMain>
         <ChatbotSidebar />
       </div>
     </div>

@@ -11,11 +11,7 @@ declare global {
   }
 }
 
-export function CookieBanner({
-  onConsentChange,
-}: {
-  onConsentChange: (consent: boolean) => void
-}) {
+export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: boolean) => void }) {
   const [showBanner, setShowBanner] = useState(null)
   const isBrowser = useIsBrowser()
 
@@ -73,8 +69,8 @@ export function CookieBanner({
     <div className="fixed right-20 bottom-8 z-50 flex w-[322px] items-center justify-center rounded-xl bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,.1)] dark:border dark:border-neutral-700 dark:bg-black">
       <div>
         <p className="mb-4 font-sans text-sm dark:text-white">
-          We use tracking cookies to understand how you use the product and help
-          us improve it. Please accept cookies to help us improve.
+          We use tracking cookies to understand how you use the product and help us improve it. Please accept cookies to
+          help us improve.
         </p>
         <Button
           variant="secondary"
@@ -86,13 +82,7 @@ export function CookieBanner({
           Accept cookies
         </Button>
         <span> </span>
-        <Button
-          variant={'secondary'}
-          className="dark:text-white"
-          size={'slim'}
-          type="button"
-          onClick={handleReject}
-        >
+        <Button variant={'secondary'} className="dark:text-white" size={'slim'} type="button" onClick={handleReject}>
           Decline cookies
         </Button>
       </div>

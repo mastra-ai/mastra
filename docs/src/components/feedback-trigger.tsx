@@ -3,14 +3,7 @@ import { FeedbackForm } from './feedback-form'
 import { Button } from './ui/button'
 import React, { useState } from 'react'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
-import {
-  Dialog,
-  DialogContent,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-} from '@radix-ui/react-dialog'
+import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@radix-ui/react-dialog'
 
 export const FeedbackTrigger: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -40,11 +33,7 @@ export const FeedbackTrigger: React.FC = () => {
             <div className="mx-auto h-fit w-md rounded-xl bg-(--ifm-background-color) shadow-2xl ring ring-neutral-200 transition-all duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) dark:bg-(--mastra-surface-2) dark:ring-(--border)">
               <DialogTitle className="sr-only">Send Feedback</DialogTitle>
               <div className="w-full">
-                <FeedbackForm
-                  isOpen={isOpen}
-                  onClose={() => setIsOpen(false)}
-                  currentPage={currentPage}
-                />
+                <FeedbackForm isOpen={isOpen} onClose={() => setIsOpen(false)} currentPage={currentPage} />
               </div>
             </div>
           </div>

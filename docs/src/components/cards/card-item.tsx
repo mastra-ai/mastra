@@ -4,11 +4,7 @@ import Link from '@docusaurus/Link'
 import { Card, CardContent } from '../ui/card'
 import { useLocation } from '@docusaurus/router'
 
-export function CardItem({
-  links,
-}: {
-  links: Array<{ title: string; href: string }>
-}) {
+export function CardItem({ links }: { links: Array<{ title: string; href: string }> }) {
   const location = useLocation()
   const locale = location.pathname.split('/')[1] || 'en'
   return (

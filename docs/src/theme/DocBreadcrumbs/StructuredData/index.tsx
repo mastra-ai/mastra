@@ -9,9 +9,7 @@ export default function DocBreadcrumbsStructuredData(props: Props): ReactNode {
   })
   return (
     <Head>
-      <script type="application/ld+json">
-        {JSON.stringify(structuredData)}
-      </script>
+      <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
     </Head>
   )
 }

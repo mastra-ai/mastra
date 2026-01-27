@@ -13,10 +13,7 @@ import { CancelIcon } from './copy-page-icons'
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, 'Please enter your feedback'),
-  email: z
-    .email('Please enter a valid email address')
-    .optional()
-    .or(z.literal('')),
+  email: z.email('Please enter a valid email address').optional().or(z.literal('')),
   rating: z.number().min(1).max(5).optional(),
   page: z.string(),
   userAgent: z.string().optional(),
@@ -101,20 +98,14 @@ const ratings = [
   },
 ]
 
-export const FeedbackForm = ({
-  isOpen,
-  onClose,
-  currentPage,
-}: FeedbackFormProps) => {
+export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps) => {
   const { siteConfig } = useDocusaurusContext()
   const { mastraWebsite } = siteConfig.customFields as {
     mastraWebsite?: string
   }
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitStatus, setSubmitStatus] = useState<
-    'idle' | 'success' | 'error'
-  >('idle')
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string>('')
 
   const form = useForm<FeedbackFormData>({
@@ -124,8 +115,7 @@ export const FeedbackForm = ({
       email: '',
       rating: 5,
       page: currentPage,
-      userAgent:
-        typeof window !== 'undefined' ? window.navigator.userAgent : '',
+      userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : '',
     },
     reValidateMode: 'onSubmit',
   })
@@ -149,9 +139,7 @@ export const FeedbackForm = ({
       })
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: 'Unknown error' }))
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
         throw new Error(errorData.error || `Server error: ${response.status}`)
       }
 
@@ -164,9 +152,7 @@ export const FeedbackForm = ({
       }, 2000)
     } catch (error) {
       setSubmitStatus('error')
-      setErrorMessage(
-        error instanceof Error ? error.message : 'An unexpected error occurred',
-      )
+      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred')
     } finally {
       setIsSubmitting(false)
     }
@@ -180,22 +166,15 @@ export const FeedbackForm = ({
     <>
       {submitStatus === 'success' ? (
         <div className="py-8 text-center">
-          <p className="mb-0! text-base text-black dark:text-white">
-            Thank you! Your feedback has been submitted
-          </p>
+          <p className="mb-0! text-base text-black dark:text-white">Thank you! Your feedback has been submitted</p>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="flex items-start justify-between border-b-[0.5px] border-(--border) px-6 py-4">
-              <Label
-                htmlFor="feedback"
-                className="flex flex-col items-start gap-0"
-              >
+              <Label htmlFor="feedback" className="flex flex-col items-start gap-0">
                 <span className="text-lg font-semibold">Share feedback</span>
-                <span className="text-xs text-(--mastra-text-secondary)">
-                  Tell us how this can be better.
-                </span>
+                <span className="text-xs text-(--mastra-text-secondary)">Tell us how this can be better.</span>
               </Label>
               <Button
                 type="button"
@@ -218,9 +197,7 @@ export const FeedbackForm = ({
                     onClick={() => form.setValue('rating', rating)}
                     className={cn(
                       'flex h-10 w-10 items-center justify-center rounded-full text-lg transition-all hover:scale-110 hover:bg-(--mastra-surface-3)',
-                      currentRating === rating
-                        ? 'ring-2 ring-(--mastra-green-accent)'
-                        : '',
+                      currentRating === rating ? 'ring-2 ring-(--mastra-green-accent)' : '',
                     )}
                     title={label}
                   >
@@ -281,11 +258,7 @@ export const FeedbackForm = ({
               <div className="mx-6 mb-4 rounded-[10px] bg-red-50 p-3 dark:bg-red-900/20">
                 <p className="mb-0! font-mono text-xs text-red-500 dark:text-red-400">
                   Something went wrong. Please try again
-                  {errorMessage && (
-                    <span className="mt-1 block opacity-75">
-                      {errorMessage}
-                    </span>
-                  )}
+                  {errorMessage && <span className="mt-1 block opacity-75">{errorMessage}</span>}
                 </p>
               </div>
             )}

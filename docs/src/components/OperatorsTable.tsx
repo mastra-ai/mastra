@@ -12,17 +12,10 @@ interface OperatorsTableProps {
   operators: Operator[]
 }
 
-export default function OperatorsTable({
-  title,
-  operators,
-}: OperatorsTableProps): React.JSX.Element {
+export default function OperatorsTable({ title, operators }: OperatorsTableProps): React.JSX.Element {
   return (
     <div style={{ marginBottom: '2rem' }}>
-      <h3
-        style={{ marginBottom: '1rem', fontSize: '1.125rem', fontWeight: 600 }}
-      >
-        {title}
-      </h3>
+      <h3 style={{ marginBottom: '1rem', fontSize: '1.125rem', fontWeight: 600 }}>{title}</h3>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {operators.map((operator, index) => {
           return (
@@ -34,10 +27,7 @@ export default function OperatorsTable({
                 gap: '0.5rem',
                 paddingTop: '0.75rem',
                 paddingBottom: '0.75rem',
-                borderBottom:
-                  index === operators.length - 1
-                    ? 'none'
-                    : '1px solid var(--ifm-color-emphasis-300)',
+                borderBottom: index === operators.length - 1 ? 'none' : '1px solid var(--ifm-color-emphasis-300)',
               }}
             >
               <div

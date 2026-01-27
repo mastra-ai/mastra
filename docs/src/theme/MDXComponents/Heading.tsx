@@ -29,19 +29,9 @@ export default function Heading({ as: As, id, ...props }: Props): ReactNode {
   )
 
   return (
-    <As
-      {...props}
-      className={clsx('anchor', anchorTargetClassName, props.className)}
-      id={id}
-    >
+    <As {...props} className={clsx('anchor', anchorTargetClassName, props.className)} id={id}>
       {props.children}
-      <Link
-        className="hash-link"
-        to={`#${id}`}
-        aria-label={anchorTitle}
-        title={anchorTitle}
-        translate="no"
-      >
+      <Link className="hash-link" to={`#${id}`} aria-label={anchorTitle} title={anchorTitle} translate="no">
         <div className="sr-only">{anchorTitle}</div>
       </Link>
     </As>

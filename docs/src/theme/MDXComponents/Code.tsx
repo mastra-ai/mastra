@@ -9,9 +9,7 @@ function shouldBeInline(props: Props) {
     // empty code blocks have no props.children,
     // see https://github.com/facebook/docusaurus/pull/9704
     typeof props.children !== 'undefined' &&
-    React.Children.toArray(props.children).every(
-      el => typeof el === 'string' && !el.includes('\n'),
-    )
+    React.Children.toArray(props.children).every(el => typeof el === 'string' && !el.includes('\n'))
   )
 }
 

@@ -11,9 +11,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string
   const kapaGroupId = siteConfig.customFields.kapaGroupId as string | undefined
   const posthogApiKey = siteConfig.customFields.posthogApiKey as string
-  const posthogHost =
-    (siteConfig.customFields.posthogHost as string) ||
-    'https://us.i.posthog.com'
+  const posthogHost = (siteConfig.customFields.posthogHost as string) || 'https://us.i.posthog.com'
 
   return (
     <PostHogProvider
@@ -28,9 +26,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
       >
         <Toaster />
         <CookieConsent />
-        <ChatbotSidebarProvider defaultHidden={true}>
-          {children}
-        </ChatbotSidebarProvider>
+        <ChatbotSidebarProvider defaultHidden={true}>{children}</ChatbotSidebarProvider>
       </KapaProvider>
     </PostHogProvider>
   )

@@ -1,35 +1,18 @@
 import { cn } from '@site/src/lib/utils'
 import { useCallback, useState } from 'react'
 import { useMarkdownContent } from '../hooks/useMarkdownContent'
-import {
-  ChatGPTIcon,
-  ChevronDownIcon,
-  ClaudeIcon,
-  CopyPageIcon,
-  CursorIcon,
-  ExternalLinkIcon,
-} from './copy-page-icons'
+import { ChatGPTIcon, ChevronDownIcon, ClaudeIcon, CopyPageIcon, CursorIcon, ExternalLinkIcon } from './copy-page-icons'
 import { Button } from './ui/button'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 
-function openInChatGpt(
-  url: string,
-  encodeURIComponent: typeof window.encodeURIComponent,
-) {
-  const query = encodeURIComponent(
-    `Read from the ${url} so I can ask questions about it.`,
-  )
+function openInChatGpt(url: string, encodeURIComponent: typeof window.encodeURIComponent) {
+  const query = encodeURIComponent(`Read from the ${url} so I can ask questions about it.`)
   const chatGptUrl = `https://chatgpt.com/?hints=search&q=${query}`
   return chatGptUrl
 }
 
-function openInClaude(
-  url: string,
-  encodeURIComponent: typeof window.encodeURIComponent,
-) {
-  const query = encodeURIComponent(
-    `Read from the ${url} so I can ask questions about it.`,
-  )
+function openInClaude(url: string, encodeURIComponent: typeof window.encodeURIComponent) {
+  const query = encodeURIComponent(`Read from the ${url} so I can ask questions about it.`)
   const claudeUrl = `https://claude.ai/new?q=${query}`
   return claudeUrl
 }
@@ -100,10 +83,7 @@ export const CopyPageButton = () => {
             )}
           >
             <ChevronDownIcon
-              className={cn(
-                'size-3 transition-transform duration-200',
-                open && 'rotate-180 transform',
-              )}
+              className={cn('size-3 transition-transform duration-200', open && 'rotate-180 transform')}
             />
           </Button>
         </DropdownMenu.Trigger>

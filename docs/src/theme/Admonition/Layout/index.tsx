@@ -4,13 +4,7 @@ import React, { type ReactNode } from 'react'
 import type { Props } from '@theme/Admonition/Layout'
 
 import { cn } from '@site/src/lib/utils'
-import {
-  GithubTipIcon,
-  GithubCautionIcon,
-  GithubNoteIcon,
-  GithubWarningIcon,
-  GithubImportantIcon,
-} from '../icons'
+import { GithubTipIcon, GithubCautionIcon, GithubNoteIcon, GithubWarningIcon, GithubImportantIcon } from '../icons'
 
 const TypeToEmoji = {
   note: <GithubTipIcon />,
@@ -28,11 +22,7 @@ const classes: Record<CalloutType, string> = {
     'text-green-700 dark:text-green-500',
     'border-green-200 dark:border-green-800',
   ),
-  danger: cn(
-    'bg-red-100 dark:bg-red-900/30',
-    'text-red-700 dark:text-red-500',
-    'border-red-200 dark:border-red-600',
-  ),
+  danger: cn('bg-red-100 dark:bg-red-900/30', 'text-red-700 dark:text-red-500', 'border-red-200 dark:border-red-600'),
   info: cn(
     'bg-blue-50 dark:bg-blue-900/30',
     'text-blue-700 dark:text-blue-400',
@@ -56,13 +46,7 @@ function AdmonitionContainer({
   children,
 }: Pick<Props, 'type' | 'className'> & { children: ReactNode }) {
   return (
-    <div
-      className={clsx(
-        'mb-4 flex flex-col gap-2 rounded-xl border border-(--border) p-4',
-        classes[type],
-        className,
-      )}
-    >
+    <div className={clsx('mb-4 flex flex-col gap-2 rounded-xl border border-(--border) p-4', classes[type], className)}>
       {children}
     </div>
   )
@@ -72,19 +56,13 @@ function AdmonitionIconType({ title, type }: Pick<Props, 'title' | 'type'>) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="size-3 shrink-0">{TypeToEmoji[type]}</span>
-      {title ? (
-        <span className="font-mono text-xs font-semibold tracking-tight capitalize">
-          {title}
-        </span>
-      ) : null}
+      {title ? <span className="font-mono text-xs font-semibold tracking-tight capitalize">{title}</span> : null}
     </div>
   )
 }
 
 function AdmonitionContent({ children }: Pick<Props, 'children'>) {
-  return children ? (
-    <div className="text-sm [&>:last-child]:mb-0!">{children}</div>
-  ) : null
+  return children ? <div className="text-sm [&>:last-child]:mb-0!">{children}</div> : null
 }
 
 export default function AdmonitionLayout(props: Props): ReactNode {

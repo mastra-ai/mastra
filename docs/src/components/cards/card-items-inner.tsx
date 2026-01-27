@@ -24,17 +24,9 @@ export function CardItemsInner({
   }
   return (
     <div>
-      <CardTitle
-        titles={titles}
-        activeTab={activeTab}
-        setActiveTab={handleTabChange}
-      />
+      <CardTitle titles={titles} activeTab={activeTab} setActiveTab={handleTabChange} />
       <div className="mt-6">
-        <CardItem
-          links={
-            items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? []
-          }
-        />
+        <CardItem links={items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? []} />
       </div>
     </div>
   )

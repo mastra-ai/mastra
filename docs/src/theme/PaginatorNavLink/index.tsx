@@ -29,12 +29,7 @@ export default function PaginatorNavLink(props: Props): ReactNode {
       </svg>
       <div>
         {subLabel && (
-          <div
-            className={cn(
-              'text-sm text-(--mastra-text-tertiary)',
-              isNext ? 'text-right' : 'text-left',
-            )}
-          >
+          <div className={cn('text-sm text-(--mastra-text-tertiary)', isNext ? 'text-right' : 'text-left')}>
             {subLabel}
           </div>
         )}

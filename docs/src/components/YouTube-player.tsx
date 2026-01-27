@@ -5,10 +5,7 @@ export interface YouTubeProps {
   title?: string
 }
 
-export default function YouTube({
-  id,
-  title = 'YouTube video player',
-}: YouTubeProps) {
+export default function YouTube({ id, title = 'YouTube video player' }: YouTubeProps) {
   return (
     <div
       style={{

@@ -20,10 +20,7 @@ export default function CollapseButton({ onClick }: Props): ReactNode {
         message: 'Collapse sidebar',
         description: 'The title attribute for collapse button of doc sidebar',
       })}
-      className={clsx(
-        'button button--secondary button--outline',
-        styles.collapseSidebarButton,
-      )}
+      className={clsx('button button--secondary button--outline', styles.collapseSidebarButton)}
       onClick={onClick}
     >
       <IconArrow className={styles.collapseSidebarButtonIcon} />

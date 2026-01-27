@@ -31,18 +31,7 @@ module.exports = {
       },
     },
     {
-      types: [
-        'entity',
-        'url',
-        'symbol',
-        'number',
-        'boolean',
-        'variable',
-        'constant',
-        'property',
-        'regex',
-        'inserted',
-      ],
+      types: ['entity', 'url', 'symbol', 'number', 'boolean', 'variable', 'constant', 'property', 'regex', 'inserted'],
       style: {
         color: '#b5cea8',
       },

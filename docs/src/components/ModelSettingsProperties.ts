@@ -10,8 +10,7 @@ export const MODEL_SETTINGS_PROPERTIES = [
         name: 'temperature',
         type: 'number',
         isOptional: true,
-        description:
-          'Controls randomness in generation (0-2). Higher values make output more random.',
+        description: 'Controls randomness in generation (0-2). Higher values make output more random.',
       },
     ],
   },
@@ -42,8 +41,7 @@ export const MODEL_SETTINGS_PROPERTIES = [
         name: 'topP',
         type: 'number',
         isOptional: true,
-        description:
-          'Nucleus sampling parameter (0-1). Controls diversity of generated text.',
+        description: 'Nucleus sampling parameter (0-1). Controls diversity of generated text.',
       },
     ],
   },
@@ -53,8 +51,7 @@ export const MODEL_SETTINGS_PROPERTIES = [
         name: 'topK',
         type: 'number',
         isOptional: true,
-        description:
-          'Top-k sampling parameter. Limits vocabulary to k most likely tokens.',
+        description: 'Top-k sampling parameter. Limits vocabulary to k most likely tokens.',
       },
     ],
   },
@@ -64,8 +61,7 @@ export const MODEL_SETTINGS_PROPERTIES = [
         name: 'presencePenalty',
         type: 'number',
         isOptional: true,
-        description:
-          'Penalty for token presence (-2 to 2). Reduces repetition.',
+        description: 'Penalty for token presence (-2 to 2). Reduces repetition.',
       },
     ],
   },
@@ -75,8 +71,7 @@ export const MODEL_SETTINGS_PROPERTIES = [
         name: 'frequencyPenalty',
         type: 'number',
         isOptional: true,
-        description:
-          'Penalty for token frequency (-2 to 2). Reduces repetition of frequent tokens.',
+        description: 'Penalty for token frequency (-2 to 2). Reduces repetition of frequent tokens.',
       },
     ],
   },

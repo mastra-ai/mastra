@@ -1,17 +1,6 @@
-import React, {
-  type ComponentProps,
-  type ReactNode,
-  useEffect,
-  useMemo,
-} from 'react'
+import React, { type ComponentProps, type ReactNode, useEffect, useMemo } from 'react'
 import clsx from 'clsx'
-import {
-  ThemeClassNames,
-  useThemeConfig,
-  usePrevious,
-  Collapsible,
-  useCollapsible,
-} from '@docusaurus/theme-common'
+import { ThemeClassNames, useThemeConfig, usePrevious, Collapsible, useCollapsible } from '@docusaurus/theme-common'
 import { isSamePath } from '@docusaurus/theme-common/internal'
 import {
   isActiveSidebarItem,
@@ -27,10 +16,7 @@ import DocSidebarItemLink from '@theme/DocSidebarItem/Link'
 import type { Props } from '@theme/DocSidebarItem/Category'
 import SidebarBadge from '@site/src/components/SidebarBadge'
 
-import type {
-  PropSidebarItemCategory,
-  PropSidebarItemLink,
-} from '@docusaurus/plugin-content-docs'
+import type { PropSidebarItemCategory, PropSidebarItemLink } from '@docusaurus/plugin-content-docs'
 import styles from './styles.module.css'
 import { getBadgeType } from '../utils'
 
@@ -51,19 +37,11 @@ function useAutoExpandActiveCategory({
   const previousActivePath = usePrevious(activePath)
   useEffect(() => {
     const justBecameActive = isActive && !wasActive
-    const stillActiveButPathChanged =
-      isActive && wasActive && activePath !== previousActivePath
+    const stillActiveButPathChanged = isActive && wasActive && activePath !== previousActivePath
     if ((justBecameActive || stillActiveButPathChanged) && collapsed) {
       updateCollapsed(false)
     }
-  }, [
-    isActive,
-    wasActive,
-    collapsed,
-    updateCollapsed,
-    activePath,
-    previousActivePath,
-  ])
+  }, [isActive, wasActive, collapsed, updateCollapsed, activePath, previousActivePath])
 }
 
 /**
@@ -74,9 +52,7 @@ function useAutoExpandActiveCategory({
  * see https://github.com/facebookincubator/infima/issues/36#issuecomment-772543188
  * see https://github.com/facebook/docusaurus/issues/3030
  */
-function useCategoryHrefWithSSRFallback(
-  item: Props['item'],
-): string | undefined {
+function useCategoryHrefWithSSRFallback(item: Props['item']): string | undefined {
   const isBrowser = useIsBrowser()
   return useMemo(() => {
     if (item.href && !item.linkUnlisted) {
@@ -130,10 +106,7 @@ function CollapseButton({
 }
 
 export default function DocSidebarItemCategory(props: Props): ReactNode {
-  const visibleChildren = useVisibleSidebarItems(
-    props.item.items,
-    props.activePath,
-  )
+  const visibleChildren = useVisibleSidebarItems(props.item.items, props.activePath)
   if (visibleChildren.length === 0) {
     return <DocSidebarItemCategoryEmpty {...props} />
   } else {
@@ -141,9 +114,7 @@ export default function DocSidebarItemCategory(props: Props): ReactNode {
   }
 }
 
-function isCategoryWithHref(
-  category: PropSidebarItemCategory,
-): category is PropSidebarItemCategory & { href: string } {
+function isCategoryWithHref(category: PropSidebarItemCategory): category is PropSidebarItemCategory & { href: string } {
   return typeof category.href === 'string'
 }
 
@@ -155,14 +126,7 @@ function DocSidebarItemCategoryEmpty({ item, ...props }: Props): ReactNode {
     return null
   }
   // We remove props that don't make sense for a link and forward the rest
-  const {
-    type,
-    collapsed,
-    collapsible,
-    items,
-    linkUnlisted,
-    ...forwardableProps
-  } = item
+  const { type, collapsed, collapsible, items, linkUnlisted, ...forwardableProps } = item
   const linkItem: PropSidebarItemLink = {
     type: 'link',
     ...forwardableProps,
@@ -216,12 +180,7 @@ function DocSidebarItemCategoryCollapsible({
     activePath,
   })
   useEffect(() => {
-    if (
-      collapsible &&
-      expandedItem != null &&
-      expandedItem !== index &&
-      autoCollapseCategories
-    ) {
+    if (collapsible && expandedItem != null && expandedItem !== index && autoCollapseCategories) {
       setCollapsed(true)
     }
   }, [collapsible, expandedItem, index, setCollapsed, autoCollapseCategories])
@@ -276,16 +235,11 @@ function DocSidebarItemCategoryCollapsible({
           aria-current={isCurrentPage ? 'page' : undefined}
           role={collapsible && !href ? 'button' : undefined}
           aria-expanded={collapsible && !href ? !collapsed : undefined}
-          href={
-            collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback
-          }
+          href={collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
           {...props}
         >
           <span title={label} className={styles.categoryLinkLabel}>
-            {label}{' '}
-            {badgeType && (
-              <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />
-            )}
+            {label} {badgeType && <SidebarBadge type={badgeType as 'new' | 'beta' | 'advanced'} />}
           </span>
         </Link>
         {href && collapsible && (

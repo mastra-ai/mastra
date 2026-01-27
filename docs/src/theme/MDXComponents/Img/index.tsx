@@ -11,11 +11,6 @@ function transformImgClassName(className?: string): string {
 export default function MDXImg(props: Props): ReactNode {
   return (
     // eslint-disable-next-line jsx-a11y/alt-text
-    <img
-      decoding="async"
-      loading="lazy"
-      {...props}
-      className={transformImgClassName(props.className)}
-    />
+    <img decoding="async" loading="lazy" {...props} className={transformImgClassName(props.className)} />
   )
 }

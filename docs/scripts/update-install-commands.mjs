@@ -48,9 +48,7 @@ function main() {
   const preJsonPath = path.join(rootDir, '.changeset', 'pre.json')
   const preJson = JSON.parse(fs.readFileSync(preJsonPath, 'utf8'))
 
-  const packageNames = Object.keys(preJson.initialVersions).filter(
-    name => !name.startsWith('@internal/'),
-  )
+  const packageNames = Object.keys(preJson.initialVersions).filter(name => !name.startsWith('@internal/'))
 
   console.log(`Found ${packageNames.length} packages to check for @${TAG_FROM}`)
 
@@ -70,9 +68,7 @@ function main() {
     for (const pkg of packageNames) {
       const searchPattern = `${pkg}@${TAG_FROM}`
       if (content.includes(searchPattern)) {
-        const count = (
-          content.match(new RegExp(escapeRegex(searchPattern), 'g')) || []
-        ).length
+        const count = (content.match(new RegExp(escapeRegex(searchPattern), 'g')) || []).length
         content = content.replaceAll(searchPattern, `${pkg}@${TAG_TO}`)
         modified = true
         fileReplacements += count
@@ -88,9 +84,7 @@ function main() {
     }
   }
 
-  console.log(
-    `\nDone! Modified ${totalFilesModified} files with ${totalReplacements} total replacements.`,
-  )
+  console.log(`\nDone! Modified ${totalFilesModified} files with ${totalReplacements} total replacements.`)
 }
 
 main()

@@ -18,14 +18,8 @@ const REO_CLIENT_ID = 'fdd9258c52d6769'
 export const CookieConsent = () => {
   const { siteConfig } = useDocusaurusContext()
   const [cookieConsent, setCookieConsent] = useState<boolean | null>(null)
-  const [
-    hasGottenConsentForGoogleTracking,
-    setHasGottenConsentForGoogleTracking,
-  ] = useState<boolean>(false)
-  const [
-    hasGottenConsentForHubspotTracking,
-    setHasGottenConsentForHubspotTracking,
-  ] = useState<boolean>(false)
+  const [hasGottenConsentForGoogleTracking, setHasGottenConsentForGoogleTracking] = useState<boolean>(false)
+  const [hasGottenConsentForHubspotTracking, setHasGottenConsentForHubspotTracking] = useState<boolean>(false)
 
   const GA_ID = siteConfig.customFields?.gaId as string | undefined
   const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as string | undefined
@@ -51,10 +45,7 @@ export const CookieConsent = () => {
       {hasGottenConsentForGoogleTracking ? (
         <>
           <Head>
-            <script
-              async
-              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-            />
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} />
             <script>
               {`
                 window.dataLayer = window.dataLayer || [];
@@ -72,11 +63,7 @@ export const CookieConsent = () => {
       {/* HubSpot - Only load with consent */}
       {hasGottenConsentForHubspotTracking ? (
         <Head>
-          <script
-            async
-            src={`//js.hs-scripts.com/${HS_PORTAL_ID}.js`}
-            id="hs-script-loader"
-          />
+          <script async src={`//js.hs-scripts.com/${HS_PORTAL_ID}.js`} id="hs-script-loader" />
         </Head>
       ) : null}
 

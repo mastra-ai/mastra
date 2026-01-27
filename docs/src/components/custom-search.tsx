@@ -3,11 +3,7 @@ import { cn } from '@site/src/lib/utils'
 import { BookOpen, Code2, FileText, Lightbulb, Search } from 'lucide-react'
 import type { FC, SyntheticEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import {
-  AlgoliaResult,
-  AlgoliaSearchOptions,
-  useAlgoliaSearch,
-} from '../hooks/use-algolia-search'
+import { AlgoliaResult, AlgoliaSearchOptions, useAlgoliaSearch } from '../hooks/use-algolia-search'
 import { EmptySearch } from './empty-search'
 import { BurgerIcon } from './search-icons'
 import { useHistory } from '@docusaurus/router'
@@ -79,15 +75,10 @@ export const CustomSearch: FC<SearchProps> = ({
   searchOptions,
   closeModal,
 }) => {
-  const {
-    isSearchLoading,
-    results,
-    search,
-    setSearch,
-    hasMore,
-    loadMore,
-    isLoadingMore,
-  } = useAlgoliaSearch(300, searchOptions)
+  const { isSearchLoading, results, search, setSearch, hasMore, loadMore, isLoadingMore } = useAlgoliaSearch(
+    300,
+    searchOptions,
+  )
 
   const history = useHistory()
   const inputRef = useRef<HTMLInputElement>(null!)
@@ -179,9 +170,7 @@ export const CustomSearch: FC<SearchProps> = ({
       case 'ArrowDown':
         event.preventDefault()
         setSelectedIndex(prev => {
-          const maxIndex = isEmptyState
-            ? emptyStateItemCount - 1
-            : totalItems - 1
+          const maxIndex = isEmptyState ? emptyStateItemCount - 1 : totalItems - 1
           const newIndex = prev < maxIndex ? prev + 1 : prev
 
           // Scroll to the selected item (only for search results with virtualizer)
@@ -327,17 +316,9 @@ export const CustomSearch: FC<SearchProps> = ({
       </div>
 
       <div className={cn('relative h-[400px] overflow-hidden p-1.5')}>
-        <div
-          ref={resultsContainerRef}
-          className="h-full overflow-auto"
-          id="docs-search-results"
-        >
+        <div ref={resultsContainerRef} className="h-full overflow-auto" id="docs-search-results">
           {!search || !results.length || showLoader ? (
-            <EmptySearch
-              selectedIndex={selectedIndex}
-              onSelect={handleEmptyStateSelect}
-              onHover={setSelectedIndex}
-            />
+            <EmptySearch selectedIndex={selectedIndex} onSelect={handleEmptyStateSelect} onHover={setSelectedIndex} />
           ) : (
             <div
               className={cn(
@@ -419,10 +400,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
               {/* Intersection observer trigger for infinite scroll */}
               {hasMore && results.length > 0 && (
-                <div
-                  ref={loadMoreTriggerRef}
-                  className="text-icons-3 p-4 text-center text-sm"
-                >
+                <div ref={loadMoreTriggerRef} className="text-icons-3 p-4 text-center text-sm">
                   {isLoadingMore && (
                     <div className="flex items-center justify-center gap-2">
                       <div className="border-accent-green h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />

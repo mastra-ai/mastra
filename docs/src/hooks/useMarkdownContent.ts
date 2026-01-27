@@ -94,10 +94,7 @@ export const useMarkdownContent = () => {
           case 'pre':
           case 'code':
             const codeText = element.textContent
-            if (
-              element.parentElement?.tagName.toLowerCase() === 'pre' ||
-              tagName === 'pre'
-            ) {
+            if (element.parentElement?.tagName.toLowerCase() === 'pre' || tagName === 'pre') {
               result += `\n\`\`\`\n${codeText}\n\`\`\`\n\n`
             } else {
               result += `\`${codeText}\``

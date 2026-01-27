@@ -1,10 +1,7 @@
 import React, { type ReactNode, useState } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
-import {
-  useAnnouncementBar,
-  useScrollPosition,
-} from '@docusaurus/theme-common/internal'
+import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import DocSidebarItems from '@theme/DocSidebarItems'
 import type { Props } from '@theme/DocSidebar/Desktop/Content'
@@ -26,11 +23,7 @@ function useShowAnnouncementBar() {
   return isActive && showAnnouncementBar
 }
 
-export default function DocSidebarDesktopContent({
-  path,
-  sidebar,
-  className,
-}: Props): ReactNode {
+export default function DocSidebarDesktopContent({ path, sidebar, className }: Props): ReactNode {
   const showAnnouncementBar = useShowAnnouncementBar()
 
   return (

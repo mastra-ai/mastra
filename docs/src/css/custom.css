@@ -60,11 +60,9 @@
   --border-sm: 0.5px;
   /* Fonts */
   --ifm-font-family-base:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  --ifm-font-family-monospace:
-    'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
+  --ifm-font-family-monospace: 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
   --ifm-h3-font-size: 1.25rem;
@@ -89,11 +87,7 @@
   --ifm-navbar-height: 47px;
 
   /* Code blocks */
-  --docusaurus-highlighted-code-line-bg: color-mix(
-    in oklab,
-    #e0e0e0e6 90%,
-    transparent
-  );
+  --docusaurus-highlighted-code-line-bg: color-mix(in oklab, #e0e0e0e6 90%, transparent);
 
   /* Syntax highlighting colors - Light mode */
   --prism-color-string: #158d29;
@@ -1091,13 +1085,8 @@ kbd {
     :where(& > :not(:last-child)) {
       --tw-space-y-reverse: 0;
       /* --spacing: 0.25rem; */
-      margin-block-start: calc(
-        calc(var(--spacing) * 2) /* 0.25rem = 4px */ * var(--tw-space-y-reverse)
-      );
-      margin-block-end: calc(
-        calc(var(--spacing) * 2) /* 0.25rem = 4px */ *
-          calc(1 - var(--tw-space-y-reverse))
-      );
+      margin-block-start: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * var(--tw-space-y-reverse));
+      margin-block-end: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * calc(1 - var(--tw-space-y-reverse)));
     }
   }
 
@@ -1274,8 +1263,7 @@ kbd {
     }
   }
 
-  .theme-doc-sidebar-item-link:not(.theme-doc-sidebar-item-link-level-2)
-    .menu__link {
+  .theme-doc-sidebar-item-link:not(.theme-doc-sidebar-item-link-level-2) .menu__link {
     @apply relative;
   }
 

@@ -2,12 +2,7 @@ import React from 'react'
 import { useLocation } from '@docusaurus/router'
 import Link from '@docusaurus/Link'
 import { ChevronDown, Check } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from './ui/dropdown'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown'
 import { Button } from './ui/button'
 import { cn } from '@site/src/lib/utils'
 
@@ -51,10 +46,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
 
   const activeTab =
     docsTabs.find(tab => {
-      if (
-        pathname.startsWith(tab.basePath + '/') ||
-        pathname === tab.basePath
-      ) {
+      if (pathname.startsWith(tab.basePath + '/') || pathname === tab.basePath) {
         return true
       }
       return false
@@ -96,9 +88,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
                 )}
               >
                 <span>{tab.label}</span>
-                {isActive && (
-                  <Check className="size-4 text-(--mastra-green-accent-2)" />
-                )}
+                {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
               </Link>
             </DropdownMenuItem>
           )

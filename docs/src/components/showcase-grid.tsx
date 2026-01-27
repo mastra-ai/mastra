@@ -24,12 +24,7 @@ const ArrowUpRight = () => (
   </svg>
 )
 
-const ShowcaseCard = ({
-  title,
-  description,
-  image,
-  link,
-}: ShowcaseCardProps) => (
+const ShowcaseCard = ({ title, description, image, link }: ShowcaseCardProps) => (
   <div className="group showcase-item overflow-hidden rounded-lg border-[0.5px] border-(--border) bg-white transition-all hover:opacity-90 dark:border-[#343434] dark:bg-[#050505]">
     <a
       style={{
@@ -58,10 +53,7 @@ const ShowcaseCard = ({
           </div>
         </div>
         {description && (
-          <p
-            className="mt-2 text-sm text-[var(--mastra-text-tertiary)]"
-            style={{ textDecoration: 'none' }}
-          >
+          <p className="mt-2 text-sm text-[var(--mastra-text-tertiary)]" style={{ textDecoration: 'none' }}>
             {description}
           </p>
         )}
@@ -74,15 +66,13 @@ export const ShowcaseGrid = () => {
   const showcaseItems: ShowcaseCardProps[] = [
     {
       title: 'Olive',
-      description:
-        'Generate powerful tools and dashboards connected to your data sources in minutes',
+      description: 'Generate powerful tools and dashboards connected to your data sources in minutes',
       image: 'from-olive.png',
       link: 'https://fromolive.com/',
     },
     {
       title: 'Artifact',
-      description:
-        'Design tool that lets you design at any level of fidelity - from concept to connector',
+      description: 'Design tool that lets you design at any level of fidelity - from concept to connector',
       image: 'artifact-engineer.png',
       link: 'https://www.artifact.engineer/',
     },
@@ -100,8 +90,7 @@ export const ShowcaseGrid = () => {
     },
     {
       title: 'Dalus',
-      description:
-        'AI-Powered Systems Engineering for Mission-Critical Hardware',
+      description: 'AI-Powered Systems Engineering for Mission-Critical Hardware',
       image: 'dalus-io.webp',
       link: 'https://www.dalus.io/',
     },
@@ -114,8 +103,7 @@ export const ShowcaseGrid = () => {
 
     {
       title: 'NotebookLM-Mastra',
-      description:
-        'AI-powered assistant that creates podcasts from the sources you upload',
+      description: 'AI-powered assistant that creates podcasts from the sources you upload',
       image: 'notebook-lm.png',
       link: 'https://notebooklm-mastra.vercel.app/',
     },
@@ -133,8 +121,7 @@ export const ShowcaseGrid = () => {
     },
     {
       title: 'Excalidraw app',
-      description:
-        'A tool that converts whiteboard images into editable Excalidraw diagrams',
+      description: 'A tool that converts whiteboard images into editable Excalidraw diagrams',
       image: 'excalidraw-app.png',
       link: 'https://image2excalidraw.netlify.app/',
     },
@@ -155,12 +142,8 @@ export const ShowcaseGrid = () => {
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="mb-12 text-center">
-        <h1 className="mb-4 text-4xl font-semibold tracking-tight text-[var(--mastra-text-primary)]">
-          Showcase
-        </h1>
-        <p className="text-lg text-[var(--mastra-text-tertiary)]">
-          Check out these applications built with Mastra.
-        </p>
+        <h1 className="mb-4 text-4xl font-semibold tracking-tight text-[var(--mastra-text-primary)]">Showcase</h1>
+        <p className="text-lg text-[var(--mastra-text-tertiary)]">Check out these applications built with Mastra.</p>
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {showcaseItems.map(item => (

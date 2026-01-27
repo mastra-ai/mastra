@@ -26,11 +26,7 @@ interface PropertiesTableProps {
 }
 
 const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
-  const renderType = ({
-    properties = [],
-  }: {
-    properties: Property[] | undefined
-  }) => {
+  const renderType = ({ properties = [] }: { properties: Property[] | undefined }) => {
     if (properties && properties.length > 0) {
       return (
         <div className="flex flex-col">
@@ -58,9 +54,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                           {param.type}
                         </div>
                       </div>
-                      <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">
-                        {param.description}
-                      </div>
+                      <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{param.description}</div>
                     </div>
                   ))}
               </div>
@@ -89,14 +83,10 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                 {item.type}
               </div>
               {item.defaultValue && (
-                <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">
-                  = {item.defaultValue}
-                </div>
+                <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">= {item.defaultValue}</div>
               )}
             </div>
-            <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">
-              {item.description}
-            </div>
+            <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{item.description}</div>
             {renderType({ properties: item.properties })}
           </div>
         )

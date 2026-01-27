@@ -6,7 +6,7 @@
   "useTabs": false,
   "trailingComma": "all",
   "bracketSpacing": true,
-  "printWidth": 80,
+  "printWidth": 120,
   "arrowParens": "avoid",
   "plugins": ["prettier-plugin-tailwindcss"]
 }

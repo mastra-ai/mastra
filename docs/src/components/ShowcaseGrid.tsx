@@ -8,25 +8,11 @@ interface ShowcaseCardProps {
   link: string
 }
 
-const ShowcaseCard = ({
-  title,
-  description,
-  image,
-  link,
-}: ShowcaseCardProps) => (
+const ShowcaseCard = ({ title, description, image, link }: ShowcaseCardProps) => (
   <div className={styles.showcaseItem}>
-    <a
-      href={link}
-      className={styles.showcaseLink}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
+    <a href={link} className={styles.showcaseLink} target="_blank" rel="noopener noreferrer">
       <div className={styles.imageContainer}>
-        <img
-          src={`/img/showcase/optimized/${image}`}
-          alt={title}
-          className={styles.image}
-        />
+        <img src={`/img/showcase/optimized/${image}`} alt={title} className={styles.image} />
       </div>
       <div className={styles.content}>
         <div className={styles.header}>
@@ -52,15 +38,13 @@ const ShowcaseCard = ({
 const showcaseItems: ShowcaseCardProps[] = [
   {
     title: 'Olive',
-    description:
-      'Generate powerful tools and dashboards connected to your data sources in minutes',
+    description: 'Generate powerful tools and dashboards connected to your data sources in minutes',
     image: 'from-olive.png',
     link: 'https://fromolive.com/',
   },
   {
     title: 'Artifact',
-    description:
-      'Design tool that lets you design at any level of fidelity - from concept to connector',
+    description: 'Design tool that lets you design at any level of fidelity - from concept to connector',
     image: 'artifact-engineer.png',
     link: 'https://www.artifact.engineer/',
   },
@@ -97,8 +81,7 @@ const showcaseItems: ShowcaseCardProps[] = [
   },
   {
     title: 'NotebookLM-Mastra',
-    description:
-      'AI-powered assistant that creates podcasts from the sources you upload',
+    description: 'AI-powered assistant that creates podcasts from the sources you upload',
     image: 'notebook-lm.png',
     link: 'https://notebooklm-mastra.vercel.app/',
   },
@@ -116,8 +99,7 @@ const showcaseItems: ShowcaseCardProps[] = [
   },
   {
     title: 'Excalidraw app',
-    description:
-      'A tool that converts whiteboard images into editable Excalidraw diagrams',
+    description: 'A tool that converts whiteboard images into editable Excalidraw diagrams',
     image: 'excalidraw-app.png',
     link: 'https://image2excalidraw.netlify.app/',
   },
@@ -142,9 +124,7 @@ export const ShowcaseGrid = () => {
         <h1 className="mb-4 text-4xl font-semibold tracking-tight text-(--mastra-text-primary) dark:text-white">
           Showcase
         </h1>
-        <p className="text-lg text-(--mastra-text-tertiary)">
-          Check out these applications built with Mastra.
-        </p>
+        <p className="text-lg text-(--mastra-text-tertiary)">Check out these applications built with Mastra.</p>
       </div>
       <div className={styles.showcaseGrid}>
         {showcaseItems.map(item => (

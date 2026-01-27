@@ -9,7 +9,5 @@ export default function MDXLi(props: Props): ReactNode | undefined {
   useBrokenLinks().collectAnchor(props.id)
   const anchorTargetClassName = useAnchorTargetClassName(props.id)
 
-  return (
-    <li className={clsx(anchorTargetClassName, props.className)} {...props} />
-  )
+  return <li className={clsx(anchorTargetClassName, props.className)} {...props} />
 }

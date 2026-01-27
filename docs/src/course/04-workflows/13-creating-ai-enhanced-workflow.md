@@ -43,10 +43,7 @@ Update your Mastra configuration to include both workflows and ensure the conten
 
 ```typescript
 // In src/mastra/index.ts
-import {
-  contentWorkflow,
-  aiContentWorkflow,
-} from './workflows/content-workflow'
+import { contentWorkflow, aiContentWorkflow } from './workflows/content-workflow'
 import { contentAgent } from './agents/content-agent'
 
 export const mastra = new Mastra({

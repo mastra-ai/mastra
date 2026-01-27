@@ -59,9 +59,7 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
 
     // Get the contentAgent from the mastra instance.
     const contentAgent = mastra.getAgent('contentAgent')
-    const { text } = await contentAgent.generate([
-      { role: 'user', content: prompt },
-    ])
+    const { text } = await contentAgent.generate([{ role: 'user', content: prompt }])
 
     // Parse AI response (with fallback)
     let aiAnalysis

@@ -103,9 +103,7 @@ export function EmptySearch({
               {search.label}
             </p>
 
-            <p className="mb-0! truncate text-sm font-normal text-(--mastra-text-muted)">
-              {search.description}
-            </p>
+            <p className="mb-0! truncate text-sm font-normal text-(--mastra-text-muted)">{search.description}</p>
           </div>
         )
       })}

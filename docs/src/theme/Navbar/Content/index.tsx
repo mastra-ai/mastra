@@ -1,14 +1,7 @@
 import React, { type ReactNode } from 'react'
 import clsx from 'clsx'
-import {
-  useThemeConfig,
-  ErrorCauseBoundary,
-  ThemeClassNames,
-} from '@docusaurus/theme-common'
-import {
-  splitNavbarItems,
-  useNavbarMobileSidebar,
-} from '@docusaurus/theme-common/internal'
+import { useThemeConfig, ErrorCauseBoundary, ThemeClassNames } from '@docusaurus/theme-common'
+import { splitNavbarItems, useNavbarMobileSidebar } from '@docusaurus/theme-common/internal'
 import NavbarItem, { type Props as NavbarItemConfig } from '@theme/NavbarItem'
 import NavbarColorModeToggle from '@theme/Navbar/ColorModeToggle'
 import SearchBar from '@theme/SearchBar'
@@ -45,29 +38,11 @@ ${JSON.stringify(item, null, 2)}`,
   )
 }
 
-function NavbarContentLayout({
-  left,
-  right,
-}: {
-  left: ReactNode
-  right: ReactNode
-}) {
+function NavbarContentLayout({ left, right }: { left: ReactNode; right: ReactNode }) {
   return (
     <div className="navbar__inner">
-      <div
-        className={clsx(
-          ThemeClassNames.layout.navbar.containerLeft,
-          'navbar__items',
-        )}
-      >
-        {left}
-      </div>
-      <div
-        className={clsx(
-          ThemeClassNames.layout.navbar.containerRight,
-          'navbar__items navbar__items--right',
-        )}
-      >
+      <div className={clsx(ThemeClassNames.layout.navbar.containerLeft, 'navbar__items')}>{left}</div>
+      <div className={clsx(ThemeClassNames.layout.navbar.containerRight, 'navbar__items navbar__items--right')}>
         {right}
       </div>
     </div>

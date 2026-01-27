@@ -1,10 +1,6 @@
 import ErrorBoundary from '@docusaurus/ErrorBoundary'
 import Head from '@docusaurus/Head'
-import {
-  PageMetadata,
-  SkipToContentFallbackId,
-  ThemeClassNames,
-} from '@docusaurus/theme-common'
+import { PageMetadata, SkipToContentFallbackId, ThemeClassNames } from '@docusaurus/theme-common'
 import { useKeyboardNavigation } from '@docusaurus/theme-common/internal'
 import { useLocation } from '@docusaurus/router'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
@@ -61,9 +57,7 @@ export default function Layout(props: Props): ReactNode {
           wrapperClassName,
         )}
       >
-        <ErrorBoundary fallback={params => <ErrorPageContent {...params} />}>
-          {children}
-        </ErrorBoundary>
+        <ErrorBoundary fallback={params => <ErrorPageContent {...params} />}>{children}</ErrorBoundary>
       </div>
 
       {!noFooter && <Footer />}

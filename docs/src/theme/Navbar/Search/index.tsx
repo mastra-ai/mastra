@@ -1,11 +1,4 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-} from '@radix-ui/react-dialog'
+import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@radix-ui/react-dialog'
 import { Search as SearchIcon } from 'lucide-react'
 import { CustomSearch } from '@site/src/components/custom-search'
 import { Button } from '@site/src/components/ui/button'
@@ -65,12 +58,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
       'priority',
       'depth',
     ],
-    attributesToHighlight: [
-      'hierarchy.lvl1',
-      'hierarchy.lvl2',
-      'hierarchy.lvl3',
-      'content',
-    ],
+    attributesToHighlight: ['hierarchy.lvl1', 'hierarchy.lvl2', 'hierarchy.lvl3', 'content'],
     attributesToSnippet: ['content:30'],
     filters: `lang:${locale}`,
     snippetEllipsisText: '…',
@@ -86,9 +74,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
           className="w-9 cursor-pointer items-center gap-2 border-[0.5px] border-transparent text-sm font-normal lg:w-46 lg:border-(--border) lg:bg-(--mastra-surface-4) xl:w-64"
         >
           <SearchIcon className="text-(--mastra-icons-1)" />
-          <span className="hidden text-sm text-(--mastra-icons-2) lg:block">
-            Search documentation
-          </span>
+          <span className="hidden text-sm text-(--mastra-icons-2) lg:block">Search documentation</span>
           <div className="ml-auto hidden xl:block">
             <Shortcut shortcut="K" />
           </div>

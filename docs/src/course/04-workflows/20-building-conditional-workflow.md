@@ -23,15 +23,10 @@ export const conditionalWorkflow = createWorkflow({
   .then(assessContentStep)
   .branch([
     // Branch 1: Short and simple content
-    [
-      async ({ inputData }) =>
-        inputData.category === 'short' && inputData.complexity === 'simple',
-      quickProcessingStep,
-    ],
+    [async ({ inputData }) => inputData.category === 'short' && inputData.complexity === 'simple', quickProcessingStep],
     // Branch 2: Everything else
     [
-      async ({ inputData }) =>
-        !(inputData.category === 'short' && inputData.complexity === 'simple'),
+      async ({ inputData }) => !(inputData.category === 'short' && inputData.complexity === 'simple'),
       generalProcessingStep,
     ],
   ])

@@ -21,8 +21,7 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
         <button
           onClick={handlePlay}
           style={{
-            background:
-              'linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))',
+            background: 'linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))',
           }}
           className="group absolute top-1/2 left-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform cursor-pointer rounded-[12px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
           aria-label="Play video"

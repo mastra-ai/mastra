@@ -116,10 +116,7 @@ function getDocId(item: SidebarItem): string | null {
 /**
  * Find the overview/index doc in a category's items
  */
-function findCategoryOverviewUrl(
-  items: SidebarItem[],
-  baseUrl: string,
-): string | null {
+function findCategoryOverviewUrl(items: SidebarItem[], baseUrl: string): string | null {
   for (const item of items) {
     const docId = getDocId(item)
     if (docId && (docId.endsWith('/index') || docId === 'index')) {
@@ -162,12 +159,7 @@ function generateMarkdownList(
       } else {
         // It's a category - create a label and recurse
         output += `${indent}- ${label}\n`
-        output += generateMarkdownList(
-          item.items,
-          baseUrl,
-          depth + 1,
-          condensedCategories,
-        )
+        output += generateMarkdownList(item.items, baseUrl, depth + 1, condensedCategories)
       }
     }
   }

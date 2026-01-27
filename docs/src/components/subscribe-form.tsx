@@ -1,12 +1,5 @@
 import { useForm } from 'react-hook-form'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@site/src/components/ui/forms'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@site/src/components/ui/forms'
 import { Spinner } from './spinner'
 import { cn } from '@site/src/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,9 +23,7 @@ const buttonCopy = ({
   isDark?: boolean
 }) => ({
   idle: idleIcon ? idleIcon : 'Subscribe',
-  loading: (
-    <Spinner className="h-4 w-4 text-black duration-300! dark:text-white" />
-  ),
+  loading: <Spinner className="h-4 w-4 text-black duration-300! dark:text-white" />,
   success: successIcon ? successIcon : 'Subscribed!',
 })
 

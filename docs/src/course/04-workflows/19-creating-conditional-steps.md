@@ -32,8 +32,7 @@ const assessContentStep = createStep({
     if (wordCount >= 200) category = 'long'
 
     // Determine complexity by average word length
-    const avgWordLength =
-      words.reduce((sum, word) => sum + word.length, 0) / wordCount
+    const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / wordCount
     let complexity: 'simple' | 'moderate' | 'complex' = 'simple'
     if (avgWordLength > 5) complexity = 'moderate'
     if (avgWordLength > 7) complexity = 'complex'
@@ -77,10 +76,7 @@ const quickProcessingStep = createStep({
     return {
       processedContent: inputData.content,
       processingType: 'quick',
-      recommendations: [
-        'Content is concise',
-        'Consider expanding for more detail',
-      ],
+      recommendations: ['Content is concise', 'Consider expanding for more detail'],
     }
   },
 })

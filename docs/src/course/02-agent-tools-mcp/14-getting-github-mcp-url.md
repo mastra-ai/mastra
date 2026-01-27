@@ -25,11 +25,8 @@ pnpm install @smithery/sdk
 ```ts
 import { createSmitheryUrl } from '@smithery/sdk'
 
-const smitheryGithubMCPServerUrl = createSmitheryUrl(
-  'https://server.smithery.ai/@smithery-ai/github',
-  {
-    apiKey: process.env.SMITHERY_API_KEY,
-    profile: process.env.SMITHERY_PROFILE,
-  },
-)
+const smitheryGithubMCPServerUrl = createSmitheryUrl('https://server.smithery.ai/@smithery-ai/github', {
+  apiKey: process.env.SMITHERY_API_KEY,
+  profile: process.env.SMITHERY_PROFILE,
+})
 ```

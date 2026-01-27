@@ -1,10 +1,7 @@
 import React, { type ComponentProps, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames, useThemeConfig } from '@docusaurus/theme-common'
-import {
-  useHideableNavbar,
-  useNavbarMobileSidebar,
-} from '@docusaurus/theme-common/internal'
+import { useHideableNavbar, useNavbarMobileSidebar } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import NavbarMobileSidebar from '@theme/Navbar/MobileSidebar'
 import type { Props } from '@theme/Navbar/Layout'
@@ -12,13 +9,7 @@ import type { Props } from '@theme/Navbar/Layout'
 import styles from './styles.module.css'
 
 function NavbarBackdrop(props: ComponentProps<'div'>) {
-  return (
-    <div
-      role="presentation"
-      {...props}
-      className={clsx('navbar-sidebar__backdrop', props.className)}
-    />
-  )
+  return <div role="presentation" {...props} className={clsx('navbar-sidebar__backdrop', props.className)} />
 }
 
 export default function NavbarLayout({ children }: Props): ReactNode {
@@ -39,10 +30,7 @@ export default function NavbarLayout({ children }: Props): ReactNode {
         ThemeClassNames.layout.navbar.container,
         'navbar',
         'navbar--fixed-top',
-        hideOnScroll && [
-          styles.navbarHideable,
-          !isNavbarVisible && styles.navbarHidden,
-        ],
+        hideOnScroll && [styles.navbarHideable, !isNavbarVisible && styles.navbarHidden],
         {
           'navbar--dark': style === 'dark',
           'navbar--primary': style === 'primary',
