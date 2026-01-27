@@ -12,7 +12,7 @@
 ```
 Progress: [██████████] 100%
 Phases:   6/6 complete (All phases complete)
-Tests:    191/232 passing (82.3% parity), 36 skipped
+Tests:    189/232 passing (81.5% parity), 38 skipped
 ```
 
 ## Gap Analysis Summary

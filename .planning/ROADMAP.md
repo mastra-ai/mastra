@@ -325,9 +325,9 @@ ResourceId & Misc (6 tests):
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete |
 | 4     | Suspend/Resume Edge Cases | 26 (11+15skip)| Complete |
 | 5     | Streaming vNext           | 6 (4+2skip)   | Complete |
-| 6     | Remaining Parity          | 40 (19+21skip)| Complete |
+| 6     | Remaining Parity          | 40 (17+23skip)| Complete |
 
-**Total:** 111 tests ported, 99 passing, 12 pre-existing = **191 passing tests total**
+**Total:** 111 tests ported, 99 passing = **189 passing tests total** (38 skipped with documented reasons)
 
 **Project Status:** COMPLETE - Evented workflow runtime test parity achieved
 
