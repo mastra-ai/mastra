@@ -8,21 +8,21 @@
 See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Core value:** Test parity with default runtime
-**Current focus:** v1.1 Agent Integration — Phase 8: Writer API
+**Current focus:** v1.1 Agent Integration — Phase 9: Foreach Index Resume
 
 ## Current Position
 
 **Milestone:** v1.1 Agent Integration
-**Phase:** 8 - Writer API
-**Plan:** 1 of 1
-**Status:** Phase 8 Plan 1 complete
+**Phase:** 9 - Foreach Index Resume
+**Plan:** Not started
+**Status:** Phase 8 complete, ready for Phase 9 planning
 
 ```
-Progress: [█████░░░░░] 44% (Phase 8 Plan 1 of 9 total phases)
-Milestone: v1.1 Agent Integration — Phase 8 Plan 1 completed 2026-01-27
+Progress: [██████░░░░] 67% (Phase 9 of 9)
+Milestone: v1.1 Agent Integration — Phase 8 completed 2026-01-27
 ```
 
-**Next action:** Continue Phase 8 or move to Phase 9
+**Next action:** `/gsd:discuss-phase 9` or `/gsd:plan-phase 9`
 
 ## v1.1 Roadmap Summary
 
@@ -33,8 +33,8 @@ Milestone: v1.1 Agent Integration — Phase 8 Plan 1 completed 2026-01-27
 
 **Phase structure:**
 - Phase 7: V2 Model + TripWire Support (4 requirements) ✅ Complete
-- Phase 8: Writer API (3 requirements) ← Current
-- Phase 9: Foreach Index Resume (3 requirements)
+- Phase 8: Writer API (3 requirements) ✅ Complete
+- Phase 9: Foreach Index Resume (3 requirements) ← Current
 
 **Coverage:** 10/10 requirements mapped (100%)
 
@@ -62,9 +62,9 @@ Milestone: v1.1 Agent Integration — Phase 8 Plan 1 completed 2026-01-27
 
 | Metric           | v1.0 Value | v1.1 Current |
 | ---------------- | ---------- | ------------ |
-| Phases completed | 6          | 1            |
-| Plans completed  | 15         | 1            |
-| Tests ported     | 70         | 2            |
+| Phases completed | 6          | 2            |
+| Plans completed  | 15         | 3            |
+| Tests ported     | 70         | 6            |
 | Tests passing    | 193 (85%)  | 195 (86%)    |
 | Tests skipped    | 34         | 32           |
 
@@ -93,7 +93,7 @@ Milestone: v1.1 Agent Integration — Phase 8 Plan 1 completed 2026-01-27
 
 ### Current Blockers
 
-None. Phase 8 Plan 1 complete.
+None. Phase 8 complete, ready for Phase 9 planning.
 
 ### Open Questions
 
@@ -129,9 +129,9 @@ None. All v1.1 features have reference implementations in default runtime.
 
 **Summary:** .planning/phases/08-writer-api/08-01-SUMMARY.md
 
-**Next action:** Continue Phase 8 or move to Phase 9
+**Next action:** `/gsd:discuss-phase 9` or `/gsd:plan-phase 9`
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 7 completion_
+_Last updated: 2026-01-27 after Phase 8 completion_

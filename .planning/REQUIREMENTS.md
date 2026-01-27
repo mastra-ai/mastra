@@ -13,9 +13,9 @@ Requirements for agent integration and foreach control parity.
 - [x] **AGENT-02**: Agent steps use .stream() for V2+ models instead of .streamLegacy()
 - [x] **AGENT-03**: TripWire errors caught and serialized with explicit type markers
 - [x] **AGENT-04**: TripWire status propagates from agent to workflow result
-- [ ] **AGENT-05**: Writer API exposed in step context as ToolStream instance
-- [ ] **AGENT-06**: Writer .write() method emits custom chunks during step execution
-- [ ] **AGENT-07**: Writer .custom() method emits typed custom events
+- [x] **AGENT-05**: Writer API exposed in step context as ToolStream instance
+- [x] **AGENT-06**: Writer .write() method emits custom chunks during step execution
+- [x] **AGENT-07**: Writer .custom() method emits typed custom events
 
 ### Foreach Control
 
@@ -52,9 +52,9 @@ Explicitly excluded from v1.1.
 | AGENT-02 | Phase 7 | Complete |
 | AGENT-03 | Phase 7 | Complete |
 | AGENT-04 | Phase 7 | Complete |
-| AGENT-05 | Phase 8 | Pending |
-| AGENT-06 | Phase 8 | Pending |
-| AGENT-07 | Phase 8 | Pending |
+| AGENT-05 | Phase 8 | Complete |
+| AGENT-06 | Phase 8 | Complete |
+| AGENT-07 | Phase 8 | Complete |
 | FOREACH-01 | Phase 9 | Pending |
 | FOREACH-02 | Phase 9 | Pending |
 | FOREACH-03 | Phase 9 | Pending |
@@ -71,4 +71,4 @@ Explicitly excluded from v1.1.
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 7 completion*
+*Last updated: 2026-01-27 after Phase 8 completion*
