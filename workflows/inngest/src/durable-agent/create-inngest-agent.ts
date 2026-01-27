@@ -122,20 +122,20 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
 }
 
 /**
- * Extended MastraModelOutput with additional durable execution metadata.
- * This allows InngestAgent.stream() to return the same type as Agent.stream()
- * while also providing access to runId and cleanup.
+ * Result from InngestAgent.stream()
  */
-export type DurableMastraModelOutput<OUTPUT = undefined> = MastraModelOutput<OUTPUT> & {
-  /** The unique run ID for this durable execution */
+export interface InngestAgentStreamResult<OUTPUT = undefined> {
+  /** The streaming output */
+  output: MastraModelOutput<OUTPUT>;
+  /** The unique run ID */
   runId: string;
   /** Thread ID if using memory */
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
-  /** Cleanup function to unsubscribe from pubsub */
+  /** Cleanup function */
   cleanup: () => void;
-};
+}
 
 /**
  * An Inngest-powered durable agent.
@@ -156,12 +156,11 @@ export interface InngestAgent<TOutput = undefined> {
 
   /**
    * Stream a response using Inngest's durable execution.
-   * Returns MastraModelOutput (same as Agent.stream()) with additional durable execution metadata.
    */
   stream(
     messages: MessageListInput,
     options?: InngestAgentStreamOptions<TOutput>,
-  ): Promise<DurableMastraModelOutput<TOutput>>;
+  ): Promise<InngestAgentStreamResult<TOutput>>;
 
   /**
    * Resume a suspended workflow execution.
@@ -178,7 +177,7 @@ export interface InngestAgent<TOutput = undefined> {
       onError?: (error: Error) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<DurableMastraModelOutput<TOutput>>;
+  ): Promise<InngestAgentStreamResult<TOutput>>;
 
   /**
    * Prepare for durable execution without starting it.
@@ -283,7 +282,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return inngest;
     },
 
-    async stream(messages, streamOptions): Promise<DurableMastraModelOutput<TOutput>> {
+    async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
       // 1. Prepare for durable execution
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
@@ -322,18 +321,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         });
       }, 100);
 
-      // 4. Return output with additional durable execution metadata
-      // This makes it compatible with Agent.stream() return type while adding extra properties
-      const result = output as DurableMastraModelOutput<TOutput>;
-      result.runId = runId;
-      result.threadId = threadId;
-      result.resourceId = resourceId;
-      result.cleanup = streamCleanup;
+      // 4. Return stream result - attach extra properties to output for compatibility
+      // This allows both destructuring { output, runId, cleanup } AND direct access to fullStream
+      const result = {
+        output,
+        runId,
+        threadId,
+        resourceId,
+        cleanup: streamCleanup,
+        // Also expose fullStream directly for server compatibility
+        get fullStream() {
+          return output.fullStream;
+        },
+      };
 
-      return result;
+      return result as InngestAgentStreamResult<TOutput>;
     },
 
-    async resume(runId, resumeData, resumeOptions): Promise<DurableMastraModelOutput<TOutput>> {
+    async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       // Re-subscribe to the stream
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
         pubsub,
@@ -370,14 +375,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           });
       }, 100);
 
-      // Return output with additional durable execution metadata
-      const result = output as DurableMastraModelOutput<TOutput>;
-      result.runId = runId;
-      result.threadId = resumeOptions?.threadId;
-      result.resourceId = resumeOptions?.resourceId;
-      result.cleanup = streamCleanup;
-
-      return result;
+      return {
+        output,
+        runId,
+        threadId: resumeOptions?.threadId,
+        resourceId: resumeOptions?.resourceId,
+        cleanup: streamCleanup,
+      };
     },
 
     async prepare(messages, prepareOptions) {

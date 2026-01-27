@@ -53,7 +53,7 @@ export {
   type InngestAgent,
   type CreateInngestAgentOptions,
   type InngestAgentStreamOptions,
-  type DurableMastraModelOutput,
+  type InngestAgentStreamResult,
 } from './create-inngest-agent';
 
 // Workflow factory (internal, used by createInngestAgent)
