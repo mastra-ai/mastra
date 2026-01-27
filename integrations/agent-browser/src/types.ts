@@ -213,6 +213,73 @@ export type ScrollInput = z.infer<typeof scrollInputSchema>;
 export type ScrollOutput = z.infer<typeof scrollOutputSchema>;
 
 // ============================================================================
+// Screenshot Tool Schemas
+// ============================================================================
+
+/**
+ * Zod schema for the screenshot tool input parameters.
+ *
+ * Supports viewport, full-page, and element capture modes.
+ */
+export const screenshotInputSchema = z.object({
+  fullPage: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Capture the entire scrollable page instead of just the viewport'),
+  format: z
+    .enum(['png', 'jpeg'])
+    .optional()
+    .default('png')
+    .describe('Image format. PNG is lossless, JPEG is smaller.'),
+  quality: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .default(80)
+    .describe('JPEG quality (0-100). Ignored for PNG.'),
+  ref: z
+    .string()
+    .optional()
+    .describe('Element ref from snapshot to capture specific element (e.g., @e5)'),
+});
+
+/**
+ * Zod schema for the screenshot tool output.
+ *
+ * Returns base64 image data with metadata for multimodal consumption.
+ */
+export const screenshotOutputSchema = z.object({
+  base64: z.string().describe('Base64-encoded image data'),
+  mimeType: z.enum(['image/png', 'image/jpeg']).describe('Image MIME type'),
+  dimensions: z
+    .object({
+      width: z.number().describe('Image width in pixels'),
+      height: z.number().describe('Image height in pixels'),
+    })
+    .describe('Image dimensions'),
+  fileSize: z.number().describe('Image file size in bytes'),
+  timestamp: z.string().describe('ISO timestamp when screenshot was captured'),
+  url: z.string().describe('Page URL at capture time'),
+  title: z.string().describe('Page title at capture time'),
+  warning: z
+    .string()
+    .optional()
+    .describe('Warning message if image dimensions exceed recommended limits'),
+});
+
+/**
+ * Input type for the screenshot tool.
+ */
+export type ScreenshotInput = z.infer<typeof screenshotInputSchema>;
+
+/**
+ * Output type for the screenshot tool.
+ */
+export type ScreenshotOutput = z.infer<typeof screenshotOutputSchema>;
+
+// ============================================================================
 // Legacy/General Types
 // ============================================================================
 
