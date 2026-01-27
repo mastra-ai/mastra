@@ -44,10 +44,12 @@ Plans:
   3. Agent can type text into form fields using ref identifiers
   4. Agent can scroll the page viewport in any direction
   5. All errors include recovery hints without exposing stack traces
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: [TBD - defined during plan-phase]
+- [ ] 02-01-PLAN.md - Error handling foundation and snapshot tool
+- [ ] 02-02-PLAN.md - Click and type interaction tools
+- [ ] 02-03-PLAN.md - Scroll tool and toolset registration
 
 ### Phase 3: Screenshot
 **Goal**: Agents can capture visual screenshots for debugging and verification
@@ -87,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 2/2 | ✓ Complete | 2026-01-26 |
-| 2. Core Actions | 0/TBD | Not started | - |
+| 2. Core Actions | 0/3 | Planned | - |
 | 3. Screenshot | 0/TBD | Not started | - |
 
 ---
@@ -95,3 +97,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 *Roadmap created: 2026-01-26*
 *Phase 1 planned: 2026-01-26*
 *Phase 1 completed: 2026-01-26*
+*Phase 2 planned: 2026-01-26*
