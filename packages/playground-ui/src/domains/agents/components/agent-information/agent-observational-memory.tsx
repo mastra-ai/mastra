@@ -190,17 +190,23 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     threadId,
   });
 
-  // Check if OM is actively observing/reflecting (from server status OR streaming)
-  // Server status can be stale if process crashed mid-observation, so we add a staleness check
+  // Check if OM is actively observing/reflecting
+  // The streaming context is the source of truth for active operations.
+  // Server flags (isObserving/isReflecting) can be stale if process crashed mid-operation.
+  // We only use server flags as a fallback when:
+  // 1. lastObservedAt is recent (within 2 minutes), AND
+  // 2. We're on a fresh page load (no stream context yet)
   const STALE_OBSERVATION_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
   const serverLastObservedAt = statusData?.observationalMemory?.lastObservedAt;
   const isServerStatusStale = serverLastObservedAt 
     ? Date.now() - new Date(serverLastObservedAt).getTime() > STALE_OBSERVATION_THRESHOLD_MS
-    : false;
+    : true; // If no lastObservedAt, consider it stale
   
-  // Only trust server's isObserving/isReflecting if the status isn't stale
-  const isObservingFromServer = !isServerStatusStale && (statusData?.observationalMemory?.isObserving || false);
-  const isReflectingFromServer = !isServerStatusStale && (statusData?.observationalMemory?.isReflecting || false);
+  // Stream context is the primary source of truth
+  // Only fall back to server status if not stale AND no stream activity has been detected yet
+  const hasHadStreamActivity = isObservingFromStream || isReflectingFromStream;
+  const isObservingFromServer = !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isObserving || false);
+  const isReflectingFromServer = !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isReflecting || false);
   const isObserving = isObservingFromStream || isObservingFromServer;
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
