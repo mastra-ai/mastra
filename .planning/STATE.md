@@ -5,14 +5,14 @@
 
 ## Current Position
 
-**Phase:** 2 Complete
-**Plan:** 1/1 complete (02-lifecycle-callbacks)
-**Status:** Ready for Phase 3 - Schema Validation & Defaults
+**Phase:** 3 In Progress
+**Plan:** 1/1 in progress (03-01-schema-validation)
+**Status:** Task 1 complete (tests ported), Task 2 in progress (fixing failures)
 
 ```
-Progress: [████░░░░░░] 33%
-Phases:   2/6 complete
-Tests:    146/232 passing (63% parity)
+Progress: [████░░░░░░] 40%
+Phases:   2/6 complete, 1 in progress
+Tests:    158/232 expected (68% parity) - pending verification
 ```
 
 ## Gap Analysis Summary
@@ -38,9 +38,14 @@ Tests:    146/232 passing (63% parity)
 
 ## Current Focus
 
-Phase 2 complete. All 15 lifecycle callback context tests ported and passing.
+Phase 3 - Schema Validation in progress. Task 1 complete: 12 schema validation tests ported to evented runtime.
 
-**Next action:** Start Phase 3 - Schema Validation & Defaults
+**Current status:**
+- ✅ Task 1: All 12 tests ported with evented adaptations
+- ⏳ Task 2: Tests running to identify failures (likely isEmpty() check in validateStepInput)
+- ⏳ Task 3: Final verification pending Task 2 completion
+
+**Next action:** Complete Task 2 - fix any failing tests, likely in utils.ts validateStepInput
 
 ## Performance Metrics
 
@@ -48,9 +53,10 @@ Phase 2 complete. All 15 lifecycle callback context tests ported and passing.
 | ---------------- | ----- |
 | Phases completed | 2     |
 | Plans completed  | 3     |
-| Tests ported     | 27    |
-| Tests to port    | ~86   |
-| Session count    | 3     |
+| Plans in progress| 1 (03-01) |
+| Tests ported     | 39 (27 + 12 new) |
+| Tests to port    | ~74   |
+| Session count    | 4     |
 
 ## Accumulated Context
 
@@ -65,6 +71,8 @@ Phase 2 complete. All 15 lifecycle callback context tests ported and passing.
 | Nested workflow via component      | Detect both EventedWorkflow and Workflow types        | Phase 1    |
 | Item extract only for workflows    | Step executor handles regular steps via foreachIdx    | Phase 1    |
 | resourceId via execute() params    | Pass from Run.start() through execute to callbacks    | Phase 2-01 |
+| Test Mastra instances per test    | Each test creates own Mastra with workflows registered | Phase 3-01 |
+| Subset schema test shares Mastra   | 4 workflows in single test share one Mastra instance  | Phase 3-01 |
 
 ### Key Files
 
@@ -105,8 +113,8 @@ None.
 ### Last Session
 
 **Date:** 2026-01-27
-**Work completed:** Phase 2 Plan 01 - 15 callback context tests ported, resourceId bug fixed
-**Stopping point:** Completed 02-01-PLAN.md
+**Work completed:** Phase 3 Plan 01 - Task 1 complete (12 schema validation tests ported)
+**Stopping point:** Tests running for Task 2 verification
 
 ### Session History
 
@@ -115,14 +123,17 @@ None.
 | 2026-01-26 | Gap analysis and roadmap creation                       |
 | 2026-01-27 | Phase 1: State Object Support (12 tests passing)        |
 | 2026-01-27 | Phase 2-01: Callback context tests (15 tests passing)   |
+| 2026-01-27 | Phase 3-01 Task 1: Schema validation tests ported (12)  |
 
 ### Resumption Notes
 
-1. Run `pnpm test evented-workflow.test.ts` in packages/core to verify 146 tests passing
-2. Phase 2 complete - proceed to Phase 3: Schema Validation & Defaults
-3. Use `/gsd:plan-phase 3` to start planning Phase 3
+1. Run `cd packages/core && pnpm test evented-workflow.test.ts -t "Schema Validation"` to check Task 2 status
+2. Expected failures in default value tests due to isEmpty() check in validateStepInput (utils.ts line 54-55)
+3. Fix: Change `inputData = isEmptyData ? prevOutput : validatedInput.data;` to `inputData = validatedInput.data;`
+4. After Task 2 complete: Run full test suite to verify 158 tests passing
+5. Complete Task 3: Final verification and commit
 
 ---
 
 _State initialized: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 2 completion_
+_Last updated: 2026-01-27 after Phase 3 Plan 01 Task 1 completion_
