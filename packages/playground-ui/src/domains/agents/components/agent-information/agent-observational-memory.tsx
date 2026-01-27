@@ -51,7 +51,8 @@ const ProgressBar = ({
   label,
   isActive = false,
   model,
-  baseThreshold
+  baseThreshold,
+  totalBudget
 }: { 
   value: number; 
   max: number; 
@@ -59,13 +60,17 @@ const ProgressBar = ({
   isActive?: boolean;
   model?: string;
   baseThreshold?: number; // When adaptive, shows the configured base threshold
+  totalBudget?: number; // Total shared budget in adaptive mode
 }) => {
-  const isAdaptive = baseThreshold !== undefined && baseThreshold !== max;
+  const isAdaptive = baseThreshold !== undefined && totalBudget !== undefined;
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
   const barColor = getBarColor(percentage);
   const elapsed = useElapsedTime(isActive && percentage >= 100);
   const isProcessing = isActive && percentage >= 100;
   const activeText = label === 'Messages' ? 'observing' : 'reflecting';
+  
+  // Show "adaptive" when at 100% due to adaptive mode but still below configured threshold
+  const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
   
   // When processing: use blue observing badge style (bg-blue-500/10 text-blue-600)
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
@@ -92,8 +97,8 @@ const ProgressBar = ({
               <div className="space-y-0.5">
                 <div><span className="text-neutral4">Model:</span> <span className="text-neutral5">{model || 'not configured'}</span></div>
                 <div><span className="text-neutral4">Threshold:</span> <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span></div>
-                {isAdaptive && (
-                  <div><span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span> <span className="text-neutral4">({formatTokens(max)} shared budget)</span></div>
+                {isAdaptive && totalBudget && (
+                  <div><span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span> <span className="text-neutral4">({formatTokens(totalBudget)} shared budget)</span></div>
                 )}
               </div>
             </div>
@@ -111,20 +116,20 @@ const ProgressBar = ({
           <span 
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColor} pointer-events-none`}
           >
-            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : `${Math.round(percentage)}%`}
+            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : showAdaptiveLabel ? 'adaptive' : `${Math.round(percentage)}%`}
           </span>
           <span 
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
-            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : `${Math.round(percentage)}%`}
+            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : showAdaptiveLabel ? 'adaptive' : `${Math.round(percentage)}%`}
           </span>
         </div>
         
         {/* Token count connected to bar */}
         <span className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center gap-1 rounded-r -ml-px`}>
           {formatTokens(value)}<span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
-          {isAdaptive && (
+          {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-amber-400 cursor-help">({formatTokens(baseThreshold)})</span>
@@ -133,7 +138,7 @@ const ProgressBar = ({
                 <div className="text-xs">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
                   <span className="text-neutral4"> is the configured threshold. </span>
-                  <span className="text-neutral5">Adaptive mode shares a {formatTokens(max)} token budget between messages and observations.</span>
+                  <span className="text-neutral5">Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.</span>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -271,17 +276,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     : undefined;
   
   // Priority: streamProgress > recordConfig > agentConfig > defaults
+  // For messages bar: use stream threshold (real-time effective) or total budget (max available)
   const observationThreshold = streamProgress?.threshold 
     ?? recordConfig?.observationThreshold 
     ?? getThresholdValue(omAgentConfig?.observationThreshold, 10000);
   
-  // For reflection threshold in adaptive mode, calculate based on remaining budget
-  // effectiveReflectionThreshold = totalBudget - messageThreshold
+  // For observations bar: use the configured reflection threshold (not calculated remaining)
+  // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configReflectionThreshold = getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
   const reflectionThreshold = streamProgress?.reflectionThreshold 
-    ?? (isAdaptiveMode 
-      ? Math.max(totalBudget - observationThreshold, 1000) // What's left after message threshold
-      : (recordConfig?.reflectionThreshold ?? configReflectionThreshold));
+    ?? recordConfig?.reflectionThreshold 
+    ?? configReflectionThreshold;
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
@@ -412,6 +417,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             isActive={isObserving}
             model={observerModel}
             baseThreshold={baseObservationThreshold}
+            totalBudget={totalBudget}
           />
           <ProgressBar
             value={observationTokenCount}
@@ -420,6 +426,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             isActive={isReflecting}
             baseThreshold={baseReflectionThreshold}
             model={reflectorModel}
+            totalBudget={totalBudget}
           />
         </div>
       </TooltipProvider>
