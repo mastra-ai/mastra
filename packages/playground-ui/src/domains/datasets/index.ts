@@ -18,6 +18,7 @@ export * from './utils/csv-export';
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
+export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
