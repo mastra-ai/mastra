@@ -17,6 +17,9 @@ export interface ScreencastEvents {
 
   /** Emitted when reconnection succeeds */
   reconnected: () => void;
+
+  /** Index signature for TypedEmitter compatibility */
+  [key: string]: (...args: any[]) => void;
 }
 
 /**
