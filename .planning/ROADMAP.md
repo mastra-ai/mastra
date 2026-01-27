@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Actions** - Snapshot and interaction tools (click, type, scroll) ✓
 - [x] **Phase 3: Screenshot** - Visual capture tool for debugging and verification ✓
 - [x] **Phase 4: Navigate Error Consistency** - Unify navigate error handling with BrowserToolError (GAP CLOSURE) ✓
-- [ ] **Phase 5: Schema Consolidation** - Remove duplicate schemas, single source of truth (GAP CLOSURE) [1/2 plans]
+- [x] **Phase 5: Schema Consolidation** - Remove duplicate schemas, single source of truth (GAP CLOSURE) ✓
 - [ ] **Phase 6: Browser Lifecycle Locking** - Fix race condition in concurrent getBrowser calls (GAP CLOSURE)
 
 ## Phase Details
@@ -96,7 +96,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md - Update types.ts and consolidate snapshot/click
-- [ ] 05-02-PLAN.md - Consolidate type/scroll/screenshot
+- [x] 05-02-PLAN.md - Consolidate type/scroll/screenshot
 
 ### Phase 6: Browser Lifecycle Locking
 **Goal**: Concurrent getBrowser() calls share single browser instance
@@ -140,7 +140,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Core Actions | 3/3 | ✓ Complete | 2026-01-26 |
 | 3. Screenshot | 1/1 | ✓ Complete | 2026-01-26 |
 | 4. Navigate Error Consistency | 1/1 | ✓ Complete | 2026-01-27 |
-| 5. Schema Consolidation | 1/2 | In Progress | — |
+| 5. Schema Consolidation | 2/2 | ✓ Complete | 2026-01-27 |
 | 6. Browser Lifecycle Locking | 0/1 | Pending | — |
 
 ---
@@ -155,3 +155,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 *Gap closure phases 4-6 added: 2026-01-26*
 *Phase 4 completed: 2026-01-27*
 *Phase 5 plan 1 completed: 2026-01-27*
+*Phase 5 completed: 2026-01-27*
