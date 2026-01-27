@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Screenshot** - Visual capture tool for debugging and verification ✓
 - [x] **Phase 4: Navigate Error Consistency** - Unify navigate error handling with BrowserToolError (GAP CLOSURE) ✓
 - [x] **Phase 5: Schema Consolidation** - Remove duplicate schemas, single source of truth (GAP CLOSURE) ✓
-- [ ] **Phase 6: Browser Lifecycle Locking** - Fix race condition in concurrent getBrowser calls (GAP CLOSURE)
+- [x] **Phase 6: Browser Lifecycle Locking** - Fix race condition in concurrent getBrowser calls (GAP CLOSURE) ✓
 
 ## Phase Details
 
@@ -110,7 +110,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md - Add browser launch locking
+- [x] 06-01-PLAN.md - Add browser launch locking
 
 ## Requirement Coverage
 
@@ -141,7 +141,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Screenshot | 1/1 | ✓ Complete | 2026-01-26 |
 | 4. Navigate Error Consistency | 1/1 | ✓ Complete | 2026-01-27 |
 | 5. Schema Consolidation | 2/2 | ✓ Complete | 2026-01-27 |
-| 6. Browser Lifecycle Locking | 0/1 | Pending | — |
+| 6. Browser Lifecycle Locking | 1/1 | ✓ Complete | 2026-01-27 |
 
 ---
 
@@ -156,3 +156,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 *Phase 4 completed: 2026-01-27*
 *Phase 5 plan 1 completed: 2026-01-27*
 *Phase 5 completed: 2026-01-27*
+*Phase 6 completed: 2026-01-27*
