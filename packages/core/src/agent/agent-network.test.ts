@@ -5469,6 +5469,245 @@ describe('Agent - network - message history transfer to sub-agents', () => {
   });
 });
 
+describe('Agent - network - output processors', () => {
+  it('should apply output processors to messages saved during network execution', async () => {
+    // This test verifies that output processors (like TraceIdInjector for Braintrust)
+    // are applied to messages saved during network execution.
+    // Issue: https://github.com/mastra-ai/mastra/issues/12300
+
+    const savedMessages: any[] = [];
+    const memory = new MockMemory();
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Create an output processor that adds traceId to assistant messages
+    // (similar to the TraceIdInjector from the issue)
+    const traceIdProcessor = {
+      id: 'trace-id-injector',
+      name: 'Trace ID Injector',
+      processOutputResult: ({ messages }: { messages: any[] }) => {
+        return messages.map((msg: any) => {
+          if (msg.role === 'assistant') {
+            return {
+              ...msg,
+              content: {
+                ...msg.content,
+                metadata: {
+                  ...msg.content?.metadata,
+                  traceId: 'test-trace-id-12300',
+                },
+              },
+            };
+          }
+          return msg;
+        });
+      },
+    };
+
+    // Create a simple sub-agent
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Sub-agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent response' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent for testing',
+      instructions: 'Do the task.',
+      model: subAgentMockModel,
+    });
+
+    // Routing agent selects sub-agent, then marks complete
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the task',
+      selectionReason: 'Sub-agent can handle this',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Task completed',
+      completionReason: 'Sub-agent completed the request',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Create network agent with the output processor
+    const networkAgent = new Agent({
+      id: 'network-agent-with-processor',
+      name: 'Network Agent with Output Processor',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+      outputProcessors: [traceIdProcessor],
+    });
+
+    const anStream = await networkAgent.network('Do the task', {
+      memory: {
+        thread: 'test-thread-output-processors',
+        resource: 'test-resource-output-processors',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Verify that at least some messages were saved
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Find assistant messages saved during network execution
+    const assistantMessages = savedMessages.filter((msg: any) => msg.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    // The key assertion: output processors should have been applied,
+    // so assistant messages should have the traceId in their metadata
+    const messagesWithTraceId = assistantMessages.filter(
+      (msg: any) => msg.content?.metadata?.traceId === 'test-trace-id-12300',
+    );
+
+    // This assertion will FAIL if output processors are not applied to saved messages
+    expect(
+      messagesWithTraceId.length,
+      'Output processors should be applied to assistant messages saved during network execution. ' +
+        'Expected at least one assistant message to have traceId in metadata.',
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe('Agent - network - requestContext propagation (issue #12330)', () => {
+  it('should propagate requestContext to tools executed within the network', async () => {
+    const memory = new MockMemory();
+    const capturedRequestContext: { userId?: string; resourceId?: string } = {};
+
+    const contextCaptureTool = createTool({
+      id: 'context-capture-tool-12330',
+      description: 'A tool that captures requestContext values for testing',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }, context) => {
+        capturedRequestContext.userId = context?.requestContext?.get('userId') as string | undefined;
+        capturedRequestContext.resourceId = context?.requestContext?.get('resourceId') as string | undefined;
+        return { result: `Captured for: ${message}` };
+      },
+    });
+
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'context-capture-tool-12330',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ message: 'test' }),
+      selectionReason: 'Testing requestContext propagation',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Tool executed',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'test-agent-12330',
+      name: 'RequestContext Test Agent',
+      instructions: 'Use the context-capture-tool-12330 when asked.',
+      model: mockModel,
+      tools: { 'context-capture-tool-12330': contextCaptureTool },
+      memory,
+    });
+
+    const requestContext = new RequestContext<{ userId: string; resourceId: string }>();
+    requestContext.set('userId', 'network-user-12330');
+    requestContext.set('resourceId', 'network-resource-12330');
+
+    const anStream = await networkAgent.network('Test requestContext propagation', {
+      requestContext,
+      memory: {
+        thread: 'test-thread-12330',
+        resource: 'test-resource-12330',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // consume
+    }
+
+    expect(capturedRequestContext.userId).toBe('network-user-12330');
+    expect(capturedRequestContext.resourceId).toBe('network-resource-12330');
+  });
+});
+
 describe('Agent - network - abort functionality', () => {
   afterEach(() => {
     vi.restoreAllMocks();

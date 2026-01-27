@@ -25,9 +25,20 @@ See [Custom API Routes](/docs/server/custom-api-routes#authentication) for contr
 
 ## Available providers
 
-- [JSON Web Token (JWT)](/docs/server/auth/jwt)
+### Built-in
+
+- [Simple Auth](/docs/server/auth/simple-auth) - Token-to-user mapping for development and API keys
+- [JSON Web Token (JWT)](/docs/server/auth/jwt) - HMAC-signed JWT verification
+
+### Third-party integrations
+
 - [Clerk](/docs/server/auth/clerk)
 - [Supabase](/docs/server/auth/supabase)
 - [Firebase](/docs/server/auth/firebase)
 - [WorkOS](/docs/server/auth/workos)
 - [Auth0](/docs/server/auth/auth0)
+
+### Advanced
+
+- [Composite Auth](/docs/server/auth/composite-auth) - Combine multiple auth providers
+- [Custom Auth Provider](/docs/server/auth/custom-auth-provider) - Build your own provider

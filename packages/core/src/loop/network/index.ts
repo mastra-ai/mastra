@@ -8,7 +8,9 @@ import type { MastraDBMessage, MessageListInput } from '../../agent/message-list
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
+import { noopLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
+import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
@@ -331,22 +333,64 @@ export async function prepareMemoryStep({
  *
  * @internal
  */
+/**
+ * Helper function to apply output processors to messages before saving.
+ * This ensures that user-configured output processors (like TraceIdInjector)
+ * are applied to all messages saved during network execution.
+ */
+async function saveMessagesWithProcessors(
+  memory:
+    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | undefined,
+  messages: MastraDBMessage[],
+  processorRunner: ProcessorRunner | null,
+  context?: {
+    tracingContext?: TracingContext;
+    requestContext?: RequestContext;
+  },
+): Promise<void> {
+  if (!memory) return;
+
+  if (!processorRunner || messages.length === 0) {
+    await memory.saveMessages({ messages });
+    return;
+  }
+
+  // Create a MessageList and add the messages as 'response' type
+  const messageList = new MessageList();
+  for (const msg of messages) {
+    messageList.add(msg, 'response');
+  }
+
+  // Run output processors on the messages
+  await processorRunner.runOutputProcessors(messageList, context?.tracingContext, context?.requestContext);
+
+  // Get the processed messages and save them
+  const processedMessages = messageList.get.response.db();
+  await memory.saveMessages({ messages: processedMessages });
+}
+
 async function saveFinalResultIfProvided({
   memory,
   finalResult,
   threadId,
   resourceId,
   generateId,
+  processorRunner,
+  requestContext,
 }: {
   memory: Awaited<ReturnType<Agent['getMemory']>>;
   finalResult: string | undefined;
   threadId: string;
   resourceId: string;
   generateId: () => string;
+  processorRunner: ProcessorRunner | null;
+  requestContext?: RequestContext;
 }) {
   if (memory && finalResult) {
-    await memory.saveMessages({
-      messages: [
+    await saveMessagesWithProcessors(
+      memory,
+      [
         {
           id: generateId(),
           type: 'text',
@@ -360,7 +404,9 @@ async function saveFinalResultIfProvided({
           resourceId,
         },
       ] as MastraDBMessage[],
-    });
+      processorRunner,
+      { requestContext },
+    );
   }
 }
 
@@ -388,6 +434,20 @@ export async function createNetworkLoop({
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
 }) {
+  // Get configured output processors from the agent for applying to saved messages
+  const configuredOutputProcessors = await agent.listConfiguredOutputProcessors(requestContext);
+
+  // Create a ProcessorRunner if there are output processors to apply
+  const processorRunner =
+    configuredOutputProcessors.length > 0
+      ? new ProcessorRunner({
+          outputProcessors: configuredOutputProcessors,
+          inputProcessors: [],
+          logger: agent.getMastraInstance()?.getLogger() || noopLogger,
+          agentName: agent.name,
+        })
+      : null;
+
   const routingStep = createStep({
     id: 'routing-agent-step',
     inputSchema: z.object({
@@ -793,8 +853,9 @@ export async function createNetworkLoop({
         finalText = finalText + '\n\nTool call was not approved by the user';
       }
 
-      await memory?.saveMessages({
-        messages: [
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -835,7 +896,9 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
 
       if (requireApprovalMetadata || suspendedTools) {
         await writer.write({
@@ -1121,8 +1184,9 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-      await memory?.saveMessages({
-        messages: [
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -1163,7 +1227,9 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
 
       if (suspendPayload) {
         await writer?.write({
@@ -1374,8 +1440,9 @@ export async function createNetworkLoop({
               }),
             ),
           );
-          await memory?.saveMessages({
-            messages: [
+          await saveMessagesWithProcessors(
+            memory,
+            [
               {
                 id: generateId(),
                 type: 'text',
@@ -1416,7 +1483,9 @@ export async function createNetworkLoop({
                 resourceId: initData.threadResourceId || networkName,
               },
             ] as MastraDBMessage[],
-          });
+            processorRunner,
+            { requestContext },
+          );
           await writer?.write({
             type: 'tool-execution-approval',
             payload: {
@@ -1439,8 +1508,9 @@ export async function createNetworkLoop({
         } else {
           if (!resumeData.approved) {
             const rejectionResult = 'Tool call was not approved by the user';
-            await memory?.saveMessages({
-              messages: [
+            await saveMessagesWithProcessors(
+              memory,
+              [
                 {
                   id: generateId(),
                   type: 'text',
@@ -1466,7 +1536,9 @@ export async function createNetworkLoop({
                   resourceId: initData.threadResourceId || networkName,
                 },
               ] as MastraDBMessage[],
-            });
+              processorRunner,
+              { requestContext },
+            );
 
             const endPayload = {
               task: inputData.task,
@@ -1504,8 +1576,9 @@ export async function createNetworkLoop({
             toolCallId,
             threadId: initData.threadId,
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
-              await memory?.saveMessages({
-                messages: [
+              await saveMessagesWithProcessors(
+                memory,
+                [
                   {
                     id: generateId(),
                     type: 'text',
@@ -1549,7 +1622,9 @@ export async function createNetworkLoop({
                     resourceId: initData.threadResourceId || networkName,
                   },
                 ] as MastraDBMessage[],
-              });
+                processorRunner,
+                { requestContext },
+              );
               await writer?.write({
                 type: 'tool-execution-suspended',
                 payload: {
@@ -1587,8 +1662,9 @@ export async function createNetworkLoop({
         });
       }
 
-      await memory?.saveMessages({
-        messages: [
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -1621,7 +1697,9 @@ export async function createNetworkLoop({
             resourceId: initData.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
 
       const endPayload = {
         task: inputData.task,
@@ -1774,7 +1852,7 @@ export async function createNetworkLoop({
     })
     .commit();
 
-  return { networkWorkflow };
+  return { networkWorkflow, processorRunner };
 }
 
 export async function networkLoop<OUTPUT = undefined>({
@@ -1942,7 +2020,7 @@ export async function networkLoop<OUTPUT = undefined>({
 
   const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
 
-  const { networkWorkflow } = await createNetworkLoop({
+  const { networkWorkflow, processorRunner } = await createNetworkLoop({
     networkName,
     requestContext,
     runId: runIdToUse,
@@ -2067,6 +2145,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       } else {
@@ -2126,6 +2206,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       }
@@ -2167,35 +2249,36 @@ export async function networkLoop<OUTPUT = undefined>({
 
       // Save feedback to memory so the next iteration can see it
       const memoryInstance = await routingAgent.getMemory({ requestContext });
-      if (memoryInstance) {
-        await memoryInstance.saveMessages({
-          messages: [
-            {
-              id: generateId(),
-              type: 'text',
-              role: 'assistant',
-              content: {
-                parts: [
-                  {
-                    type: 'text',
-                    text: feedback,
-                  },
-                ],
-                format: 2,
-                metadata: {
-                  mode: 'network',
-                  completionResult: {
-                    passed: completionResult.complete,
-                  },
+      await saveMessagesWithProcessors(
+        memoryInstance,
+        [
+          {
+            id: generateId(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'text',
+                  text: feedback,
+                },
+              ],
+              format: 2,
+              metadata: {
+                mode: 'network',
+                completionResult: {
+                  passed: completionResult.complete,
                 },
               },
-              createdAt: new Date(),
-              threadId: inputData.threadId || runIdToUse,
-              resourceId: inputData.threadResourceId || networkName,
             },
-          ] as MastraDBMessage[],
-        });
-      }
+            createdAt: new Date(),
+            threadId: inputData.threadId || runIdToUse,
+            resourceId: inputData.threadResourceId || networkName,
+          },
+        ] as MastraDBMessage[],
+        processorRunner,
+        { requestContext },
+      );
 
       if (isComplete) {
         // Task is complete - use generatedFinalResult if LLM provided one,
@@ -2349,6 +2432,7 @@ export async function networkLoop<OUTPUT = undefined>({
       if (resumeDataToUse) {
         return run.resumeStream({
           resumeData: resumeDataToUse,
+          requestContext,
         }).fullStream;
       }
       return run.stream({
@@ -2363,6 +2447,7 @@ export async function networkLoop<OUTPUT = undefined>({
           isOneOff: false,
           verboseIntrospection: true,
         },
+        requestContext,
       }).fullStream;
     },
   });
