@@ -7,8 +7,6 @@
   "include": [
     "src/**/*",
     "scripts/build-llms-txt.ts",
-    "scripts/build-eval-context.ts",
-    "scripts/build-cursor-context.ts",
     "config/docs"
   ]
 }

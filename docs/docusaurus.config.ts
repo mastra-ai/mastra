@@ -155,12 +155,6 @@ const config: Config = {
       colorMode: {
         respectPrefersColorScheme: true,
       },
-      navbar: {
-        logo: {
-          alt: "Mastra Logo",
-          src: "logo.svg",
-        },
-      },
       prism: {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
