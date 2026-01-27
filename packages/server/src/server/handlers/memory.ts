@@ -391,7 +391,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
 
 export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/memory/observational-memory',
+  path: '/memory/observational-memory',
   responseType: 'json',
   queryParamSchema: getObservationalMemoryQuerySchema,
   responseSchema: getObservationalMemoryResponseSchema,
