@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 8 - Item Selection
+**Current focus:** Milestone complete
 
 ## Current Position
 
-Phase: 7 of 8 (CSV Import) — COMPLETE
+Phase: 7 of 7 (CSV Import) — COMPLETE
 Plan: 5 of 5 in phase 7 (includes gap closure)
-Status: Phase 7 verified + gap closed
-Last activity: 2026-01-27 — Completed 07-05 gap closure (column mapping fix)
+Status: All phases complete
+Last activity: 2026-01-27 — Removed Phase 8 (Item Selection)
 
-Progress: [████████░░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 

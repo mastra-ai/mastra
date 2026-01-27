@@ -19,7 +19,6 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
 - [x] **Phase 6: Playground Integration** - Datasets UI with run triggering and results ✓
 - [x] **Phase 7: CSV Import** - Bulk item creation from CSV files ✓
-- [ ] **Phase 8: Item Selection** - Run subsets via itemIds parameter
 
 ## Phase Details
 
@@ -151,26 +150,10 @@ Plans:
 - [x] 07-04-PLAN.md — Integration into dataset detail page items list
 - [x] 07-05-PLAN.md — Gap closure: fix useColumnMapping headers sync
 
-### Phase 8: Item Selection
-**Goal**: Run subsets of dataset for quick iteration via UI selection
-**Depends on**: Phase 2, Phase 6
-**Requirements**: SEL-01 (Item selection)
-**Success Criteria** (what must be TRUE):
-  1. User can select specific items via checkboxes in dataset detail UI
-  2. Selection count shown (e.g., "5 of 100 selected")
-  3. "Run Selected" button triggers run with only selected itemIds[]
-  4. Run record stores which items were included
-  5. Analytics compute correctly for partial runs
-  6. Comparison works between full and partial runs with clear indication
-**Plans**: TBD
-
-Plans:
-- [ ] 08-01: TBD
-
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -181,4 +164,3 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
 | 6. Playground Integration | 12/12 | ✓ Complete | 2026-01-26 |
 | 7. CSV Import | 5/5 | ✓ Complete | 2026-01-27 |
-| 8. Item Selection | 0/TBD | Not started | - |
