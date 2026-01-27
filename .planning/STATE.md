@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 
 ## Current Position
 
-Phase: 3 of 3 (Screenshot)
+Phase: 4 of 6 (Navigate Error Consistency)
 Plan: 1 of 1 in current phase
-Status: Milestone complete, all phases verified
-Last activity: 2026-01-26 — Phase 3 executed and verified
+Status: Phase complete
+Last activity: 2026-01-27 — Completed 04-01-PLAN.md
 
-Progress: [====================] 100% (3/3 phases)
+Progress: [==============......] 66% (4/6 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 3.3 min
-- Total execution time: 20 min
+- Total plans completed: 7
+- Average duration: 3.1 min
+- Total execution time: 22 min
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [====================] 100% (3/3 phases)
 | 01-infrastructure | 2 | 6 min | 3 min |
 | 02-core-actions | 3 | 10 min | 3.3 min |
 | 03-screenshot | 1 | 4 min | 4 min |
+| 04-navigate-error-consistency | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 6 plans: 2 min, 4 min, 2 min, 4 min, 4 min, 4 min
+- Last 6 plans: 4 min, 2 min, 4 min, 4 min, 4 min, 2 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -61,6 +62,8 @@ Recent decisions affecting current work:
 | 30s timeout for screenshots | 03-01 | Full-page captures can take longer than action tools |
 | String page.evaluate() for DOM access | 03-01 | Avoids TypeScript DOM lib requirement |
 | 8000px warning threshold | 03-01 | Matches Claude API dimension limits |
+| Discriminated union for navigateOutputSchema | 04-01 | Type-safe success/error discrimination |
+| Remove BrowserError completely | 04-01 | Use BrowserToolError from errors.ts as canonical source |
 
 ### Pending Todos
 
@@ -72,18 +75,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-26
-Stopped at: Completed Phase 3 (03-01-PLAN.md)
+Last session: 2026-01-27
+Stopped at: Completed Phase 4 (04-01-PLAN.md)
 Resume file: None
 
-## Project Complete
+## Gap Closure In Progress
 
-All 3 phases complete. BrowserToolset provides 6 tools:
-- browser_navigate
-- browser_snapshot
-- browser_click
-- browser_type
-- browser_scroll
-- browser_screenshot
+Core phases 1-3 complete. Gap closure phases from audit:
+- Phase 4: Navigate error consistency - COMPLETE
+- Phase 5: Schema consolidation - Ready
+- Phase 6: Browser lifecycle locking - Ready
 
-Ready for changeset and publishing.
+Next: Execute phases 5-6, then re-audit.
