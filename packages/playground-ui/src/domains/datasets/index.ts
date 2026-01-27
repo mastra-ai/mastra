@@ -11,6 +11,10 @@ export * from './hooks/use-csv-parser';
 export * from './utils/csv-validation';
 export * from './utils/json-cell-parser';
 
+// Selection and export utilities
+export * from './hooks/use-item-selection';
+export * from './utils/csv-export';
+
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
@@ -22,6 +26,7 @@ export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetDetail } from './components/dataset-detail/dataset-detail';
 export { ItemsList } from './components/dataset-detail/items-list';
 export { RunHistory } from './components/dataset-detail/run-history';
+export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 export { EditItemDialog } from './components/edit-item-dialog';
 
