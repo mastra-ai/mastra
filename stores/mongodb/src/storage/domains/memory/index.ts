@@ -11,6 +11,7 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_OBSERVATIONAL_MEMORY,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -18,6 +19,10 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  ObservationalMemoryRecord,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -30,7 +35,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_OBSERVATIONAL_MEMORY] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -71,6 +76,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
       { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
+      // Observational Memory collection indexes
+      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1 } },
+      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
 
@@ -902,6 +911,392 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Observational Memory Methods
+  // ============================================
+
+  private getOMKey(threadId: string | null, resourceId: string): string {
+    return threadId ? `thread:${threadId}` : `resource:${resourceId}`;
+  }
+
+  private parseOMDocument(doc: any): ObservationalMemoryRecord {
+    return {
+      id: doc.id,
+      scope: doc.scope,
+      threadId: doc.threadId || null,
+      resourceId: doc.resourceId,
+      createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
+      updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt : new Date(doc.updatedAt),
+      lastObservedAt: doc.lastObservedAt
+        ? doc.lastObservedAt instanceof Date
+          ? doc.lastObservedAt
+          : new Date(doc.lastObservedAt)
+        : undefined,
+      originType: doc.originType || 'initial',
+      activeObservations: doc.activeObservations || '',
+      bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
+      patterns: doc.patterns || undefined,
+      totalTokensObserved: Number(doc.totalTokensObserved || 0),
+      observationTokenCount: Number(doc.observationTokenCount || 0),
+      pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
+      isReflecting: Boolean(doc.isReflecting),
+      isObserving: Boolean(doc.isObserving),
+      config: doc.config || {},
+      metadata: doc.metadata || undefined,
+    };
+  }
+
+  async getObservationalMemory(
+    threadId: string | null,
+    resourceId: string,
+  ): Promise<ObservationalMemoryRecord | null> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const doc = await collection.findOne(
+        { lookupKey },
+        { sort: { generationCount: -1 } },
+      );
+      if (!doc) return null;
+      return this.parseOMDocument(doc);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit: number = 10,
+  ): Promise<ObservationalMemoryRecord[]> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const docs = await collection
+        .find({ lookupKey })
+        .sort({ generationCount: -1 })
+        .limit(limit)
+        .toArray();
+      return docs.map((doc: any) => this.parseOMDocument(doc));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATIONAL_MEMORY_HISTORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId, limit },
+        },
+        error,
+      );
+    }
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = crypto.randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.scope,
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: undefined,
+        originType: 'initial',
+        activeObservations: '',
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.config,
+      };
+
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      await collection.insertOne({
+        id,
+        lookupKey,
+        scope: input.scope,
+        resourceId: input.resourceId,
+        threadId: input.threadId || null,
+        activeObservations: '',
+        activeObservationsPendingUpdate: null,
+        patterns: null,
+        originType: 'initial',
+        config: input.config,
+        generationCount: 0,
+        lastObservedAt: null,
+        lastReflectionAt: null,
+        pendingMessageTokens: 0,
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        isObserving: false,
+        isReflecting: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    try {
+      const now = new Date();
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+
+      const updateDoc: any = {
+        activeObservations: input.observations,
+        lastObservedAt: input.lastObservedAt,
+        pendingMessageTokens: 0,
+        observationTokenCount: input.tokenCount,
+        updatedAt: now,
+      };
+
+      // Only update patterns if provided
+      if (input.patterns) {
+        updateDoc.patterns = input.patterns;
+      }
+
+      const result = await collection.updateOne(
+        { id: input.id },
+        {
+          $set: updateDoc,
+          $inc: { totalTokensObserved: input.tokenCount },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_ACTIVE_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = crypto.randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.currentRecord.scope,
+        threadId: input.currentRecord.threadId,
+        resourceId: input.currentRecord.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: input.currentRecord.lastObservedAt,
+        originType: 'reflection',
+        activeObservations: input.reflection,
+        patterns: input.patterns,
+        totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
+        observationTokenCount: input.tokenCount,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.currentRecord.config,
+        metadata: input.currentRecord.metadata,
+      };
+
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      await collection.insertOne({
+        id,
+        lookupKey,
+        scope: record.scope,
+        resourceId: record.resourceId,
+        threadId: record.threadId || null,
+        activeObservations: input.reflection,
+        activeObservationsPendingUpdate: null,
+        patterns: input.patterns || null,
+        originType: 'reflection',
+        config: record.config,
+        generationCount: ((input.currentRecord as any).generationCount ?? 0) + 1,
+        lastObservedAt: record.lastObservedAt || null,
+        lastReflectionAt: now,
+        pendingMessageTokens: 0,
+        totalTokensObserved: record.totalTokensObserved,
+        observationTokenCount: record.observationTokenCount,
+        isObserving: false,
+        isReflecting: false,
+        createdAt: now,
+        updatedAt: now,
+        metadata: record.metadata || null,
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecord.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const result = await collection.updateOne(
+        { id },
+        { $set: { isReflecting, updatedAt: new Date() } },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_REFLECTING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_REFLECTING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        },
+        error,
+      );
+    }
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const result = await collection.updateOne(
+        { id },
+        { $set: { isObserving, updatedAt: new Date() } },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_OBSERVING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_OBSERVING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        },
+        error,
+      );
+    }
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      await collection.deleteMany({ lookupKey });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CLEAR_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const result = await collection.updateOne(
+        { id },
+        {
+          $inc: { pendingMessageTokens: tokenCount },
+          $set: { updatedAt: new Date() },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
         },
         error,
       );
