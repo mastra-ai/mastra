@@ -324,12 +324,12 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.deleteThread({ threadId });
 
-    // Clean up associated vector embeddings for semantic recall
-    if (this.vector) {
-      await this.deleteThreadVectors(threadId);
-    }
+    // Execute storage deletion and vector cleanup in parallel
+    await Promise.all([
+      memoryStore.deleteThread({ threadId }),
+      this.vector ? this.deleteThreadVectors(threadId) : Promise.resolve(),
+    ]);
   }
 
   /**
@@ -346,21 +346,23 @@ export class Memory extends MastraMemory {
       const memoryIndexes = indexes.filter((name: string) => name.startsWith('memory_messages'));
 
       // Delete vectors from each memory index that match the thread_id
-      for (const indexName of memoryIndexes) {
-        try {
-          await this.vector!.deleteVectors({
-            indexName,
-            filter: { thread_id: threadId },
-          });
-          this.logger.debug(`Deleted vectors for thread ${threadId} from index ${indexName}`);
-        } catch (error) {
-          this.logger.debug(
-            `Could not delete vectors for thread ${threadId} from index ${indexName}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      }
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          try {
+            await this.vector!.deleteVectors({
+              indexName,
+              filter: { thread_id: threadId },
+            });
+            this.logger.debug(`Deleted vectors for thread ${threadId} from index ${indexName}`);
+          } catch (error) {
+            this.logger.debug(
+              `Could not delete vectors for thread ${threadId} from index ${indexName}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }),
+      );
     } catch (error) {
       this.logger.debug(
         `No memory indexes found to clean up for thread ${threadId}: ${
@@ -1231,14 +1233,13 @@ ${
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage
+    // Delete from storage and vector store in parallel
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.deleteMessages(messageIds);
 
-    // Also delete from vector store if semantic recall is enabled
-    if (this.vector && messageIds.length > 0) {
-      await this.deleteMessageVectors(messageIds);
-    }
+    await Promise.all([
+      memoryStore.deleteMessages(messageIds),
+      this.vector && messageIds.length > 0 ? this.deleteMessageVectors(messageIds) : Promise.resolve(),
+    ]);
   }
 
   /**
@@ -1254,21 +1255,26 @@ ${
       const indexes = await this.vector!.listIndexes();
       const memoryIndexes = indexes.filter((name: string) => name.startsWith('memory_messages'));
 
-      // Delete vectors from each memory index that match the message_ids
-      for (const indexName of memoryIndexes) {
-        for (const messageId of messageIds) {
-          try {
-            await this.vector!.deleteVectors({
-              indexName,
-              filter: { message_id: messageId },
-            });
-          } catch {
-            this.logger.debug(
-              `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
-            );
-          }
-        }
-      }
+      // Delete vectors from each memory index in parallel
+      await Promise.all(
+        memoryIndexes.map(async indexName => {
+          // Delete all message vectors for this index in parallel
+          await Promise.all(
+            messageIds.map(async messageId => {
+              try {
+                await this.vector!.deleteVectors({
+                  indexName,
+                  filter: { message_id: messageId },
+                });
+              } catch {
+                this.logger.debug(
+                  `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
+                );
+              }
+            }),
+          );
+        }),
+      );
     } catch {
       this.logger.debug(`No memory indexes found to clean up for deleted messages`);
     }
