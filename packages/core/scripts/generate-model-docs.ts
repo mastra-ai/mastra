@@ -870,7 +870,7 @@ Your users never experience the disruption - the response comes back with the sa
 
 Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
 
-For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`id\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
+For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`modelId\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
 
 For the \`url\` it's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting and not the individual chat endpoints.
 
