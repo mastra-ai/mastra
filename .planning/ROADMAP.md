@@ -136,12 +136,12 @@ Plans:
 
 Plans:
 
-- [ ] 04-01-PLAN.md - Auto-resume and error handling (6 tests)
-- [ ] 04-02-PLAN.md - Resume labels and suspendData (4 tests)
-- [ ] 04-03-PLAN.md - Parallel/branch suspend (4 tests)
-- [ ] 04-04-PLAN.md - Context preservation (2 tests)
-- [ ] 04-05-PLAN.md - Nested workflow edge cases (4 tests)
-- [ ] 04-06-PLAN.md - Foreach suspend/resume (6 tests)
+- [x] 04-01-PLAN.md - Auto-resume and error handling (5 passing, 1 skipped)
+- [x] 04-02-PLAN.md - Resume labels and suspendData (3 passing, 1 skipped)
+- [x] 04-03-PLAN.md - Parallel/branch suspend (0 passing, 4 skipped)
+- [x] 04-04-PLAN.md - Context preservation (2 passing)
+- [x] 04-05-PLAN.md - Nested workflow edge cases (1 passing, 3 skipped)
+- [x] 04-06-PLAN.md - Foreach suspend/resume (0 passing, 6 skipped)
 
 **Missing Tests:**
 
@@ -264,13 +264,13 @@ Foreach Suspend/Resume:
 | 1     | State Object Support      | 12            | Complete    |
 | 2     | Lifecycle Callbacks       | 15            | Complete    |
 | 3     | Schema Validation         | 12 (9+3skip)  | Complete    |
-| 4     | Suspend/Resume Edge Cases | 26            | Planned     |
+| 4     | Suspend/Resume Edge Cases | 26 (11+15skip)| Complete    |
 | 5     | Streaming vNext           | 6             | Not Started |
 | 6     | Remaining Parity          | ~43           | Not Started |
 
-**Total:** ~77 tests to port (113 - 36 completed)
+**Total:** ~49 tests to port (~113 - 47 completed - 17 skipped)
 
 ---
 
 _Roadmap created: 2026-01-26_
-_Last updated: 2026-01-27 after Phase 4 planning_
+_Last updated: 2026-01-27 after Phase 4 completion_
