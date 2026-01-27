@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { dirname, join, parse, resolve } from 'node:path';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
@@ -709,3 +711,35 @@ export function setNestedValue(obj: any, path: string, value: any): void {
 export const removeUndefinedValues = (obj: Record<string, any>) => {
   return Object.fromEntries(Object.entries(obj).filter(([_, value]) => value !== undefined));
 };
+
+/**
+ * Get the project root directory.
+ *
+ * When running via `mastra dev`, cwd is ./src/mastra/public/ (3 levels deep).
+ * When running via `mastra start`, cwd is ./.mastra/output (2 levels deep).
+ * When running scripts directly, searches upward for nearest package.json.
+ */
+export function getProjectRoot(): string {
+  const cwd = process.cwd();
+
+  if (process.env.MASTRA_DEV) {
+    return resolve(cwd, '../../..');
+  }
+
+  // Check for mastra start context by looking for bundled output files
+  const isMastraStart = existsSync(join(cwd, 'index.mjs')) && existsSync(join(cwd, '..', 'bundler-config.mjs'));
+  if (isMastraStart) {
+    return resolve(cwd, '../..');
+  }
+
+  // Direct script execution: find nearest package.json
+  let dir = cwd;
+  while (dir !== parse(dir).root) {
+    if (existsSync(join(dir, 'package.json'))) {
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+
+  return cwd;
+}
