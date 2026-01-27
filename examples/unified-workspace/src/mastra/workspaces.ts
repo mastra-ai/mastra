@@ -39,7 +39,7 @@ const PROJECT_ROOT = getProjectRoot();
  * - Skills discovery from SKILL.md files
  * - BM25 search across indexed content
  *
- * Skills are discovered from the configured skillsPaths and are:
+ * Skills are discovered from the configured skills and are:
  * - Visible in the Workspace UI (/workspace page, Skills tab)
  * - Available to agents via workspace.skills
  * - Searchable via workspace.skills.search()
@@ -71,7 +71,7 @@ export const globalWorkspace = new Workspace({
   // Auto-index support FAQ content for search
   autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
   // Discover skills from these paths (global skills only)
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   // Auto-initialize on construction (needed for mastra dev)
   autoInit: true,
 });
@@ -105,7 +105,7 @@ export const docsAgentWorkspace = new Workspace({
   // Enable BM25 search
   bm25: true,
   // Inherit global skills + add agent-specific skills
-  skillsPaths: ['/skills', '/docs-skills'],
+  skills: ['/skills', '/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
 });
@@ -136,7 +136,7 @@ export const isolatedDocsWorkspace = new Workspace({
   // Auto-index support FAQ content for search
   autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
   // Only agent-specific skills, no global skills
-  skillsPaths: ['/docs-skills'],
+  skills: ['/docs-skills'],
   // Auto-initialize on construction
   autoInit: true,
 });
@@ -158,7 +158,7 @@ export const readonlyWorkspace = new Workspace({
     },
   }),
   bm25: true,
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   autoInit: true,
 });
 
@@ -191,7 +191,7 @@ export const safeWriteWorkspace = new Workspace({
     },
   },
   bm25: true,
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   autoInit: true,
 });
 
@@ -219,7 +219,7 @@ export const supervisedSandboxWorkspace = new Workspace({
     },
   },
   bm25: true,
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   autoInit: true,
 });
 
@@ -249,7 +249,7 @@ export const fsWriteApprovalWorkspace = new Workspace({
     [WORKSPACE_TOOLS.SEARCH.INDEX]: { requireApproval: true },
   },
   bm25: true,
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   autoInit: true,
 });
 
@@ -278,7 +278,7 @@ export const fsAllApprovalWorkspace = new Workspace({
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireApproval: false },
   },
   bm25: true,
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
   autoInit: true,
 });
 
@@ -301,7 +301,7 @@ export const testAgentWorkspace = new Workspace({
  * Skills-only workspace - no filesystem or sandbox, just skills.
  *
  * This demonstrates the minimal workspace configuration:
- * - Only skillsPaths is provided
+ * - Only skills is provided
  * - Skills are loaded read-only via LocalSkillSource (using Node.js fs/promises)
  * - No filesystem tools (workspace_read_file, workspace_write_file, etc.)
  * - No sandbox tools (execute_command)
@@ -318,7 +318,7 @@ export const skillsOnlyWorkspace = new Workspace({
   // No filesystem - skills loaded read-only from disk via LocalSkillSource
   // No sandbox - no code execution capability
   // Only skills from the configured paths
-  skillsPaths: [join(PROJECT_ROOT, 'skills'), join(PROJECT_ROOT, 'docs-skills')],
+  skills: [join(PROJECT_ROOT, 'skills'), join(PROJECT_ROOT, 'docs-skills')],
   // Note: BM25/vector search not available without filesystem
   // Skills are still searchable via workspace.skills.search() using simple text matching
 });

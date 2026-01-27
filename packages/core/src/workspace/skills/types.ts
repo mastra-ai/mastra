@@ -1,6 +1,6 @@
 /**
  * Types for Skills following the Agent Skills specification.
- * Skills are SKILL.md files discovered from workspace skillsPaths.
+ * Skills are SKILL.md files discovered from workspace skills paths.
  *
  * @see https://github.com/anthropics/skills
  */
@@ -9,20 +9,20 @@ import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../../a
 import type { RequestContext } from '../../request-context';
 
 // =============================================================================
-// Skills Paths Types
+// Skills Types
 // =============================================================================
 
 /**
- * Context passed to skillsPaths resolver function.
+ * Context passed to skills resolver function.
  * Contains request-scoped information for dynamic path resolution.
  */
-export interface SkillsPathsContext {
+export interface SkillsContext {
   /** Request context with user/thread information */
   requestContext?: RequestContext;
 }
 
 /**
- * Resolver for skillsPaths - can be static array or dynamic function.
+ * Resolver for skills - can be static array of paths or dynamic function.
  *
  * Static: A fixed array of paths to scan for skills.
  * Dynamic: A function that returns paths based on context (e.g., user tier, tenant).
@@ -30,14 +30,14 @@ export interface SkillsPathsContext {
  * @example Static paths
  * ```typescript
  * const workspace = new Workspace({
- *   skillsPaths: ['/skills', '/node_modules/@myorg/skills'],
+ *   skills: ['/skills', '/node_modules/@myorg/skills'],
  * });
  * ```
  *
  * @example Dynamic paths based on user tier
  * ```typescript
  * const workspace = new Workspace({
- *   skillsPaths: (ctx) => {
+ *   skills: (ctx) => {
  *     const tier = ctx.requestContext?.get('userTier');
  *     if (tier === 'premium') {
  *       return ['/skills/basic', '/skills/premium'];
@@ -47,7 +47,7 @@ export interface SkillsPathsContext {
  * });
  * ```
  */
-export type SkillsPathsResolver = string[] | ((context: SkillsPathsContext) => string[] | Promise<string[]>);
+export type SkillsResolver = string[] | ((context: SkillsContext) => string[] | Promise<string[]>);
 
 /**
  * Skill source types indicating where the skill comes from and its access level.
@@ -148,14 +148,14 @@ export interface UpdateSkillInput {
  * Interface for skills accessed via workspace.skills.
  * Provides discovery, search, and CRUD operations for skills in the workspace.
  *
- * Skills are SKILL.md files discovered from configured skillsPaths.
+ * Skills are SKILL.md files discovered from configured skills.
  * All operations are async because they use the workspace filesystem.
  *
  * @example
  * ```typescript
  * const workspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './data' }),
- *   skillsPaths: ['/skills'],
+ *   skills: ['/skills'],
  * });
  *
  * // List all skills
@@ -199,15 +199,15 @@ export interface WorkspaceSkills {
   has(name: string): Promise<boolean>;
 
   /**
-   * Refresh skills from filesystem (re-scan skillsPaths)
+   * Refresh skills from filesystem (re-scan skills)
    */
   refresh(): Promise<void>;
 
   /**
-   * Conditionally refresh skills if the skillsPaths have been modified.
+   * Conditionally refresh skills if the skills have been modified.
    * Uses a staleness check to avoid unnecessary re-discovery on every call.
    *
-   * When skillsPaths is a dynamic function, pass context to resolve paths.
+   * When skills is a dynamic function, pass context to resolve paths.
    * If paths have changed, triggers a full refresh.
    *
    * Call this in processInput before each agent turn to catch newly
@@ -215,7 +215,7 @@ export interface WorkspaceSkills {
    *
    * @param context - Optional context for dynamic path resolution
    */
-  maybeRefresh(context?: SkillsPathsContext): Promise<void>;
+  maybeRefresh(context?: SkillsContext): Promise<void>;
 
   // ===========================================================================
   // Search

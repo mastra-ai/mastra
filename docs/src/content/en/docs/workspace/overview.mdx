@@ -122,12 +122,12 @@ A skill is a folder containing a `SKILL.md` file with metadata and instructions,
       lint.ts         # Executable scripts
 ```
 
-Configure `skillsPaths` to enable skill discovery:
+Configure `skills` to enable skill discovery:
 
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skillsPaths: ['/skills'],
+  skills: ['/skills'],
 });
 ```
 

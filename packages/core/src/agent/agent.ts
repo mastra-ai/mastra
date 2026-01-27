@@ -295,7 +295,7 @@ export class Agent<
   }
 
   /**
-   * Gets the skills processors to add to input processors when workspace has skillsPaths.
+   * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */
   private async getSkillsProcessors(

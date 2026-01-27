@@ -222,7 +222,7 @@ export interface AgentConfig<
    */
   memory?: DynamicArgument<MastraMemory>;
   /**
-   * Format for skill information injection when workspace has skillsPaths.
+   * Format for skill information injection when workspace has skills.
    * @default 'xml'
    */
   skillsFormat?: SkillFormat;
