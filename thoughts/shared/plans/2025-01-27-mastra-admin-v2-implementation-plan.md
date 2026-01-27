@@ -4,7 +4,7 @@
 
 Implementation plan for MastraAdmin V2 - an enterprise self-hosted platform for managing multiple Mastra servers. This plan uses environment variable-based observability activation instead of build-time code injection, file-based observability with ClickHouse ingestion, and SSE for real-time build log streaming.
 
-## Current State Analysis
+### Current State Analysis
 
 ### Existing Codebase Assets
 
@@ -24,7 +24,7 @@ Implementation plan for MastraAdmin V2 - an enterprise self-hosted platform for 
 3. **Server pattern**: Framework-agnostic routes in `packages/server/` with Hono adapter
 4. **No admin packages exist**: Fresh implementation needed for all admin-specific packages
 
-## Desired End State
+### Desired End State
 
 After completing this plan:
 
@@ -42,7 +42,7 @@ After completing this plan:
 - API integration tests pass
 - End-to-end flow: Create team → Discover project → Deploy → View traces
 
-## What We're NOT Doing
+### What We're NOT Doing
 
 1. **RBAC** - Deferred to later phase; just team membership for now
 2. **GitHub source adapter** - Only implementing local source
@@ -54,7 +54,7 @@ After completing this plan:
 
 ---
 
-## Implementation Approach
+### Implementation Approach
 
 The implementation follows the PRD's phased approach with adapter-based architecture:
 
