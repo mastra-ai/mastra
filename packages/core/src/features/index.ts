@@ -14,4 +14,6 @@
  * ```
  */
 // Add feature flags here as new features are introduced
-export const coreFeatures = new Set<string>();
+export const coreFeatures = new Set<string>([
+  'observationalMemory', // Added in 1.x - storage methods and types for observational memory
+]);

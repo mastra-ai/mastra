@@ -35,9 +35,9 @@ import {
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
-import { ObservationalMemory } from './experiments/observational-memory';
 import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { coreFeatures } from '@mastra/core/features';
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
@@ -1509,6 +1509,15 @@ ${
     // Add ObservationalMemory processor if configured and not already present
     const omConfig = effectiveConfig.observationalMemory;
     if (omConfig?.enabled && !hasObservationalMemory) {
+      const coreSupportsOM = coreFeatures.has('observationalMemory');
+
+      if (!coreSupportsOM) {
+        throw new Error(
+          'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
+            'Please upgrade @mastra/core to a version that includes observational memory support.',
+        );
+      }
+
       const memoryStore = await this.storage.getStore('memory');
       if (!memoryStore) {
         throw new Error(
@@ -1522,6 +1531,10 @@ ${
             `Please use a storage adapter that supports observational memory (libsql, pg, mongodb) or disable observational memory.`,
         );
       }
+      // Dynamic import to avoid loading OM code when not needed and to prevent
+      // import errors when paired with an older @mastra/core version
+      // @TODO update import path, will be imported from core package
+      const { ObservationalMemory } = await import('./experiments/observational-memory');
 
       processors.push(
         new ObservationalMemory({
