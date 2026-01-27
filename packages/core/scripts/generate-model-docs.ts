@@ -868,30 +868,23 @@ Your users never experience the disruption - the response comes back with the sa
 
 ## Use local models with Mastra
 
-Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. Your application needs to provide an OpenAI compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
+Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
 
-In order to connect the OpenAI compatible API with Mastra you need to install \`@ai-sdk/openai-compatible\`:
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. It's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting. In the case of LMStudio this will be \`http://localhost:1234/v1\`.
 
-\`\`\`bash npm2yarn
-npm install @ai-sdk/openai-compatible
-\`\`\`
-
-Afterwards, you can create a local LMStudio provider and use it with Mastra:
+For the \`id\` you can use whichever value you like, e.g. \`custom/qwen/my-qwen3-model\`. If you use a provider name that already exists in the list, it'll show up in the Studio UI.
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-
-const lmStudio = createOpenAICompatible({
-  name: 'lmstudio',
-  baseURL: 'http://localhost:1234/v1',
-})
 
 const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: lmStudio('qwen/qwen3-30b-a3b-2507')
+  model: {
+    id: "custom/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
 })
 \`\`\`
 
