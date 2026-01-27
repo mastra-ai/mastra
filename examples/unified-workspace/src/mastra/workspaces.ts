@@ -59,7 +59,10 @@ export const globalWorkspace = new Workspace({
   // Pass env vars explicitly - spread process.env for full access, or specific vars for security
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    env: { ...process.env }, // Full env access for development
+    env: {
+      // PATH: process.env.PATH,
+      SOMETHING_ELSE: 'hello',
+    },
   }),
   // Tool configuration - full access for demo/development purposes
   // No approval required, no read-before-write enforcement

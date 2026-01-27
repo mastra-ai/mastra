@@ -100,14 +100,16 @@ export interface LocalSandboxOptions {
   workingDirectory?: string;
   /**
    * Environment variables to set for command execution.
-   * By default, no host environment variables are inherited.
-   * Pass specific variables you need (e.g., PATH, HOME) or pass process.env
-   * if you want all host variables.
+   * PATH is always included by default (needed for finding executables).
+   * Other host environment variables are not inherited unless explicitly passed.
    *
    * @example
    * ```typescript
-   * // Minimal - only what you need
-   * env: { PATH: process.env.PATH, NODE_ENV: 'production' }
+   * // Default - only PATH is available
+   * env: undefined
+   *
+   * // Add specific variables
+   * env: { NODE_ENV: 'production', HOME: process.env.HOME }
    *
    * // Full host environment (less secure)
    * env: process.env
@@ -225,10 +227,15 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   /**
    * Build the environment object for execution.
+   * Always includes PATH by default (needed for finding executables).
    * Merges the sandbox's configured env with any additional env from the command.
    */
   private buildEnv(additionalEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    return { ...this.env, ...additionalEnv };
+    return {
+      PATH: process.env.PATH, // Always include PATH for finding executables
+      ...this.env,
+      ...additionalEnv,
+    };
   }
 
   get status(): SandboxStatus {
