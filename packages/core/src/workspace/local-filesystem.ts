@@ -7,6 +7,16 @@
 
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
+import {
+  FileNotFoundError,
+  DirectoryNotFoundError,
+  FileExistsError,
+  IsDirectoryError,
+  NotDirectoryError,
+  DirectoryNotEmptyError,
+  PermissionError,
+  WorkspaceReadOnlyError,
+} from './errors';
 import type {
   WorkspaceFilesystem,
   FileContent,
@@ -17,17 +27,8 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  FilesystemSafetyOptions,
 } from './filesystem';
-import {
-  FileNotFoundError,
-  DirectoryNotFoundError,
-  FileExistsError,
-  IsDirectoryError,
-  NotDirectoryError,
-  DirectoryNotEmptyError,
-  PermissionError,
-} from './filesystem';
+import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
 
 /**
  * Local filesystem provider configuration.
@@ -40,10 +41,11 @@ export interface LocalFilesystemOptions {
   /** Restrict operations to basePath (default: true) */
   sandbox?: boolean;
   /**
-   * Safety options for this filesystem.
-   * These control read-only mode, read-before-write, and approval requirements.
+   * When true, all write operations to this filesystem are blocked.
+   * Read operations are still allowed.
+   * @default false
    */
-  safety?: FilesystemSafetyOptions;
+  readOnly?: boolean;
 }
 
 /**
@@ -68,7 +70,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
-  readonly safety?: FilesystemSafetyOptions;
+  readonly readOnly?: boolean;
 
   private readonly _basePath: string;
   private readonly _sandbox: boolean;
@@ -85,7 +87,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._sandbox = options.sandbox ?? true;
-    this.safety = options.safety;
+    this.readOnly = options.readOnly;
   }
 
   private generateId(): string {
@@ -96,26 +98,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     if (Buffer.isBuffer(content)) return content;
     if (content instanceof Uint8Array) return Buffer.from(content);
     return Buffer.from(content, 'utf-8');
-  }
-
-  private getMimeType(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      txt: 'text/plain',
-      html: 'text/html',
-      css: 'text/css',
-      js: 'application/javascript',
-      ts: 'application/typescript',
-      json: 'application/json',
-      xml: 'application/xml',
-      md: 'text/markdown',
-      py: 'text/x-python',
-      rb: 'text/x-ruby',
-      go: 'text/x-go',
-      rs: 'text/x-rust',
-      sh: 'text/x-sh',
-    };
-    return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
   }
 
   private resolvePath(inputPath: string): string {
@@ -137,6 +119,12 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }
 
+  private assertWritable(operation: string): void {
+    if (this.readOnly) {
+      throw new WorkspaceReadOnlyError(operation);
+    }
+  }
+
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     const absolutePath = this.resolvePath(inputPath);
 
@@ -152,7 +140,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       return await fs.readFile(absolutePath);
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(inputPath);
       }
       throw error;
@@ -160,6 +148,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
 
     if (options?.overwrite === false) {
@@ -180,6 +169,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
+    this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
     const dir = nodePath.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
@@ -187,6 +177,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
 
     try {
@@ -197,7 +188,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       await fs.unlink(absolutePath);
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         if (!options?.force) {
           throw new FileNotFoundError(inputPath);
         }
@@ -208,6 +199,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
 
@@ -232,7 +224,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError || error instanceof FileExistsError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -264,6 +256,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
 
@@ -287,7 +280,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
     } catch (error: unknown) {
       if (error instanceof FileExistsError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -295,12 +288,13 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+    this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
 
     try {
       await fs.mkdir(absolutePath, { recursive: options?.recursive ?? true });
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
+      if (isEexistError(error)) {
         const stats = await fs.stat(absolutePath);
         if (!stats.isDirectory()) {
           throw new FileExistsError(inputPath);
@@ -312,6 +306,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+    this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
 
     try {
@@ -333,7 +328,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       if (error instanceof NotDirectoryError || error instanceof DirectoryNotEmptyError) {
         throw error;
       }
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         if (!options?.force) {
           throw new DirectoryNotFoundError(inputPath);
         }
@@ -424,7 +419,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       return result;
     } catch (error: unknown) {
       if (error instanceof NotDirectoryError) throw error;
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      if (isEnoentError(error)) {
         throw new DirectoryNotFoundError(inputPath);
       }
       throw error;
@@ -433,52 +428,16 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async exists(inputPath: string): Promise<boolean> {
     const absolutePath = this.resolvePath(inputPath);
-    try {
-      await fs.access(absolutePath);
-      return true;
-    } catch {
-      return false;
-    }
+    return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
     const absolutePath = this.resolvePath(inputPath);
-
-    try {
-      const stats = await fs.stat(absolutePath);
-      return {
-        name: nodePath.basename(absolutePath),
-        path: this.toRelativePath(absolutePath),
-        type: stats.isDirectory() ? 'directory' : 'file',
-        size: stats.size,
-        createdAt: stats.birthtime,
-        modifiedAt: stats.mtime,
-        mimeType: stats.isFile() ? this.getMimeType(absolutePath) : undefined,
-      };
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-        throw new FileNotFoundError(inputPath);
-      }
-      throw error;
-    }
-  }
-
-  async isFile(inputPath: string): Promise<boolean> {
-    try {
-      const stats = await this.stat(inputPath);
-      return stats.type === 'file';
-    } catch {
-      return false;
-    }
-  }
-
-  async isDirectory(inputPath: string): Promise<boolean> {
-    try {
-      const stats = await this.stat(inputPath);
-      return stats.type === 'directory';
-    } catch {
-      return false;
-    }
+    const result = await fsStat(absolutePath, inputPath);
+    return {
+      ...result,
+      path: this.toRelativePath(absolutePath),
+    };
   }
 
   async init(): Promise<void> {

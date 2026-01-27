@@ -21,6 +21,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { fsExists, fsStat, isTextFile } from '../fs-utils';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 
 /**
@@ -59,29 +60,18 @@ export class LocalSkillSource implements SkillSource {
   }
 
   async exists(skillPath: string): Promise<boolean> {
-    try {
-      await fs.access(this.#resolvePath(skillPath));
-      return true;
-    } catch {
-      return false;
-    }
+    return fsExists(this.#resolvePath(skillPath));
   }
 
   async stat(skillPath: string): Promise<SkillSourceStat> {
-    const stats = await fs.stat(this.#resolvePath(skillPath));
-    return {
-      modifiedAt: stats.mtime,
-    };
+    return fsStat(this.#resolvePath(skillPath), skillPath);
   }
 
   async readFile(skillPath: string): Promise<string | Buffer> {
     const resolved = this.#resolvePath(skillPath);
-    // Read as buffer first, then convert to string for text files
     const content = await fs.readFile(resolved);
-    // Try to detect if it's a text file by checking for common text extensions
-    const ext = path.extname(skillPath).toLowerCase();
-    const textExtensions = ['.md', '.txt', '.json', '.yaml', '.yml', '.js', '.ts', '.py', '.sh'];
-    if (textExtensions.includes(ext)) {
+    // Convert to string for text files
+    if (isTextFile(skillPath)) {
       return content.toString('utf-8');
     }
     return content;

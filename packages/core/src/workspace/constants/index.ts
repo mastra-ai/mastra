@@ -30,8 +30,8 @@ export const WORKSPACE_TOOLS = {
     WRITE_FILE: `${TOOLS_NAMESPACE}_write_file` as const,
     EDIT_FILE: `${TOOLS_NAMESPACE}_edit_file` as const,
     LIST_FILES: `${TOOLS_NAMESPACE}_list_files` as const,
-    DELETE_FILE: `${TOOLS_NAMESPACE}_delete_file` as const,
-    FILE_EXISTS: `${TOOLS_NAMESPACE}_file_exists` as const,
+    DELETE: `${TOOLS_NAMESPACE}_delete` as const,
+    FILE_STAT: `${TOOLS_NAMESPACE}_file_stat` as const,
     MKDIR: `${TOOLS_NAMESPACE}_mkdir` as const,
   },
   SANDBOX: {
@@ -97,7 +97,7 @@ export interface WorkspaceToolConfig {
  *       requireApproval: true,
  *       requireReadBeforeWrite: true,
  *     },
- *     mastra_workspace_delete_file: {
+ *     mastra_workspace_delete: {
  *       enabled: false,
  *     },
  *     mastra_workspace_execute_command: {

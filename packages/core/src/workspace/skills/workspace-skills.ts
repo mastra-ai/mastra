@@ -650,10 +650,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     for (const skillsPath of this.#resolvedPaths) {
       try {
-        if (!(await this.#source.exists(skillsPath))) {
-          continue;
-        }
-
         const stat = await this.#source.stat(skillsPath);
         const mtime = stat.modifiedAt.getTime();
 
@@ -673,11 +669,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
               return true;
             }
           } catch {
-            // Couldn't stat, assume not stale
+            // Couldn't stat entry, skip it
           }
         }
       } catch {
-        // Couldn't stat, assume not stale
+        // Couldn't stat skillsPath (doesn't exist or error), skip to next path
+        continue;
       }
     }
 
