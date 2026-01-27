@@ -1272,9 +1272,12 @@ export class Agent extends BaseResource {
         } catch {
           // Already closed
         }
+        // Re-throw so caller can handle it (e.g., reset UI state)
+        throw error;
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
+      throw error;
     }
 
     return response;
@@ -1783,9 +1786,11 @@ export class Agent extends BaseResource {
         lastMessage: undefined,
       }).catch(error => {
         console.error('Error processing stream response:', error);
+        throw error;
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
+      throw error;
     }
     return response;
   }

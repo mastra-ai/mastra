@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain, XCircle, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug } from 'lucide-react';
 import { ObservationRenderer } from './observation-renderer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
@@ -67,12 +67,14 @@ export const ObservationMarkerBadge = ({
   const state = omData._state || (
     omData.failedAt ? 'failed' : 
     omData.completedAt ? 'complete' : 
+    (omData as any).disconnectedAt ? 'disconnected' :
     'loading'
   );
   
   const isStart = state === 'loading';
   const isEnd = state === 'complete';
   const isFailed = state === 'failed';
+  const isDisconnected = state === 'disconnected';
   const isReflection = omData.operationType === 'reflection';
   
   // Colors - same scheme for both observation and reflection
@@ -215,6 +217,17 @@ export const ObservationMarkerBadge = ({
             )}
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (isDisconnected) {
+    const disconnectedLabel = isReflection ? 'Reflection interrupted' : 'Observation interrupted';
+    const tokensToObserve = omData.tokensToObserve;
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-medium my-1">
+        <Unplug className="w-3 h-3" />
+        <span>{disconnectedLabel}{tokensToObserve ? ` (~${formatTokens(tokensToObserve)} tokens)` : ''}</span>
       </div>
     );
   }

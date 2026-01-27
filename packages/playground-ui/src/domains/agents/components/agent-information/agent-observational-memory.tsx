@@ -166,8 +166,16 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   });
 
   // Check if OM is actively observing/reflecting (from server status OR streaming)
-  const isObservingFromServer = statusData?.observationalMemory?.isObserving || false;
-  const isReflectingFromServer = statusData?.observationalMemory?.isReflecting || false;
+  // Server status can be stale if process crashed mid-observation, so we add a staleness check
+  const STALE_OBSERVATION_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+  const serverLastObservedAt = statusData?.observationalMemory?.lastObservedAt;
+  const isServerStatusStale = serverLastObservedAt 
+    ? Date.now() - new Date(serverLastObservedAt).getTime() > STALE_OBSERVATION_THRESHOLD_MS
+    : false;
+  
+  // Only trust server's isObserving/isReflecting if the status isn't stale
+  const isObservingFromServer = !isServerStatusStale && (statusData?.observationalMemory?.isObserving || false);
+  const isReflectingFromServer = !isServerStatusStale && (statusData?.observationalMemory?.isReflecting || false);
   const isObserving = isObservingFromStream || isObservingFromServer;
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
