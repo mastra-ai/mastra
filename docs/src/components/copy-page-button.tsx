@@ -81,6 +81,7 @@ export const CopyPageButton = () => {
               'inline-flex h-8 items-center justify-center rounded-xl rounded-tl-none rounded-bl-none p-1.5 px-2.5',
               'border border-(--border)/50 hover:bg-(--mastra-surface-2) dark:border-(--border)/50',
             )}
+            aria-label="Show more options"
           >
             <ChevronDownIcon
               className={cn('size-3 transition-transform duration-200', open && 'rotate-180 transform')}
