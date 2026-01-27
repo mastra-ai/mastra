@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Run Analytics** - Cross-run comparison and score regression detection ✓
 - [x] **Phase 6: Playground Integration** - Datasets UI with run triggering and results ✓
 - [x] **Phase 7: CSV Import** - Bulk item creation from CSV files ✓
+- [ ] **Phase 8: Item Selection & Actions** - Bulk operations via item selection
 
 ## Phase Details
 
@@ -150,10 +151,29 @@ Plans:
 - [x] 07-04-PLAN.md — Integration into dataset detail page items list
 - [x] 07-05-PLAN.md — Gap closure: fix useColumnMapping headers sync
 
+### Phase 8: Item Selection & Actions
+**Goal**: Bulk operations on dataset items via selection UI
+**Depends on**: Phase 6
+**Requirements**: SEL-01 (Item selection), ACT-01 (Export CSV), ACT-02 (Create dataset), ACT-03 (Delete items)
+**Success Criteria** (what must be TRUE):
+  1. User can select items via checkboxes (single click, shift-click range, select all)
+  2. ⋮ menu appears when dataset has ≥1 item with action options
+  3. Export to CSV downloads selected items immediately
+  4. Create Dataset opens modal, creates new dataset from selected items
+  5. Delete Items shows confirmation, removes selected items
+  6. Selection mode exits after action completes with success banner
+**Plans**: 4 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Selection state hook + CSV export utility
+- [ ] 08-02-PLAN.md — Three-dot menu component + bulk delete mutation
+- [ ] 08-03-PLAN.md — Create dataset from items dialog
+- [ ] 08-04-PLAN.md — Integration into ItemsList and DatasetDetail
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -164,3 +184,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Run Analytics | 1/1 | ✓ Complete | 2026-01-24 |
 | 6. Playground Integration | 12/12 | ✓ Complete | 2026-01-26 |
 | 7. CSV Import | 5/5 | ✓ Complete | 2026-01-27 |
+| 8. Item Selection & Actions | 0/4 | Not started | - |
