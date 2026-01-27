@@ -1,26 +1,5 @@
 import type { RequestOptions, ClientOptions } from '../types';
-
-/**
- * Normalizes a route path to ensure consistent formatting.
- * Inlined to avoid backwards compatibility issues with older @mastra/core versions.
- */
-function normalizeRoutePath(path: string): string {
-  let normalized = path.trim();
-  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
-    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
-  }
-  normalized = normalized.replace(/\/+/g, '/');
-  if (normalized === '/' || normalized === '') {
-    return '';
-  }
-  if (normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  return normalized;
-}
+import { normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;

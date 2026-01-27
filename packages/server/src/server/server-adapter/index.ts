@@ -3,30 +3,10 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 
-/**
- * Normalizes a route path to ensure consistent formatting.
- * Inlined to avoid backwards compatibility issues with older @mastra/core versions.
- */
-function normalizeRoutePath(path: string): string {
-  let normalized = path.trim();
-  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
-    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
-  }
-  normalized = normalized.replace(/\/+/g, '/');
-  if (normalized === '/' || normalized === '') {
-    return '';
-  }
-  if (normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  return normalized;
-}
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
+import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
@@ -34,7 +14,7 @@ import type { ServerRoute } from './routes';
 export * from './routes';
 export { redactStreamChunk } from './redact';
 
-export { WorkflowRegistry } from '../utils';
+export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
 export interface OpenAPIConfig {
   title?: string;
