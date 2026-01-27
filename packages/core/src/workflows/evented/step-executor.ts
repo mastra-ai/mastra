@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
@@ -7,6 +8,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, Step, SuspendOptions } from '../step';
@@ -92,6 +94,17 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
+      const callId = randomUUID();
+      const outputWriter = async (chunk: any) => {
+        if (this.mastra?.pubsub) {
+          await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: chunk,
+          });
+        }
+      };
+
       const stepOutput = await step.execute(
         createDeprecationProxy(
           {
@@ -146,8 +159,15 @@ export class StepExecutor extends MastraBase {
             bail: (result: any): InnerOutput => {
               bailed = { payload: result };
             },
-            // TODO
-            writer: undefined as any,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId,
+                name: step.id,
+                runId,
+              },
+              outputWriter,
+            ),
             abort: () => {
               abortController?.abort();
             },
@@ -320,6 +340,17 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
+    const callId = randomUUID();
+    const outputWriter = async (chunk: any) => {
+      if (this.mastra?.pubsub) {
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: chunk,
+        });
+      }
+    };
+
     return condition(
       createDeprecationProxy(
         {
@@ -336,8 +367,15 @@ export class StepExecutor extends MastraBase {
           bail: (_result: any) => {
             throw new Error('Not implemented');
           },
-          // TODO
-          writer: undefined as any,
+          writer: new ToolStream(
+            {
+              prefix: 'workflow-step',
+              callId,
+              name: 'condition',
+              runId,
+            },
+            outputWriter,
+          ),
           abort: () => {
             abortController?.abort();
           },
@@ -386,6 +424,17 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
+      const callId = randomUUID();
+      const outputWriter = async (chunk: any) => {
+        if (this.mastra?.pubsub) {
+          await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: chunk,
+          });
+        }
+      };
+
       return await step.fn(
         createDeprecationProxy(
           {
@@ -411,8 +460,15 @@ export class StepExecutor extends MastraBase {
             abort: () => {
               abortController?.abort();
             },
-            // TODO
-            writer: undefined as any,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId,
+                name: step.id,
+                runId,
+              },
+              outputWriter,
+            ),
             [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
@@ -461,6 +517,17 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
+      const callId = randomUUID();
+      const outputWriter = async (chunk: any) => {
+        if (this.mastra?.pubsub) {
+          await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: chunk,
+          });
+        }
+      };
+
       const result = await step.fn(
         createDeprecationProxy(
           {
@@ -486,8 +553,15 @@ export class StepExecutor extends MastraBase {
             abort: () => {
               abortController?.abort();
             },
-            // TODO
-            writer: undefined as any,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId,
+                name: step.id,
+                runId,
+              },
+              outputWriter,
+            ),
             [PUBSUB_SYMBOL]: this.mastra?.pubsub ?? new EventEmitterPubSub(ee),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
