@@ -1,7 +1,11 @@
 import { BrowserManager } from 'agent-browser/dist/browser.js';
 import type { ToolAction } from '@mastra/core/tools';
 
+import { createClickTool } from './tools/click.js';
 import { createNavigateTool } from './tools/navigate.js';
+import { createScrollTool } from './tools/scroll.js';
+import { createSnapshotTool } from './tools/snapshot.js';
+import { createTypeTool } from './tools/type.js';
 import type { BrowserToolsetConfig } from './types.js';
 
 /**
@@ -55,6 +59,10 @@ export class BrowserToolset {
     // Initialize tools with getBrowser closure for lazy initialization
     this.tools = {
       browser_navigate: createNavigateTool(() => this.getBrowser(), this.config.timeout),
+      browser_snapshot: createSnapshotTool(() => this.getBrowser()),
+      browser_click: createClickTool(() => this.getBrowser(), this.config.timeout),
+      browser_type: createTypeTool(() => this.getBrowser(), this.config.timeout),
+      browser_scroll: createScrollTool(() => this.getBrowser()),
     };
   }
 
