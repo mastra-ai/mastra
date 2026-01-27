@@ -1,16 +1,16 @@
-import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
-import BackToTopButton from "@theme/BackToTopButton";
-import type { Props } from "@theme/DocRoot/Layout";
-import DocRootLayoutSidebar from "@theme/DocRoot/Layout/Sidebar";
-import { type ReactNode, useState } from "react";
-import DocRootLayoutMain from "./Main";
+import { useDocsSidebar } from '@docusaurus/plugin-content-docs/client'
+import BackToTopButton from '@theme/BackToTopButton'
+import type { Props } from '@theme/DocRoot/Layout'
+import DocRootLayoutSidebar from '@theme/DocRoot/Layout/Sidebar'
+import { type ReactNode, useState } from 'react'
+import DocRootLayoutMain from './Main'
 
-import ChatbotSidebar from "./ChatbotSidebar";
-import styles from "./styles.module.css";
+import ChatbotSidebar from './ChatbotSidebar'
+import styles from './styles.module.css'
 
 export default function DocRootLayout({ children }: Props): ReactNode {
-  const sidebar = useDocsSidebar();
-  const [hiddenSidebarContainer, setHiddenSidebarContainer] = useState(false);
+  const sidebar = useDocsSidebar()
+  const [hiddenSidebarContainer, setHiddenSidebarContainer] = useState(false)
 
   return (
     <div className={styles.docsWrapper}>
@@ -29,5 +29,5 @@ export default function DocRootLayout({ children }: Props): ReactNode {
         <ChatbotSidebar />
       </div>
     </div>
-  );
+  )
 }

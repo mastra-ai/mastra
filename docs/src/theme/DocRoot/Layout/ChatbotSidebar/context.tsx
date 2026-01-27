@@ -4,41 +4,41 @@ import {
   useContext,
   useState,
   type ReactNode,
-} from "react";
+} from 'react'
 
 export interface ChatbotSidebarContextValue {
   /**
    * Whether the chatbot sidebar is hidden
    */
-  isHidden: boolean;
+  isHidden: boolean
   /**
    * Set the hidden state of the chatbot sidebar
    */
-  setIsHidden: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setIsHidden: (value: boolean | ((prev: boolean) => boolean)) => void
   /**
    * Toggle the chatbot sidebar open/closed
    */
-  toggle: () => void;
+  toggle: () => void
   /**
    * Open the chatbot sidebar
    */
-  open: () => void;
+  open: () => void
   /**
    * Close the chatbot sidebar
    */
-  close: () => void;
+  close: () => void
 }
 
 const ChatbotSidebarContext = createContext<
   ChatbotSidebarContextValue | undefined
->(undefined);
+>(undefined)
 
 interface ChatbotSidebarProviderProps {
-  children: ReactNode;
+  children: ReactNode
   /**
    * Initial hidden state (defaults to true)
    */
-  defaultHidden?: boolean;
+  defaultHidden?: boolean
 }
 
 /**
@@ -50,19 +50,19 @@ export function ChatbotSidebarProvider({
   children,
   defaultHidden = true,
 }: ChatbotSidebarProviderProps) {
-  const [isHidden, setIsHidden] = useState(defaultHidden);
+  const [isHidden, setIsHidden] = useState(defaultHidden)
 
   const toggle = useCallback(() => {
-    setIsHidden((prev) => !prev);
-  }, []);
+    setIsHidden(prev => !prev)
+  }, [])
 
   const open = useCallback(() => {
-    setIsHidden(false);
-  }, []);
+    setIsHidden(false)
+  }, [])
 
   const close = useCallback(() => {
-    setIsHidden(true);
-  }, []);
+    setIsHidden(true)
+  }, [])
 
   const value: ChatbotSidebarContextValue = {
     isHidden,
@@ -70,13 +70,13 @@ export function ChatbotSidebarProvider({
     toggle,
     open,
     close,
-  };
+  }
 
   return (
     <ChatbotSidebarContext.Provider value={value}>
       {children}
     </ChatbotSidebarContext.Provider>
-  );
+  )
 }
 
 /**
@@ -97,11 +97,11 @@ export function ChatbotSidebarProvider({
  * ```
  */
 export function useChatbotSidebar(): ChatbotSidebarContextValue {
-  const context = useContext(ChatbotSidebarContext);
+  const context = useContext(ChatbotSidebarContext)
   if (context === undefined) {
     throw new Error(
-      "useChatbotSidebar must be used within a ChatbotSidebarProvider",
-    );
+      'useChatbotSidebar must be used within a ChatbotSidebarProvider',
+    )
   }
-  return context;
+  return context
 }

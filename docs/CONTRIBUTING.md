@@ -54,11 +54,11 @@ All MDX files should include frontmatter with `title` and `description`. For doc
 
 ```yaml
 ---
-title: "Memory Overview"
+title: 'Memory Overview'
 description: "Learn about Mastra's memory system"
 packages:
-  - "@mastra/memory"
-  - "@mastra/core"
+  - '@mastra/memory'
+  - '@mastra/core'
 ---
 ```
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react'
 
 export const CopyIcon = (
   <svg
@@ -9,7 +9,7 @@ export const CopyIcon = (
     stroke="currentColor"
     width="16"
     height="16"
-    style={{ minWidth: "16px", minHeight: "16px" }}
+    style={{ minWidth: '16px', minHeight: '16px' }}
   >
     <path
       strokeLinecap="round"
@@ -17,7 +17,7 @@ export const CopyIcon = (
       d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"
     />
   </svg>
-);
+)
 
 export const DownloadIcon = (
   <svg
@@ -28,7 +28,7 @@ export const DownloadIcon = (
     stroke="currentColor"
     width="16"
     height="16"
-    style={{ minWidth: "16px", minHeight: "16px" }}
+    style={{ minWidth: '16px', minHeight: '16px' }}
   >
     <path
       strokeLinecap="round"
@@ -36,9 +36,9 @@ export const DownloadIcon = (
       d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
     />
   </svg>
-);
+)
 
-import { SVGProps } from "react";
+import { SVGProps } from 'react'
 
 export const SpinnerIcon = (props: SVGProps<SVGSVGElement>) => {
   return (
@@ -57,8 +57,8 @@ export const SpinnerIcon = (props: SVGProps<SVGSVGElement>) => {
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       />
     </svg>
-  );
-};
+  )
+}
 
 export const CheckIcon = (
   <svg
@@ -69,7 +69,7 @@ export const CheckIcon = (
     stroke="currentColor"
     width="16"
     height="16"
-    style={{ minWidth: "16px", minHeight: "16px" }}
+    style={{ minWidth: '16px', minHeight: '16px' }}
   >
     <path
       strokeLinecap="round"
@@ -77,7 +77,7 @@ export const CheckIcon = (
       d="M4.5 12.75l6 6 9-13.5"
     />
   </svg>
-);
+)
 
 export const SearchIcon = ({ className }: { className?: string }) => (
   <svg
@@ -91,7 +91,7 @@ export const SearchIcon = ({ className }: { className?: string }) => (
       fill="currentColor"
     />
   </svg>
-);
+)
 
 export const JarvisIcon = ({ className }: { className?: string }) => (
   <svg
@@ -123,7 +123,7 @@ export const JarvisIcon = ({ className }: { className?: string }) => (
       fill="currentColor"
     />
   </svg>
-);
+)
 
 export const PaperIcon = ({ className }: { className?: string }) => (
   <svg
@@ -139,7 +139,7 @@ export const PaperIcon = ({ className }: { className?: string }) => (
       fill="#939393"
     />
   </svg>
-);
+)
 
 export const ArrowLeftIcon = ({ className }: { className?: string }) => (
   <svg
@@ -157,7 +157,7 @@ export const ArrowLeftIcon = ({ className }: { className?: string }) => (
       strokeLinecap="round"
     />
   </svg>
-);
+)
 
 export const BookIcon = ({ className }: { className?: string }) => {
   return (
@@ -176,8 +176,8 @@ export const BookIcon = ({ className }: { className?: string }) => {
         fill="currentColor"
       />
     </svg>
-  );
-};
+  )
+}
 
 export const BurgerIcon = ({ className }: { className?: string }) => {
   return (
@@ -196,8 +196,8 @@ export const BurgerIcon = ({ className }: { className?: string }) => {
         strokeLinecap="round"
       />
     </svg>
-  );
-};
+  )
+}
 
 export const Zap = ({ className }: { className?: string }) => {
   return (
@@ -215,5 +215,5 @@ export const Zap = ({ className }: { className?: string }) => {
     >
       <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
     </svg>
-  );
-};
+  )
+}

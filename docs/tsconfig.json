@@ -4,9 +4,5 @@
     "baseUrl": ".",
     "types": ["@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
   },
-  "include": [
-    "src/**/*",
-    "scripts/build-llms-txt.ts",
-    "config/docs"
-  ]
+  "include": ["src/**/*", "scripts/build-llms-txt.ts", "config/docs"]
 }

@@ -1,9 +1,9 @@
-import React, { type ComponentProps, type ReactNode } from "react";
-import { useThemeConfig } from "@docusaurus/theme-common";
-import { useNavbarSecondaryMenu } from "@docusaurus/theme-common/internal";
-import Translate from "@docusaurus/Translate";
+import React, { type ComponentProps, type ReactNode } from 'react'
+import { useThemeConfig } from '@docusaurus/theme-common'
+import { useNavbarSecondaryMenu } from '@docusaurus/theme-common/internal'
+import Translate from '@docusaurus/Translate'
 
-function SecondaryMenuBackButton(props: ComponentProps<"button">) {
+function SecondaryMenuBackButton(props: ComponentProps<'button'>) {
   return (
     <button {...props} type="button" className="clean-btn navbar-sidebar__back">
       <Translate
@@ -13,14 +13,14 @@ function SecondaryMenuBackButton(props: ComponentProps<"button">) {
         ← Back to main menu
       </Translate>
     </button>
-  );
+  )
 }
 
 // The secondary menu slides from the right and shows contextual information
 // such as the docs sidebar
 export default function NavbarMobileSidebarSecondaryMenu(): ReactNode {
-  const isPrimaryMenuEmpty = useThemeConfig().navbar.items.length === 0;
-  const secondaryMenu = useNavbarSecondaryMenu();
+  const isPrimaryMenuEmpty = useThemeConfig().navbar.items.length === 0
+  const secondaryMenu = useNavbarSecondaryMenu()
   return (
     <>
       {/* edge-case: prevent returning to the primaryMenu when it's empty */}
@@ -29,5 +29,5 @@ export default function NavbarMobileSidebarSecondaryMenu(): ReactNode {
       )}
       {secondaryMenu.content}
     </>
-  );
+  )
 }

@@ -1,19 +1,19 @@
-import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
-import { KapaProvider } from "@kapaai/react-sdk";
-import { CookieConsent } from "@site/src/components/cookie/cookie-consent";
-import { Toaster } from "@site/src/components/ui/sonner";
-import { PostHogProvider } from "posthog-js/react";
-import React from "react";
-import { ChatbotSidebarProvider } from "./DocRoot/Layout/ChatbotSidebar/context";
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import { KapaProvider } from '@kapaai/react-sdk'
+import { CookieConsent } from '@site/src/components/cookie/cookie-consent'
+import { Toaster } from '@site/src/components/ui/sonner'
+import { PostHogProvider } from 'posthog-js/react'
+import React from 'react'
+import { ChatbotSidebarProvider } from './DocRoot/Layout/ChatbotSidebar/context'
 
 export default function Root({ children }: { children: React.ReactNode }) {
-  const { siteConfig } = useDocusaurusContext();
-  const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
-  const kapaGroupId = siteConfig.customFields.kapaGroupId as string | undefined;
-  const posthogApiKey = siteConfig.customFields.posthogApiKey as string;
+  const { siteConfig } = useDocusaurusContext()
+  const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string
+  const kapaGroupId = siteConfig.customFields.kapaGroupId as string | undefined
+  const posthogApiKey = siteConfig.customFields.posthogApiKey as string
   const posthogHost =
     (siteConfig.customFields.posthogHost as string) ||
-    "https://us.i.posthog.com";
+    'https://us.i.posthog.com'
 
   return (
     <PostHogProvider
@@ -23,7 +23,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
       }}
     >
       <KapaProvider
-        integrationId={kapaIntegrationId || ""}
+        integrationId={kapaIntegrationId || ''}
         {...(kapaGroupId && { sourceGroupIDsInclude: [kapaGroupId] })}
       >
         <Toaster />
@@ -33,5 +33,5 @@ export default function Root({ children }: { children: React.ReactNode }) {
         </ChatbotSidebarProvider>
       </KapaProvider>
     </PostHogProvider>
-  );
+  )
 }

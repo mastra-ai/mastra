@@ -1,35 +1,35 @@
-import React from "react";
+import React from 'react'
 
 interface Parameter {
-  name: string;
-  type: string;
-  isOptional?: boolean;
-  description: string;
+  name: string
+  type: string
+  isOptional?: boolean
+  description: string
 }
 
 interface Property {
-  type: string;
-  parameters: Parameter[];
+  type: string
+  parameters: Parameter[]
 }
 
 interface ContentItem {
-  name: string;
-  type: string;
-  isOptional?: boolean;
-  description: string;
-  properties?: Property[];
-  defaultValue?: string;
+  name: string
+  type: string
+  isOptional?: boolean
+  description: string
+  properties?: Property[]
+  defaultValue?: string
 }
 
 interface PropertiesTableProps {
-  content?: ContentItem[];
+  content?: ContentItem[]
 }
 
 const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
   const renderType = ({
     properties = [],
   }: {
-    properties: Property[] | undefined;
+    properties: Property[] | undefined
   }) => {
     if (properties && properties.length > 0) {
       return (
@@ -37,24 +37,24 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
           {properties.map((prop, idx) => (
             <div
               key={idx}
-              className="m-2 rounded-lg flex flex-col relative my-4 border border-(--ifm-color-emphasis-300)"
+              className="relative m-2 my-4 flex flex-col rounded-lg border border-(--ifm-color-emphasis-300)"
             >
               <div className="flex flex-col">
-                <div className="cursor-pointer font-(family-name:--ifm-font-family-monospace) text-xs absolute -top-3 right-2 bg-(--ifm-color-emphasis-200) px-2 py-1 rounded-md text-(--ifm-color-emphasis-700) z-20">
+                <div className="absolute -top-3 right-2 z-20 cursor-pointer rounded-md bg-(--ifm-color-emphasis-200) px-2 py-1 font-(family-name:--ifm-font-family-monospace) text-xs text-(--ifm-color-emphasis-700)">
                   {prop.type}
                 </div>
                 {prop.parameters &&
                   prop.parameters.map((param, paramIdx) => (
                     <div
                       key={paramIdx}
-                      className="flex flex-col border-b p-3 gap-1 last:border-none border-(--ifm-color-emphasis-300)"
+                      className="flex flex-col gap-1 border-b border-(--ifm-color-emphasis-300) p-3 last:border-none"
                     >
-                      <div className="relative flex flex-row items-start gap-2 group">
-                        <h3 className="font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium! cursor-pointer m-0">
+                      <div className="group relative flex flex-row items-start gap-2">
+                        <h3 className="m-0 cursor-pointer font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!">
                           {param.name}
-                          <span>{param.isOptional ? "?:" : ":"}</span>
+                          <span>{param.isOptional ? '?:' : ':'}</span>
                         </h3>
-                        <div className="font-(family-name:--ifm-font-family-monospace) text-(--ifm-color-emphasis-700) text-sm w-full">
+                        <div className="w-full font-(family-name:--ifm-font-family-monospace) text-sm text-(--ifm-color-emphasis-700)">
                           {param.type}
                         </div>
                       </div>
@@ -67,9 +67,9 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
             </div>
           ))}
         </div>
-      );
+      )
     }
-  };
+  }
 
   return (
     <div className="flex flex-col">
@@ -78,14 +78,14 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
           <div
             key={index}
             id={item.name}
-            className="flex flex-col gap-1 py-3 border-b border-(--ifm-color-emphasis-300)"
+            className="flex flex-col gap-1 border-b border-(--ifm-color-emphasis-300) py-3"
           >
-            <div className="flex flex-row gap-2 group items-start">
-              <h3 className="font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium! cursor-pointer m-0 border-b-0! pb-0!">
+            <div className="group flex flex-row items-start gap-2">
+              <h3 className="m-0 cursor-pointer border-b-0! pb-0! font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!">
                 {item.name}
-                <span>{item.isOptional ? "?:" : ":"}</span>
+                <span>{item.isOptional ? '?:' : ':'}</span>
               </h3>
-              <div className="text-sm leading-5 font-(family-name:--ifm-font-family-monospace) text-(--ifm-color-emphasis-700)">
+              <div className="font-(family-name:--ifm-font-family-monospace) text-sm leading-5 text-(--ifm-color-emphasis-700)">
                 {item.type}
               </div>
               {item.defaultValue && (
@@ -99,10 +99,10 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
             </div>
             {renderType({ properties: item.properties })}
           </div>
-        );
+        )
       })}
     </div>
-  );
-};
+  )
+}
 
-export default PropertiesTable;
+export default PropertiesTable

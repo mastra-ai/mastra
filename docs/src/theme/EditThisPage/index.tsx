@@ -1,8 +1,8 @@
-import Link from "@docusaurus/Link";
-import Translate from "@docusaurus/Translate";
-import { ExternalLinkIcon } from "@site/src/components/copy-page-icons";
-import type { Props } from "@theme/EditThisPage";
-import { type ReactNode } from "react";
+import Link from '@docusaurus/Link'
+import Translate from '@docusaurus/Translate'
+import { ExternalLinkIcon } from '@site/src/components/copy-page-icons'
+import type { Props } from '@theme/EditThisPage'
+import { type ReactNode } from 'react'
 
 export default function EditThisPage({ editUrl }: Props): ReactNode {
   return (
@@ -12,8 +12,8 @@ export default function EditThisPage({ editUrl }: Props): ReactNode {
         description="The link label to edit the current page"
       >
         Edit this page
-      </Translate>{" "}
+      </Translate>{' '}
       <ExternalLinkIcon />
     </Link>
-  );
+  )
 }

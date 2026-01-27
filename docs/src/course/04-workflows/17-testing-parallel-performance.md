@@ -12,7 +12,7 @@ import {
   contentWorkflow,
   aiContentWorkflow,
   parallelAnalysisWorkflow,
-} from "./workflows/content-workflow";
+} from './workflows/content-workflow'
 
 export const mastra = new Mastra({
   workflows: {
@@ -21,7 +21,7 @@ export const mastra = new Mastra({
     parallelAnalysisWorkflow, // Add the parallel workflow
   },
   // ... rest of configuration
-});
+})
 ```
 
 ## Testing the Parallel Workflow

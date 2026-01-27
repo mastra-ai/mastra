@@ -1,33 +1,33 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef } from 'react'
 
 interface VideoPlayerProps {
-  src: string;
+  src: string
 }
 
 export const VideoPlayer = ({ src }: VideoPlayerProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [showPlayButton, setShowPlayButton] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [showPlayButton, setShowPlayButton] = useState(true)
 
   const handlePlay = () => {
     if (videoRef.current) {
-      videoRef.current.play();
-      setShowPlayButton(false);
+      videoRef.current.play()
+      setShowPlayButton(false)
     }
-  };
+  }
 
   return (
-    <div className="relative min-h-[400px] h-full w-full mb-6">
+    <div className="relative mb-6 h-full min-h-[400px] w-full">
       {showPlayButton ? (
         <button
           onClick={handlePlay}
           style={{
             background:
-              "linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))",
+              'linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))',
           }}
-          className="group cursor-pointer absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform rounded-[12px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
+          className="group absolute top-1/2 left-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform cursor-pointer rounded-[12px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
           aria-label="Play video"
         >
-          <div className=" text-white transition-colors group-hover:text-black">
+          <div className="text-white transition-colors group-hover:text-black">
             <svg
               width="16"
               height="16"
@@ -56,5 +56,5 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
         Your browser does not support the video tag.
       </video>
     </div>
-  );
-};
+  )
+}
