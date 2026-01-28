@@ -2235,7 +2235,7 @@
 - 876b8a2: Rename difference metric to textual difference metric
 - 1bbec77: Reorganized evals into nlp and llm
 - 35764f4: Added workflow for eval tests
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 - aea3c13: Fix evals export for llm and nlp
 - 4f1d1a1: Enforce types ann cleanup package.json
 - 202d404: Added instructions when generating evals
@@ -2649,7 +2649,7 @@
 ### Patch Changes
 
 - 9625602: Use mastra core splitted bundles in other packages
-- 8769a62: Split core into seperate entry fils
+- 8769a62: Split core into separate entry files
 - Updated dependencies [30322ce]
 - Updated dependencies [78eec7c]
 - Updated dependencies [9625602]
