@@ -535,6 +535,112 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
 
       expect(agentToolCall).toBeDefined();
     }, 50000);
+
+    it('should create agent tools for sub-agents with defaultOptions.memory', async () => {
+      // Create a sub-agent with its own defaultOptions.memory
+      const subAgent = new Agent({
+        id: 'sub-agent-with-memory',
+        name: 'sub-agent-with-memory',
+        instructions: 'You are a sub-agent with custom memory config.',
+        model: dummyModel,
+        defaultOptions: {
+          memory: {
+            thread: 'custom-thread',
+            resource: 'custom-resource',
+          },
+        },
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created with proper configuration
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents without defaultOptions', async () => {
+      // Create a sub-agent WITHOUT defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-no-options',
+        name: 'sub-agent-no-options',
+        instructions: 'You are a sub-agent without default options.',
+        model: dummyModel,
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // This should not throw - convertTools should handle missing defaultOptions gracefully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      // Verify the agent tool was created
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents with function-based defaultOptions', async () => {
+      // Create a sub-agent with function-based defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-fn-options',
+        name: 'sub-agent-fn-options',
+        instructions: 'You are a sub-agent with function-based options.',
+        model: dummyModel,
+        defaultOptions: ({ requestContext }) => ({
+          memory: {
+            thread: `thread-${requestContext.get('userId') || 'default'}`,
+            resource: 'custom-resource',
+          },
+        }),
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created successfully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
   });
 }
 

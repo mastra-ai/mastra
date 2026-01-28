@@ -1989,6 +1989,9 @@ export class Agent<
                 }) ||
                 `${slugify.default(this.id)}-${agentName}`;
 
+              const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
+              const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
@@ -2010,7 +2013,7 @@ export class Agent<
                   tracingContext: context?.tracingContext,
                   ...(inputData.instructions && { instructions: inputData.instructions }),
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
+                  ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                     ? {
                         memory: {
                           resource: subAgentResourceId,
@@ -2039,7 +2042,7 @@ export class Agent<
                   tracingContext: context?.tracingContext,
                   ...(inputData.instructions && { instructions: inputData.instructions }),
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
+                  ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                     ? {
                         memory: {
                           resource: subAgentResourceId,
