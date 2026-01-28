@@ -29,7 +29,6 @@ export const useWorkspaceInfo = () => {
       const workspace = (client as any).getWorkspace();
       return workspace.info();
     },
-    enabled: isWorkspaceV1Supported(client),
   });
 };
 
@@ -48,7 +47,6 @@ export const useWorkspaces = () => {
       }
       return (client as any).listWorkspaces();
     },
-    enabled: isWorkspaceV1Supported(client),
   });
 };
 
