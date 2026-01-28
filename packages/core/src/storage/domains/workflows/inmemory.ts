@@ -75,7 +75,43 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot.context[stepId] = result;
+    // For foreach steps with array outputs, merge the arrays atomically
+    // This handles concurrent iteration completions
+    const existingResult = snapshot.context[stepId];
+    if (
+      existingResult &&
+      Array.isArray(existingResult.output) &&
+      result &&
+      typeof result === 'object' &&
+      Array.isArray((result as any).output)
+    ) {
+      const existingOutput = existingResult.output as any[];
+      const newOutput = (result as any).output as any[];
+      // Merge arrays: use new value for each index, preserving existing when new is null
+      // Exception: { __pending: true } is a special marker that forces null (for bulk resume)
+      const mergedOutput = [...existingOutput];
+      for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
+        if (i < newOutput.length) {
+          const newVal = newOutput[i];
+          // Check for __pending marker - convert to null (forces reset)
+          if (newVal && typeof newVal === 'object' && newVal.__pending === true) {
+            mergedOutput[i] = null;
+          } else if (newVal !== null) {
+            // New non-null value always wins
+            mergedOutput[i] = newVal;
+          }
+          // If newVal is null, keep existing (mergedOutput[i] already has it from spread)
+        }
+        // If i >= newOutput.length, keep existing from spread
+      }
+      snapshot.context[stepId] = {
+        ...existingResult,
+        ...(result as any),
+        output: mergedOutput,
+      };
+    } else {
+      snapshot.context[stepId] = result;
+    }
     snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
     this.db.workflows.set(key, {

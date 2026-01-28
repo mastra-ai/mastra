@@ -81,9 +81,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // Set up promise that will resolve when workflow finishes
     // CRITICAL: Must subscribe BEFORE publishing events to avoid race condition
-    let resolveResult: (data: any) => void;
-    const resultPromise = new Promise<any>((resolve, _reject) => {
+    let resolveResult!: (data: any) => void;
+    let rejectResult!: (error: any) => void;
+    const resultPromise = new Promise<any>((resolve, reject) => {
       resolveResult = resolve;
+      rejectResult = reject;
     });
 
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
@@ -115,65 +117,73 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     // NOW safe to publish - listener is guaranteed to be registered
-    if (params.resume) {
-      const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
-      const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
-      // Extract state from stepResults.__state or use initialState
-      const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
+    // Wrap in try/catch to ensure proper cleanup and rejection on errors
+    try {
+      if (params.resume) {
+        const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
+        const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
+        // Extract state from stepResults.__state or use initialState
+        const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
 
-      await pubsub.publish('workflows', {
-        type: 'workflow.resume',
-        runId: params.runId,
-        data: {
-          workflowId: params.workflowId,
+        await pubsub.publish('workflows', {
+          type: 'workflow.resume',
           runId: params.runId,
-          executionPath: params.resume.resumePath,
-          stepResults: params.resume.stepResults,
-          resumeSteps: params.resume.steps,
-          prevResult: { status: 'success', output: prevResult?.payload },
-          resumeData: params.resume.resumePayload,
-          requestContext: Object.fromEntries(params.requestContext.entries()),
-          format: params.format,
-          perStep: params.perStep,
-          initialState: resumeState,
-          state: resumeState,
-          outputOptions: params.outputOptions,
-          forEachIndex: params.resume.forEachIndex,
-        },
-      });
-    } else if (params.timeTravel) {
-      const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.timeTravel.executionPath);
-      const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
-      await pubsub.publish('workflows', {
-        type: 'workflow.start',
-        runId: params.runId,
-        data: {
-          workflowId: params.workflowId,
+          data: {
+            workflowId: params.workflowId,
+            runId: params.runId,
+            executionPath: params.resume.resumePath,
+            stepResults: params.resume.stepResults,
+            resumeSteps: params.resume.steps,
+            prevResult: { status: 'success', output: prevResult?.payload },
+            resumeData: params.resume.resumePayload,
+            requestContext: Object.fromEntries(params.requestContext.entries()),
+            format: params.format,
+            perStep: params.perStep,
+            initialState: resumeState,
+            state: resumeState,
+            outputOptions: params.outputOptions,
+            forEachIndex: params.resume.forEachIndex,
+          },
+        });
+      } else if (params.timeTravel) {
+        const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.timeTravel.executionPath);
+        const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
+        await pubsub.publish('workflows', {
+          type: 'workflow.start',
           runId: params.runId,
-          executionPath: params.timeTravel.executionPath,
-          stepResults: params.timeTravel.stepResults,
-          timeTravel: params.timeTravel,
-          prevResult: { status: 'success', output: prevResult?.payload },
-          requestContext: Object.fromEntries(params.requestContext.entries()),
-          format: params.format,
-          perStep: params.perStep,
-        },
-      });
-    } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.start',
-        runId: params.runId,
-        data: {
-          workflowId: params.workflowId,
+          data: {
+            workflowId: params.workflowId,
+            runId: params.runId,
+            executionPath: params.timeTravel.executionPath,
+            stepResults: params.timeTravel.stepResults,
+            timeTravel: params.timeTravel,
+            prevResult: { status: 'success', output: prevResult?.payload },
+            requestContext: Object.fromEntries(params.requestContext.entries()),
+            format: params.format,
+            perStep: params.perStep,
+          },
+        });
+      } else {
+        await pubsub.publish('workflows', {
+          type: 'workflow.start',
           runId: params.runId,
-          prevResult: { status: 'success', output: params.input },
-          requestContext: Object.fromEntries(params.requestContext.entries()),
-          format: params.format,
-          perStep: params.perStep,
-          initialState: params.initialState,
-          outputOptions: params.outputOptions,
-        },
-      });
+          data: {
+            workflowId: params.workflowId,
+            runId: params.runId,
+            prevResult: { status: 'success', output: params.input },
+            requestContext: Object.fromEntries(params.requestContext.entries()),
+            format: params.format,
+            perStep: params.perStep,
+            initialState: params.initialState,
+            outputOptions: params.outputOptions,
+          },
+        });
+      }
+    } catch (err) {
+      // Clean up subscription and reject the promise on error
+      await pubsub.unsubscribe('workflows-finish', finishCb);
+      rejectResult(err);
+      throw err;
     }
 
     // Wait for workflow to complete

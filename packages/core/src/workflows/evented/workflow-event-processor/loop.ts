@@ -220,6 +220,26 @@ export async function processWorkflowForEach(
     // If so, re-suspend the workflow to wait for those to be resumed.
     const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
     if (pendingIterations.length > 0) {
+      // Collect resumeLabels from all suspended iterations
+      const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+      for (let i = 0; i < currentResult.output.length; i++) {
+        const iterResult = currentResult.output[i];
+        if (iterResult?.status === 'suspended' && iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+          Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+        }
+      }
+
+      // Build the suspend metadata with all collected resumeLabels
+      const suspendMeta: {
+        foreachIndex?: number;
+        resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+      } = {
+        foreachIndex: forEachIndex,
+      };
+      if (Object.keys(collectedResumeLabels).length > 0) {
+        suspendMeta.resumeLabels = collectedResumeLabels;
+      }
+
       // Re-suspend the workflow - there are still pending iterations
       // Use workflow.step.end with suspended status to update storage
       await pubsub.publish('workflows', {
@@ -237,13 +257,13 @@ export async function processWorkflowForEach(
               ...currentResult,
               status: 'suspended',
               suspendedAt: Date.now(),
-              suspendPayload: { __workflow_meta: { foreachIndex: forEachIndex } },
+              suspendPayload: { __workflow_meta: suspendMeta },
             },
           },
           prevResult: {
             status: 'suspended',
             output: currentResult.output,
-            suspendPayload: { __workflow_meta: { foreachIndex: forEachIndex } },
+            suspendPayload: { __workflow_meta: suspendMeta },
             payload: currentResult.payload,
             startedAt: currentResult.startedAt,
             suspendedAt: Date.now(),
@@ -257,6 +277,77 @@ export async function processWorkflowForEach(
       return;
     }
     return;
+  }
+
+  // Handle bulk resume: when resumeData is provided but no forEachIndex,
+  // resume suspended iterations up to the concurrency limit
+  if (resumeData !== undefined && forEachIndex === undefined && currentResult?.output?.length > 0) {
+    const suspendedIndices: number[] = [];
+    for (let i = 0; i < currentResult.output.length; i++) {
+      const iterResult = currentResult.output[i];
+      if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
+        suspendedIndices.push(i);
+      }
+    }
+
+    if (suspendedIndices.length > 0) {
+      // Limit resumption to concurrency value (like initial execution)
+      const concurrency = step.opts.concurrency ?? 1;
+      const indicesToResume = suspendedIndices.slice(0, concurrency);
+
+      // Mark only the iterations we're resuming as pending (null) before re-running them
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const updatedOutput = [...currentResult.output];
+      for (const suspIdx of indicesToResume) {
+        // Use special marker to force null during atomic merge (bypasses "keep existing" logic)
+        updatedOutput[suspIdx] = { __pending: true } as any;
+      }
+
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result: {
+          ...currentResult,
+          output: updatedOutput,
+        } as any,
+        requestContext,
+      });
+
+      // Check if inner step is a nested workflow
+      const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
+
+      // Resume iterations up to concurrency limit
+      for (const suspIdx of indicesToResume) {
+        const targetArray = (prevResult as any)?.output;
+        const iterationPrevResult =
+          isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
+            ? { status: 'success' as const, output: targetArray[suspIdx] }
+            : prevResult;
+
+        await pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          runId,
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath: [executionPath[0]!, suspIdx],
+            resumeSteps,
+            timeTravel,
+            stepResults,
+            prevResult: iterationPrevResult,
+            resumeData,
+            activeSteps,
+            requestContext,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+        });
+      }
+      return;
+    }
   }
 
   if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {

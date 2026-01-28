@@ -74,9 +74,14 @@ export class StepExecutor extends MastraBase {
     };
 
     if (params.resumeData) {
-      delete stepInfo.suspendPayload?.['__workflow_meta'];
       stepInfo.resumePayload = params.resumeData;
       stepInfo.resumedAt = Date.now();
+      // Strip __workflow_meta from suspendPayload when step is resumed
+      // This metadata is only needed during suspend, not in the final completed result
+      if (stepInfo.suspendPayload && '__workflow_meta' in stepInfo.suspendPayload) {
+        const { __workflow_meta, ...userSuspendPayload } = stepInfo.suspendPayload;
+        stepInfo.suspendPayload = userSuspendPayload;
+      }
     }
 
     // Extract suspend data if this step was previously suspended

@@ -1177,11 +1177,32 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       let newResult = prevResult;
       if (currentIdx !== undefined) {
+        // For foreach, store the full iteration result (including status, suspendPayload, etc.)
+        // not just the output, so suspend state is preserved
+        const iterationResult =
+          prevResult.status === 'suspended'
+            ? prevResult // Keep full result for suspended iterations
+            : (prevResult as any).output; // Just output for completed iterations
+
         if (currentResult) {
-          currentResult[currentIdx] = (prevResult as any).output;
-          newResult = { ...prevResult, output: currentResult, payload: originalPayload } as any;
+          currentResult[currentIdx] = iterationResult;
+          // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
+          // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
+          // Existing step's suspend properties are preserved (first suspend)
+          newResult = {
+            ...existingStepResult, // Preserve step-level properties
+            ...prevResult, // Get iteration timing info
+            output: currentResult,
+            payload: originalPayload,
+            // Preserve suspend metadata from first suspension
+            suspendPayload: existingStepResult?.suspendPayload ?? prevResult.suspendPayload,
+            suspendedAt: existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt,
+            // Update resume metadata to most recent resume (new iteration takes precedence)
+            resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
+            resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
+          } as any;
         } else {
-          newResult = { ...prevResult, output: [(prevResult as any).output], payload: originalPayload } as any;
+          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload } as any;
         }
       }
       const newStepResults = await workflowsStore?.updateWorkflowResults({
@@ -1197,6 +1218,179 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
 
       stepResults = newStepResults;
+
+      // For foreach iterations, check if all iterations are complete before emitting events
+      // This prevents emitting workflow.suspend when only some concurrent iterations have finished
+      if (currentIdx !== undefined) {
+        const foreachResult = stepResults[step.step.id] as any;
+        const iterationResults = foreachResult?.output ?? [];
+        const targetLen = foreachResult?.payload?.length ?? 0;
+
+        // Count iterations by status
+        const pendingCount = iterationResults.filter((r: any) => r === null).length;
+        const suspendedCount = iterationResults.filter(
+          (r: any) => r && typeof r === 'object' && r.status === 'suspended',
+        ).length;
+        const iterationsStarted = iterationResults.length;
+
+        if (pendingCount > 0) {
+          // There are still pending (null) iterations - concurrent execution in progress
+          // Wait for them to complete
+          return;
+        }
+
+        // Check if there are more iterations to start before deciding to suspend
+        // This handles partial concurrency: don't suspend until all iterations have been started
+        if (iterationsStarted < targetLen) {
+          // More iterations need to be started - call processWorkflowForEach to continue
+          await processWorkflowForEach(
+            {
+              workflow,
+              workflowId,
+              prevResult: { status: 'success', output: foreachResult.payload } as any,
+              runId,
+              executionPath: [executionPath[0]!],
+              stepResults,
+              activeSteps,
+              resumeSteps,
+              timeTravel,
+              resumeData: undefined, // Don't pass resumeData when starting new iterations
+              parentWorkflow,
+              requestContext,
+              perStep,
+              state: currentState,
+              outputOptions,
+            },
+            {
+              pubsub: this.mastra.pubsub,
+              mastra: this.mastra,
+              step,
+            },
+          );
+          return;
+        }
+
+        if (suspendedCount > 0) {
+          // Some iterations are suspended - emit workflow suspend
+          // Build aggregated suspend metadata from all suspended iterations
+          const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+          // suspendedPaths maps stepId -> executionPath, using the step ID (not stepId[index])
+          const suspendedPaths: Record<string, number[]> = {
+            [step.step.id]: [executionPath[0]!],
+          };
+
+          for (let i = 0; i < iterationResults.length; i++) {
+            const iterResult = iterationResults[i];
+            if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
+              // Collect resume labels
+              if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+                Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+              }
+            }
+          }
+
+          // Create the aggregated foreach step suspend result
+          const foreachSuspendResult = {
+            status: 'suspended' as const,
+            output: iterationResults,
+            payload: foreachResult.payload,
+            suspendedAt: Date.now(),
+            startedAt: foreachResult.startedAt,
+            suspendPayload: {
+              __workflow_meta: {
+                path: executionPath,
+                resumeLabels: collectedResumeLabels,
+              },
+            },
+          };
+
+          // Update the step result with aggregated suspend status
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: workflow.id,
+            runId,
+            stepId: step.step.id,
+            result: foreachSuspendResult as any,
+            requestContext,
+          });
+
+          // Check shouldPersistSnapshot option - default to true if not specified
+          const shouldPersist =
+            workflow?.options?.shouldPersistSnapshot?.({
+              stepResults: stepResults ?? {},
+              workflowStatus: 'suspended',
+            }) ?? true;
+
+          if (shouldPersist) {
+            // Persist state to snapshot context before suspending
+            await workflowsStore?.updateWorkflowResults({
+              workflowName: workflow.id,
+              runId,
+              stepId: '__state',
+              result: currentState as any,
+              requestContext,
+            });
+
+            await workflowsStore?.updateWorkflowState({
+              workflowName: workflowId,
+              runId,
+              opts: {
+                status: 'suspended',
+                result: foreachSuspendResult,
+                suspendedPaths,
+                resumeLabels: collectedResumeLabels,
+              },
+            });
+          }
+
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.suspend',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: [executionPath[0]!],
+              resumeSteps,
+              parentWorkflow,
+              stepResults: { ...stepResults, [step.step.id]: foreachSuspendResult },
+              prevResult: foreachSuspendResult,
+              activeSteps,
+              requestContext,
+              timeTravel,
+              state: currentState,
+              outputOptions,
+            },
+          });
+
+          return;
+        }
+
+        // All iterations succeeded - call processWorkflowForEach to advance to next step
+        await processWorkflowForEach(
+          {
+            workflow,
+            workflowId,
+            prevResult: { status: 'success', output: foreachResult.payload } as any,
+            runId,
+            executionPath: [executionPath[0]!],
+            stepResults,
+            activeSteps,
+            resumeSteps,
+            timeTravel,
+            resumeData: undefined,
+            parentWorkflow,
+            requestContext,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+          {
+            pubsub: this.mastra.pubsub,
+            mastra: this.mastra,
+            step,
+          },
+        );
+        return;
+      }
     } else if (isExecutableStep(step)) {
       // clear from activeSteps
       delete activeSteps[step.step.id];
