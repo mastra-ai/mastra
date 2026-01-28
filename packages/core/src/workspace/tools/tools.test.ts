@@ -692,7 +692,7 @@ describe('createWorkspaceTools', () => {
   describe('workspace_execute_command', () => {
     it('should execute command', async () => {
       const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir, env: process.env }),
       });
       await workspace.init();
       const tools = createWorkspaceTools(workspace);
@@ -714,7 +714,7 @@ describe('createWorkspaceTools', () => {
 
     it('should handle command failures', async () => {
       const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir, env: process.env }),
       });
       await workspace.init();
       const tools = createWorkspaceTools(workspace);

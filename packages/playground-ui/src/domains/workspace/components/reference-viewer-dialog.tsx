@@ -1,7 +1,7 @@
 import { FileText, X, Copy, Check } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
+import { useCopyToClipboard } from '@/lib/ai-ui/hooks/use-copy-to-clipboard';
 
 export interface ReferenceViewerDialogProps {
   open: boolean;
@@ -22,15 +22,13 @@ export function ReferenceViewerDialog({
   isLoading,
   error,
 }: ReferenceViewerDialogProps) {
-  const [copied, setCopied] = useState(false);
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 2000 });
 
   if (!open) return null;
 
-  const handleCopy = async () => {
+  const handleCopy = () => {
     if (!content) return;
-    await navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    copyToClipboard(content);
   };
 
   return (
@@ -54,9 +52,9 @@ export function ReferenceViewerDialog({
           <div className="flex items-center gap-2">
             <Button size="md" variant="light" onClick={handleCopy} disabled={!content || isLoading}>
               <Icon>
-                {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                {isCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
               </Icon>
-              {copied ? 'Copied!' : 'Copy'}
+              {isCopied ? 'Copied!' : 'Copy'}
             </Button>
             <button
               onClick={() => onOpenChange(false)}

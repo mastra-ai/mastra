@@ -1,3 +1,5 @@
+import * as nodePath from 'node:path';
+
 /**
  * File Read Tracker
  *
@@ -88,8 +90,9 @@ export class InMemoryFileReadTracker implements FileReadTracker {
     this.records.clear();
   }
 
-  private normalizePath(path: string): string {
-    // Normalize path: remove duplicate slashes, remove trailing slash (except for root)
-    return path.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+  private normalizePath(pathStr: string): string {
+    // Normalize path: unify separators, resolve dot segments, remove trailing slash
+    const normalized = nodePath.posix.normalize(pathStr.replace(/\\/g, '/'));
+    return normalized.replace(/\/$/, '') || '/';
   }
 }

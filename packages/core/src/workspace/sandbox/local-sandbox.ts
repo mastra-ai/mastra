@@ -161,6 +161,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
+  private readonly _createdAt: Date;
 
   /**
    * The working directory where commands are executed.
@@ -194,6 +195,7 @@ export class LocalSandbox implements WorkspaceSandbox {
 
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
+    this._createdAt = new Date();
     this._workingDirectory = options.workingDirectory ?? process.cwd();
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 30000;
@@ -282,7 +284,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       name: this.name,
       provider: this.provider,
       status: this._status,
-      createdAt: new Date(),
+      createdAt: this._createdAt,
       resources: {
         memoryMB: Math.round(os.totalmem() / 1024 / 1024),
         cpuCores: os.cpus().length,

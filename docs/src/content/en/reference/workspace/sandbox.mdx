@@ -110,6 +110,13 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
       description: "Additional arguments to pass to bwrap (Linux only).",
       isOptional: true,
     },
+    {
+      name: "allowSystemBinaries",
+      type: "boolean",
+      description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
+      isOptional: true,
+      defaultValue: "true",
+    },
   ]}
 />
 

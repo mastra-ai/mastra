@@ -163,7 +163,7 @@ describe('Workspace', () => {
   // ===========================================================================
   describe('sandbox operations', () => {
     it('should execute command in sandbox', async () => {
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir, inheritEnv: true });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir, env: process.env });
       const workspace = new Workspace({ sandbox });
 
       await workspace.init();
