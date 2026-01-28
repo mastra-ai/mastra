@@ -694,13 +694,14 @@ export class MemoryStorageDO extends MemoryStorage {
     try {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      // Step 1: Get paginated messages from the thread(s) first (without excluding included ones)
+      const placeholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id = ?
+        WHERE thread_id IN (${placeholders})
       `;
-      const queryParams: unknown[] = [threadId];
+      const queryParams: unknown[] = [...threadIds];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
