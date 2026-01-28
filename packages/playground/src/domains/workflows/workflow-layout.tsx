@@ -73,7 +73,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider key={workflowId}>
+      <SchemaRequestContextProvider>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
           <MainContentLayout>
             <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />

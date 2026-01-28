@@ -88,7 +88,7 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <SchemaRequestContextProvider key={agentId}>
+          <SchemaRequestContextProvider>
             <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
               <ThreadInputProvider>
                 <AgentLayout
