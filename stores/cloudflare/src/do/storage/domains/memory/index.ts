@@ -431,18 +431,18 @@ export class MemoryStorageDO extends MemoryStorage {
     const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     try {
-      // Delete the thread
-      const deleteThreadQuery = createSqlBuilder().delete(fullTableName).where('id = ?', threadId);
-
-      const { sql: threadSql, params: threadParams } = deleteThreadQuery.build();
-      await this.#db.executeQuery({ sql: threadSql, params: threadParams });
-
-      // Also delete associated messages
+      // Delete associated messages first to avoid orphaned data
       const messagesTableName = this.#db.getTableName(TABLE_MESSAGES);
       const deleteMessagesQuery = createSqlBuilder().delete(messagesTableName).where('thread_id = ?', threadId);
 
       const { sql: messagesSql, params: messagesParams } = deleteMessagesQuery.build();
       await this.#db.executeQuery({ sql: messagesSql, params: messagesParams });
+
+      // Then delete the thread
+      const deleteThreadQuery = createSqlBuilder().delete(fullTableName).where('id = ?', threadId);
+
+      const { sql: threadSql, params: threadParams } = deleteThreadQuery.build();
+      await this.#db.executeQuery({ sql: threadSql, params: threadParams });
     } catch (error) {
       throw new MastraError(
         {
