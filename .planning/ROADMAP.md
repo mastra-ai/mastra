@@ -91,11 +91,11 @@ Plans:
   2. Connected clients receive CDP frames as they are captured
   3. Disconnecting clients are cleaned up without memory leaks
   4. Screencast only runs when at least one viewer is connected (no wasted CPU)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD (WebSocket route and handler)
-- [ ] 08-02: TBD (viewer count management)
+- [ ] 08-01-PLAN.md — Browser-stream module with types, ViewerRegistry, and WebSocket route setup
+- [ ] 08-02-PLAN.md — Server integration with deployer createNodeServer
 
 ### Phase 9: Studio UI
 **Goal**: BrowserViewPanel component renders live screencast inline with agent chat
@@ -127,9 +127,9 @@ Plans:
 | 5. Schema Consolidation | v1.0 | 2/2 | Complete | 2026-01-27 |
 | 6. Lifecycle Locking | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 7. Screencast API | v1.1 | 1/1 | Complete | 2026-01-27 |
-| 8. Transport Layer | v1.1 | 0/TBD | Not started | - |
+| 8. Transport Layer | v1.1 | 0/2 | Planned | - |
 | 9. Studio UI | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 7 completion*
+*Last updated: 2026-01-27 after Phase 8 planning*
