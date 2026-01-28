@@ -35,16 +35,6 @@ export const useMarkdownContent = () => {
     // Extract text content while preserving structure
     let markdownText = ''
 
-    // Add frontmatter and metadata
-    markdownText += `**Overview:**\n\n`
-
-    if (metadata.description) {
-      markdownText += `${metadata.description}\n\n`
-    }
-
-    markdownText += `Source: ${window.location.origin}${location.pathname}\n\n`
-    markdownText += '---\n\n'
-
     // Helper function to convert HTML to markdown-like text
     const convertNodeToMarkdown = (node: Node, level = 0): string => {
       let result = ''
