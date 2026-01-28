@@ -360,13 +360,16 @@ export class DODB extends MastraBase {
    * Upsert multiple records in a batch operation
    * @param tableName The table to insert into
    * @param records The records to insert
+   * @param conflictKeys The columns to use for conflict detection (defaults to ['id'])
    */
   async batchUpsert({
     tableName,
     records,
+    conflictKeys = ['id'],
   }: {
     tableName: TABLE_NAMES;
     records: Record<string, unknown>[];
+    conflictKeys?: string[];
   }): Promise<void> {
     if (records.length === 0) return;
 
@@ -399,13 +402,22 @@ export class DODB extends MastraBase {
 
             const recordToUpsert = columns.reduce(
               (acc, col) => {
-                if (col !== 'createdAt') acc[col] = `excluded.${col}`;
+                // Don't update conflict keys or createdAt on conflict
+                if (col !== 'createdAt' && !conflictKeys.includes(col)) {
+                  acc[col] = `excluded.${col}`;
+                }
                 return acc;
               },
               {} as Record<string, string>,
             );
 
-            const query = createSqlBuilder().insert(fullTableName, columns, values as SqlParam[], ['id'], recordToUpsert);
+            const query = createSqlBuilder().insert(
+              fullTableName,
+              columns,
+              values as SqlParam[],
+              conflictKeys,
+              recordToUpsert,
+            );
 
             const { sql, params } = query.build();
             await this.executeQuery({ sql, params });
