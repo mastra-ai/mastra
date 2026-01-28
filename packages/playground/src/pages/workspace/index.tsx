@@ -41,7 +41,7 @@ export default function Workspace() {
   // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
-  const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
   const { data: workspacesData } = useWorkspaces();
@@ -91,7 +91,6 @@ export default function Workspace() {
   // Use URL-derived values
   const currentPath = pathFromUrl;
   const selectedFile = fileFromUrl;
-  const activeTab = tabFromUrl;
 
   // Files - pass workspaceId to get files from the selected workspace
   const {
@@ -123,6 +122,19 @@ export default function Workspace() {
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
+
+  // Compute active tab based on URL and workspace capabilities
+  // If URL specifies a tab, use it only if the workspace supports it
+  // Otherwise, fall back to the first available capability
+  const getEffectiveTab = (): TabType => {
+    if (tabFromUrl === 'files' && hasFilesystem) return 'files';
+    if (tabFromUrl === 'skills' && hasSkills) return 'skills';
+    // No valid tab from URL, pick the first available
+    if (hasFilesystem) return 'files';
+    if (hasSkills) return 'skills';
+    return 'files'; // fallback
+  };
+  const activeTab = getEffectiveTab();
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
