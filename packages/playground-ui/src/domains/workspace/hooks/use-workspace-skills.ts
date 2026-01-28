@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
-import { isWorkspaceV1Supported } from '../compatibility';
+import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery } from '../compatibility';
 import type {
   Skill,
   ListSkillsResponse,
@@ -29,7 +29,7 @@ export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
       const workspace = (client as any).getWorkspace(options?.workspaceId);
       return workspace.listSkills();
     },
-    enabled: isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -49,7 +49,8 @@ export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boole
       const skill = workspace.getSkill(skillName);
       return skill.details();
     },
-    enabled: options?.enabled !== false && !!skillName && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!skillName,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -72,7 +73,8 @@ export const useWorkspaceSkillReferences = (
       const skill = workspace.getSkill(skillName);
       return skill.listReferences();
     },
-    enabled: options?.enabled !== false && !!skillName && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!skillName,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -96,7 +98,8 @@ export const useWorkspaceSkillReference = (
       const skill = workspace.getSkill(skillName);
       return skill.getReference(referencePath);
     },
-    enabled: options?.enabled !== false && !!skillName && !!referencePath && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!skillName && !!referencePath,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -144,6 +147,7 @@ export const useAgentSkill = (
       const skill = workspace.getSkill(skillName);
       return skill.details();
     },
-    enabled: options?.enabled !== false && !!agentId && !!skillName && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!agentId && !!skillName,
+    retry: shouldRetryWorkspaceQuery,
   });
 };

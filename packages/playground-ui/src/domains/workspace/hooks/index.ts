@@ -1,3 +1,6 @@
+// Compatibility helpers
+export { isWorkspaceV1Supported, isWorkspaceNotSupportedError } from '../compatibility';
+
 // Workspace hooks - filesystem and search
 export {
   useWorkspaceInfo,
