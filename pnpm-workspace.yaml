@@ -9,7 +9,6 @@ packages:
   - pubsub/*
   - client-sdks/*
   - integrations/*
-  - examples/dane
   - auth/*
   - observability/*
   - explorations/longmemeval
