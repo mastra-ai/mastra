@@ -96,6 +96,7 @@
   "dependencies": {
     "@babel/core": "^7.28.6",
     "@babel/preset-typescript": "^7.27.1",
+    "@hono/node-ws": "^1.3.0",
     "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
@@ -125,6 +126,7 @@
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
