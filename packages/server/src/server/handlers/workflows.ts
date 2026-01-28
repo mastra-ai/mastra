@@ -69,7 +69,6 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
             workflow = workflows[workflowId];
             break;
           }
-          break;
         } catch (error) {
           logger.debug('Error getting workflow from agent', error);
         }
