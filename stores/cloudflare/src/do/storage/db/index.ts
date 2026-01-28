@@ -95,6 +95,13 @@ export class DODB extends MastraBase {
   }
 
   private async getTableColumns(tableName: string): Promise<{ name: string; type: string }[]> {
+    // Validate table name to prevent SQL injection
+    const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!identifierPattern.test(tableName)) {
+      this.logger.warn(`Invalid table name in getTableColumns: ${tableName}`);
+      return [];
+    }
+
     try {
       const sql = `PRAGMA table_info(${tableName})`;
       const result = await this.executeQuery({ sql });
@@ -228,12 +235,26 @@ export class DODB extends MastraBase {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
+    // Validate identifier pattern
+    const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
     try {
       const fullTableName = this.getTableName(args.tableName);
+
+      // Validate full table name (may include prefix)
+      if (!identifierPattern.test(fullTableName)) {
+        throw new Error(`Invalid table name: ${fullTableName}`);
+      }
+
       const existingColumns = await this.getTableColumns(fullTableName);
       const existingColumnNames = new Set(existingColumns.map(col => col.name));
 
       for (const [columnName, column] of Object.entries(args.schema)) {
+        // Validate column name before using in SQL
+        if (!identifierPattern.test(columnName)) {
+          throw new Error(`Invalid column name: ${columnName}`);
+        }
+
         if (!existingColumnNames.has(columnName) && args.ifNotExists.includes(columnName)) {
           const sqlType = this.getSqlType(column.type);
           const defaultValue = this.getDefaultValue(column.type);
@@ -313,7 +334,15 @@ export class DODB extends MastraBase {
     }
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({
+    tableName,
+    keys,
+    orderBy,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, string>;
+    orderBy?: { column: string; direction: 'ASC' | 'DESC' };
+  }): Promise<R | null> {
     try {
       const fullTableName = this.getTableName(tableName);
       const query = createSqlBuilder().select('*').from(fullTableName);
@@ -329,7 +358,10 @@ export class DODB extends MastraBase {
         }
       }
 
-      query.orderBy('createdAt', 'DESC');
+      // Only apply orderBy if explicitly provided
+      if (orderBy) {
+        query.orderBy(orderBy.column, orderBy.direction);
+      }
 
       query.limit(1);
       const { sql, params } = query.build();
