@@ -9,6 +9,7 @@ declare global {
     MASTRA_STUDIO_BASE_PATH?: string;
     MASTRA_SERVER_HOST: string;
     MASTRA_SERVER_PORT: string;
+    MASTRA_API_PREFIX?: string;
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
@@ -173,7 +174,7 @@ const routes = [
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -188,7 +189,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
@@ -200,12 +201,13 @@ export default function AppWrapper() {
   const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
   const host = window.MASTRA_SERVER_HOST || 'localhost';
   const port = window.MASTRA_SERVER_PORT || 4111;
+  const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>
