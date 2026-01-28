@@ -372,8 +372,7 @@ export class StoreMemoryRedis extends MemoryStorage {
 
         for (const message of batch) {
           const key = getMessageKey(message.threadId!, message.id);
-          const createdAtScore = new Date(message.createdAt).getTime();
-          const score = message._index !== undefined ? message._index : createdAtScore;
+          const score = getMessageScore(message);
 
           const existingThreadId = await this.getThreadIdForMessage(message.id);
           if (existingThreadId && existingThreadId !== message.threadId) {
@@ -935,10 +934,7 @@ export class StoreMemoryRedis extends MemoryStorage {
           multi.set(newKey, JSON.stringify(updatedMessage));
           multi.set(getMessageIndexKey(id), updatePayload.threadId);
 
-          const score =
-            (updatedMessage as Record<string, unknown>)._index !== undefined
-              ? ((updatedMessage as Record<string, unknown>)._index as number)
-              : new Date(updatedMessage.createdAt).getTime();
+          const score = getMessageScore(updatedMessage as MastraDBMessage & { _index?: number });
           multi.zAdd(getThreadMessagesKey(updatePayload.threadId), { score, value: id });
 
           messageIdToKey[id] = newKey;
@@ -1211,7 +1207,8 @@ export class StoreMemoryRedis extends MemoryStorage {
         const messageKey = getMessageKey(newThreadId, newMessageId);
         multi.set(messageKey, JSON.stringify(newMessage));
         multi.set(getMessageIndexKey(newMessageId), newThreadId);
-        multi.zAdd(newThreadMessagesKey, { score: i, value: newMessageId });
+        const score = getMessageScore({ createdAt: newMessage.createdAt, _index: i });
+        multi.zAdd(newThreadMessagesKey, { score, value: newMessageId });
 
         clonedMessages.push(newMessage);
       }
@@ -1249,4 +1246,10 @@ function getMessageKey(threadId: string, messageId: string): string {
 
 function getMessageIndexKey(messageId: string): string {
   return `msg-idx:${messageId}`;
+}
+
+function getMessageScore(message: { createdAt: Date | string; _index?: number }): number {
+  const createdAtScore = new Date(message.createdAt).getTime();
+  const index = typeof message._index === 'number' ? message._index : 0;
+  return createdAtScore * 1000 + index;
 }
