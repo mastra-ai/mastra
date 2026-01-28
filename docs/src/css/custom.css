@@ -6,8 +6,12 @@
 
 @theme {
   --breakpoint-lg: 62.25rem;
-  --font-sans: 'Greed', 'Greed Fallback', -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback', Menlo, Consolas, Monaco, Adwaita Mono, Liberation Mono, Lucida Console, monospace;
+  --font-sans:
+    'Greed', 'Greed Fallback', -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue,
+    Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+  --font-mono:
+    'Geist Mono', 'Geist Mono Fallback', Menlo, Consolas, Monaco, Adwaita Mono, Liberation Mono, Lucida Console,
+    monospace;
 }
 
 /* ==================== LIGHT MODE ==================== */
@@ -739,7 +743,9 @@ article p {
   }
 
   .markdown {
-    > p, > ul li, > ol li {
+    > p,
+    > ul li,
+    > ol li {
       font-size: 1.125rem;
     }
 

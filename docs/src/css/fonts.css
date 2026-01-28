@@ -22,7 +22,7 @@
 }
 
 @font-face {
-  font-family: "Geist Mono Fallback";
+  font-family: 'Geist Mono Fallback';
   src: local('Courier New'), local('CourierNewPSMT');
   ascent-override: 100.5164%;
   descent-override: 29.5048%;
