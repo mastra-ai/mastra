@@ -22,6 +22,7 @@ import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error'
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
+import { tsConfigPaths } from '../plugins/tsconfig-paths';
 
 type VirtualDependency = {
   name: string;
@@ -159,6 +160,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    tsConfigPaths(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({
