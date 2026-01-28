@@ -93,6 +93,46 @@ export interface MastraCloudClientConfig {
   projectId: string;
   /** Base URL (defaults to https://cloud.mastra.ai) */
   baseUrl?: string;
+  /** API prefix for versioned endpoints (defaults to /api/v1) */
+  apiPrefix?: string;
+  /** Auth path for login redirect (defaults to /auth/oss) */
+  authPath?: string;
+}
+
+/**
+ * Option interfaces for client methods.
+ * Internal - not exported. All methods use options pattern.
+ */
+interface GetUserOptions {
+  userId: string;
+  token: string;
+}
+
+interface GetUserPermissionsOptions {
+  userId: string;
+  token: string;
+}
+
+interface DestroySessionOptions {
+  sessionId: string;
+  token?: string;
+}
+
+interface GetLoginUrlOptions {
+  redirectUri: string;
+  state: string;
+}
+
+interface ExchangeCodeOptions {
+  code: string;
+}
+
+interface VerifyTokenOptions {
+  token: string;
+}
+
+interface ValidateSessionOptions {
+  sessionToken: string;
 }
 
 /**
@@ -103,10 +143,16 @@ export interface MastraCloudClientConfig {
 export class MastraCloudClient {
   private projectId: string;
   private baseUrl: string;
+  private apiPrefix: string;
+  private authPath: string;
 
   constructor(config: MastraCloudClientConfig) {
     this.projectId = config.projectId;
-    this.baseUrl = config.baseUrl ?? 'https://cloud.mastra.ai';
+    // Normalize baseUrl to remove trailing slash if present
+    const baseUrl = config.baseUrl ?? 'https://cloud.mastra.ai';
+    this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    this.apiPrefix = config.apiPrefix ?? '/api/v1';
+    this.authPath = config.authPath ?? '/auth/oss';
   }
 
   /**
