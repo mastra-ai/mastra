@@ -19,6 +19,7 @@ export {
 export {
   createWorkspaceTools,
   WORKSPACE_TOOLS,
+  WORKSPACE_TOOLS_PREFIX,
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
   type WorkspaceToolName,
