@@ -2,7 +2,7 @@ import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { ErrorAwareText } from './error-aware-text';
-import { TooltipIconButton } from '../tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { ToolFallback } from '../tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
@@ -79,32 +79,37 @@ const AssistantActionBar = () => {
     >
       <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
-          <TooltipIconButton tooltip="Read aloud">
+          <IconButton variant="light" size="md" tooltip="Read aloud">
             <AudioLinesIcon />
-          </TooltipIconButton>
+          </IconButton>
         </ActionBarPrimitive.Speak>
       </MessagePrimitive.If>
       <MessagePrimitive.If speaking>
         <ActionBarPrimitive.StopSpeaking asChild>
-          <TooltipIconButton tooltip="Stop">
+          <IconButton variant="light" size="md" tooltip="Stop">
             <StopCircleIcon />
-          </TooltipIconButton>
+          </IconButton>
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy" className="bg-transparent text-neutral3 hover:text-neutral6">
+        <IconButton
+          variant="light"
+          size="md"
+          tooltip="Copy"
+          className="bg-transparent text-neutral3 hover:text-neutral6"
+        >
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>
           <MessagePrimitive.If copied={false}>
             <CopyIcon />
           </MessagePrimitive.If>
-        </TooltipIconButton>
+        </IconButton>
       </ActionBarPrimitive.Copy>
       {/* <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
+        <IconButton variant="light" size="md" tooltip="Refresh">
           <RefreshCwIcon />
-        </TooltipIconButton>
+        </IconButton>
       </ActionBarPrimitive.Reload> */}
     </ActionBarPrimitive.Root>
   );

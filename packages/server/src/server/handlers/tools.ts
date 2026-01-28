@@ -36,11 +36,16 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
-          const tool = _tool;
+          // Cast to any since we're serializing to a generic Record<string, any>
+          // and the tool types have varying property availability
+          const tool = _tool as any;
           acc[id] = {
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
             outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+            requestContextSchema: tool.requestContextSchema
+              ? stringify(zodToJsonSchema(tool.requestContextSchema))
+              : undefined,
           };
           return acc;
         },
@@ -83,6 +88,9 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;
@@ -190,6 +198,9 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;
@@ -214,7 +225,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Agent not found' });
       }
 
       const agentTools = await agent.listTools({ requestContext });

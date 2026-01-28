@@ -159,8 +159,17 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -168,7 +177,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 /**
@@ -203,12 +213,13 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, any>,
   TId extends string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
+): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
@@ -244,8 +255,17 @@ export function createStep<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
 ): Step<
   TStepId,
   TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
@@ -253,7 +273,8 @@ export function createStep<
   z.infer<TOutputSchema>,
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
 >;
 
 // ============================================
@@ -314,6 +335,7 @@ function createStepFromParams<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -920,7 +942,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  input: { phase, streamParts: [] },
+                  input: { phase, totalChunks: 0 },
                   attributes: {
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
@@ -933,7 +955,6 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (processorSpan) {
                 processorSpan.input = {
                   phase,
-                  streamParts: streamParts ?? [],
                   totalChunks: (streamParts ?? []).length,
                 };
               }
@@ -958,7 +979,8 @@ function createStepFromProcessor<TProcessorId extends string>(
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: result });
+                  // Output just totalChunks (workflow processors don't track accumulated text yet)
+                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
                   delete mutableState[spanKey];
                 }
               } catch (error) {
@@ -1184,8 +1206,9 @@ export function createWorkflow<
   TInput = unknown,
   TOutput = unknown,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(params);
+  TRequestContext extends Record<string, any> | unknown = unknown,
+>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
 }
 
 export function cloneWorkflow<
@@ -1223,7 +1246,7 @@ export function cloneWorkflow<
 
 export class Workflow<
   TEngineType = DefaultEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
@@ -1237,15 +1260,17 @@ export class Workflow<
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 >
   extends MastraBase
-  implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType>
+  implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType, TRequestContext>
 {
   public id: TWorkflowId;
   public description?: string | undefined;
   public inputSchema: SchemaWithValidation<TInput>;
   public outputSchema: SchemaWithValidation<TOutput>;
   public stateSchema?: SchemaWithValidation<TState>;
+  public requestContextSchema?: SchemaWithValidation<TRequestContext>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1266,7 +1291,7 @@ export class Workflow<
 
   #mastra?: Mastra;
 
-  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput>> = new Map();
+  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
 
   constructor({
     mastra,
@@ -1274,19 +1299,21 @@ export class Workflow<
     inputSchema,
     outputSchema,
     stateSchema,
+    requestContextSchema,
     description,
     executionEngine,
     retryConfig,
     steps,
     options = {},
     type,
-  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
     this.inputSchema = inputSchema;
     this.outputSchema = outputSchema;
     this.stateSchema = stateSchema;
+    this.requestContextSchema = requestContextSchema;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -1364,7 +1391,8 @@ export class Workflow<
       TSchemaOut,
       any,
       any,
-      TEngineType
+      TEngineType,
+      any
     >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
@@ -1379,7 +1407,16 @@ export class Workflow<
       },
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1409,7 +1446,16 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TPrevSchema,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1438,7 +1484,16 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TPrevSchema,
+      TRequestContext
+    >;
   }
 
   /**
@@ -1465,8 +1520,8 @@ export class Workflow<
           [k: string]:
             | {
                 step:
-                  | Step<string, any, any, any, any, any, TEngineType>
-                  | Step<string, any, any, any, any, any, TEngineType>[];
+                  | Step<string, any, any, any, any, any, TEngineType, any>
+                  | Step<string, any, any, any, any, any, TEngineType, any>[];
                 path: string;
               }
             | { value: any; schema: SchemaWithValidation<any> }
@@ -1482,7 +1537,7 @@ export class Workflow<
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any> {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       const mappingStep: any = createStep({
@@ -1505,7 +1560,16 @@ export class Workflow<
               : mappingConfig.toString(),
         },
       });
-      return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any>;
+      return this as unknown as Workflow<
+        TEngineType,
+        TSteps,
+        TWorkflowId,
+        TState,
+        TInput,
+        TOutput,
+        any,
+        TRequestContext
+      >;
     }
 
     const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
@@ -1606,11 +1670,20 @@ export class Workflow<
             : JSON.stringify(newMappingConfig, null, 2),
       },
     });
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, MappedOutputSchema>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      MappedOutputSchema,
+      TRequestContext
+    >;
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
       [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
         string,
@@ -1651,7 +1724,8 @@ export class Workflow<
       TOutput,
       {
         [K in keyof StepsRecord<TParallelSteps>]: InferZodLikeSchema<StepsRecord<TParallelSteps>[K]['outputSchema']>;
-      }
+      },
+      TRequestContext
     >;
   }
 
@@ -1661,7 +1735,7 @@ export class Workflow<
     TBranchSteps extends Array<
       [
         ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>,
-        Step<string, any, TPrevSchema, any, any, any, TEngineType>,
+        Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
   >(steps: TBranchSteps) {
@@ -1707,7 +1781,8 @@ export class Workflow<
         [K in keyof StepsRecord<ExtractedSteps[]>]?: InferZodLikeSchema<
           StepsRecord<ExtractedSteps[]>[K]['outputSchema']
         >;
-      }
+      },
+      TRequestContext
     >;
   }
 
@@ -1735,7 +1810,16 @@ export class Workflow<
       loopType: 'dowhile',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
@@ -1762,7 +1846,16 @@ export class Workflow<
       loopType: 'dountil',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut,
+      TRequestContext
+    >;
   }
 
   foreach<
@@ -1793,7 +1886,16 @@ export class Workflow<
       opts: opts ?? { concurrency: 1 },
     });
     this.steps[(step as any).id] = step as any;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut[]>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSchemaOut[],
+      TRequestContext
+    >;
   }
 
   /**
@@ -1815,7 +1917,16 @@ export class Workflow<
   commit() {
     this.executionGraph = this.buildExecutionGraph();
     this.committed = true;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput>;
+    return this as unknown as Workflow<
+      TEngineType,
+      TSteps,
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TOutput,
+      TRequestContext
+    >;
   }
 
   get stepGraph() {
@@ -1838,7 +1949,7 @@ export class Workflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -1864,6 +1975,7 @@ export class Workflow<
         workflowId: this.id,
         stateSchema: this.stateSchema,
         inputSchema: this.inputSchema,
+        requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
@@ -2000,7 +2112,7 @@ export class Workflow<
     };
     [PUBSUB_SYMBOL]: PubSub;
     mastra: Mastra;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
     abortSignal: AbortSignal;
     bail: (result: any) => any;
@@ -2057,7 +2169,7 @@ export class Workflow<
     });
 
     if (retryCount && retryCount > 0 && isResume && requestContext) {
-      requestContext.set('__mastraWorflowInputData', inputData);
+      (requestContext as RequestContext).set('__mastraWorflowInputData', inputData);
     }
 
     let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
@@ -2393,7 +2505,7 @@ export class Workflow<
 
 export class Run<
   TEngineType = DefaultEngineType,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     unknown,
     unknown,
@@ -2405,6 +2517,7 @@ export class Run<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   #abortController?: AbortController;
   protected pubsub: PubSub;
@@ -2484,6 +2597,7 @@ export class Run<
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: SchemaWithValidation<TState>;
   protected inputSchema?: SchemaWithValidation<TInput>;
+  protected requestContextSchema?: SchemaWithValidation<any>;
 
   protected cleanup?: () => void;
 
@@ -2498,6 +2612,7 @@ export class Run<
     resourceId?: string;
     stateSchema?: SchemaWithValidation<TState>;
     inputSchema?: SchemaWithValidation<TInput>;
+    requestContextSchema?: SchemaWithValidation<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -2529,6 +2644,7 @@ export class Run<
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
     this.inputSchema = params.inputSchema;
+    this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
   }
@@ -2604,6 +2720,21 @@ export class Run<
     return initialStateToUse;
   }
 
+  protected async _validateRequestContext(requestContext?: RequestContext) {
+    if (this.validateInputs && this.requestContextSchema && isZodType(this.requestContextSchema)) {
+      const contextValues = requestContext?.all ?? {};
+      const validatedRequestContext = await this.requestContextSchema.safeParseAsync(contextValues);
+
+      if (!validatedRequestContext.success) {
+        const errors = getZodErrors(validatedRequestContext.error);
+        throw new Error(
+          `Request context validation failed for workflow '${this.workflowId}': \n` +
+            errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        );
+      }
+    }
+  }
+
   protected async _validateResumeData<TResume>(resumeData: TResume, suspendedStep?: StepWithComponent) {
     let resumeDataToUse = resumeData;
 
@@ -2625,7 +2756,7 @@ export class Run<
 
   protected async _validateTimetravelInputData<TInput>(
     inputData: TInput,
-    step: Step<string, any, TInput, any, any, any, TEngineType>,
+    step: Step<string, any, TInput, any, any, any, TEngineType, any>,
   ) {
     let inputDataToUse = inputData;
 
@@ -2670,7 +2801,7 @@ export class Run<
       : {
           initialState: TState;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
@@ -2695,13 +2826,14 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
-      requestContext,
+      requestContext: requestContext as RequestContext,
       mastra: this.#mastra,
     });
 
     const traceId = workflowSpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+    await this._validateRequestContext(requestContext as RequestContext);
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -2714,7 +2846,7 @@ export class Run<
       initialState: initialStateToUse,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext: (requestContext ?? new RequestContext()) as RequestContext,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -2751,7 +2883,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
         tracingOptions?: TracingOptions;
@@ -2787,7 +2919,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         tracingOptions?: TracingOptions;
         outputOptions?: {
           includeState?: boolean;
@@ -2822,7 +2954,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<TRequestContext>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2833,7 +2965,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<TRequestContext>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2995,7 +3127,7 @@ export class Run<
       : {
           initialState: TState;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<TRequestContext>;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
@@ -3118,14 +3250,14 @@ export class Run<
   }: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, any, TResume, any, TEngineType>
+      | Step<string, any, any, any, TResume, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResume, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResume, any, TEngineType, any>,
         ]
       | string
       | string[];
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
@@ -3280,15 +3412,15 @@ export class Run<
   async resume<TResume>(params: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, any, TResume, any, TEngineType>
+      | Step<string, any, any, any, TResume, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResume, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResume, any, TEngineType, any>,
         ]
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3309,7 +3441,7 @@ export class Run<
    */
   async restart(
     args: {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
@@ -3321,15 +3453,15 @@ export class Run<
   protected async _resume<TResume>(params: {
     resumeData?: TResume;
     step?:
-      | Step<string, any, any, TResume, any, any, TEngineType>
+      | Step<string, any, any, TResume, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResume, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, TResume, any, any, TEngineType, any>,
         ]
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3426,8 +3558,8 @@ export class Run<
 
     let requestContextInput;
     if (params.retryCount && params.retryCount > 0 && params.requestContext) {
-      requestContextInput = params.requestContext.get('__mastraWorflowInputData');
-      params.requestContext.delete('__mastraWorflowInputData');
+      requestContextInput = (params.requestContext as RequestContext).get('__mastraWorflowInputData');
+      (params.requestContext as RequestContext).delete('__mastraWorflowInputData');
     }
 
     const stepResults = { ...(snapshot?.context ?? {}), input: requestContextInput ?? snapshot?.context?.input } as any;
@@ -3435,8 +3567,8 @@ export class Run<
     const requestContextToUse = params.requestContext ?? new RequestContext();
 
     Object.entries(snapshot?.requestContext ?? {}).forEach(([key, value]) => {
-      if (!requestContextToUse.has(key)) {
-        requestContextToUse.set(key, value);
+      if (!(requestContextToUse as RequestContext).has(key)) {
+        (requestContextToUse as RequestContext).set(key, value);
       }
     });
 
@@ -3454,7 +3586,7 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,
       tracingContext: params.tracingContext,
-      requestContext: requestContextToUse,
+      requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
 
@@ -3480,7 +3612,7 @@ export class Run<
         },
         format: params.format,
         pubsub: this.pubsub,
-        requestContext: requestContextToUse,
+        requestContext: requestContextToUse as RequestContext,
         abortController: this.abortController,
         workflowSpan,
         outputOptions: params.outputOptions,
@@ -3510,7 +3642,7 @@ export class Run<
     tracingContext,
     tracingOptions,
   }: {
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3570,8 +3702,8 @@ export class Run<
     };
     const requestContextToUse = requestContext ?? new RequestContext();
     for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
-      if (!requestContextToUse.has(key)) {
-        requestContextToUse.set(key, value);
+      if (!(requestContextToUse as RequestContext).has(key)) {
+        (requestContextToUse as RequestContext).set(key, value);
       }
     }
     const workflowSpan = getOrCreateSpan({
@@ -3586,7 +3718,7 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
-      requestContext: requestContextToUse,
+      requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
 
@@ -3602,7 +3734,7 @@ export class Run<
       restart: restartData,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
-      requestContext: requestContextToUse,
+      requestContext: requestContextToUse as RequestContext,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -3634,13 +3766,16 @@ export class Run<
     resumeData?: any;
     initialState?: TState;
     step:
-      | Step<string, any, TInput, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInput, any, any, any, TEngineType>]
+      | Step<string, any, TInput, any, any, any, TEngineType, any>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInput, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3697,8 +3832,8 @@ export class Run<
 
     const requestContextToUse = requestContext ?? new RequestContext();
     for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
-      if (!requestContextToUse.has(key)) {
-        requestContextToUse.set(key, value);
+      if (!(requestContextToUse as RequestContext).has(key)) {
+        (requestContextToUse as RequestContext).set(key, value);
       }
     }
 
@@ -3715,7 +3850,7 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
-      requestContext: requestContextToUse,
+      requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
 
@@ -3731,7 +3866,7 @@ export class Run<
       serializedStepGraph: this.serializedStepGraph,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
-      requestContext: requestContextToUse,
+      requestContext: requestContextToUse as RequestContext,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -3752,13 +3887,16 @@ export class Run<
     resumeData?: any;
     initialState?: TState;
     step:
-      | Step<string, any, TInput, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInput, any, any, any, TEngineType>]
+      | Step<string, any, TInput, any, any, any, TEngineType, any>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInput, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3788,13 +3926,16 @@ export class Run<
     initialState?: TState;
     resumeData?: any;
     step:
-      | Step<string, any, any, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | Step<string, any, any, any, any, any, TEngineType, any>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, any, any, TEngineType, any>,
+        ]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
