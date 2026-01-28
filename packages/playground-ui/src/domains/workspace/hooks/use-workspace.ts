@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
-import { hasMethod } from '../client-utils';
 import type {
   WorkspaceInfo,
   WorkspacesListResponse,
@@ -12,25 +11,7 @@ import type {
   SearchWorkspaceParams,
   SearchResponse,
 } from '../types';
-import { coreFeatures } from '@mastra/core/features';
-import { MastraClient } from '@mastra/client-js';
-
-// =============================================================================
-// Version Compatibility Check
-// =============================================================================
-
-/**
- * Checks if workspace v1 features are supported by both core and client.
- * This guards against version mismatches between playground-ui, core, and client-js.
- */
-export const isWorkspaceV1Supported = (client: MastraClient) => {
-  const workspaceClientMethods = ['listWorkspaces', 'getWorkspace'];
-
-  const coreSupported = coreFeatures.has('workspaces-v1');
-  const clientSupported = workspaceClientMethods.every(method => hasMethod(client, method));
-
-  return coreSupported && clientSupported;
-};
+import { isWorkspaceV1Supported } from '../compatibility';
 
 // =============================================================================
 // Workspace Info Hook
