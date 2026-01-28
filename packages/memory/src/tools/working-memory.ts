@@ -165,6 +165,33 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       } else {
         // Template-based (Markdown): use existing replace semantics
         workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+
+        // Validate that we're not replacing good data with an empty template
+        // This prevents accidental data loss when the LLM returns just the template
+        const existingRaw = await memory.getWorkingMemory({
+          threadId,
+          resourceId,
+          memoryConfig,
+        });
+
+        if (existingRaw) {
+          const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
+          if (template?.content) {
+            // Normalize whitespace for comparison
+            const normalizedNew = workingMemory.replace(/\s+/g, ' ').trim();
+            const normalizedTemplate = template.content.replace(/\s+/g, ' ').trim();
+            const normalizedExisting = existingRaw.replace(/\s+/g, ' ').trim();
+
+            // If the new content is essentially the empty template and we have meaningful existing data
+            if (normalizedNew === normalizedTemplate && normalizedExisting !== normalizedTemplate) {
+              return {
+                success: false,
+                message:
+                  'Attempted to replace existing working memory with empty template. Update skipped to prevent data loss.',
+              };
+            }
+          }
+        }
       }
 
       // Use the updateWorkingMemory method which handles both thread and resource scope
