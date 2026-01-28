@@ -19,6 +19,7 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 
 export interface ThreadProps {
   agentName?: string;
@@ -55,7 +56,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} />
+      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} />
     </ThreadWrapper>
   );
 };
@@ -86,9 +87,10 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 interface ComposerProps {
   hasMemory?: boolean;
   agentId?: string;
+  hasModelList?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
@@ -115,9 +117,12 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
               onChange={e => setThreadInput?.(e.target.value)}
             />
           </ComposerPrimitive.Input>
-          <div className="flex justify-end gap-2">
-            <SpeechInput agentId={agentId} />
-            <ComposerAction />
+          <div className="flex items-center justify-between gap-2">
+            {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
+            <div className="flex items-center gap-2 ml-auto">
+              <SpeechInput agentId={agentId} />
+              <ComposerAction />
+            </div>
           </div>
         </div>
       </ComposerPrimitive.Root>
