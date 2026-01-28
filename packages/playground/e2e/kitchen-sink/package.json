@@ -9,9 +9,9 @@
     "start": "mastra start"
   },
   "dependencies": {
-    "ai": "5.1.0-beta.13",
+    "ai": "5.1.0-beta.28",
     "mastra": "latest",
-    "@ai-sdk/openai": "^2.0.44",
+    "@ai-sdk/openai": "^2.0.89",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
