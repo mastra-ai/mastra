@@ -52,17 +52,10 @@ const MASTRA_SPAN_TYPE = 'mastra.span.type';
  * The @arizeai/openinference-genai library defaults all spans to LLM kind,
  * which is incorrect for workflow, agent, tool, and other non-LLM spans.
  * This mapping overrides the span kind based on the mastra.span.type attribute.
+ *
+ * Only non-CHAIN types are mapped here - all other span types default to CHAIN.
  */
 const SPAN_TYPE_TO_KIND: Record<string, OpenInferenceSpanKind> = {
-  // Workflow spans -> CHAIN
-  workflow_run: OpenInferenceSpanKind.CHAIN,
-  workflow_step: OpenInferenceSpanKind.CHAIN,
-  workflow_conditional: OpenInferenceSpanKind.CHAIN,
-  workflow_conditional_eval: OpenInferenceSpanKind.CHAIN,
-  workflow_parallel: OpenInferenceSpanKind.CHAIN,
-  workflow_loop: OpenInferenceSpanKind.CHAIN,
-  workflow_sleep: OpenInferenceSpanKind.CHAIN,
-  workflow_wait_event: OpenInferenceSpanKind.CHAIN,
   // Model spans -> LLM
   model_generation: OpenInferenceSpanKind.LLM,
   model_step: OpenInferenceSpanKind.LLM,
@@ -72,9 +65,6 @@ const SPAN_TYPE_TO_KIND: Record<string, OpenInferenceSpanKind> = {
   mcp_tool_call: OpenInferenceSpanKind.TOOL,
   // Agent spans -> AGENT
   agent_run: OpenInferenceSpanKind.AGENT,
-  // Other spans -> CHAIN
-  processor_run: OpenInferenceSpanKind.CHAIN,
-  generic: OpenInferenceSpanKind.CHAIN,
 };
 
 /**
@@ -250,10 +240,11 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
 
         // Override span kind based on mastra.span.type
         // The @arizeai/openinference-genai library incorrectly defaults all spans to LLM kind.
-        // We need to map based on the actual Mastra span type.
+        // We need to map based on the actual Mastra span type, defaulting to CHAIN.
         const spanType = mastraOther[MASTRA_SPAN_TYPE];
-        if (typeof spanType === 'string' && SPAN_TYPE_TO_KIND[spanType]) {
-          mutableSpan.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND] = SPAN_TYPE_TO_KIND[spanType];
+        if (typeof spanType === 'string') {
+          mutableSpan.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND] =
+            SPAN_TYPE_TO_KIND[spanType] ?? OpenInferenceSpanKind.CHAIN;
         }
       }
 

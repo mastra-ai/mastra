@@ -755,6 +755,37 @@ describe('ArizeExporter', () => {
       // MCP tool call spans should be mapped to TOOL span kind
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
     });
+
+    it('defaults unknown span types to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      // Simulate a future span type that doesn't exist in the mapping
+      const unknownSpan: Mutable<AnyExportedSpan> = {
+        id: 'unknown-span',
+        traceId: 'trace-unknown',
+        type: 'some_future_span_type' as any,
+        name: 'Future Operation',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { data: 'input' },
+        output: { result: 'output' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: unknownSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Unknown span types should default to CHAIN span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
   });
 
   describe('Tool Call Span Support', () => {
