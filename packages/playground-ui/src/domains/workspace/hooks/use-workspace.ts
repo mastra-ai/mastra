@@ -17,19 +17,22 @@ import type {
 // Workspace Info Hook
 // =============================================================================
 
-export const useWorkspaceInfo = () => {
+export const useWorkspaceInfo = (workspaceId?: string) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'info'],
+    queryKey: ['workspace', 'info', workspaceId],
     queryFn: async (): Promise<WorkspaceInfo> => {
       if (!hasMethod(client, 'getWorkspace')) {
         throw new Error('Client does not support workspace methods');
       }
-      const workspace = (client as any).getWorkspace();
+      if (!workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.info();
     },
-    enabled: hasMethod(client, 'getWorkspace'),
+    enabled: !!workspaceId && hasMethod(client, 'getWorkspace'),
   });
 };
 
@@ -68,10 +71,13 @@ export const useWorkspaceFiles = (
       if (!hasMethod(client, 'getWorkspace')) {
         throw new Error('Client does not support workspace methods');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.listFiles(path, options?.recursive);
     },
-    enabled: options?.enabled !== false && !!path && hasMethod(client, 'getWorkspace'),
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && hasMethod(client, 'getWorkspace'),
   });
 };
 
@@ -87,10 +93,13 @@ export const useWorkspaceFile = (
       if (!hasMethod(client, 'getWorkspace')) {
         throw new Error('Client does not support workspace methods');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.readFile(path, options?.encoding);
     },
-    enabled: options?.enabled !== false && !!path && hasMethod(client, 'getWorkspace'),
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && hasMethod(client, 'getWorkspace'),
   });
 };
 
@@ -103,10 +112,13 @@ export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean
       if (!hasMethod(client, 'getWorkspace')) {
         throw new Error('Client does not support workspace methods');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.stat(path);
     },
-    enabled: options?.enabled !== false && !!path && hasMethod(client, 'getWorkspace'),
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && hasMethod(client, 'getWorkspace'),
   });
 };
 
@@ -229,12 +241,21 @@ export const useIndexWorkspaceContent = () => {
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: async (params: { path: string; content: string; metadata?: Record<string, unknown> }) => {
+    mutationFn: async (params: {
+      workspaceId: string;
+      path: string;
+      content: string;
+      metadata?: Record<string, unknown>;
+    }) => {
       if (!hasMethod(client, 'getWorkspace')) {
         throw new Error('Client does not support workspace methods');
       }
-      const workspace = (client as any).getWorkspace();
-      return workspace.index(params);
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      return workspace.index({
+        path: params.path,
+        content: params.content,
+        metadata: params.metadata,
+      });
     },
   });
 };
