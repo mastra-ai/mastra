@@ -1,5 +1,5 @@
 export function isArrayOfRecords(value: unknown): value is Record<string, unknown>[] {
-  return value !== null && value !== undefined && Array.isArray(value) && value.length > 0;
+  return value !== null && value !== undefined && Array.isArray(value);
 }
 
 export function deserializeValue(value: unknown, type?: string): unknown {

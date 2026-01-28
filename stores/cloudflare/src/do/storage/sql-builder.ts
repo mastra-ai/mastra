@@ -128,13 +128,18 @@ export class SqlBuilder {
 
     if (conflictColumns && updateMap) {
       const parsedConflictColumns = conflictColumns.map(col => parseSqlIdentifier(col, 'column name'));
-      // Validate updateMap: keys must be valid identifiers, values must be 'excluded.<column>' pattern
+      // Validate updateMap: keys must be valid identifiers, values must be safe patterns
+      // Allowed: 'excluded.<column>' or 'COALESCE(excluded.<column>, <table>.<column>)'
       const excludedPattern = /^excluded\.[a-zA-Z_][a-zA-Z0-9_]*$/;
+      const coalescePattern =
+        /^COALESCE\(excluded\.[a-zA-Z_][a-zA-Z0-9_]*,\s*[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\)$/;
       const updateClause = Object.entries(updateMap)
         .map(([col, expr]) => {
           const parsedCol = parseSqlIdentifier(col, 'update column name');
-          if (!excludedPattern.test(expr)) {
-            throw new Error(`Invalid update expression for column ${col}: must be 'excluded.<column>' pattern`);
+          if (!excludedPattern.test(expr) && !coalescePattern.test(expr)) {
+            throw new Error(
+              `Invalid update expression for column ${col}: must be 'excluded.<column>' or 'COALESCE(excluded.<column>, <table>.<column>)' pattern`,
+            );
           }
           return `${parsedCol} = ${expr}`;
         })

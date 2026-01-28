@@ -463,7 +463,6 @@ export class MemoryStorageDO extends MemoryStorage {
 
     try {
       const now = new Date();
-      const threadId = messages[0]?.threadId;
 
       // Validate all messages before insert
       for (const [i, message] of messages.entries()) {
@@ -504,17 +503,19 @@ export class MemoryStorageDO extends MemoryStorage {
         };
       });
 
-      // Insert messages and update thread's updatedAt in parallel
+      // Insert messages and update all affected threads' updatedAt in parallel
       await Promise.all([
         this.#db.batchUpsert({
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
-        // Update thread's updatedAt timestamp
-        this.#db.executeQuery({
-          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
-          params: [now.toISOString(), threadId],
-        }),
+        // Update updatedAt timestamp for all affected threads
+        ...uniqueThreadIds.map(tid =>
+          this.#db.executeQuery({
+            sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
+            params: [now.toISOString(), tid],
+          }),
+        ),
       ]);
 
       this.logger.debug(`Saved ${messages.length} messages`);
