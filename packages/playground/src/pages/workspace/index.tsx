@@ -23,11 +23,12 @@ import {
   SearchSkillsPanel,
   WorkspaceNotConfigured,
   useWorkspaceFile,
+  isWorkspaceNotSupportedError,
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
 import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
-import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
@@ -44,14 +45,22 @@ export default function Workspace() {
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
-  const { data: workspacesData } = useWorkspaces();
+  const { data: workspacesData, error: workspacesError } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
   // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
   const effectiveWorkspaceId = workspaceIdFromPath ?? workspaces[0]?.id;
 
   // Workspace info - calls /api/workspaces/:workspaceId directly
-  const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo(effectiveWorkspaceId);
+  const {
+    data: workspaceInfo,
+    isLoading: isLoadingInfo,
+    error: workspaceInfoError,
+  } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Check if workspaces are not supported (501 error from server)
+  const isWorkspaceNotSupported =
+    isWorkspaceNotSupportedError(workspacesError) || isWorkspaceNotSupportedError(workspaceInfoError);
 
   // Get the selected workspace metadata from the list (for displaying name, capabilities badge, etc.)
   const selectedWorkspace: WorkspaceItem | undefined = effectiveWorkspaceId
@@ -139,6 +148,57 @@ export default function Workspace() {
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
   const files = filesData?.entries ?? [];
+
+  // If workspace v1 is not supported by the server's @mastra/core version
+  if (isWorkspaceNotSupported) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="grid overflow-y-auto h-full">
+          <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start h-full w-full">
+            <PageHeader
+              title="Workspace"
+              description="Manage files, skills, and search your workspace"
+              icon={<Folder />}
+            />
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 mb-6">
+                <AlertTriangle className="h-8 w-8 text-amber-500" />
+              </div>
+              <h2 className="text-xl font-semibold text-icon6 mb-2">Workspace Not Supported</h2>
+              <p className="text-icon4 max-w-md mb-6">
+                The workspace feature requires a newer version of <code className="text-icon5">@mastra/core</code>.
+                Please upgrade your dependencies to enable workspace functionality.
+              </p>
+              <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+                <Icon>
+                  <DocsIcon />
+                </Icon>
+                Learn More
+              </Button>
+            </div>
+          </div>
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // If workspace is not configured, show the not configured message
   if (!isLoadingInfo && !isWorkspaceConfigured) {

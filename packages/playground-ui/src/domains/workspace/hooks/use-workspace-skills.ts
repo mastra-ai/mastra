@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
-import { isWorkspaceV1Supported } from '../compatibility';
+import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery } from '../compatibility';
 import type {
   Skill,
   ListSkillsResponse,
@@ -33,6 +33,7 @@ export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
       return workspace.listSkills();
     },
     enabled: !!options?.workspaceId && isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -56,6 +57,7 @@ export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boole
       return skill.details();
     },
     enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -82,6 +84,7 @@ export const useWorkspaceSkillReferences = (
       return skill.listReferences();
     },
     enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -114,6 +117,7 @@ export const useWorkspaceSkillReference = (
       !!referencePath &&
       !!options?.workspaceId &&
       isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -170,5 +174,6 @@ export const useAgentSkill = (
       !!skillName &&
       !!options?.workspaceId &&
       isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
   });
 };
