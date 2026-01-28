@@ -7,8 +7,6 @@
 
 import { z } from 'zod';
 import { createTool } from '../../tools';
-import { WORKSPACE_TOOLS } from '../constants';
-import type { WorkspaceToolName, WorkspaceToolsConfig } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker } from '../filesystem';
 import type { FileReadTracker } from '../filesystem';
@@ -20,7 +18,10 @@ import {
   StringNotUniqueError,
 } from '../line-utils';
 import type { Workspace } from '../workspace';
+import type { WorkspaceToolName } from './constants';
+import { WORKSPACE_TOOLS } from './constants';
 import { formatAsTree } from './tree-formatter';
+import type { WorkspaceToolsConfig } from './types';
 
 /**
  * Resolves the effective configuration for a specific tool.

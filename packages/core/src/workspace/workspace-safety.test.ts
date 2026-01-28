@@ -2,11 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WORKSPACE_TOOLS } from './constants';
 import { FileReadRequiredError, WorkspaceReadOnlyError } from './errors';
 import { LocalFilesystem } from './filesystem';
 import { LocalSandbox } from './sandbox';
-import { createWorkspaceTools } from './tools';
+import { WORKSPACE_TOOLS, createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 describe('Workspace Safety Features', () => {

@@ -16,13 +16,13 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools } from './tools/tools';
 export {
+  createWorkspaceTools,
   WORKSPACE_TOOLS,
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
   type WorkspaceToolName,
-} from './constants';
+} from './tools';
 
 // Lifecycle
 export * from './lifecycle';
