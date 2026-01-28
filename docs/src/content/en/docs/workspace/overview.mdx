@@ -9,18 +9,18 @@ packages:
 
 A workspace gives agents a persistent environment for storing files and executing commands. Agents use workspace tools to read and write files, run shell commands, and search indexed content.
 
-## How workspaces work
+## How Workspaces Work
 
 A workspace combines two components:
 
 - **Filesystem provider** - Handles file storage (read, write, list, delete)
 - **Sandbox provider** - Handles command execution (shell commands)
 
-When you assign a workspace to an agent, Mastra automatically adds workspace tools to the agent's toolset. The agent can then use these tools to interact with files and execute code as part of its task.
+When you assign a workspace to an agent, Mastra automatically adds workspace tools to the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
 
-You can create a workspace with just a filesystem (file storage only), just a sandbox (code execution only), or both. The agent receives only the tools relevant to the configured providers.
+You can create a workspace with just a filesystem (file storage only), just a sandbox (command execution only), or both. The agent receives only the tools relevant to the configured providers.
 
-## Filesystem providers
+## Filesystem Providers
 
 Filesystem providers determine where files are stored. All file operations go through the provider, which handles the actual storage.
 
@@ -38,7 +38,7 @@ All file paths are relative to `basePath`. A path like `/docs/guide.md` maps to 
 
 See [Filesystem Reference](/reference/workspace/filesystem) for the full API.
 
-## Sandbox providers
+## Sandbox Providers
 
 Sandbox providers execute shell commands.
 
@@ -58,7 +58,7 @@ const sandbox = new LocalSandbox({
 
 See [Sandbox Reference](/reference/workspace/sandbox) for the full API.
 
-## Creating a workspace
+## Creating a Workspace
 
 Combine providers into a workspace:
 
@@ -79,7 +79,7 @@ await workspace.init();
 
 The `init()` call starts the sandbox and indexes any files in `autoIndexPaths` if search is configured.
 
-## Global workspace
+## Global Workspace
 
 Set a workspace on the Mastra instance. All agents inherit this workspace unless they define their own:
 
@@ -92,7 +92,7 @@ const mastra = new Mastra({
 });
 ```
 
-## Agent-scoped workspace
+## Agent-scoped Workspace
 
 Assign a workspace directly to an agent to override the global workspace:
 
@@ -110,7 +110,7 @@ export const myAgent = new Agent({
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
 
-A skill is a folder containing a `SKILL.md` file with metadata and instructions, plus optional reference files, scripts, and assets. When an agent activates a skill, the instructions are injected into its context.
+A skill is a folder containing a `SKILL.md` file with metadata and instructions, plus optional reference files, scripts, and assets:
 
 ```
 /skills
@@ -131,87 +131,90 @@ const workspace = new Workspace({
 });
 ```
 
-When skills are configured, agents receive a `SkillsProcessor` that:
-- Injects available skills into the system message
-- Provides tools for activating skills (`skill-activate`)
-- Provides tools for searching skill content (`skill-search`)
-- Provides tools for reading references, scripts, and assets
+When skills are configured, agents receive a `SkillsProcessor` that injects available skills into the system message and allows agents to activate skills during conversation.
 
-## Agent tools and processors
+## Agent Tools
 
-A workspace provides tools and processors to agents based on what is configured:
+A workspace provides tools to agents based on what is configured:
 
-- **Filesystem** - Tools for reading, writing, editing, listing, and deleting files
-- **Sandbox** - Tools for executing shell commands
-- **Search** - Tools for searching and indexing workspace content
-- **Skills** - A processor that injects skill instructions into the system message, plus tools for activating and reading skills
+**Filesystem tools** (when filesystem is configured):
+- `mastra_workspace_read_file` - Read file contents
+- `mastra_workspace_write_file` - Write file contents
+- `mastra_workspace_edit_file` - Edit file by replacing text
+- `mastra_workspace_list_files` - List directory contents
+- `mastra_workspace_delete` - Delete files or directories
+- `mastra_workspace_file_stat` - Get file metadata
+- `mastra_workspace_mkdir` - Create directories
+
+**Sandbox tools** (when sandbox is configured):
+- `mastra_workspace_execute_command` - Execute shell commands
+
+**Search tools** (when BM25 or vector search is configured):
+- `mastra_workspace_search` - Search indexed content
+- `mastra_workspace_index` - Index content for search
 
 Only the relevant tools are added. A workspace with only a filesystem won't have command execution tools.
 
 See [Workspace Class Reference](/reference/workspace/workspace-class) for details.
 
-## Safety
+## Tool Configuration
 
-Safety is configured on the provider instances (LocalFilesystem, LocalSandbox), not on the Workspace directly.
+Configure tool behavior through the `tools` option on the Workspace. This controls which tools are enabled and their safety settings.
 
 ```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-    safety: {
-      readOnly: false,
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    // Global defaults
+    enabled: true,
+    requireApproval: false,
+
+    // Per-tool overrides
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
       requireReadBeforeWrite: true,
-      requireApproval: 'none',
     },
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-    safety: {
-      requireApproval: 'all',
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+      enabled: false,
     },
-  }),
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+  },
 });
 ```
 
-### Filesystem safety
+### Tool Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `readOnly` | `false` | Block all write operations |
-| `requireReadBeforeWrite` | `true` | Require reading files before writing |
-| `requireApproval` | `'none'` | Approval for filesystem ops: `'all'`, `'write'`, or `'none'` |
+| Option | Type | Description |
+|--------|------|-------------|
+| `enabled` | `boolean` | Whether the tool is available (default: `true`) |
+| `requireApproval` | `boolean` | Whether the tool requires user approval before execution (default: `false`) |
+| `requireReadBeforeWrite` | `boolean` | For write tools: require reading the file first (default: `false`) |
 
 ### Read-before-write
 
-When enabled (default), agents must read a file before writing to it. This prevents overwriting files the agent hasn't seen. The workspace tracks:
+When `requireReadBeforeWrite` is enabled on write tools, agents must read a file before writing to it. This prevents overwriting files the agent hasn't seen:
 
 - **New files** - Can be written without reading (they don't exist yet)
 - **Existing files** - Must be read first
 - **Externally modified files** - If a file changed since the agent read it, the write fails
 
-### Sandbox safety
+### Read-only Mode
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `requireApproval` | `'all'` | Approval for sandbox ops: `'all'`, `'commands'`, or `'none'` |
+To make a filesystem read-only, set `readOnly: true` on the LocalFilesystem:
 
-Controls when sandbox operations require user approval:
+```typescript
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+  readOnly: true,
+});
+```
 
-| Value | `execute_command` |
-|-------|-------------------|
-| `'none'` | No approval |
-| `'commands'` | Requires approval |
-| `'all'` | Requires approval |
-
-### Filesystem approval
-
-Controls when filesystem operations require user approval:
-
-| Value | Read ops | Write ops |
-|-------|----------|-----------|
-| `'none'` | No approval | No approval |
-| `'write'` | No approval | Requires approval |
-| `'all'` | Requires approval | Requires approval |
+When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset.
 
 ## Search
 
@@ -231,4 +234,3 @@ const workspace = new Workspace({
 - [Workspace Class Reference](/reference/workspace/workspace-class)
 - [Filesystem Reference](/reference/workspace/filesystem)
 - [Sandbox Reference](/reference/workspace/sandbox)
-- [Agent Approval](/docs/agents/agent-approval)

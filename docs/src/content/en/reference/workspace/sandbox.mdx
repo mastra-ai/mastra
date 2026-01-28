@@ -26,10 +26,17 @@ const sandbox = new LocalSandbox({
 });
 ```
 
-### Constructor parameters
+### Constructor Parameters
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this sandbox instance",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
     {
       name: "workingDirectory",
       type: "string",
@@ -42,6 +49,13 @@ const sandbox = new LocalSandbox({
       type: "NodeJS.ProcessEnv",
       description: "Environment variables to set. PATH is included by default unless overridden.",
       isOptional: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Default timeout for operations in milliseconds",
+      isOptional: true,
+      defaultValue: "30000",
     },
     {
       name: "isolation",
@@ -104,14 +118,55 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Sandbox instance identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Provider name ('LocalSandbox')",
+    },
+    {
       name: "provider",
       type: "string",
       description: "Provider identifier ('local')",
     },
+    {
+      name: "status",
+      type: "ProviderStatus",
+      description: "'starting' | 'running' | 'stopped' | 'error'",
+    },
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "The configured working directory",
+    },
   ]}
 />
 
-## WorkspaceSandbox interface
+### Static Methods
+
+#### `detectIsolation()`
+
+Detect the best available isolation backend for the current platform.
+
+```typescript
+const detection = LocalSandbox.detectIsolation();
+// { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
+```
+
+**Returns:** `SandboxDetectionResult`
+
+```typescript
+interface SandboxDetectionResult {
+  backend: IsolationBackend;
+  available: boolean;
+  message: string;
+}
+```
+
+## WorkspaceSandbox Interface
 
 All sandbox providers implement this interface.
 
@@ -183,6 +238,18 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
       description: "Additional environment variables",
       isOptional: true,
     },
+    {
+      name: "options.onStdout",
+      type: "(data: string) => void",
+      description: "Callback for stdout streaming",
+      isOptional: true,
+    },
+    {
+      name: "options.onStderr",
+      type: "(data: string) => void",
+      description: "Callback for stderr streaming",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -194,7 +261,7 @@ interface CommandResult {
   stdout: string;
   stderr: string;
   exitCode: number;
-  duration: number;
+  executionTimeMs: number;
 }
 ```
 
@@ -223,7 +290,7 @@ interface SandboxInfo {
 }
 ```
 
-## Environment isolation
+## Environment Isolation
 
 By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
 
@@ -249,7 +316,7 @@ const devSandbox = new LocalSandbox({
 });
 ```
 
-## Native OS sandboxing
+## Native OS Sandboxing
 
 `LocalSandbox` supports native OS-level sandboxing for additional security:
 
@@ -278,6 +345,60 @@ When isolation is enabled:
 - File reads are allowed everywhere (needed for system binaries)
 - Network access is blocked by default
 - Process isolation prevents affecting the host system
+
+## Errors
+
+### SandboxError
+
+Base error for sandbox operations.
+
+```typescript
+class SandboxError extends Error {
+  code: string;
+}
+```
+
+### SandboxNotReadyError
+
+Thrown when attempting to execute commands before the sandbox is started.
+
+```typescript
+class SandboxNotReadyError extends SandboxError {
+  code: 'SANDBOX_NOT_READY';
+}
+```
+
+### SandboxExecutionError
+
+Thrown when a command fails to execute.
+
+```typescript
+class SandboxExecutionError extends SandboxError {
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+}
+```
+
+### SandboxTimeoutError
+
+Thrown when a command exceeds its timeout.
+
+```typescript
+class SandboxTimeoutError extends SandboxError {
+  code: 'TIMEOUT';
+}
+```
+
+### IsolationUnavailableError
+
+Thrown when the requested isolation backend is not available on the current platform.
+
+```typescript
+class IsolationUnavailableError extends SandboxError {
+  code: 'ISOLATION_UNAVAILABLE';
+}
+```
 
 ## Related
 

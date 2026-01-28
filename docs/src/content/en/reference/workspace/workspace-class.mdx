@@ -7,36 +7,39 @@ packages:
 
 # Workspace Class
 
-The `Workspace` class combines a filesystem and sandbox to provide agents with file storage and code execution capabilities. It also supports BM25 and vector search for indexed content.
+The `Workspace` class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities. It also supports BM25 and vector search for indexed content.
 
-## Usage example
+## Usage Example
 
 ```typescript
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   id: 'my-workspace',
   name: 'My Workspace',
   filesystem: new LocalFilesystem({
     basePath: './workspace',
-    safety: {
-      requireReadBeforeWrite: true,
-    },
   }),
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
-    safety: {
-      requireApproval: 'all',
-    },
   }),
   bm25: true,
   autoIndexPaths: ['/docs'],
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+  },
 });
 
 await workspace.init();
 ```
 
-## Constructor parameters
+## Constructor Parameters
 
 <PropertiesTable
   content={[
@@ -57,13 +60,13 @@ await workspace.init();
     {
       name: "filesystem",
       type: "WorkspaceFilesystem",
-      description: "Filesystem provider instance (LocalFilesystem)",
+      description: "Filesystem provider instance (e.g., LocalFilesystem)",
       isOptional: true,
     },
     {
       name: "sandbox",
       type: "WorkspaceSandbox",
-      description: "Sandbox provider instance (LocalSandbox)",
+      description: "Sandbox provider instance (e.g., LocalSandbox)",
       isOptional: true,
     },
     {
@@ -93,10 +96,15 @@ await workspace.init();
     },
     {
       name: "skills",
-      type: "string[]",
-      description: "Paths where SKILL.md files are located",
+      type: "string[] | ((context) => string[])",
+      description: "Paths where SKILL.md files are located. Can be static array or dynamic function.",
       isOptional: true,
-      defaultValue: "['/skills']",
+    },
+    {
+      name: "tools",
+      type: "WorkspaceToolsConfig",
+      description: "Per-tool configuration for enabling tools and setting safety options",
+      isOptional: true,
     },
     {
       name: "autoInit",
@@ -114,48 +122,56 @@ await workspace.init();
   ]}
 />
 
-## Safety configuration
+## Tool Configuration
 
-Safety is configured on the provider instances (LocalFilesystem, LocalSandbox), not on the Workspace directly. The Workspace reads these settings from the providers.
+The `tools` option controls which workspace tools are enabled and their safety settings.
 
-### Filesystem safety (LocalFilesystem)
+```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    // Global defaults apply to all tools
+    enabled: true,
+    requireApproval: false,
+
+    // Per-tool overrides
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+      enabled: false,
+    },
+  },
+});
+```
+
+### WorkspaceToolConfig
 
 <PropertiesTable
   content={[
     {
-      name: "readOnly",
+      name: "enabled",
       type: "boolean",
-      description: "Block all write operations",
+      description: "Whether the tool is available to agents",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "requireApproval",
+      type: "boolean",
+      description: "Whether the tool requires user approval before execution",
       isOptional: true,
       defaultValue: "false",
     },
     {
       name: "requireReadBeforeWrite",
       type: "boolean",
-      description: "Require files to be read before writing. Prevents overwrites of externally modified files.",
+      description: "For write tools: require reading the file first to prevent overwrites",
       isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "requireApproval",
-      type: "'all' | 'write' | 'none'",
-      description: "Require approval for filesystem operations",
-      isOptional: true,
-      defaultValue: "'none'",
-    },
-  ]}
-/>
-
-### Sandbox safety (LocalSandbox)
-
-<PropertiesTable
-  content={[
-    {
-      name: "requireApproval",
-      type: "'all' | 'commands' | 'none'",
-      description: "Require approval for sandbox operations",
-      isOptional: true,
-      defaultValue: "'all'",
+      defaultValue: "false",
     },
   ]}
 />
@@ -195,11 +211,6 @@ Safety is configured on the provider instances (LocalFilesystem, LocalSandbox), 
       description: "Skills interface for accessing SKILL.md files",
     },
     {
-      name: "readOnly",
-      type: "boolean",
-      description: "Whether the workspace is in read-only mode",
-    },
-    {
       name: "canBM25",
       type: "boolean",
       description: "Whether BM25 search is available",
@@ -237,55 +248,7 @@ Destroy the workspace and clean up resources.
 await workspace.destroy();
 ```
 
-### Filesystem operations
-
-#### `readFile(path, options?)`
-
-Read a file from the workspace filesystem.
-
-```typescript
-const content = await workspace.readFile('/docs/guide.md');
-const buffer = await workspace.readFile('/data/image.png', { encoding: 'binary' });
-```
-
-#### `writeFile(path, content, options?)`
-
-Write a file to the workspace filesystem.
-
-```typescript
-await workspace.writeFile('/docs/new.md', '# New Document');
-await workspace.writeFile('/docs/nested/file.md', content, { recursive: true });
-```
-
-#### `readdir(path, options?)`
-
-List directory contents.
-
-```typescript
-const entries = await workspace.readdir('/docs');
-// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
-```
-
-#### `exists(path)`
-
-Check if a path exists.
-
-```typescript
-const exists = await workspace.exists('/docs/guide.md');
-```
-
-### Sandbox operations
-
-#### `executeCommand(command, args?, options?)`
-
-Execute a shell command.
-
-```typescript
-const result = await workspace.executeCommand('ls', ['-la']);
-console.log(result.stdout);
-```
-
-### Search operations
+### Search Operations
 
 #### `index(path, content, options?)`
 
@@ -326,27 +289,39 @@ const context = workspace.getPathContext();
 // { type, filesystem?, sandbox?, requiresSync, instructions }
 ```
 
-#### `getSafetyConfig()`
+#### `getToolsConfig()`
 
-Get the safety configuration.
+Get the tools configuration.
 
 ```typescript
-const config = workspace.getSafetyConfig();
+const config = workspace.getToolsConfig();
 ```
 
-## Agent tools
+## Agent Tools
 
 A workspace provides tools to agents based on what is configured:
 
-**Filesystem** - When a filesystem provider is configured, agents receive tools for file operations: reading, writing, editing, listing, and deleting files.
+**Filesystem tools** (when filesystem is configured):
+- `mastra_workspace_read_file` - Read file contents with optional line range
+- `mastra_workspace_write_file` - Write content to a file
+- `mastra_workspace_edit_file` - Edit file by replacing text
+- `mastra_workspace_list_files` - List directory contents as a tree
+- `mastra_workspace_delete` - Delete files or directories
+- `mastra_workspace_file_stat` - Get file/directory metadata
+- `mastra_workspace_mkdir` - Create directories
 
-**Sandbox** - When a sandbox provider is configured, agents receive tools for executing shell commands.
+**Sandbox tools** (when sandbox is configured):
+- `mastra_workspace_execute_command` - Execute shell commands
 
-**Search** - When BM25 or vector search is configured, agents receive tools for searching and indexing workspace content.
+**Search tools** (when BM25 or vector search is configured):
+- `mastra_workspace_search` - Search indexed content
+- `mastra_workspace_index` - Index content for search
 
-**Skills** - When `skills` is configured, the workspace provides access to SKILL.md files for skill discovery and activation.
+Write tools (`write_file`, `edit_file`, `delete`, `mkdir`, `index`) are excluded when the filesystem is in read-only mode.
 
 ## Related
 
 - [Workspace Overview](/docs/workspace/overview)
 - [Search and Indexing](/docs/workspace/search)
+- [Filesystem Reference](/reference/workspace/filesystem)
+- [Sandbox Reference](/reference/workspace/sandbox)

@@ -104,9 +104,10 @@ With options:
 
 ```typescript
 const results = await workspace.search('authentication flow', {
-  topK: 10,         // Maximum results (default: 5)
-  mode: 'hybrid',   // 'bm25' | 'vector' | 'hybrid'
-  threshold: 0.5,   // Minimum score threshold
+  topK: 10,           // Maximum results (default: 5)
+  mode: 'hybrid',     // 'bm25' | 'vector' | 'hybrid'
+  minScore: 0.5,      // Minimum score threshold
+  vectorWeight: 0.5,  // Weight for vector scores in hybrid (0-1)
 });
 ```
 
@@ -118,12 +119,12 @@ const results = await workspace.search('authentication flow', {
 | `vector` | Conceptual queries, natural language questions |
 | `hybrid` | General search combining both approaches |
 
-## Agent tools
+## Agent Tools
 
 Agents with a search-enabled workspace receive:
 
-- `workspace_search` - Search indexed content
-- `workspace_index` - Index new content
+- `mastra_workspace_search` - Search indexed content
+- `mastra_workspace_index` - Index new content
 
 ## Related
 
