@@ -56,13 +56,13 @@ function AdmonitionIconType({ title, type }: Pick<Props, 'title' | 'type'>) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="size-3 shrink-0">{TypeToEmoji[type]}</span>
-      {title ? <span className="font-mono text-xs font-semibold tracking-tight capitalize">{title}</span> : null}
+      {title ? <span className="font-mono text-sm font-bold tracking-tight capitalize">{title}</span> : null}
     </div>
   )
 }
 
 function AdmonitionContent({ children }: Pick<Props, 'children'>) {
-  return children ? <div className="text-sm [&>:last-child]:mb-0!">{children}</div> : null
+  return children ? <div className="text-sm *:last:mb-0!">{children}</div> : null
 }
 
 export default function AdmonitionLayout(props: Props): ReactNode {

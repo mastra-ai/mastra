@@ -904,7 +904,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  input: { phase, streamParts: [] },
+                  input: { phase, totalChunks: 0 },
                   attributes: {
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
@@ -917,7 +917,6 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (processorSpan) {
                 processorSpan.input = {
                   phase,
-                  streamParts: streamParts ?? [],
                   totalChunks: (streamParts ?? []).length,
                 };
               }
@@ -942,7 +941,8 @@ function createStepFromProcessor<TProcessorId extends string>(
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: result });
+                  // Output just totalChunks (workflow processors don't track accumulated text yet)
+                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
                   delete mutableState[spanKey];
                 }
               } catch (error) {
