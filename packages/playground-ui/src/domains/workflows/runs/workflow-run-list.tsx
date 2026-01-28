@@ -62,7 +62,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                 <ThreadLink as={Link} to={paths.workflowRunLink(workflowId, run.runId)} isActive={isActive}>
                   <span className="flex items-center gap-2">
                     {typeof run?.snapshot === 'object' && <WorkflowRunStatusBadge status={run.snapshot.status} />}
-                    <Truncate variant="ui-sm" className="text-neutral3" untilChar="-">
+                    <Truncate variant="ui-sm" className="text-neutral3" untilChar="-" withTooltip={false}>
                       {run.runId}
                     </Truncate>
                   </span>

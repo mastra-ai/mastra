@@ -124,7 +124,7 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
     return (
       <Txt variant="ui-sm" className="text-neutral3">
         Thread{' '}
-        <Truncate variant="ui-sm" className="text-neutral3" untilChar="-">
+        <Truncate variant="ui-sm" className="text-neutral3" untilChar="-" withTooltip={false}>
           {id ?? ''}
         </Truncate>
       </Txt>
