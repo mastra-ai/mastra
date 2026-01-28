@@ -42,7 +42,7 @@ export class MemoryThread extends BaseResource {
   get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
-    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
   }
 
   /**
@@ -53,7 +53,7 @@ export class MemoryThread extends BaseResource {
   update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(params.requestContext, agentIdParam ? '&' : '?');
-    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
       method: 'PATCH',
       body: params,
     });
@@ -67,7 +67,7 @@ export class MemoryThread extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<{ result: string }> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
-    return this.request(`/api/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
       method: 'DELETE',
     });
   }
@@ -95,7 +95,7 @@ export class MemoryThread extends BaseResource {
 
     const query = new URLSearchParams(queryParams);
     const queryString = query.toString();
-    const url = `/api/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    const url = `/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
     return this.request(url);
   }
 
@@ -116,7 +116,7 @@ export class MemoryThread extends BaseResource {
     const query = new URLSearchParams(queryParams);
     const queryString = query.toString();
     return this.request(
-      `/api/memory/messages/delete${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
+      `/memory/messages/delete${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
       {
         method: 'POST',
         body: { messageIds },
@@ -133,7 +133,7 @@ export class MemoryThread extends BaseResource {
     const { requestContext, ...body } = params;
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
-    return this.request(`/api/memory/threads/${this.threadId}/clone${agentIdParam}${contextParam}`, {
+    return this.request(`/memory/threads/${this.threadId}/clone${agentIdParam}${contextParam}`, {
       method: 'POST',
       body,
     });

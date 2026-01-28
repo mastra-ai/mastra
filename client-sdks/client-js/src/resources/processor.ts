@@ -23,7 +23,7 @@ export class Processor extends BaseResource {
    * @returns Promise containing processor details including phases and configurations
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetProcessorDetailResponse> {
-    return this.request(`/api/processors/${this.processorId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/processors/${this.processorId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -39,7 +39,7 @@ export class Processor extends BaseResource {
       requestContext: parseClientRequestContext(params.requestContext),
     };
 
-    return this.request(`/api/processors/${this.processorId}/execute`, {
+    return this.request(`/processors/${this.processorId}/execute`, {
       method: 'POST',
       body,
     });

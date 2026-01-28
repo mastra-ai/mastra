@@ -48,6 +48,7 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/Switch';
 export * from './ds/components/Tooltip';
+export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';

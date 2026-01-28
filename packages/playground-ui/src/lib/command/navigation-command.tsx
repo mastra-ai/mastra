@@ -1,4 +1,5 @@
-import { Cpu, EyeIcon, GaugeIcon, PackageIcon } from 'lucide-react';
+import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon } from 'lucide-react';
+import React from 'react';
 
 import {
   CommandDialog,
@@ -8,8 +9,10 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
+  CommandShortcut,
 } from '@/ds/components/Command';
 import { AgentIcon, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { useMaybeSidebar } from '@/ds/components/MainSidebar';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -24,6 +27,7 @@ export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
   const { navigate, paths } = useLinkComponent();
   const { isMastraPlatform } = useMastraPlatform();
+  const sidebar = useMaybeSidebar();
 
   const { data: agents = {} } = useAgents();
   const { data: workflows = {} } = useWorkflows();
@@ -55,6 +59,19 @@ export const NavigationCommand = () => {
         <CommandEmpty>No results found.</CommandEmpty>
 
         <CommandGroup heading="Navigation">
+          {sidebar && (
+            <CommandItem
+              value="toggle sidebar collapse expand"
+              onSelect={() => {
+                sidebar.toggleSidebar();
+                setOpen(false);
+              }}
+            >
+              <PanelLeftIcon className="text-neutral3" />
+              <span>Toggle Sidebar</span>
+              <CommandShortcut>Ctrl+B</CommandShortcut>
+            </CommandItem>
+          )}
           <CommandItem value="all agents" onSelect={() => handleSelect('/agents')}>
             <AgentIcon className="text-neutral3" />
             <span>All Agents</span>
@@ -102,10 +119,19 @@ export const NavigationCommand = () => {
             <CommandSeparator />
             <CommandGroup heading="Agents">
               {agentEntries.map(([id, agent]) => (
-                <CommandItem key={id} value={`agent ${agent.name}`} onSelect={() => handleSelect(paths.agentLink(id))}>
-                  <AgentIcon className="text-neutral3" />
-                  <span>{agent.name}</span>
-                </CommandItem>
+                <React.Fragment key={id}>
+                  <CommandItem value={`${agent.name} chat agent`} onSelect={() => handleSelect(paths.agentLink(id))}>
+                    <AgentIcon className="text-neutral3" />
+                    <span>{agent.name}: Chat</span>
+                  </CommandItem>
+                  <CommandItem
+                    value={`${agent.name} traces agent observability`}
+                    onSelect={() => handleSelect(`/observability?entity=${id}`)}
+                  >
+                    <EyeIcon className="text-neutral3" />
+                    <span>{agent.name}: Traces</span>
+                  </CommandItem>
+                </React.Fragment>
               ))}
             </CommandGroup>
           </>
@@ -116,14 +142,22 @@ export const NavigationCommand = () => {
             <CommandSeparator />
             <CommandGroup heading="Workflows">
               {workflowEntries.map(([id, workflow]) => (
-                <CommandItem
-                  key={id}
-                  value={`workflow ${workflow.name}`}
-                  onSelect={() => handleSelect(paths.workflowLink(id))}
-                >
-                  <WorkflowIcon className="text-neutral3" />
-                  <span>{workflow.name}</span>
-                </CommandItem>
+                <React.Fragment key={id}>
+                  <CommandItem
+                    value={`${workflow.name} graph workflow view`}
+                    onSelect={() => handleSelect(paths.workflowLink(id))}
+                  >
+                    <WorkflowIcon className="text-neutral3" />
+                    <span>{workflow.name}: Graph</span>
+                  </CommandItem>
+                  <CommandItem
+                    value={`${workflow.name} traces workflow observability`}
+                    onSelect={() => handleSelect(`/observability?entity=${workflow.name}`)}
+                  >
+                    <EyeIcon className="text-neutral3" />
+                    <span>{workflow.name}: Traces</span>
+                  </CommandItem>
+                </React.Fragment>
               ))}
             </CommandGroup>
           </>

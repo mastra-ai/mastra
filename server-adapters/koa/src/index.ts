@@ -229,7 +229,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
   }
 
-  async sendResponse(route: ServerRoute, ctx: Context, result: unknown): Promise<void> {
+  async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       ctx.body = result;
     } else if (route.responseType === 'stream') {
@@ -279,7 +281,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: ctx.res,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -313,8 +315,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -330,7 +332,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
   }
 
-  async registerRoute(app: Koa, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: Koa, route: ServerRoute, { prefix: prefixParam }: { prefix?: string } = {}): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Koa-style :param (they're the same)
@@ -426,12 +431,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: prefix,
       };
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, ctx, result);
+        await this.sendResponse(route, ctx, result, prefix);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code

@@ -11,9 +11,8 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
-  DividerIcon,
   WorkflowCombobox,
-  Badge,
+  Truncate,
 } from '@mastra/playground-ui';
 import { EyeIcon } from 'lucide-react';
 
@@ -36,19 +35,19 @@ export function WorkflowHeader({
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as="span" to="" isCurrent>
+          <Crumb as="span" to="" isCurrent={!runId}>
             <WorkflowCombobox value={workflowId} variant="ghost" />
           </Crumb>
+          {runId && (
+            <Crumb as={Link} to={`/workflows/${workflowId}/graph/${runId}`} isCurrent>
+              <Truncate untilChar="-" copy>
+                {runId}
+              </Truncate>
+            </Crumb>
+          )}
         </Breadcrumb>
 
         <HeaderGroup>
-          {runId && (
-            <>
-              <Badge variant="default">Run: {runId}</Badge>
-              <DividerIcon />
-            </>
-          )}
-
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
             <Icon>
               <EyeIcon />

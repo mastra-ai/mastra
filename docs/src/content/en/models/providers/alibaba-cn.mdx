@@ -11,11 +11,11 @@ Access 61 Alibaba (China) models through Mastra's model router. Authentication i
 
 Learn more in the [Alibaba (China) documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
-```bash
+```bash title=".env"
 DASHSCOPE_API_KEY=your-api-key
 ```
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -784,7 +784,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ### Custom Headers
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -801,7 +801,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

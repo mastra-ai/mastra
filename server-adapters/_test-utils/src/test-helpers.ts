@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
+import { normalizeRoutePath } from './route-test-utils';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { CompositeVoice } from '@mastra/core/voice';
@@ -879,13 +880,13 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
-  /** Prefix to prepend to the route path (defaults to '/api') */
+  /** Route prefix to prepend to the route path (defaults to '/api') */
   prefix?: string;
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  const prefix = overrides.prefix ?? '/api';
+  const prefix = normalizeRoutePath(overrides.prefix ?? '/api');
   let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {

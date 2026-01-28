@@ -8,13 +8,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
-          <NavigationCommand />
-          <div className="grid grid-cols-[auto_1fr] h-full">
-            <MainSidebarProvider>
+          <MainSidebarProvider>
+            <NavigationCommand />
+            <div className="grid grid-cols-[auto_1fr] h-full">
               <AppSidebar />
-            </MainSidebarProvider>
-            <div className="bg-surface2 my-3 mr-3 rounded-lg border border-border1 overflow-y-auto">{children}</div>
-          </div>
+              <div className="bg-surface2 my-3 mr-3 rounded-lg border border-border1 overflow-y-auto">{children}</div>
+            </div>
+          </MainSidebarProvider>
         </TooltipProvider>
       </ThemeProvider>
     </div>

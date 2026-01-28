@@ -214,7 +214,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     });
   }
 
-  async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
+  async sendResponse(
+    route: ServerRoute,
+    response: Response,
+    result: unknown,
+    request?: Request,
+    prefix?: string,
+  ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -253,7 +261,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: request,
           res: response,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -280,8 +288,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: request,
           res: response,
         });
@@ -296,7 +304,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: Application,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -383,12 +398,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
-          routePrefix: this.prefix,
+          routePrefix: prefix,
         };
 
         try {
           const result = await route.handler(handlerParams);
-          await this.sendResponse(route, res, result, req);
+          await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code
