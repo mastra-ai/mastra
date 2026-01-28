@@ -75,17 +75,21 @@ export class ScoresStorageDO extends ScoresStorage {
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
+      // Guard against null/primitives when accessing score properties
+      const safeScore = score && typeof score === 'object' ? (score as Record<string, unknown>) : {};
+      const safeScorer =
+        safeScore.scorer && typeof safeScore.scorer === 'object' ? (safeScore.scorer as Record<string, unknown>) : {};
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
-            entityId: score.entityId ?? 'unknown',
-            entityType: score.entityType ?? 'unknown',
-            traceId: score.traceId ?? '',
-            spanId: score.spanId ?? '',
+            scorer: typeof safeScorer.id === 'string' ? safeScorer.id : String(safeScorer.id ?? 'unknown'),
+            entityId: (safeScore.entityId as string) ?? 'unknown',
+            entityType: (safeScore.entityType as string) ?? 'unknown',
+            traceId: (safeScore.traceId as string) ?? '',
+            spanId: (safeScore.spanId as string) ?? '',
           },
         },
         error,
@@ -119,7 +123,11 @@ export class ScoresStorageDO extends ScoresStorage {
       const columns = Object.keys(serializedRecord);
       const values = Object.values(serializedRecord);
 
-      const query = createSqlBuilder().insert(fullTableName, columns, values as (string | number | boolean | null | undefined)[]);
+      const query = createSqlBuilder().insert(
+        fullTableName,
+        columns,
+        values as (string | number | boolean | null | undefined)[],
+      );
       const { sql, params } = query.build();
 
       await this.#db.executeQuery({ sql, params });
@@ -170,7 +178,9 @@ export class ScoresStorageDO extends ScoresStorage {
         countQuery.andWhere('source = ?', source as string);
       }
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -244,7 +254,9 @@ export class ScoresStorageDO extends ScoresStorage {
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('runId = ?', runId);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -318,7 +330,9 @@ export class ScoresStorageDO extends ScoresStorage {
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -393,7 +407,9 @@ export class ScoresStorageDO extends ScoresStorage {
         .where('traceId = ?', traceId)
         .andWhere('spanId = ?', spanId);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
