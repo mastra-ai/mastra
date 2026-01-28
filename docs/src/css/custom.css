@@ -739,8 +739,8 @@ article p {
   }
 
   .markdown {
-    p, ul li, ol li {
-      font-size: 1.125em;
+    > p, > ul li, > ol li {
+      font-size: 1.125rem;
     }
 
     h1,
