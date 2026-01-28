@@ -6,6 +6,8 @@
 
 @theme {
   --breakpoint-lg: 62.25rem;
+  --font-sans: 'Greed', 'Greed Fallback', -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', Menlo, Consolas, Monaco, Adwaita Mono, Liberation Mono, Lucida Console, monospace;
 }
 
 /* ==================== LIGHT MODE ==================== */
@@ -59,10 +61,8 @@
   /* Border width */
   --border-sm: 0.5px;
   /* Fonts */
-  --ifm-font-family-base:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
-    'Droid Sans', 'Helvetica Neue', sans-serif;
-  --ifm-font-family-monospace: 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
   --ifm-h3-font-size: 1.25rem;
