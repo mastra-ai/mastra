@@ -49,7 +49,6 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
-import { AgentSkillDetailPage } from './pages/agents/skills/[skillName]';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import Templates from './pages/templates';
@@ -60,7 +59,10 @@ import { StudioSettingsPage } from './pages/settings';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
+  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -119,7 +121,6 @@ const routes = [
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
-      { path: '/agents/:agentId/skills/:skillName', element: <AgentSkillDetailPage /> },
       {
         path: '/agents/:agentId',
         element: (

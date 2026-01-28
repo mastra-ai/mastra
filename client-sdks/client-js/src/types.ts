@@ -92,6 +92,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;

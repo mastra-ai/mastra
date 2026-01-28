@@ -14,15 +14,24 @@ import {
   useWorkspaceSkillReference,
 } from '@mastra/playground-ui';
 
-import { Link, useParams } from 'react-router';
-import { Folder, Wand2 } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import { Bot, Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
+  const [searchParams] = useSearchParams();
   const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
 
-  // Build back link with workspaceId
-  const workspaceBackLink = workspaceId ? `/workspaces/${workspaceId}?tab=skills` : '/workspaces';
+  // Check if we came from an agent page (for breadcrumb context)
+  const agentId = searchParams.get('agentId');
+  const decodedAgentId = agentId ? decodeURIComponent(agentId) : null;
+
+  // Build back link based on context
+  const backLink = decodedAgentId
+    ? `/agents/${decodedAgentId}` // Back to agent
+    : workspaceId
+      ? `/workspaces/${workspaceId}?tab=skills` // Back to workspace skills tab
+      : '/workspaces';
 
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
@@ -39,28 +48,49 @@ export default function WorkspaceSkillDetailPage() {
     },
   );
 
+  // Breadcrumb component based on context
+  const renderBreadcrumb = (currentLabel: string) =>
+    decodedAgentId ? (
+      // Agent context: Agent > Skill
+      <Breadcrumb>
+        <Crumb as={Link} to={backLink}>
+          <Icon>
+            <Bot className="h-4 w-4" />
+          </Icon>
+          {decodedAgentId}
+        </Crumb>
+        <Crumb as="span" to="" isCurrent>
+          <Icon>
+            <Wand2 className="h-4 w-4" />
+          </Icon>
+          {currentLabel}
+        </Crumb>
+      </Breadcrumb>
+    ) : (
+      // Workspace context: Workspace > Skills > Skill
+      <Breadcrumb>
+        <Crumb as={Link} to={backLink}>
+          <Icon>
+            <Folder className="h-4 w-4" />
+          </Icon>
+          Workspace
+        </Crumb>
+        <Crumb as={Link} to={backLink}>
+          <Icon>
+            <Wand2 className="h-4 w-4" />
+          </Icon>
+          Skills
+        </Crumb>
+        <Crumb as="span" to="" isCurrent>
+          {currentLabel}
+        </Crumb>
+      </Breadcrumb>
+    );
+
   if (isLoading) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={workspaceBackLink}>
-              <Icon>
-                <Folder className="h-4 w-4" />
-              </Icon>
-              Workspace
-            </Crumb>
-            <Crumb as={Link} to={workspaceBackLink}>
-              <Icon>
-                <Wand2 className="h-4 w-4" />
-              </Icon>
-              Skills
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              Loading...
-            </Crumb>
-          </Breadcrumb>
-        </Header>
+        <Header>{renderBreadcrumb('Loading...')}</Header>
         <div className="grid place-items-center h-full">
           <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -71,25 +101,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error || !skill) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={workspaceBackLink}>
-              <Icon>
-                <Folder className="h-4 w-4" />
-              </Icon>
-              Workspace
-            </Crumb>
-            <Crumb as={Link} to={workspaceBackLink}>
-              <Icon>
-                <Wand2 className="h-4 w-4" />
-              </Icon>
-              Skills
-            </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              Error
-            </Crumb>
-          </Breadcrumb>
-        </Header>
+        <Header>{renderBreadcrumb('Error')}</Header>
         <div className="grid place-items-center h-full">
           <div className="text-center">
             <p className="text-red-400 mb-2">Failed to load skill</p>
@@ -103,23 +115,7 @@ export default function WorkspaceSkillDetailPage() {
   return (
     <MainContentLayout>
       <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to={workspaceBackLink}>
-            <Icon>
-              <Folder className="h-4 w-4" />
-            </Icon>
-            Workspace
-          </Crumb>
-          <Crumb as={Link} to={workspaceBackLink}>
-            <Icon>
-              <Wand2 className="h-4 w-4" />
-            </Icon>
-            Skills
-          </Crumb>
-          <Crumb as="span" to="" isCurrent>
-            {decodedSkillName}
-          </Crumb>
-        </Breadcrumb>
+        {renderBreadcrumb(decodedSkillName)}
 
         <HeaderAction>
           <Button as={Link} to="https://mastra.ai/en/docs/workspace/skills" target="_blank">

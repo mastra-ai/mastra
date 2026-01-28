@@ -113,6 +113,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   inputProcessors: SerializedProcessor[];
   outputProcessors: SerializedProcessor[];
   provider?: string;
@@ -425,9 +427,18 @@ async function formatAgentList({
     logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
-  // Extract skills and workspace tools from agent's workspace
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -450,6 +461,7 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -617,9 +629,18 @@ async function formatAgent({
     mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
-  // Extract skills and workspace tools from agent's workspace
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext: proxyRequestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
 
   // Serialize requestContextSchema if present
   let serializedRequestContextSchema: string | undefined;
@@ -640,6 +661,7 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),

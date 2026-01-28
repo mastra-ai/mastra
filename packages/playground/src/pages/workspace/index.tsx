@@ -414,7 +414,6 @@ export default function Workspace() {
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
-                workspaceId={effectiveWorkspaceId}
               />
             )}
 

@@ -79,6 +79,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const skills = agent.skills ?? [];
   const workspaceTools = agent.workspaceTools ?? [];
+  const workspaceId = agent.workspaceId;
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
 
@@ -169,7 +170,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           title: 'Skills documentation',
         }}
       >
-        <AgentMetadataSkillList skills={skills} agentId={agentId} />
+        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={workspaceId} />
       </AgentMetadataSection>
 
       {workspaceTools.length > 0 && (
@@ -303,9 +304,10 @@ export interface AgentMetadataSkillListProps {
     license?: string;
   }>;
   agentId: string;
+  workspaceId?: string;
 }
 
-export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillListProps) => {
+export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMetadataSkillListProps) => {
   const { Link, paths } = useLinkComponent();
   const { isSkillActivated } = useActivatedSkills();
 
@@ -323,7 +325,7 @@ export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillLi
             className={`flex-col items-start gap-1 ${isActivated ? 'bg-green-500/10 rounded-md p-1 -m-1' : ''}`}
           >
             <div className="flex items-center gap-2">
-              <Link href={paths.agentSkillLink(agentId, skill.name)} data-testid="skill-badge">
+              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
                 <Badge
                   icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
                   variant={isActivated ? 'success' : 'default'}

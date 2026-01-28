@@ -17,7 +17,7 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
-  agentSkillLink: (agentId: string, skillName: string) => string;
+  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
 
