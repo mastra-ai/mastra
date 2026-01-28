@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
-import { isWorkspaceV1Supported } from './use-workspace';
+import { isWorkspaceV1Supported } from '../compatibility';
 import type {
   Skill,
   ListSkillsResponse,

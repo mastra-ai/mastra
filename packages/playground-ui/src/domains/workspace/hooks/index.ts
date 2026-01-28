@@ -1,6 +1,5 @@
 // Workspace hooks - filesystem and search
 export {
-  isWorkspaceV1Supported,
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
