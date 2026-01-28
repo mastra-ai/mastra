@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 /**
  * Get the project root directory.

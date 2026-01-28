@@ -14,7 +14,7 @@ import { AgentIcon } from '@/ds/icons';
 import { GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
-import { WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace/constants';
+import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
