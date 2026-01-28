@@ -393,8 +393,8 @@ export class MemoryStorageDO extends MemoryStorage {
       const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
       const mergedMetadata = {
-        ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
-        ...(metadata as Record<string, unknown>),
+        ...thread.metadata,
+        ...metadata,
       };
 
       const updatedAt = new Date();
@@ -410,10 +410,7 @@ export class MemoryStorageDO extends MemoryStorage {
       return {
         ...thread,
         title,
-        metadata: {
-          ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
-          ...(metadata as Record<string, unknown>),
-        },
+        metadata: mergedMetadata,
         updatedAt,
       };
     } catch (error) {
