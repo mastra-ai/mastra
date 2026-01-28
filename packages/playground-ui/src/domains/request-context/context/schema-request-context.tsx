@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { usePlaygroundStore } from '@/store/playground-store';
+import { createContext, useContext, useState, ReactNode } from 'react';
 
 interface SchemaRequestContextState {
   /**
@@ -21,15 +22,14 @@ interface SchemaRequestContextState {
 export const SchemaRequestContext = createContext<SchemaRequestContextState | null>(null);
 
 export function SchemaRequestContextProvider({ children }: { children: ReactNode }) {
-  const [schemaValues, setSchemaValuesState] = useState<Record<string, any>>({});
+  const { requestContext } = usePlaygroundStore();
+  const [schemaValues, setSchemaValuesState] = useState<Record<string, any>>(requestContext);
 
-  const setSchemaValues = useCallback((values: Record<string, any>) => {
-    setSchemaValuesState(values);
-  }, []);
+  const setSchemaValues = (values: Record<string, any>) => setSchemaValuesState(values);
 
-  const clearSchemaValues = useCallback(() => {
+  const clearSchemaValues = () => {
     setSchemaValuesState({});
-  }, []);
+  };
 
   return (
     <SchemaRequestContext.Provider value={{ schemaValues, setSchemaValues, clearSchemaValues }}>

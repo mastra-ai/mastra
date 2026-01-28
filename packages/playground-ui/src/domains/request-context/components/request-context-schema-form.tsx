@@ -1,19 +1,11 @@
-import { useEffect, useState, useMemo, useImperativeHandle, forwardRef } from 'react';
+import { useMemo } from 'react';
 import { Txt } from '@/ds/components/Txt';
-import { usePlaygroundStore } from '@/store/playground-store';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { useSchemaRequestContext } from '../context/schema-request-context';
-import { CopyIcon } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
-
-export interface RequestContextSchemaFormRef {
-  /** Get the current form values (for use when executing) */
-  getValues: () => Record<string, any>;
-}
+import { CopyButton } from '@/ds/components/CopyButton';
 
 export interface RequestContextSchemaFormProps {
   /**
@@ -31,73 +23,41 @@ export interface RequestContextSchemaFormProps {
  * allowing the agent chat to use these values (which override global context).
  * Empty strings in form fields will override global values intentionally.
  */
-export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, RequestContextSchemaFormProps>(
-  ({ requestContextSchema }, ref) => {
-    const { requestContext } = usePlaygroundStore();
-    const { setSchemaValues } = useSchemaRequestContext();
-    // Local state for schema-driven form (does NOT update global store)
-    const [localFormValues, setLocalFormValues] = useState<Record<string, any>>({});
+export const RequestContextSchemaForm = ({ requestContextSchema }: RequestContextSchemaFormProps) => {
+  const { setSchemaValues, schemaValues } = useSchemaRequestContext();
+  // Local state for schema-driven form (does NOT update global store)
 
-    const localFormValuesStr = JSON.stringify(localFormValues);
-    const { handleCopy } = useCopyToClipboard({ text: localFormValuesStr });
+  const localFormValuesStr = JSON.stringify(schemaValues);
 
-    // Parse the schema
-    const zodSchema = useMemo(() => {
-      try {
-        const jsonSchema = parse(requestContextSchema) as Parameters<typeof jsonSchemaToZod>[0];
-        return resolveSerializedZodOutput(jsonSchemaToZod(jsonSchema));
-      } catch (error) {
-        console.error('Failed to parse requestContextSchema:', error);
-        return null;
-      }
-    }, [requestContextSchema]);
-
-    // When global context changes, update local form values
-    // Note: This syncs the form display but doesn't override schemaValues
-    // (schemaValues are set via onValuesChange to ensure form values take precedence)
-    useEffect(() => {
-      if (zodSchema && requestContext) {
-        setLocalFormValues(requestContext);
-      }
-    }, [zodSchema, requestContext]);
-
-    // Expose getValues method to parent components via ref
-    useImperativeHandle(
-      ref,
-      () => ({
-        getValues: () => localFormValues,
-      }),
-      [localFormValues],
-    );
-
-    // Update local state and schema context on every form change
-    // This ensures empty strings properly override global values
-    const handleSchemaFormChange = (data: Record<string, any>) => {
-      setLocalFormValues(data);
-      setSchemaValues(data);
-    };
-
-    if (!zodSchema) {
-      return (
-        <div className="text-neutral3">
-          <Txt variant="ui-sm">Failed to parse request context schema</Txt>
-        </div>
-      );
+  // Parse the schema
+  const zodSchema = useMemo(() => {
+    try {
+      const jsonSchema = parse(requestContextSchema) as Parameters<typeof jsonSchemaToZod>[0];
+      return resolveSerializedZodOutput(jsonSchemaToZod(jsonSchema));
+    } catch (error) {
+      console.error('Failed to parse requestContextSchema:', error);
+      return null;
     }
+  }, [requestContextSchema]);
 
+  if (!zodSchema) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Txt as="label" variant="ui-md" className="text-neutral3">
-            Request Context
-          </Txt>
-          <IconButton size="sm" variant="ghost" tooltip="Copy Request Context" onClick={handleCopy}>
-            <CopyIcon />
-          </IconButton>
-        </div>
-
-        <DynamicForm schema={zodSchema} onValuesChange={handleSchemaFormChange} defaultValues={requestContext} />
+      <div className="text-neutral3">
+        <Txt variant="ui-sm">Failed to parse request context schema</Txt>
       </div>
     );
-  },
-);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="ui-md" className="text-neutral3">
+          Request Context
+        </Txt>
+        <CopyButton content={localFormValuesStr} />
+      </div>
+
+      <DynamicForm schema={zodSchema} onValuesChange={setSchemaValues} defaultValues={schemaValues} />
+    </div>
+  );
+};

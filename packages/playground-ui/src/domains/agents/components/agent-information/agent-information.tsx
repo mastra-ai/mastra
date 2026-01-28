@@ -45,17 +45,21 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           <TabContent value="model-settings">
             <AgentSettings agentId={agentId} />
           </TabContent>
+
+          {agent?.requestContextSchema && (
+            <TabContent value="request-context">
+              <div className="p-5">
+                <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
+              </div>
+            </TabContent>
+          )}
+
           {hasMemory && (
             <TabContent value="memory">
               <AgentMemory agentId={agentId} threadId={threadId} />
             </TabContent>
           )}
-          {/* Keep RequestContextSchemaForm mounted to preserve state, use CSS to show/hide */}
-          {agent?.requestContextSchema && (
-            <div className={cn('p-5', selectedTab !== 'request-context' && 'hidden')}>
-              <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
-            </div>
-          )}
+
           <TabContent value="tracing-options">
             <TracingRunOptions />
           </TabContent>
