@@ -2,12 +2,13 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
 import { normalizeRoutePath } from '../utils';
-import { generateOpenAPIDocument } from './openapi-utils';
+import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
 
@@ -127,6 +128,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected taskStore?: InMemoryTaskStore;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
+  protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
 
   constructor({
@@ -139,6 +141,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     taskStore,
     customRouteAuthConfig,
     streamOptions,
+    customApiRoutes,
     mcpOptions,
   }: {
     app: TApp;
@@ -150,6 +153,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     taskStore?: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
+    customApiRoutes?: ApiRoute[];
     /**
      * MCP transport options applied to all MCP HTTP and SSE routes.
      * Individual routes can override these via MCPHttpTransportResult.mcpOptions.
@@ -165,6 +169,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
+    this.customApiRoutes = customApiRoutes;
     this.mcpOptions = mcpOptions;
 
     // Automatically register this adapter with Mastra so getServerApp() works
@@ -344,6 +349,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       version,
       description,
     });
+
+    // Merge custom API routes into the OpenAPI spec
+    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
 
     const openApiRoute: ServerRoute = {
       method: 'GET',
