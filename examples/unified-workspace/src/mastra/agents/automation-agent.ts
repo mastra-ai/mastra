@@ -24,6 +24,6 @@ When automating:
 
 Use workspace sandbox tools to execute code and commands as needed.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: supervisedSandboxWorkspace,
 });

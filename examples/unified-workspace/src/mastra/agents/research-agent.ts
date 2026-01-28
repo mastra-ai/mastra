@@ -38,7 +38,7 @@ When researching:
 
 Use workspace search to find relevant code and documentation.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: readonlyWorkspace,
   memory: researchMemory,
 });

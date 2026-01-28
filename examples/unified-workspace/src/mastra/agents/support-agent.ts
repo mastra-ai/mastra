@@ -26,6 +26,6 @@ Guidelines:
 
 Use workspace tools to search for information and manage support content.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: isolatedDocsWorkspace,
 });

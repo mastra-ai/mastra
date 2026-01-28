@@ -26,6 +26,6 @@ When writing documentation:
 You have access to workspace skills including brand-guidelines, code-review, and api-design.
 Use workspace tools to read, write, and manage documentation files.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: docsAgentWorkspace,
 });

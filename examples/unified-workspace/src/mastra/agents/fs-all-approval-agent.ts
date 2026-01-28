@@ -26,6 +26,6 @@ When working with files:
 
 Use workspace filesystem tools to perform file operations as needed.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: fsAllApprovalWorkspace,
 });

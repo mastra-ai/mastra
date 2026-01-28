@@ -38,6 +38,6 @@ Available skills provide guidelines for:
 - Customer support interactions
 - Brand guidelines for documentation`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: skillsOnlyWorkspace,
 });

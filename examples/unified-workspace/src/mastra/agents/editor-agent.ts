@@ -24,6 +24,6 @@ When editing code:
 
 Use workspace tools to read files, make edits, and execute code to verify changes.`,
 
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: safeWriteWorkspace,
 });

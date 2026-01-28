@@ -12,6 +12,6 @@ export const testAgent = new Agent({
   description: 'A test agent with its own isolated workspace filesystem.',
   instructions: `You are a test agent with access to your own workspace.
 Your workspace contains files that are different from the global workspace.`,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
   workspace: testAgentWorkspace,
 });
