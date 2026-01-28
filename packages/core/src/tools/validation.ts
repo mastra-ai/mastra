@@ -107,6 +107,56 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Recursively strips null and undefined values from objects.
+ * This handles LLMs (Claude, Gemini) that send null for optional fields,
+ * since Zod's .optional() only accepts undefined, not null. (GitHub #12362)
+ *
+ * Also strips explicit undefined values from object properties to prevent
+ * convertUndefinedToNull from converting them to null later in the pipeline.
+ *
+ * When a property value is null or undefined, it is omitted from the result
+ * object entirely, which is equivalent to "not provided" for Zod validation.
+ *
+ * Only recurses into plain objects to preserve class instances and built-in objects
+ * like Date, Map, URL, etc.
+ *
+ * @param input The input to process
+ * @returns The processed input with null/undefined values stripped
+ */
+function stripNullishValues(input: unknown): unknown {
+  // Top-level null/undefined becomes undefined
+  if (input === null || input === undefined) {
+    return undefined;
+  }
+
+  if (typeof input !== 'object') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    // For arrays, recursively process elements but keep nulls in arrays
+    // (array elements with null may be intentional)
+    return input.map(item => (item === null ? null : stripNullishValues(item)));
+  }
+
+  // Only recurse into plain objects - preserve class instances, built-in objects
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  // It's a plain object - recursively process all properties, omitting null/undefined values
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === null || value === undefined) {
+      // Omit null/undefined values - equivalent to "not provided" for optional fields
+      continue;
+    }
+    result[key] = stripNullishValues(value);
+  }
+  return result;
+}
+
+/**
  * Recursively converts undefined values to null in an object.
  * This is needed for OpenAI compat layers which convert .optional() to .nullable()
  * for strict mode compliance. When fields are omitted (undefined), we convert them
@@ -164,9 +214,15 @@ export function validateToolInput<T = any>(
     return { data: input };
   }
 
+  // Strip null/undefined values from input (GitHub #12362)
+  // LLMs like Claude and Gemini often send null for optional fields, but Zod's
+  // .optional() only accepts undefined, not null. By stripping nullish values,
+  // we treat them as "not provided" which matches user intent.
+  let normalizedInput = stripNullishValues(input);
+
   // Normalize undefined/null input to appropriate default for the schema type
   // This handles LLMs that send undefined instead of {} or [] for optional parameters
-  let normalizedInput = normalizeNullishInput(schema, input);
+  normalizedInput = normalizeNullishInput(schema, normalizedInput);
 
   // Convert undefined values to null recursively (GitHub #11457)
   // This is needed because OpenAI compat layers convert .optional() to .nullable()
