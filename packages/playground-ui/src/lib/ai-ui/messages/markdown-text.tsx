@@ -8,7 +8,7 @@ import '@assistant-ui/react-markdown/styles/dot.css';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { FC, ImgHTMLAttributes, memo, useEffect, useState } from 'react';
 import remarkGfm from 'remark-gfm';
-import { TooltipIconButton } from '../tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { cn } from '@/lib/utils';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { makePrismAsyncLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
@@ -47,7 +47,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       className="flex items-center justify-between gap-4 px-4 py-2 text-sm font-semibold text-white"
     >
       <span className="lowercase [&>span]:text-xs">{language}</span>
-      <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+      <IconButton variant="light" size="md" tooltip="Copy" onClick={onCopy}>
         <span className="grid">
           <span
             key="checkmark"
@@ -68,7 +68,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
             <CopyIcon size={14} />
           </span>
         </span>
-      </TooltipIconButton>
+      </IconButton>
     </div>
   );
 };
