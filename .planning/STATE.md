@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 8 of 9 (Transport Layer)
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-01-27 — Completed Phase 8 (Transport Layer)
+Phase: 9 of 9 (Studio UI)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-28 — Completed 09-01-PLAN.md
 
-Progress: [################    ] 83% (6/10 v1.0 phases + 2/3 v1.1 phases)
+Progress: [##################  ] 89% (6/10 v1.0 phases + 3/3 v1.1 phases, 1/2 plans in phase 9)
 
 ## Performance Metrics
 
@@ -37,12 +37,13 @@ Progress: [################    ] 83% (6/10 v1.0 phases + 2/3 v1.1 phases)
 
 **v1.1 Milestone:**
 - Phases: 3 (7, 8, 9)
-- Plans completed: 3
+- Plans completed: 4
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-screencast-api | 1 | 3 min | 3 min |
 | 08-transport-layer | 2 | 10 min | 5 min |
+| 09-studio-ui | 1 | 2 min | 2 min |
 
 ## Accumulated Context
 
@@ -66,6 +67,10 @@ From Phase 8:
 - setupBrowserStream called BEFORE CORS middleware (avoid header conflicts)
 - injectWebSocket called AFTER serve() returns
 
+From Phase 9:
+- useRef for img.src updates bypasses React virtual DOM (critical for 60fps)
+- Exponential backoff for reconnect capped at 30s max delay
+
 ### Pending Todos
 
 None.
@@ -76,13 +81,13 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T16:40:00Z
-Stopped at: Completed Phase 8 (Transport Layer)
+Last session: 2026-01-28T03:48:00Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None
 
 ## Milestone History
 
 - v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans)
-- v1.1: IN PROGRESS (3 phases planned, 3 plans complete)
+- v1.1: IN PROGRESS (3 phases planned, 4 plans complete, 1 remaining)
 
-Next: `/gsd:discuss-phase 9`
+Next: `/gsd:execute-phase 9` (for 09-02)
