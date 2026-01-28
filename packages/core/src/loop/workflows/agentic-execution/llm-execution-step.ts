@@ -1027,11 +1027,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
           
           // Create a ProcessorStreamWriter from outputWriter if available
-          console.log('[LLM-EXECUTION-STEP DEBUG] outputWriter available:', !!outputWriter);
           const processorWriter: ProcessorStreamWriter | undefined = outputWriter
             ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
             : undefined;
-          console.log('[LLM-EXECUTION-STEP DEBUG] processorWriter created:', !!processorWriter);
           
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],

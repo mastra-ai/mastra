@@ -24,6 +24,7 @@ import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
 export class InMemoryMemory extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
