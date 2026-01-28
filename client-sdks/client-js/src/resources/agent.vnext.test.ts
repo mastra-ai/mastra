@@ -804,8 +804,7 @@ describe('Agent vNext', () => {
       { role: 'user' as const, content: 'What is the weather in NYC?' },
     ];
 
-    const result = await agent.generate({
-      messages: originalMessages,
+    const result = await agent.generate(originalMessages, {
       clientTools: { weatherTool },
     });
 
@@ -909,11 +908,9 @@ describe('Agent vNext', () => {
       { role: 'user' as const, content: 'What is the weather in NYC?' },
     ];
 
-    const result = await agent.generate({
-      messages: originalMessages,
+    const result = await agent.generate(originalMessages, {
       clientTools: { weatherTool },
-      threadId: 'test-thread-123', // Server has memory
-      resourceId: 'test-resource',
+      memory: { thread: 'test-thread-123', resource: 'test-resource' }, // Server has memory
     });
 
     expect(result.finishReason).toBe('stop');
@@ -990,8 +987,7 @@ describe('Agent vNext', () => {
       { role: 'user' as const, content: 'What is the weather in NYC?' },
     ];
 
-    const resp = await agent.stream({
-      messages: originalMessages,
+    const resp = await agent.stream(originalMessages, {
       clientTools: { weatherTool },
     });
 
@@ -1088,11 +1084,9 @@ describe('Agent vNext', () => {
       { role: 'user' as const, content: 'What is the weather in NYC?' },
     ];
 
-    const resp = await agent.stream({
-      messages: originalMessages,
+    const resp = await agent.stream(originalMessages, {
       clientTools: { weatherTool },
-      threadId: 'test-thread-123', // Server has memory
-      resourceId: 'test-resource',
+      memory: { thread: 'test-thread-123', resource: 'test-resource' }, // Server has memory
     });
 
     await resp.processDataStream({

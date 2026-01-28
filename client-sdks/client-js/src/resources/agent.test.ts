@@ -484,10 +484,10 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
-    // Pass threadId to indicate server-side memory is active
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
-      threadId: 'test-thread-123', // Server has memory - avoids duplicate messages
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // Check that the second request was called with the correct messages
@@ -568,10 +568,10 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
-    // Pass threadId to indicate server-side memory is active
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
-      threadId: 'test-thread-123', // Server has memory - avoids duplicate messages
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // The agent should have made 5 requests total (1 initial + 4 tool calls)
