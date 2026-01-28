@@ -199,7 +199,7 @@ async function getOMConfigFromAgent(
     const hasResolvedConfig = typeof (omProcessor as any).getResolvedConfig === 'function';
     
     if (hasResolvedConfig) {
-      const resolvedConfig = await (omProcessor as any).getResolvedConfig();
+      const resolvedConfig = await (omProcessor as any).getResolvedConfig(requestContext);
       return {
         enabled: true,
         scope: resolvedConfig.scope || 'resource',

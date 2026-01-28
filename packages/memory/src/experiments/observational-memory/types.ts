@@ -1,4 +1,26 @@
 import type { MastraModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
+
+// This is used in place of DynamicArgument so that model router IDE autocomplete works.
+// Without this TS doesn't understand the function/string union type from DynamicArgument
+// (Copied from @mastra/core/agent/types.ts to keep identical)
+type DynamicModel = ({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
+  mastra?: Mastra;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
+
+type ModelWithRetries = {
+  id?: string;
+  model: MastraModelConfig | DynamicModel;
+  maxRetries?: number; //defaults to 0
+  enabled?: boolean; //defaults to true
+};
+
+export type ObservationalMemoryModelConfig = MastraModelConfig | DynamicModel | ModelWithRetries[];
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -65,10 +87,12 @@ export interface ProviderOptions {
 export interface ObserverConfig {
   /**
    * Model for the Observer agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: MastraModelConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
    * Token threshold for message history before triggering observation.
@@ -109,10 +133,12 @@ export interface ObserverConfig {
 export interface ReflectorConfig {
   /**
    * Model for the Reflector agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: MastraModelConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
    * Token threshold for observations before triggering reflection.

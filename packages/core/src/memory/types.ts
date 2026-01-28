@@ -5,11 +5,40 @@ import type { ZodObject } from 'zod';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
+
+// Dynamic model types for Observational Memory (identical to Agent's model types)
+type ObservationalMemoryDynamicModel = ({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
+  mastra?: Mastra;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
+
+type ObservationalMemoryModelWithRetries = {
+  id?: string;
+  model: MastraModelConfig | ObservationalMemoryDynamicModel;
+  maxRetries?: number;
+  enabled?: boolean;
+};
+
+/**
+ * Model configuration for Observational Memory Observer/Reflector agents.
+ * Supports the same patterns as Agent's model configuration:
+ * - Static model config (string or object)
+ * - Dynamic function that receives requestContext
+ * - Array of models with retry configuration
+ */
+export type ObservationalMemoryModelConfig =
+  | MastraModelConfig
+  | ObservationalMemoryDynamicModel
+  | ObservationalMemoryModelWithRetries[];
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { MastraLanguageModel };
@@ -386,10 +415,12 @@ export interface ObservationalMemoryModelSettings {
 export interface ObservationalMemoryObserverConfig {
   /**
    * Model for the Observer agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: MastraModelConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
    * Token threshold for message history before triggering observation.
@@ -423,10 +454,12 @@ export interface ObservationalMemoryObserverConfig {
 export interface ObservationalMemoryReflectorConfig {
   /**
    * Model for the Reflector agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o') or a LanguageModel instance.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
    * @default 'google/gemini-2.5-flash'
    */
-  model?: MastraModelConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
    * Token threshold for observations before triggering reflection.

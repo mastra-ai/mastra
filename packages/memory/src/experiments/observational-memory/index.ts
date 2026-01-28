@@ -25,7 +25,7 @@ export type {
   ReflectorConfig,
   ObserverResult,
   ReflectorResult,
-
+  ObservationalMemoryModelConfig,
 } from './types';
 
 // Observer Agent

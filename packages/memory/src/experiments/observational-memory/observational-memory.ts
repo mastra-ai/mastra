@@ -1,9 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type { Processor, ProcessInputArgs, ProcessInputStepArgs, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import * as fs from 'fs';
@@ -74,6 +74,7 @@ import type {
   ThresholdRange,
   ModelSettings,
   ProviderOptions,
+  ObservationalMemoryModelConfig,
   DataOmObservationStartPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
@@ -434,7 +435,7 @@ export interface ObservationalMemoryConfig {
  * even when user provides a simple number (converted based on adaptiveThreshold).
  */
 interface ResolvedObserverConfig {
-  model: MastraModelConfig;
+  model: ObservationalMemoryModelConfig;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationThreshold: number | ThresholdRange;
   /** Whether adaptive threshold is enabled */
@@ -445,7 +446,7 @@ interface ResolvedObserverConfig {
 }
 
 interface ResolvedReflectorConfig {
-  model: MastraModelConfig;
+  model: ObservationalMemoryModelConfig;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   reflectionThreshold: number | ThresholdRange;
   /** Whether adaptive threshold is enabled */
@@ -758,7 +759,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
    */
-  async getResolvedConfig(): Promise<{
+  async getResolvedConfig(requestContext?: RequestContext): Promise<{
     scope: 'resource' | 'thread';
     observer: {
       observationThreshold: number | ThresholdRange;
@@ -769,25 +770,48 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       model: string;
     };
   }> {
-    const [observerModel, reflectorModel] = await Promise.all([
-      resolveModelConfig(this.observerConfig.model),
-      resolveModelConfig(this.reflectorConfig.model),
-    ]);
+    // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
+    const getModelToResolve = (model: ObservationalMemoryModelConfig) => {
+      if (Array.isArray(model)) {
+        return model[0]?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model;
+      }
+      return model;
+    };
 
     // Format as provider/modelId (e.g., "google/gemini-2.5-flash")
     const formatModelName = (model: { provider?: string; modelId: string }) => {
       return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
     };
 
+    // Helper to safely resolve a model config
+    const safeResolveModel = async (modelConfig: ObservationalMemoryModelConfig): Promise<string> => {
+      const modelToResolve = getModelToResolve(modelConfig);
+      
+      try {
+        // resolveModelConfig handles both static configs and functions
+        const resolved = await resolveModelConfig(modelToResolve, requestContext);
+        return formatModelName(resolved);
+      } catch (error) {
+        // If resolution fails, return a placeholder
+        console.error('[OM] Failed to resolve model config:', error);
+        return '(unknown)';
+      }
+    };
+
+    const [observerModelName, reflectorModelName] = await Promise.all([
+      safeResolveModel(this.observerConfig.model),
+      safeResolveModel(this.reflectorConfig.model),
+    ]);
+
     return {
       scope: this.scope,
       observer: {
         observationThreshold: this.observerConfig.observationThreshold,
-        model: formatModelName(observerModel),
+        model: observerModelName,
       },
       reflector: {
         reflectionThreshold: this.reflectorConfig.reflectionThreshold,
-        model: formatModelName(reflectorModel),
+        model: reflectorModelName,
       },
     };
   }
