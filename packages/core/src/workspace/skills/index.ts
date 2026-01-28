@@ -9,10 +9,6 @@
 
 export * from './types';
 export * from './schemas';
-
-// skill-source has a rename (SkillSource as SkillFileSource) so can't use wildcard
-export type { SkillSource as SkillFileSource, SkillSourceStat, SkillSourceEntry } from './skill-source';
-export { isWritableSource } from './skill-source';
-
+export * from './skill-source';
 export * from './local-skill-source';
 export * from './workspace-skills';

@@ -11,6 +11,7 @@
 
 import matter from 'gray-matter';
 
+import type { ContentSource } from '../../artifacts';
 import type { IndexDocument, SearchResult } from '../search';
 import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
@@ -23,7 +24,6 @@ import type {
   CreateSkillInput,
   UpdateSkillInput,
   WorkspaceSkills,
-  SkillSource,
   SkillsResolver,
   SkillsContext,
 } from './types';
@@ -601,7 +601,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Discover skills in a single path
    */
-  async #discoverSkillsInPath(skillsPath: string, source: SkillSource): Promise<void> {
+  async #discoverSkillsInPath(skillsPath: string, source: ContentSource): Promise<void> {
     if (!(await this.#source.exists(skillsPath))) {
       return;
     }
@@ -684,7 +684,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Parse a SKILL.md file
    */
-  async #parseSkillFile(filePath: string, dirName: string, source: SkillSource): Promise<InternalSkill> {
+  async #parseSkillFile(filePath: string, dirName: string, source: ContentSource): Promise<InternalSkill> {
     const rawContent = await this.#source.readFile(filePath);
     const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
 
@@ -897,7 +897,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Determine the source type based on the path
    */
-  #determineSource(skillsPath: string): SkillSource {
+  #determineSource(skillsPath: string): ContentSource {
     if (skillsPath.includes('node_modules')) {
       return { type: 'external', packagePath: skillsPath };
     }

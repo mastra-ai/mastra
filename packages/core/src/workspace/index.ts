@@ -1,36 +1,12 @@
 // Workspace
-export {
-  Workspace,
-  type WorkspaceConfig,
-  type WorkspaceStatus,
-  type WorkspaceInfo,
-  type PathContext,
-  type PathContextType,
-} from './workspace';
+export * from './workspace';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Errors
-export {
-  WorkspaceError,
-  FilesystemNotAvailableError,
-  SandboxNotAvailableError,
-  SandboxFeatureNotSupportedError,
-  SearchNotAvailableError,
-  WorkspaceNotReadyError,
-  WorkspaceReadOnlyError,
-  FilesystemError,
-  FileNotFoundError,
-  DirectoryNotFoundError,
-  FileExistsError,
-  IsDirectoryError,
-  NotDirectoryError,
-  DirectoryNotEmptyError,
-  PermissionError,
-  FileReadRequiredError,
-} from './errors';
+export * from './errors';
 export {
   SandboxError,
   SandboxExecutionError,
@@ -49,7 +25,7 @@ export {
 } from './constants';
 
 // Lifecycle
-export type { Lifecycle, ProviderStatus } from './lifecycle';
+export * from './lifecycle';
 
 // Filesystem
 export type {
@@ -74,7 +50,6 @@ export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from '
 
 // Skills
 export type {
-  SkillSource,
   SkillFormat,
   SkillMetadata,
   Skill,

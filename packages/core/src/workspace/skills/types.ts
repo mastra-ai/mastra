@@ -50,12 +50,6 @@ export interface SkillsContext {
 export type SkillsResolver = string[] | ((context: SkillsContext) => string[] | Promise<string[]>);
 
 /**
- * Skill source types indicating where the skill comes from and its access level.
- * Alias for the shared ContentSource type.
- */
-export type SkillSource = ContentSource;
-
-/**
  * Supported skill format types for system message injection
  */
 export type SkillFormat = 'xml' | 'json' | 'markdown';
@@ -85,7 +79,7 @@ export interface Skill extends SkillMetadata {
   /** Markdown body from SKILL.md */
   instructions: string;
   /** Source of the skill (external package, local project, or managed) */
-  source: SkillSource;
+  source: ContentSource;
   /** List of reference file paths (relative to references/ directory) */
   references: string[];
   /** List of script file paths (relative to scripts/ directory) */
