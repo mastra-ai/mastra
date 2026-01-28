@@ -46,3 +46,52 @@
   --color-border2: 255 255 255;
   --color-border2-alpha: 0.12;
 }
+
+.light {
+  /* Surfaces */
+  --color-surface1: 255 255 255;
+  --color-surface2: 250 250 250;
+  --color-surface3: 244 244 245;
+  --color-surface4: 228 228 231;
+  --color-surface5: 212 212 216;
+
+  /* Accents */
+  --color-accent1: 22 163 74;
+  --color-accent2: 220 38 38;
+  --color-accent3: 37 99 235;
+  --color-accent5: 59 130 246;
+  --color-accent6: 217 119 6;
+
+  /* Accent dark */
+  --color-accent1Dark: 220 252 231;
+  --color-accent2Dark: 254 226 226;
+  --color-accent3Dark: 219 234 254;
+  --color-accent5Dark: 219 234 254;
+  --color-accent6Dark: 254 243 199;
+
+  /* Accent darker */
+  --color-accent1Darker: 240 253 244;
+  --color-accent2Darker: 254 242 242;
+  --color-accent3Darker: 239 246 255;
+  --color-accent5Darker: 239 246 255;
+  --color-accent6Darker: 255 251 235;
+
+  /* Neutrals */
+  --color-neutral1: 212 212 216;
+  --color-neutral2: 161 161 170;
+  --color-neutral3: 113 113 122;
+  --color-neutral4: 82 82 91;
+  --color-neutral5: 39 39 42;
+  --color-neutral6: 9 9 11;
+
+  /* Semantic */
+  --color-error: 220 38 38;
+
+  /* Overlay + borders */
+  --color-overlay: 0 0 0;
+  --color-overlay-alpha: 0.5;
+  --color-border1: 0 0 0;
+  --color-border1-alpha: 0.08;
+  --color-border2: 0 0 0;
+  --color-border2-alpha: 0.12;
+}
