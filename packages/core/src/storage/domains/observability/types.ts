@@ -171,6 +171,51 @@ export const spanRecordSchema = z
 export type SpanRecord = z.infer<typeof spanRecordSchema>;
 
 // ============================================================================
+// Trace Span Schema (SpanRecord + computed status for list responses)
+// ============================================================================
+
+/**
+ * Computes the trace status from a root span's error and endedAt fields.
+ * - ERROR: if error is present (regardless of endedAt)
+ * - RUNNING: if endedAt is null/undefined and no error
+ * - SUCCESS: if endedAt is present and no error
+ */
+export function computeTraceStatus(span: SpanRecord): TraceStatus {
+  if (span.error != null) return TraceStatus.ERROR;
+  if (span.endedAt == null) return TraceStatus.RUNNING;
+  return TraceStatus.SUCCESS;
+}
+
+/** Schema for a trace span (root span with computed status) */
+export const traceSpanSchema = spanRecordSchema
+  .extend({
+    status: traceStatusField,
+  })
+  .describe('Trace span with computed status (root spans only)');
+
+/** Trace span (root span with computed status) */
+export type TraceSpan = z.infer<typeof traceSpanSchema>;
+
+/**
+ * Converts a SpanRecord to a TraceSpan by adding computed status.
+ * Used when returning root spans from listTraces.
+ */
+export function toTraceSpan(span: SpanRecord): TraceSpan {
+  return {
+    ...span,
+    status: computeTraceStatus(span),
+  };
+}
+
+/**
+ * Converts an array of SpanRecords to TraceSpans by adding computed status.
+ * Used when returning root spans from listTraces.
+ */
+export function toTraceSpans(spans: SpanRecord[]): TraceSpan[] {
+  return spans.map(toTraceSpan);
+}
+
+// ============================================================================
 // Storage Operation Schemas
 // ============================================================================
 
@@ -331,10 +376,10 @@ export type ListTracesArgs = z.input<typeof listTracesArgsSchema>;
 /** Schema for listTraces operation response */
 export const listTracesResponseSchema = z.object({
   pagination: paginationInfoSchema,
-  spans: z.array(spanRecordSchema),
+  spans: z.array(traceSpanSchema),
 });
 
-/** Response containing paginated root spans for trace listing */
+/** Response containing paginated root spans with computed status */
 export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 /**

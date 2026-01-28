@@ -209,3 +209,74 @@ export const agent = new Agent({
 
 Semantic recall has different storage requirements - it needs a vector database in addition to the standard storage adapter. See [Semantic recall](/docs/memory/semantic-recall) for setup and supported vector providers.
 
+## Handling large attachments
+
+Some storage providers enforce record size limits that can be exceeded when storing messages with base64-encoded attachments (such as images). When an attachment is embedded directly in the message content, the total record size may exceed the provider's limit.
+
+### Affected providers
+
+| Provider | Record size limit |
+| -------- | ----------------- |
+| [DynamoDB](/reference/storage/dynamodb) | 400 KB |
+| [Convex](/reference/storage/convex) | 1 MiB |
+| [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
+
+Other providers like PostgreSQL, MongoDB, and libSQL have significantly higher limits and are generally not affected.
+
+### Solution: Upload attachments to external storage
+
+The recommended approach is to use an input processor that uploads large attachments to external storage and replaces them with URL references before the message is persisted. This works with any file storage service—S3, Cloudflare R2, Google Cloud Storage, [Convex file storage](https://docs.convex.dev/file-storage), or your own server.
+
+```typescript title="src/mastra/processors/attachment-uploader.ts"
+import type { Processor } from "@mastra/core/processors";
+import type { MastraDBMessage } from "@mastra/core/memory";
+
+export class AttachmentUploader implements Processor {
+  id = "attachment-uploader";
+
+  async processInput({ messages }: { messages: MastraDBMessage[] }) {
+    return Promise.all(messages.map((msg) => this.processMessage(msg)));
+  }
+
+  async processMessage(msg: MastraDBMessage) {
+    const attachments = msg.content.experimental_attachments;
+    if (!attachments?.length) return msg;
+
+    const uploaded = await Promise.all(
+      attachments.map(async (att) => {
+        // Skip if already a URL
+        if (!att.url?.startsWith("data:")) return att;
+
+        // Upload base64 data and replace with URL
+        const url = await this.upload(att.url, att.contentType);
+        return { ...att, url };
+      })
+    );
+
+    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } };
+  }
+
+  async upload(dataUri: string, contentType?: string): Promise<string> {
+    const base64 = dataUri.split(",")[1];
+    const buffer = Buffer.from(base64, "base64");
+
+    // Replace with your storage provider (S3, R2, GCS, Convex, etc.)
+    // return await s3.upload(buffer, contentType);
+    throw new Error("Implement upload() with your storage provider");
+  }
+}
+```
+
+Use the processor with your agent:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { AttachmentUploader } from "./processors/attachment-uploader";
+
+const agent = new Agent({
+  id: "my-agent",
+  memory: new Memory({ storage: yourStorage }),
+  inputProcessors: [new AttachmentUploader()],
+});
+```

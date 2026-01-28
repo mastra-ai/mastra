@@ -54,7 +54,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
-    "@types/node": "22.19.3",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^5.0.60",

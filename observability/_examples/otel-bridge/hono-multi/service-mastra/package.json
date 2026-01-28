@@ -27,7 +27,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^20.19.27",
+    "@types/node": "^20.19.30",
     "mastra": "latest",
     "prettier": "^3.6.2",
     "tsx": "^4.21.0",
