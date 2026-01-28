@@ -6,6 +6,12 @@
 
 @theme {
   --breakpoint-lg: 62.25rem;
+  --font-sans:
+    'Inter', 'Inter Fallback', -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue,
+    Adwaita Sans, Cantarell, Ubuntu, roboto, noto, helvetica, arial, sans-serif;
+  --font-mono:
+    'Geist Mono', 'Geist Mono Fallback', Menlo, Consolas, Monaco, Adwaita Mono, Liberation Mono, Lucida Console,
+    monospace;
 }
 
 /* ==================== LIGHT MODE ==================== */
@@ -59,10 +65,8 @@
   /* Border width */
   --border-sm: 0.5px;
   /* Fonts */
-  --ifm-font-family-base:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans',
-    'Droid Sans', 'Helvetica Neue', sans-serif;
-  --ifm-font-family-monospace: 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
   --ifm-h3-font-size: 1.25rem;
@@ -124,6 +128,9 @@
 
   /* Chat Sidebar */
   --doc-sidebar-hidden-width: 30px;
+
+  --default-font-feature-settings: normal;
+  --default-mono-font-feature-settings: normal;
 }
 
 /* ==================== DARK MODE ==================== */
@@ -198,6 +205,7 @@ body,
 html {
   overscroll-behavior: none;
 }
+
 /* ==================== SELECTION COLORS ==================== */
 ::selection {
   background: #e3e3e3;
@@ -417,10 +425,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-p {
-  @apply leading-[1.6] tracking-[-0.09px];
-}
-
 .docusaurus-mt-lg {
   overflow-x: hidden;
 }
@@ -577,11 +581,13 @@ pre * {
 code {
   --bg-color: var(--mastra-surface-5);
   font-family: var(--ifm-font-family-monospace);
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
+  border-radius: 0.375em;
+  font-size: 0.875em;
   border: 1px solid color-mix(in oklab, #000 4%, transparent);
   background: color-mix(in oklab, #000 3%, transparent);
   padding: 0.12em 0.25em;
+  position: relative;
+  bottom: 0.125em;
 }
 
 [data-theme='dark'] code {
@@ -679,6 +685,42 @@ kbd {
   border-bottom-color: var(--mastra-green-accent);
 }
 
+article p {
+  color: var(--mastra-text-secondary);
+}
+
+/* ======= BreadCrumbs ==================== */
+.breadcrumbs {
+  margin-bottom: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.breadcrumbs__link {
+  font-size: 14px;
+  padding: 0;
+}
+
+.breadcrumbs__item:not(:last-child):after {
+  margin: 0;
+  margin-inline-start: var(--ifm-breadcrumb-spacing);
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+  background: transparent;
+  color: var(--mastra-text-primary);
+}
+
+.breadcrumbs__item a {
+  text-transform: capitalize;
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--mastra-text-tertiary);
+  padding: 0;
+  font-size: 14px;
+}
+
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
@@ -695,38 +737,6 @@ kbd {
   .table-of-contents__left-border {
     border: none;
     padding-inline-start: 0;
-  }
-
-  /* ======= BreadCrumbs ==================== */
-  .breadcrumbs {
-    margin-bottom: 0;
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .breadcrumbs__link {
-    font-size: 14px;
-    padding: 0;
-  }
-
-  .breadcrumbs__item:not(:last-child):after {
-    margin: 0;
-    margin-inline-start: var(--ifm-breadcrumb-spacing);
-  }
-
-  .breadcrumbs__item--active .breadcrumbs__link {
-    background: transparent;
-    color: var(--mastra-text-primary);
-  }
-
-  .breadcrumbs__item a {
-    text-transform: capitalize;
-    font-size: 14px;
-    text-decoration: none;
-    color: var(--mastra-text-tertiary);
-    padding: 0;
-    font-size: 14px;
   }
 
   /* ======= Markdown headings ==================== */
@@ -833,6 +843,7 @@ kbd {
     border-radius: 0.375em;
     background: color-mix(in oklab, #000 3%, transparent);
     border: 1px solid color-mix(in oklab, #000 4%, transparent);
+    bottom: 0.075em;
   }
 
   [data-theme='dark'] article p code,
@@ -889,10 +900,6 @@ kbd {
   }
 
   /* ==================== TYPOGRAPHY ==================== */
-  article p {
-    line-height: 1.7;
-    color: var(--mastra-text-secondary);
-  }
 
   article h1,
   article h2,
@@ -938,21 +945,10 @@ kbd {
   }
 
   table code {
-    border: 1px solid var(--border-secondary);
-    border-radius: var(--ifm-global-radius);
-    background: transparent;
-    padding-inline: 0.62rem;
-    padding-block: 0.31rem 0.44rem;
-    font-size: 0.875rem;
-    height: 1.625rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: fit-content;
-  }
-
-  [data-theme='dark'] table code {
-    border-color: var(--border-code);
   }
 
   /* ==================== ADMONITIONS ==================== */
@@ -1170,10 +1166,6 @@ kbd {
 
   .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
     padding-inline-start: 0.5rem;
-  }
-
-  p {
-    @apply leading-[1.6] tracking-[-0.09px];
   }
 
   [class*='docItemContainer'] {
