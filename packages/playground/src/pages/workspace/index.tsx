@@ -43,20 +43,20 @@ export default function Workspace() {
   const fileFromUrl = searchParams.get('file');
   const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
 
-  // List of all workspaces (global + agent workspaces)
+  // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
   const { data: workspacesData } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
-  // Get the selected workspace from the list (use path param or default to first)
-  const selectedWorkspace: WorkspaceItem | undefined = workspaceIdFromPath
-    ? workspaces.find(w => w.id === workspaceIdFromPath)
-    : workspaces[0];
+  // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
+  const effectiveWorkspaceId = workspaceIdFromPath ?? workspaces[0]?.id;
 
-  // Effective workspace ID to use for API calls
-  const effectiveWorkspaceId = selectedWorkspace?.id;
-
-  // Workspace info - pass workspaceId (required by the hook)
+  // Workspace info - calls /api/workspaces/:workspaceId directly
   const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Get the selected workspace metadata from the list (for displaying name, capabilities badge, etc.)
+  const selectedWorkspace: WorkspaceItem | undefined = effectiveWorkspaceId
+    ? workspaces.find(w => w.id === effectiveWorkspaceId)
+    : undefined;
 
   // Helper to update URL query params while preserving others
   const updateSearchParams = (updates: Record<string, string | null>) => {
