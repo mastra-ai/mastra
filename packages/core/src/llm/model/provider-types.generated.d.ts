@@ -21,6 +21,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
+    'kimi-k2.5',
   ];
   readonly firmware: readonly [
     'cerebras-gpt-oss-120b',
@@ -50,6 +51,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
+    'kimi-k2.5',
   ];
   readonly 'zai-coding-plan': readonly [
     'glm-4.5',
@@ -77,6 +79,7 @@ export type ProviderModelsMap = {
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
+    'kimi-k2.5',
     'kimi-k2:1t',
     'minimax-m2',
     'minimax-m2.1',
@@ -443,6 +446,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
     'moonshotai/kimi-k2-turbo',
+    'moonshotai/kimi-k2.5',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
@@ -1105,6 +1109,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
+    'moonshotai/Kimi-K2.5',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
   ];
@@ -1745,6 +1750,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
     'accounts/fireworks/models/kimi-k2-thinking',
+    'accounts/fireworks/models/kimi-k2p5',
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/minimax-m2p1',
     'accounts/fireworks/models/qwen3-235b-a22b',
@@ -1943,7 +1949,6 @@ export type ProviderModelsMap = {
     'gemini/gemini-2.5-flash-image-preview',
     'gemini/gemini-2.5-flash-lite',
     'gemini/gemini-2.5-flash-lite-preview-09-2025',
-    'gemini/gemini-2.5-flash-preview-09-2025',
     'gemini/gemini-2.5-pro',
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3-pro-image-preview',

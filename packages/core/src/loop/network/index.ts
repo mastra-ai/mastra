@@ -40,14 +40,22 @@ type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
  * Excludes:
  * - isNetwork: true JSON (result markers after primitive execution)
  * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
+ * - Completion feedback messages (metadata.mode === 'network' or metadata.completionResult)
  */
 function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.filter(msg => {
     // Include all user messages
     if (msg.role === 'user') return true;
 
-    // Include assistant messages that are NOT internal network JSON
+    // Include assistant messages that are NOT internal network messages
     if (msg.role === 'assistant') {
+      // Check metadata for network-internal markers (e.g., completion feedback)
+      // These messages are saved with metadata flags but plain text content
+      const metadata = msg.content?.metadata;
+      if (metadata?.mode === 'network' || metadata?.completionResult) {
+        return false;
+      }
+
       // Check ALL parts for network-internal JSON
       const parts = msg.content?.parts ?? [];
       for (const part of parts) {
