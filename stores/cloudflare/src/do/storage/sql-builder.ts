@@ -184,7 +184,20 @@ export class SqlBuilder {
       return def;
     });
     const columns = parsedColumnDefinitions.join(', ');
-    const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
+
+    // Validate table constraints against allowed patterns
+    let constraints = '';
+    if (tableConstraints && tableConstraints.length > 0) {
+      // Allowed patterns: PRIMARY KEY (...), UNIQUE (...), FOREIGN KEY (...), CHECK (...)
+      const constraintPattern = /^(PRIMARY\s+KEY|UNIQUE|FOREIGN\s+KEY|CHECK)\s*\([a-zA-Z0-9_,\s]+\)$/i;
+      for (const constraint of tableConstraints) {
+        if (!constraintPattern.test(constraint.trim())) {
+          throw new Error(`Invalid table constraint: ${constraint}`);
+        }
+      }
+      constraints = ', ' + tableConstraints.join(', ');
+    }
+
     this.sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns}${constraints})`;
     return this;
   }
