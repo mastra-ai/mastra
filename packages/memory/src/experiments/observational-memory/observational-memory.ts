@@ -2126,7 +2126,6 @@ ${suggestedResponse}
         this.observerConfig.observationThreshold,
         currentObservationTokens,
       );
-
       // Calculate effective reflection threshold for UI display
       // When adaptive threshold is enabled, both thresholds share a budget
       // Reflection threshold = total budget - message threshold (what's left for observations)
@@ -2196,6 +2195,11 @@ ${suggestedResponse}
           const freshAllMessages = messageList.get.all.db();
           const freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
 
+          // Snapshot lastObservedAt BEFORE observation runs.
+          // InMemoryMemory returns object references, so freshRecord.lastObservedAt
+          // gets mutated by doSynchronousObservation/doResourceScopedObservation.
+          const preObservationTime = freshRecord.lastObservedAt?.getTime() ?? 0;
+
           if (freshUnobservedMessages.length > 0) {
             try {
               if (this.scope === 'resource' && resourceId) {
@@ -2209,11 +2213,10 @@ ${suggestedResponse}
               } else {
                 await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
               }
-              // Only mark as succeeded if observation didn't throw
-              // (doSynchronousObservation/doResourceScopedObservation catch internally,
-              //  but we check the record to see if observations were actually updated)
+              // Check if observation actually updated lastObservedAt
               const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
-              observationSucceeded = (updatedRecord.lastObservedAt?.getTime() ?? 0) > (freshRecord.lastObservedAt?.getTime() ?? 0);
+              const updatedTime = updatedRecord.lastObservedAt?.getTime() ?? 0;
+              observationSucceeded = updatedTime > preObservationTime;
             } catch {
               // Observation failed - don't clear messages
               observationSucceeded = false;

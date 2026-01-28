@@ -171,10 +171,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
      *
      * Uses om-fail-agent which has a mock observer that throws an error.
      */
-    // TODO: Fix - the mock tool call fails in workflow execution engine ("Tool test not found"),
-    // which disrupts the agent flow before OM can emit the failed marker.
-    // The observation failure IS detected (server logs show "[OM] Observation failed"),
-    // but the data-om-observation-failed marker doesn't render in the UI.
+    // TODO: The failing observer causes PROCESSOR_WORKFLOW_FAILED in the workflow engine,
+    // which disrupts the stream before the data-om-observation-failed marker can render.
+    // The OM processor catches the error and emits the marker, but the workflow engine
+    // propagates the error independently. Need to investigate workflow error isolation.
     test.skip('should show error state when observation fails', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
@@ -207,9 +207,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
   });
 
   test.describe('Observation Persistence', () => {
-    // TODO: Fix - data-om-* markers are streamed to the UI but not persisted to storage.
-    // After page reload, the markers are lost because they were only in the in-memory messageList.
-    // The insertObservationMarker method was removed; need a new persistence strategy.
+    // TODO: data-om-* parts are persisted in real apps (verified with libsql in reese4),
+    // but after page reload the markers don't render. Need to investigate whether the
+    // round-trip through storage → API → toAISdkV5Messages → convertOmPartsInMastraMessage
+    // preserves the data-om-* parts correctly.
     test.skip('should persist observations after page reload', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
@@ -233,12 +234,24 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // Verify observation marker appeared before reload
       await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
+      await page.screenshot({ path: 'test-results/persistence-before-reload.png' });
+
+      // Grab the thread URL so we can check it reloads to the same thread
+      const urlBeforeReload = page.url();
+      console.log('URL before reload:', urlBeforeReload);
 
       // ACT: Reload the page
       await page.reload();
 
       // Wait for page to reload
       await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+
+      const urlAfterReload = page.url();
+      console.log('URL after reload:', urlAfterReload);
+      
+      // Wait for messages to load
+      await page.waitForTimeout(3000);
+      await page.screenshot({ path: 'test-results/persistence-after-reload.png' });
 
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
