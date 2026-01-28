@@ -156,22 +156,22 @@ async function parseDebugFileForTokens(debugFile: string): Promise<{
 } | null> {
   try {
     const content = await readFile(debugFile, 'utf-8');
-    
+
     const result = {
       observerInputTokens: 0,
       observerOutputTokens: 0,
       reflectorInputTokens: 0,
       reflectorOutputTokens: 0,
     };
-    
+
     // Parse pretty-printed JSON objects
     const events: any[] = [];
     let currentJson = '';
     let braceCount = 0;
-    
+
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
-      
+
       if (braceCount === 0 && trimmed.startsWith('{')) {
         currentJson = line;
         braceCount = (trimmed.match(/{/g) || []).length - (trimmed.match(/}/g) || []).length;
@@ -180,7 +180,7 @@ async function parseDebugFileForTokens(debugFile: string): Promise<{
         braceCount += (trimmed.match(/{/g) || []).length;
         braceCount -= (trimmed.match(/}/g) || []).length;
       }
-      
+
       if (braceCount === 0 && currentJson) {
         try {
           events.push(JSON.parse(currentJson));
@@ -202,7 +202,7 @@ async function parseDebugFileForTokens(debugFile: string): Promise<{
         }
       }
     }
-    
+
     return result;
   } catch {
     return null;
@@ -239,9 +239,7 @@ async function loadPreparationTokenUsage(
     let cacheUpdated = false;
 
     const questionDirs = await readdir(configDir);
-    const dirsToProcess = questionIds
-      ? questionDirs.filter(d => questionIds.includes(d))
-      : questionDirs;
+    const dirsToProcess = questionIds ? questionDirs.filter(d => questionIds.includes(d)) : questionDirs;
 
     for (const questionDir of dirsToProcess) {
       const debugFile = join(configDir, questionDir, 'om-debug.jsonl');
@@ -250,7 +248,7 @@ async function loadPreparationTokenUsage(
       try {
         const fileStat = statSync(debugFile);
         const fileMtime = fileStat.mtimeMs;
-        
+
         // Check if we have a valid cache entry
         const cached = configCache[questionDir];
         if (cached && cached.mtime === fileMtime) {
@@ -269,7 +267,7 @@ async function loadPreparationTokenUsage(
             usage.reflectorInputTokens += parsed.reflectorInputTokens;
             usage.reflectorOutputTokens += parsed.reflectorOutputTokens;
             usage.questionCount++;
-            
+
             // Update cache
             configCache[questionDir] = {
               mtime: fileMtime,
@@ -1109,7 +1107,7 @@ program
 
         // Token usage summary (if available)
         const formatTokens = (n: number) => n.toLocaleString();
-        
+
         if (metrics.total_usage) {
           console.log(
             chalk.gray('Answering Tokens:'),
@@ -1117,15 +1115,14 @@ program
             chalk.gray('input,'),
             chalk.cyan(formatTokens(metrics.total_usage.outputTokens)),
             chalk.gray('output'),
-            chalk.gray(`(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/q)`),
+            chalk.gray(
+              `(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/q)`,
+            ),
           );
         }
 
         // Load preparation token usage from om-debug.jsonl files
-        const prepUsage = await loadPreparationTokenUsage(
-          './prepared-data',
-          run.config.memoryConfig,
-        );
+        const prepUsage = await loadPreparationTokenUsage('./prepared-data', run.config.memoryConfig);
         if (prepUsage && prepUsage.totalInputTokens > 0) {
           console.log(
             chalk.gray('Preparation Tokens:'),
@@ -1133,7 +1130,9 @@ program
             chalk.gray('input,'),
             chalk.cyan(formatTokens(prepUsage.totalOutputTokens)),
             chalk.gray('output'),
-            chalk.gray(`(Observer: ${formatTokens(prepUsage.observerInputTokens)}, Reflector: ${formatTokens(prepUsage.reflectorInputTokens)})`),
+            chalk.gray(
+              `(Observer: ${formatTokens(prepUsage.observerInputTokens)}, Reflector: ${formatTokens(prepUsage.reflectorInputTokens)})`,
+            ),
           );
         }
       }
@@ -1428,7 +1427,7 @@ program
   .option('-p, --prepared-data <dir>', 'Prepared data directory', './prepared-data')
   .option('--data <dir>', 'Dataset directory', './data')
   .option('--editor <cmd>', 'Editor command to open files', process.env.EDITOR || 'code')
-  .option('--inspect <question-id>', 'Inspect a question\'s data')
+  .option('--inspect <question-id>', "Inspect a question's data")
   .option('--search <keyword>', 'Search observations for a keyword')
   .option('--trace <keyword>', 'Trace information flow for a keyword')
   .option('-q, --question-id <id>', 'Question ID for search/trace/date')
@@ -1445,7 +1444,10 @@ program
   .option('--improve-question <text>', 'Improved question text (use with --improve)')
   .option('--improve-answer <text>', 'Improved answer text (use with --improve)')
   .option('--improve-note <text>', 'Improvement note (use with --improve)')
-  .option('--category <category>', 'Failure category: observer-miss, reflector-loss, agent-reasoning, dataset-error, data-freshness, knowledge-update, rag-miss, other')
+  .option(
+    '--category <category>',
+    'Failure category: observer-miss, reflector-loss, agent-reasoning, dataset-error, data-freshness, knowledge-update, rag-miss, other',
+  )
   .option('--clear-improved [fields]', 'Clear improved fields: all, question, answer, note, category (comma-separated)')
   .option('--prepare-stale', '(deprecated) Use --print-prepare-command instead')
   .option('--print-prepare-command', 'Print a prepare command for stale/partial questions')

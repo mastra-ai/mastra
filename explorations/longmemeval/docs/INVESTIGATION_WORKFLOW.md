@@ -60,6 +60,7 @@ pnpm investigate run_1768439350043
 ```
 
 This creates:
+
 ```
 investigations/
 └── run_1768439350043/
@@ -88,30 +89,35 @@ pnpm investigate --status
 The `investigate` command provides several utilities to help diagnose issues:
 
 ##### Search Observations
+
 ```bash
 # Search what the Observer extracted
 pnpm investigate --search "keyword" -q <question-id>
 ```
 
 ##### Search Original Dataset
+
 ```bash
 # Search the raw dataset with full context
 pnpm investigate --search-original "keyword" -q <question-id>
 ```
 
 ##### Trace Information Flow
+
 ```bash
 # Trace a keyword through the entire pipeline
 pnpm investigate --trace "keyword" -q <question-id>
 ```
 
 This shows where information exists at each stage:
+
 - Original dataset sessions
 - Stored messages (om.json)
 - Extracted observations
 - Agent context (om.md)
 
 ##### View Sessions
+
 ```bash
 # List all sessions for a question
 pnpm investigate --list-sessions -q <question-id>
@@ -121,12 +127,14 @@ pnpm investigate --session 33 -q <question-id>
 ```
 
 ##### Inspect Question Data
+
 ```bash
 # Show summary of question's data
 pnpm investigate --inspect <question-id>
 ```
 
 ##### View by Date
+
 ```bash
 # View observations around a specific date
 pnpm investigate --date "2023/05/29" -q <question-id>
@@ -139,26 +147,32 @@ Edit the `analysis.md` file for each question:
 
 ```markdown
 ## Failure Category
+
 - [x] Observer missed critical information
 - [ ] Reflector lost/merged information incorrectly
 - [ ] Agent reasoning error (had info, wrong conclusion)
 - [ ] Ambiguous/poorly-worded question
 - [ ] Dataset inconsistency/error
 - [ ] RAG retrieval miss (if applicable)
-- [ ] Other: ___
+- [ ] Other: \_\_\_
 
 ## Root Cause Analysis
+
 <!-- Describe what went wrong -->
 
 ## Evidence
+
 <!-- Quote relevant parts of om.md, original data, etc. -->
 
 ## Potential Improvements
+
 ### Observer/Reflector Changes
+
 - **Likelihood**: High
 - **Suggested prompt change**: ...
 
 ### Fixed Question/Answer
+
 - **improved_question**: ...
 - **improved_answer**: ...
 - **improvement_note**: ...
@@ -171,6 +185,7 @@ pnpm investigate --done <question-id>
 ```
 
 This:
+
 - Extracts the failure category from `analysis.md`
 - Updates `progress.json`
 - Shows remaining count
@@ -182,8 +197,10 @@ Based on your investigation, implement fixes:
 1. **Observer/Reflector prompt changes**: Edit `packages/memory/src/experiments/observational-memory/observer-agent.ts` or `reflector-agent.ts`
 
 2. **Improved question/answer**: Add to `analysis.md`:
+
    ```markdown
    ### Fixed Question/Answer
+
    - **improved_question**: What is the current location of my old sneakers?
    - **improved_answer**: in a shoe rack in my closet
    - **improvement_note**: Original question was ambiguous about timeframe
@@ -211,33 +228,40 @@ This syncs `improved_question`, `improved_answer`, and `improvement_note` from `
 ## Common Failure Categories
 
 ### Observer Missed Information
+
 **Symptoms**: Information exists in original dataset but not in observations.
 
 **Diagnosis**:
+
 ```bash
 pnpm investigate --trace "keyword" -q <question-id>
 # Look for: "❌ Observer missed this information"
 ```
 
 **Common causes**:
+
 - Statement of intent misclassified as question
 - Information buried in long message
 - Implicit information not captured
 
 ### Reflector Lost Information
+
 **Symptoms**: Information in observations but lost after reflection.
 
 **Diagnosis**: Compare observations before/after reflection in `om.json`.
 
 ### Agent Reasoning Error
+
 **Symptoms**: Information present in `om.md` but agent reached wrong conclusion.
 
 **Diagnosis**: Check `om.md` - if the answer is there, it's a reasoning issue.
 
 ### Dataset Inconsistency
+
 **Symptoms**: Conflicting information in the dataset itself.
 
 **Diagnosis**:
+
 ```bash
 pnpm investigate --search-original "keyword" -q <question-id>
 # Look for contradictory statements

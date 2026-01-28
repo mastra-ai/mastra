@@ -123,8 +123,6 @@ export interface ObserverConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
-
-
 }
 
 /**
@@ -195,7 +193,7 @@ export interface ObservationMarkerConfig {
 /**
  * Start marker inserted when observation begins.
  * Everything BEFORE this marker will be observed.
- * 
+ *
  * If this marker exists without a corresponding `end` or `failed` marker,
  * observation is in progress.
  */
@@ -383,4 +381,3 @@ export interface DataOmObservedPart {
     config?: ObservationMarkerConfig;
   };
 }
-

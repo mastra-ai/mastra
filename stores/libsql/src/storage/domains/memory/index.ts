@@ -50,7 +50,10 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    await this.#db.createTable({ tableName: TABLE_OBSERVATIONAL_MEMORY, schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY] });
+    await this.#db.createTable({
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+    });
     // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
@@ -178,7 +181,9 @@ export class MemoryLibSQL extends MemoryStorage {
 
     // Validate that either threadId or resourceId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasThreadId =
+      threadId !== undefined &&
+      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
     const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
     if (!hasThreadId && !hasResourceId) {
@@ -187,7 +192,10 @@ export class MemoryLibSQL extends MemoryStorage {
           id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );
@@ -1211,10 +1219,7 @@ export class MemoryLibSQL extends MemoryStorage {
     };
   }
 
-  async getObservationalMemory(
-    threadId: string | null,
-    resourceId: string,
-  ): Promise<ObservationalMemoryRecord | null> {
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const result = await this.#client.execute({

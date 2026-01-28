@@ -326,18 +326,25 @@ export class PrepareCommand {
       console.log(chalk.gray(`   Preparing to temp directory: ${tempDir}\n`));
     } else if (options.questionId) {
       // Support comma-separated question IDs
-      const questionIds = options.questionId.split(',').map(id => id.trim()).filter(Boolean);
+      const questionIds = options.questionId
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean);
       const questionIdSet = new Set(questionIds);
       questionsToProcess = questions.filter(q => questionIdSet.has(q.question_id));
-      
+
       if (questionsToProcess.length === 0) {
         throw new Error(`No questions found matching IDs: ${questionIds.join(', ')}`);
       }
-      
+
       if (questionIds.length === 1) {
         console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
       } else {
-        console.log(chalk.yellow(`\nFocusing on ${questionsToProcess.length} questions: ${questionIds.slice(0, 5).join(', ')}${questionIds.length > 5 ? ` ... and ${questionIds.length - 5} more` : ''}\n`));
+        console.log(
+          chalk.yellow(
+            `\nFocusing on ${questionsToProcess.length} questions: ${questionIds.slice(0, 5).join(', ')}${questionIds.length > 5 ? ` ... and ${questionIds.length - 5} more` : ''}\n`,
+          ),
+        );
       }
     } else {
       // Apply stratified sampling if perTypeCount is set
@@ -553,7 +560,12 @@ export class PrepareCommand {
 
         // Skip cache check if we're resuming from a specific message OR re-preparing from failures
         // (when _useTempDir is set, we explicitly want to re-prepare, not use cache)
-        if (!options.resumeFromMessageId && !options._useTempDir && !options.forceRegenerate && existsSync(join(questionDir, 'meta.json'))) {
+        if (
+          !options.resumeFromMessageId &&
+          !options._useTempDir &&
+          !options.forceRegenerate &&
+          existsSync(join(questionDir, 'meta.json'))
+        ) {
           cachedCount++;
           completedCount++;
 
@@ -876,7 +888,6 @@ export class PrepareCommand {
           // Allow config to override maxTokensPerBatch (default is 5000 in OM)
           ...(configDef.observerMaxTokensPerBatch && { maxTokensPerBatch: configDef.observerMaxTokensPerBatch }),
           // Allow config to enable sequential batch processing (default is parallel)
-
         },
         reflector: {
           model: omModel, // Real model for Reflector

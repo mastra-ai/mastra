@@ -34,7 +34,7 @@ function parseMessages(content: string): string[] {
   const parts = content.split('---');
   const messages: string[] = [];
   let current = '';
-  
+
   for (const part of parts) {
     const trimmed = part.trim();
     if (trimmed.startsWith('**User') || trimmed.startsWith('**Assistant')) {
@@ -51,9 +51,9 @@ function parseMessages(content: string): string[] {
 async function main() {
   const content = readFileSync('/tmp/problematic-thread.txt', 'utf-8');
   const messages = parseMessages(content);
-  
+
   console.log(`Testing ${messages.length} messages individually...\n`);
-  
+
   // Test each message alone
   console.log('=== Individual Message Tests ===');
   for (let i = 0; i < messages.length; i++) {
@@ -61,7 +61,7 @@ async function main() {
     const preview = messages[i].slice(0, 80).replace(/\n/g, ' ');
     console.log(`Message ${i}: ${ok ? '✅' : '🚫'} ${preview}...`);
   }
-  
+
   // Test cumulative (0 to N)
   console.log('\n=== Cumulative Tests (messages 0 to N) ===');
   for (let i = 0; i < messages.length; i++) {
@@ -74,13 +74,13 @@ async function main() {
       break;
     }
   }
-  
+
   // Test removing specific messages to find which are essential to trigger
   console.log('\n=== Testing which messages are essential triggers ===');
   const allContent = messages.join('\n\n---\n\n');
   const allOk = await testContent(allContent);
   console.log(`All messages combined: ${allOk ? '✅' : '🚫'}`);
-  
+
   if (!allOk) {
     // Test removing each message one at a time
     console.log('\nRemoving one message at a time:');

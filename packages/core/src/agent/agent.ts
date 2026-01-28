@@ -34,7 +34,12 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow, Processor } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorWorkflow,
+  Processor,
+} from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';

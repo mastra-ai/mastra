@@ -352,7 +352,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     // Validate that either threadId or resourceId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasThreadId =
+      threadId !== undefined &&
+      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
     const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
     if (!hasThreadId && !hasResourceId) {
@@ -361,7 +363,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );

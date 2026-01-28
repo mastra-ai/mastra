@@ -44,7 +44,13 @@ interface FailuresFile {
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling, applyCombSampling, type MemoryConfigDefinition } from '../config';
+import {
+  getMemoryConfig,
+  getMemoryOptions,
+  applyStratifiedSampling,
+  applyCombSampling,
+  type MemoryConfigDefinition,
+} from '../config';
 import { DatasetLoader } from '../data/loader';
 import { reconcileQuestion } from './reconcile';
 import { ObservationSemanticFilter, DateInjector } from '../processors';
@@ -82,8 +88,10 @@ async function waitForRateLimit(waitSeconds: number, reason: string): Promise<vo
   }
 
   rateLimiter.isWaiting = true;
-  console.log(chalk.yellow(`
-⏳ ${reason}. Waiting ${waitSeconds}s...`));
+  console.log(
+    chalk.yellow(`
+⏳ ${reason}. Waiting ${waitSeconds}s...`),
+  );
 
   rateLimiter.waitPromise = (async () => {
     await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
@@ -154,8 +162,8 @@ async function withRateLimitRetry<T>(
 
       if (isConnectionError && !is429) {
         // Connection error - wait a shorter time and retry
-        const waitTime = 10 + (attempt * 5); // 10s, 15s, 20s...
-        
+        const waitTime = 10 + attempt * 5; // 10s, 15s, 20s...
+
         const updateStatus = (status: string) => {
           if (spinner && 'updateStatus' in spinner) {
             spinner.updateStatus(status);
@@ -164,7 +172,9 @@ async function withRateLimitRetry<T>(
           }
         };
         updateStatus(`Connection error - waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})...`);
-        console.error(`\n🔌 Connection error (${error?.cause?.code || 'unknown'}) - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`);
+        console.error(
+          `\n🔌 Connection error (${error?.cause?.code || 'unknown'}) - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`,
+        );
 
         await waitForRateLimit(waitTime, `Connection error`);
 
@@ -186,7 +196,10 @@ async function withRateLimitRetry<T>(
           const minutes = resetStr.match(/(\d+)m(?!\s*s)/)?.[1];
           const seconds = resetStr.match(/(\d+\.?\d*)s/)?.[1];
           const ms = resetStr.match(/(\d+)ms/)?.[1];
-          retryAfter = (parseInt(minutes || '0', 10) * 60) + Math.ceil(parseFloat(seconds || '0')) + Math.ceil(parseInt(ms || '0', 10) / 1000);
+          retryAfter =
+            parseInt(minutes || '0', 10) * 60 +
+            Math.ceil(parseFloat(seconds || '0')) +
+            Math.ceil(parseInt(ms || '0', 10) / 1000);
           retryAfter = Math.max(retryAfter, 5); // At least 5 seconds
         }
 
@@ -276,7 +289,7 @@ export class RunCommand {
   async run(options: RunOptions): Promise<BenchmarkMetrics> {
     // Use existing run ID for resume, or generate new one
     let runId = options.resume;
-    
+
     // If --resume is passed without a value (true) or empty string, find the most recent run
     if (options.resume === true || options.resume === '') {
       const configDir = join(options.outputDir || this.outputDir, options.memoryConfig);
@@ -291,12 +304,12 @@ export class RunCommand {
         }
       }
     }
-    
+
     // Fall back to new run ID if no resume target found
     if (!runId || runId === true) {
       runId = `run_${Date.now()}`;
     }
-    
+
     const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId as string);
     await mkdir(runDir, { recursive: true });
 
@@ -563,7 +576,7 @@ Focusing on question: ${options.questionId}
       if (options.questionType) {
         const requestedTypes = options.questionType.split(',').map(t => t.trim());
         const availableTypes = [...new Set(preparedQuestions.map(q => q.questionType))].sort();
-        
+
         // Validate all requested types exist
         const invalidTypes = requestedTypes.filter(t => !availableTypes.includes(t));
         if (invalidTypes.length > 0) {
@@ -571,7 +584,7 @@ Focusing on question: ${options.questionId}
             `Invalid question type(s): ${invalidTypes.join(', ')}. Available types: ${availableTypes.join(', ')}`,
           );
         }
-        
+
         questionsToProcess = preparedQuestions.filter(q => requestedTypes.includes(q.questionType));
         if (questionsToProcess.length === 0) {
           throw new Error(
@@ -586,8 +599,10 @@ Filtering to question type${requestedTypes.length > 1 ? 's' : ''}: ${requestedTy
       }
       // Apply stratified sampling if perTypeCount is set (only if not filtering by type)
       if (options.perTypeCount && !options.questionType) {
-        console.log(chalk.gray(`
-Applying stratified sampling (${options.perTypeCount} per type):`));
+        console.log(
+          chalk.gray(`
+Applying stratified sampling (${options.perTypeCount} per type):`),
+        );
         // Map prepared questions to include question_type for sampling
         const withTypes = preparedQuestions.map(q => ({
           ...q,
@@ -605,8 +620,10 @@ Applying stratified sampling (${options.perTypeCount} per type):`));
       if (options.combSampleSize) {
         const combOffset = options.combOffset ?? 10;
         const startOffset = options.combStartOffset ?? 0;
-        console.log(chalk.gray(`
-Applying comb sampling (${options.combSampleSize} per type, offset=${combOffset}, start=${startOffset}):`));
+        console.log(
+          chalk.gray(`
+Applying comb sampling (${options.combSampleSize} per type, offset=${combOffset}, start=${startOffset}):`),
+        );
         // Map prepared questions to include question_type for sampling
         const withTypes = questionsToProcess.map(q => ({
           ...q,
@@ -647,9 +664,7 @@ Evaluating ${questionsToProcess.length} question${questionsToProcess.length !== 
     const remainingQuestions = questionsToProcess.filter(q => !completedQuestionIds.has(q.questionId));
     if (options.resume && remainingQuestions.length < questionsToProcess.length) {
       console.log(
-        chalk.yellow(
-          `Skipping ${questionsToProcess.length - remainingQuestions.length} already-completed questions`,
-        ),
+        chalk.yellow(`Skipping ${questionsToProcess.length - remainingQuestions.length} already-completed questions`),
       );
     }
 
@@ -711,7 +726,6 @@ Active evaluations:`;
 
     // Function to process next question from queue
     const processNextQuestion = async (slotIndex: number): Promise<void> => {
-
       while (questionQueue.length > 0) {
         const meta = questionQueue.shift();
         if (!meta) break;
@@ -953,8 +967,11 @@ When answering questions, carefully review the conversation history to identify 
       instructions: [
         { role: 'system', content: agentInstructions },
         // prevent openai prompt caching
-        { role: 'system', content: `
-cache: ${Math.random()}` },
+        {
+          role: 'system',
+          content: `
+cache: ${Math.random()}`,
+        },
       ],
       // tools: observationalMemory
       //   ? {
@@ -1019,8 +1036,11 @@ ${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
               processOutputResult: args => {
                 const responses = args.messageList.get.response.v1();
                 if (existsSync(omDebugPath)) {
-                  appendFileSync(omDebugPath, `
-${JSON.stringify(responses, null, 2)}`);
+                  appendFileSync(
+                    omDebugPath,
+                    `
+${JSON.stringify(responses, null, 2)}`,
+                  );
                 }
                 return args.messageList;
               },
@@ -1594,13 +1614,18 @@ Results saved to: ${runDir}`),
       console.log(
         chalk.gray('  Input tokens: '),
         chalk.cyan(formatTokens(metrics.total_usage.inputTokens)),
-        chalk.gray(`(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/question)`),
+        chalk.gray(
+          `(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/question)`,
+        ),
       );
       console.log(chalk.gray('  Output tokens:'), chalk.cyan(formatTokens(metrics.total_usage.outputTokens)));
       console.log(chalk.gray('  Total tokens: '), chalk.cyan(formatTokens(metrics.total_usage.totalTokens)));
 
       if (metrics.improved_total_usage) {
-        console.log(chalk.gray('  Improved input tokens: '), chalk.cyan(formatTokens(metrics.improved_total_usage.inputTokens)));
+        console.log(
+          chalk.gray('  Improved input tokens: '),
+          chalk.cyan(formatTokens(metrics.improved_total_usage.inputTokens)),
+        );
       }
     }
   }

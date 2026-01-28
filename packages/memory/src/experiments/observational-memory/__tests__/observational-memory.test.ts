@@ -3601,9 +3601,10 @@ describe.skip('Pattern Toggles', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-          content: [{
-            type: 'text' as const,
-            text: `<observations>
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
 Date: January 7, 2026
 * 🔴 (10:00) User mentioned they love hiking.
 </observations>
@@ -3612,8 +3613,9 @@ Date: January 7, 2026
 <hobbies>
 * hiking (Jan 7, 2026)
 </hobbies>
-</patterns>`
-          }],
+</patterns>`,
+            },
+          ],
           warnings: [],
         }),
       });
@@ -3638,15 +3640,17 @@ Date: January 7, 2026
       // Call observer directly with proper signature: (existingObservations, messagesToObserve, existingPatterns)
       const result = await (om as any).callObserver(
         undefined, // existingObservations
-        [{ 
-          id: 'msg-1',
-          role: 'user', 
-          content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
-          createdAt: new Date('2026-01-07T10:00:00Z'),
-          threadId,
-          resourceId,
-        }],
-        undefined // existingPatterns
+        [
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
+            createdAt: new Date('2026-01-07T10:00:00Z'),
+            threadId,
+            resourceId,
+          },
+        ],
+        undefined, // existingPatterns
       );
 
       // Patterns should be returned
@@ -3662,9 +3666,10 @@ Date: January 7, 2026
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-          content: [{
-            type: 'text' as const,
-            text: `<observations>
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
 Date: January 7, 2026
 * 🔴 (10:00) User mentioned they love hiking.
 </observations>
@@ -3673,8 +3678,9 @@ Date: January 7, 2026
 <hobbies>
 * hiking (Jan 7, 2026)
 </hobbies>
-</patterns>`
-          }],
+</patterns>`,
+            },
+          ],
           warnings: [],
         }),
       });
@@ -3699,15 +3705,17 @@ Date: January 7, 2026
       // Call observer directly with proper signature: (existingObservations, messagesToObserve, existingPatterns)
       const result = await (om as any).callObserver(
         undefined, // existingObservations
-        [{ 
-          id: 'msg-1',
-          role: 'user', 
-          content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
-          createdAt: new Date('2026-01-07T10:00:00Z'),
-          threadId,
-          resourceId,
-        }],
-        undefined // existingPatterns
+        [
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: [{ type: 'text', text: 'I love hiking in the mountains!' }],
+            createdAt: new Date('2026-01-07T10:00:00Z'),
+            threadId,
+            resourceId,
+          },
+        ],
+        undefined, // existingPatterns
       );
 
       // Patterns should NOT be returned (even though model output them)
@@ -3758,7 +3766,7 @@ Date: January 7, 2026
         undefined, // suggestedResponse
         undefined, // currentTask
         undefined, // unobservedContextBlocks
-        undefined  // patterns - not passed because toggle is off
+        undefined, // patterns - not passed because toggle is off
       );
 
       expect(formatted).not.toContain('<patterns>');
@@ -3781,13 +3789,15 @@ Date: January 7, 2026
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop' as const,
             usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-            content: [{
-              type: 'text' as const,
-              text: `<observations>
+            content: [
+              {
+                type: 'text' as const,
+                text: `<observations>
 Date: January 7, 2026
 * 🔴 (10:00) Consolidated observation.
-</observations>`
-            }],
+</observations>`,
+              },
+            ],
             warnings: [],
           };
         },
@@ -3809,7 +3819,7 @@ Date: January 7, 2026
       // Call reflector with patterns
       await (om as any).callReflector(
         'Some observations to reflect on',
-        { hobbies: 'hiking (Jan 7, 2026)' } // patterns
+        { hobbies: 'hiking (Jan 7, 2026)' }, // patterns
       );
 
       expect(reflectorReceivedPatterns).toBe(true);
@@ -3829,13 +3839,15 @@ Date: January 7, 2026
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop' as const,
             usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-            content: [{
-              type: 'text' as const,
-              text: `<observations>
+            content: [
+              {
+                type: 'text' as const,
+                text: `<observations>
 Date: January 7, 2026
 * 🔴 (10:00) Consolidated observation.
-</observations>`
-            }],
+</observations>`,
+              },
+            ],
             warnings: [],
           };
         },
@@ -3857,9 +3869,14 @@ Date: January 7, 2026
       // Even though we pass patterns, they should not be sent to reflector
       // because reflectorRecognizePatterns is false
       // We need to test via maybeReflect which checks the toggle
-      
+
       // Initialize record with patterns
-      const initRecord = await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
+      const initRecord = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
       await storage.updateActiveObservations({
         id: initRecord.id,
         observations: 'A'.repeat(60000), // Large enough to trigger reflection

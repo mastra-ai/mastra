@@ -147,8 +147,6 @@ export class SyncCommand {
 
     // Show count of questions with improved fields in dataset
     const withImproved = questions.filter(q => q.improved_question || q.improved_answer).length;
-    console.log(
-      chalk.gray(`Dataset has ${withImproved} questions with improved_question or improved_answer fields`),
-    );
+    console.log(chalk.gray(`Dataset has ${withImproved} questions with improved_question or improved_answer fields`));
   }
 }

@@ -48,7 +48,7 @@ async function main() {
   // Test original
   console.log('=== Testing Original ===');
   const originalBlocked = !(await testContent(original, 'Original'));
-  
+
   if (!originalBlocked) {
     console.log('\nOriginal thread is not blocked! Testing in thread wrapper...');
     const wrapped = `<thread id="test">${original}</thread>`;
@@ -71,7 +71,7 @@ async function main() {
     ['novelist AI -> assistant', /novelist AI/gi, 'assistant'],
     ['crime novels -> stories', /crime novels/gi, 'stories'],
     ['twisted criminal -> antagonist', /twisted criminal/gi, 'antagonist'],
-    ['women don\'t have rights -> different society', /women don't have rights/gi, 'different society'],
+    ["women don't have rights -> different society", /women don't have rights/gi, 'different society'],
     ['forced to modify -> asked to change', /forced to modify/gi, 'asked to change'],
   ];
 
@@ -98,23 +98,23 @@ async function main() {
 
   // If still blocked, try more aggressive approach - remove entire problematic sections
   console.log('\n=== Testing Section Removal ===');
-  
+
   // Split by message boundaries and test
   const messages = original.split(/---\n\n\*\*(?:User|Assistant)/);
   console.log(`Found ${messages.length} message sections`);
-  
+
   // Binary search for problematic message
   let left = 0;
   let right = messages.length;
-  
+
   while (right - left > 1) {
     const mid = Math.floor((left + right) / 2);
     const firstHalf = messages.slice(0, mid).join('---\n\n**User');
     const secondHalf = messages.slice(mid).join('---\n\n**User');
-    
+
     const firstOk = await testContent(firstHalf, `Messages 0-${mid}`);
     const secondOk = await testContent(secondHalf, `Messages ${mid}-${messages.length}`);
-    
+
     if (!firstOk && secondOk) {
       right = mid;
     } else if (firstOk && !secondOk) {
@@ -125,7 +125,7 @@ async function main() {
       else left = mid;
     }
   }
-  
+
   console.log(`\nProblematic section around message index: ${left}-${right}`);
   if (left < messages.length) {
     console.log('Content preview:');

@@ -34,7 +34,7 @@ export interface ReflectorResult {
 export function buildReflectorSystemPrompt(recognizePatterns: boolean = true): string {
   // Use the appropriate observer output format based on pattern recognition setting
   const observerOutputFormat = recognizePatterns ? OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
-  
+
   // Build the patterns section for the Reflector's own output format
   const patternsSection = recognizePatterns
     ? `

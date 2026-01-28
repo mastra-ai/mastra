@@ -134,7 +134,11 @@ export const AgentInformationLayout = ({ children, agentId }: AgentInformationLa
   const { data: agent } = useAgent(agentId);
   useAgentInformationSettings({ modelId: agent?.modelId || '' });
 
-  return <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">{children}</div>;
+  return (
+    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">
+      {children}
+    </div>
+  );
 };
 
 export interface AgentInformationTabLayoutProps {

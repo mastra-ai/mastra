@@ -121,7 +121,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     /**
      * BEHAVIOR: Completed observation shows compression stats
      * OUTCOME: User sees how much memory was compressed (e.g., "Observed 50→100 tokens")
-     * 
+     *
      * NOTE: OM only triggers observation on stepNumber > 0 (after first response).
      * We need to send multiple messages to accumulate enough tokens to trigger observation.
      * With threshold=50 tokens, we need ~50 tokens of conversation before observation triggers.
@@ -130,11 +130,11 @@ test.describe('Observational Memory - Behavior Tests', () => {
      * SKIPPED: Observation markers require multi-step agent execution (stepNumber > 0).
      * In simple chat without tools, each message is a separate turn with stepNumber = 0.
      * The OM processor only triggers observation on stepNumber > 0.
-     * 
+     *
      * To test this properly, we would need:
      * 1. An agent with tools that trigger multi-step execution
      * 2. A mock model that returns tool calls
-     * 
+     *
      * For now, we verify the sidebar behavior instead of chat markers.
      */
     test('should show completion stats when observation finishes', async ({ page }) => {
@@ -227,7 +227,9 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
-      await expect(page.locator('[data-testid="thread-wrapper"]').getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('[data-testid="thread-wrapper"]').getByText(/Observed.*→.*tokens/i)).toBeVisible({
+        timeout: 10000,
+      });
 
       // ASSERT: OM sidebar should show the observations
       await page.getByRole('tab', { name: 'Memory' }).click();
@@ -258,10 +260,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // ASSERT: Both observation and reflection markers should appear
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
-      
+
       // Observation marker should show (fixture emits observation first)
       await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
-      
+
       // Reflection marker should also show (fixture emits reflection after observation)
       await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
 
@@ -291,9 +293,9 @@ test.describe('Observational Memory - Behavior Tests', () => {
       const omSection = page.getByText('Observational Memory');
       await expect(omSection).toBeVisible({ timeout: 10000 });
 
-      // Progress bars should be visible
-      await expect(page.getByText('Messages', { exact: true })).toBeVisible();
-      await expect(page.getByText('Observations', { exact: true })).toBeVisible();
+      // Progress bars should be visible (use .first() since "Observations" may appear in both progress bar and section header)
+      await expect(page.getByText('Messages', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Observations', { exact: true }).first()).toBeVisible();
 
       // ACT: Send a message to trigger progress update
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -336,9 +338,9 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // ASSERT: OM sidebar should show observations
       await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible();
 
-      // Progress bars should be visible
-      await expect(page.getByText('Messages', { exact: true })).toBeVisible();
-      await expect(page.getByText('Observations', { exact: true })).toBeVisible();
+      // Progress bars should be visible (use .first() since "Observations" may appear in both progress bar and section header)
+      await expect(page.getByText('Messages', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('Observations', { exact: true }).first()).toBeVisible();
     });
   });
 });

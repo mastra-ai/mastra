@@ -1,10 +1,10 @@
 /**
  * Precompute embeddings for all prepared questions
- * 
+ *
  * This command indexes all observations from prepared data and caches
  * the embeddings to disk. This makes subsequent benchmark runs much faster
  * since embeddings don't need to be computed at runtime.
- * 
+ *
  * Usage:
  *   pnpm precompute-embeddings -d longmemeval_s -c observational-memory
  *   pnpm precompute-embeddings -d longmemeval_s -c observational-memory --offset 100 --subset 50
@@ -51,11 +51,10 @@ export class PrecomputeEmbeddingsCommand {
     const spinner = ora('Loading prepared data...').start();
 
     const configDef = getMemoryConfig(options.memoryConfig);
-    
+
     // Determine which config to read from (handle readOnlyConfig)
-    const effectiveConfig = configDef.readOnlyConfig && configDef.baseConfig 
-      ? configDef.baseConfig 
-      : options.memoryConfig;
+    const effectiveConfig =
+      configDef.readOnlyConfig && configDef.baseConfig ? configDef.baseConfig : options.memoryConfig;
 
     const baseDir = options.preparedDataDir || join(process.cwd(), 'prepared-data');
     const preparedDir = join(baseDir, options.dataset, effectiveConfig);
@@ -126,7 +125,7 @@ export class PrecomputeEmbeddingsCommand {
       try {
         // Load observations from om.json
         const omData: ObservationalMemoryData = JSON.parse(readFileSync(omJsonPath, 'utf-8'));
-        
+
         // Extract observations - handle both new format (array of tuples) and old format
         let observations = '';
         if (omData.observationalMemory && Array.isArray(omData.observationalMemory)) {
@@ -151,11 +150,11 @@ export class PrecomputeEmbeddingsCommand {
 
         // Check which lines need embedding
         const uncachedLines: { line: string; hash: string }[] = [];
-        
+
         for (const line of lines) {
           const hash = hasher.h32ToString(line);
           const cachePath = join(cacheDir, `${hash}.json`);
-          
+
           if (existsSync(cachePath)) {
             cachedCount++;
           } else {
@@ -171,13 +170,13 @@ export class PrecomputeEmbeddingsCommand {
         // Embed in batches with micro-cooldowns to prevent CPU overload
         const batchCooldown = Math.min(cooldown / 4, 250); // 250ms max between batches
         const totalBatches = Math.ceil(uncachedLines.length / batchSize);
-        
+
         for (let b = 0; b < uncachedLines.length; b += batchSize) {
           const batchNum = Math.floor(b / batchSize) + 1;
           const batch = uncachedLines.slice(b, b + batchSize);
-          
+
           spinner.text = `${progress} ${questionId}: embedding batch ${batchNum}/${totalBatches} (${batch.length} items)`;
-          
+
           const { embeddings } = await embedMany({
             model: fastembed.small,
             values: batch.map(l => l.line),
@@ -188,7 +187,7 @@ export class PrecomputeEmbeddingsCommand {
             const { hash } = batch[j];
             const embedding = embeddings[j];
             const cachePath = join(cacheDir, `${hash}.json`);
-            
+
             try {
               writeFileSync(cachePath, JSON.stringify(embedding));
               newCount++;
@@ -196,7 +195,7 @@ export class PrecomputeEmbeddingsCommand {
               errorCount++;
             }
           }
-          
+
           // Micro-cooldown between batches within a question
           if (batchCooldown > 0 && b + batchSize < uncachedLines.length) {
             await new Promise(resolve => setTimeout(resolve, batchCooldown));
@@ -209,19 +208,19 @@ export class PrecomputeEmbeddingsCommand {
         if (existsSync(metaJsonPath)) {
           const meta = JSON.parse(readFileSync(metaJsonPath, 'utf-8'));
           const questionsToEmbed: string[] = [];
-          
+
           if (meta.question) {
             questionsToEmbed.push(meta.question);
           }
           if (meta.improvedQuestion) {
             questionsToEmbed.push(meta.improvedQuestion);
           }
-          
+
           for (const q of questionsToEmbed) {
             totalQuestions++;
             const hash = hasher.h32ToString(q);
             const cachePath = join(cacheDir, `${hash}.json`);
-            
+
             if (existsSync(cachePath)) {
               questionsCached++;
             } else {
@@ -238,15 +237,14 @@ export class PrecomputeEmbeddingsCommand {
               }
             }
           }
-          
+
           questionStats = `, ${questionsToEmbed.length} questions`;
         }
 
         spinner.succeed(
           `${progress} ${questionId}: ${lines.length} obs ` +
-          `(${uncachedLines.length} new, ${lines.length - uncachedLines.length} cached)${questionStats}`
+            `(${uncachedLines.length} new, ${lines.length - uncachedLines.length} cached)${questionStats}`,
         );
-
       } catch (err) {
         spinner.fail(`${progress} ${questionId}: Error - ${err}`);
         errorCount++;
@@ -274,31 +272,31 @@ export class PrecomputeEmbeddingsCommand {
    */
   private parseObservationLines(observations: string): string[] {
     const lines: string[] = [];
-    
+
     for (const line of observations.split('\n')) {
       const trimmed = line.trim();
-      
+
       // Skip empty lines
       if (!trimmed) continue;
-      
+
       // Skip date headers
       if (/^##\s+\d{4}-\d{2}-\d{2}/.test(trimmed)) continue;
       if (/^Date:\s+/i.test(trimmed)) continue;
-      
+
       // Skip thread XML tags
       if (/^<thread\s+id=/.test(trimmed)) continue;
       if (/^<\/thread>/.test(trimmed)) continue;
       if (/^<other-conversation\s+id=/.test(trimmed)) continue;
       if (/^<\/other-conversation>/.test(trimmed)) continue;
-      
+
       // Skip pattern headers
       if (/^<patterns>/.test(trimmed)) continue;
       if (/^<\/patterns>/.test(trimmed)) continue;
-      
+
       // This is an observation line
       lines.push(trimmed);
     }
-    
+
     return lines;
   }
 }

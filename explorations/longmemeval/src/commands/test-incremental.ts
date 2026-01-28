@@ -34,7 +34,7 @@ function parseMessages(content: string): string[] {
   const parts = content.split('---');
   const messages: string[] = [];
   let current = '';
-  
+
   for (const part of parts) {
     const trimmed = part.trim();
     if (trimmed.startsWith('**User') || trimmed.startsWith('**Assistant')) {
@@ -51,23 +51,23 @@ function parseMessages(content: string): string[] {
 async function main() {
   const content = readFileSync('/tmp/problematic-thread.txt', 'utf-8');
   const messages = parseMessages(content);
-  
+
   console.log(`Found ${messages.length} messages\n`);
-  
+
   // Phase 1: Build up incrementally, skipping problematic messages
   console.log('=== Phase 1: Incremental build (skip problematic) ===\n');
-  
+
   const included: number[] = [];
   const skipped: number[] = [];
-  
+
   for (let i = 0; i < messages.length; i++) {
     // Try adding this message
     const testSet = [...included, i];
     const combined = testSet.map(idx => messages[idx]).join('\n\n---\n\n');
     const ok = await testContent(combined);
-    
+
     const preview = messages[i].slice(0, 60).replace(/\n/g, ' ');
-    
+
     if (ok) {
       included.push(i);
       console.log(`Message ${i}: ✅ included  "${preview}..."`);
@@ -76,11 +76,11 @@ async function main() {
       console.log(`Message ${i}: 🚫 SKIPPED   "${preview}..."`);
     }
   }
-  
+
   console.log(`\n--- Summary ---`);
   console.log(`Included: ${included.length} messages: [${included.join(', ')}]`);
   console.log(`Skipped: ${skipped.length} messages: [${skipped.join(', ')}]`);
-  
+
   // Phase 2: For each skipped message, show full content
   if (skipped.length > 0) {
     console.log(`\n=== Phase 2: Skipped message details ===\n`);
@@ -90,26 +90,26 @@ async function main() {
       console.log();
     }
   }
-  
+
   // Phase 3: Test if we can include any skipped messages by removing others
   if (skipped.length > 1) {
     console.log(`\n=== Phase 3: Can we include some skipped by removing others? ===\n`);
-    
+
     for (const tryInclude of skipped) {
       for (const tryRemove of skipped) {
         if (tryInclude === tryRemove) continue;
-        
+
         const testSet = [...included, tryInclude].filter(i => i !== tryRemove);
         const combined = testSet.map(idx => messages[idx]).join('\n\n---\n\n');
         const ok = await testContent(combined);
-        
+
         if (ok) {
           console.log(`✅ Can include ${tryInclude} if we remove ${tryRemove}`);
         }
       }
     }
   }
-  
+
   // Final test: verify the included set works
   console.log(`\n=== Final verification ===`);
   const finalCombined = included.map(idx => messages[idx]).join('\n\n---\n\n');

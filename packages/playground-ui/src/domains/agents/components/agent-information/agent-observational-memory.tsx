@@ -45,17 +45,17 @@ const useElapsedTime = (isActive: boolean) => {
 };
 
 // Progress bar component with percent label inside bar
-const ProgressBar = ({ 
-  value, 
-  max, 
+const ProgressBar = ({
+  value,
+  max,
   label,
   isActive = false,
   model,
   baseThreshold,
-  totalBudget
-}: { 
-  value: number; 
-  max: number; 
+  totalBudget,
+}: {
+  value: number;
+  max: number;
   label: string;
   isActive?: boolean;
   model?: string;
@@ -68,10 +68,10 @@ const ProgressBar = ({
   const elapsed = useElapsedTime(isActive && percentage >= 100);
   const isProcessing = isActive && percentage >= 100;
   const activeText = label === 'Messages' ? 'observing' : 'reflecting';
-  
+
   // Show "adaptive" when at 100% due to adaptive mode but still below configured threshold
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
-  
+
   // When processing: use blue observing badge style (bg-blue-500/10 text-blue-600)
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
   const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
@@ -79,7 +79,7 @@ const ProgressBar = ({
   const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
   const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-surface5';
   const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-neutral3';
-  
+
   return (
     <div className="flex-1 min-w-0">
       {/* Label above bar - fixed height to prevent layout shift */}
@@ -93,42 +93,61 @@ const ProgressBar = ({
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs bg-surface3 border border-border1 text-foreground">
             <div className="text-xs space-y-1.5">
-              <div className="font-medium text-neutral5">{label === 'Messages' ? 'Observer' : 'Reflector'} Settings</div>
+              <div className="font-medium text-neutral5">
+                {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
+              </div>
               <div className="space-y-0.5">
-                <div><span className="text-neutral4">Model:</span> <span className="text-neutral5">{model || 'not configured'}</span></div>
-                <div><span className="text-neutral4">Threshold:</span> <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span></div>
+                <div>
+                  <span className="text-neutral4">Model:</span>{' '}
+                  <span className="text-neutral5">{model || 'not configured'}</span>
+                </div>
+                <div>
+                  <span className="text-neutral4">Threshold:</span>{' '}
+                  <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span>
+                </div>
                 {isAdaptive && totalBudget && (
-                  <div><span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span> <span className="text-neutral4">({formatTokens(totalBudget)} shared budget)</span></div>
+                  <div>
+                    <span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-neutral4">({formatTokens(totalBudget)} shared budget)</span>
+                  </div>
                 )}
               </div>
             </div>
           </TooltipContent>
         </Tooltip>
       </div>
-      
+
       <div className="flex items-stretch">
         {/* Progress bar with percentage inside */}
         <div className={`relative flex-1 h-5 ${containerBg} rounded-l overflow-hidden`}>
-          <div 
-            className={`h-full ${fillColor} transition-all`}
-            style={{ width: `${percentage}%` }}
-          />
-          <span 
+          <div className={`h-full ${fillColor} transition-all`} style={{ width: `${percentage}%` }} />
+          <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColor} pointer-events-none`}
           >
-            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : showAdaptiveLabel ? 'adaptive' : `${Math.round(percentage)}%`}
+            {isProcessing
+              ? `${activeText} ${elapsed.toFixed(1)}s`
+              : showAdaptiveLabel
+                ? 'adaptive'
+                : `${Math.round(percentage)}%`}
           </span>
-          <span 
+          <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
-            {isProcessing ? `${activeText} ${elapsed.toFixed(1)}s` : showAdaptiveLabel ? 'adaptive' : `${Math.round(percentage)}%`}
+            {isProcessing
+              ? `${activeText} ${elapsed.toFixed(1)}s`
+              : showAdaptiveLabel
+                ? 'adaptive'
+                : `${Math.round(percentage)}%`}
           </span>
         </div>
-        
+
         {/* Token count connected to bar */}
-        <span className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center gap-1 rounded-r -ml-px`}>
-          {formatTokens(value)}<span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
+        <span
+          className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center gap-1 rounded-r -ml-px`}
+        >
+          {formatTokens(value)}
+          <span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -138,7 +157,9 @@ const ProgressBar = ({
                 <div className="text-xs">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
                   <span className="text-neutral4"> is the configured threshold. </span>
-                  <span className="text-neutral5">Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.</span>
+                  <span className="text-neutral5">
+                    Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
+                  </span>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -159,7 +180,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedReflections, setExpandedReflections] = useState<Set<string>>(new Set());
-  
+
   const toggleReflection = (id: string) => {
     setExpandedReflections(prev => {
       const next = new Set(prev);
@@ -173,7 +194,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   };
 
   // Get real-time observation status and progress from streaming context
-  const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } = useObservationalMemoryContext();
+  const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } =
+    useObservationalMemoryContext();
 
   // Clear progress when thread changes
   useEffect(() => {
@@ -198,24 +220,23 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // 2. We're on a fresh page load (no stream context yet)
   const STALE_OBSERVATION_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
   const serverLastObservedAt = statusData?.observationalMemory?.lastObservedAt;
-  const isServerStatusStale = serverLastObservedAt 
+  const isServerStatusStale = serverLastObservedAt
     ? Date.now() - new Date(serverLastObservedAt).getTime() > STALE_OBSERVATION_THRESHOLD_MS
     : true; // If no lastObservedAt, consider it stale
-  
+
   // Stream context is the primary source of truth
   // Only fall back to server status if not stale AND no stream activity has been detected yet
   const hasHadStreamActivity = isObservingFromStream || isReflectingFromStream;
-  const isObservingFromServer = !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isObserving || false);
-  const isReflectingFromServer = !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isReflecting || false);
+  const isObservingFromServer =
+    !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isObserving || false);
+  const isReflectingFromServer =
+    !isServerStatusStale && !hasHadStreamActivity && (statusData?.observationalMemory?.isReflecting || false);
   const isObserving = isObservingFromStream || isObservingFromServer;
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
 
   // Get OM record and history (polls when active)
-  const {
-    data: omData,
-    isLoading: isOMLoading,
-  } = useObservationalMemory({
+  const { data: omData, isLoading: isOMLoading } = useObservationalMemory({
     agentId,
     resourceId,
     threadId,
@@ -233,66 +254,73 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // 2. Record config (from OM processor when added via input/output processors)
   // 3. Agent config endpoint (when OM is configured on agent)
   // 4. Sensible defaults
-  const omAgentConfig = (configData?.config as { observationalMemory?: {
-    enabled: boolean;
-    scope?: 'thread' | 'resource';
-    observationThreshold?: number | { min: number; max: number };
-    reflectionThreshold?: number | { min: number; max: number };
-    observerModel?: string;
-    reflectorModel?: string;
-  }})?.observationalMemory;
-  const recordConfig = record?.config as { 
-    observationThreshold?: number; 
-    reflectionThreshold?: number;
-    observerModel?: string;
-    reflectorModel?: string;
-  } | undefined;
-  
+  const omAgentConfig = (
+    configData?.config as {
+      observationalMemory?: {
+        enabled: boolean;
+        scope?: 'thread' | 'resource';
+        observationThreshold?: number | { min: number; max: number };
+        reflectionThreshold?: number | { min: number; max: number };
+        observerModel?: string;
+        reflectorModel?: string;
+      };
+    }
+  )?.observationalMemory;
+  const recordConfig = record?.config as
+    | {
+        observationThreshold?: number;
+        reflectionThreshold?: number;
+        observerModel?: string;
+        reflectorModel?: string;
+      }
+    | undefined;
+
   // Extract model names from config
   const observerModel = recordConfig?.observerModel ?? omAgentConfig?.observerModel;
   const reflectorModel = recordConfig?.reflectorModel ?? omAgentConfig?.reflectorModel;
-  
+
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
     if (typeof threshold === 'number') return threshold;
     return threshold.max; // Use max for progress display (adaptive budget)
   };
-  
-  const getBaseThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
+
+  const getBaseThresholdValue = (
+    threshold: number | { min: number; max: number } | undefined,
+    defaultValue: number,
+  ) => {
     if (!threshold) return defaultValue;
     if (typeof threshold === 'number') return threshold;
     return threshold.min; // Use min for base threshold (configured value)
   };
-  
+
   // Check if adaptive mode is enabled (threshold is an object with min/max)
-  const isAdaptiveMode = omAgentConfig?.observationThreshold !== undefined 
-    && typeof omAgentConfig.observationThreshold !== 'number';
-  
+  const isAdaptiveMode =
+    omAgentConfig?.observationThreshold !== undefined && typeof omAgentConfig.observationThreshold !== 'number';
+
   // Get total budget for adaptive mode (stored as max in observation threshold)
-  const totalBudget = isAdaptiveMode 
-    ? getThresholdValue(omAgentConfig?.observationThreshold, 10000)
-    : 0;
-  
+  const totalBudget = isAdaptiveMode ? getThresholdValue(omAgentConfig?.observationThreshold, 10000) : 0;
+
   // Base thresholds (configured values, before adaptive adjustment)
-  const baseObservationThreshold = isAdaptiveMode 
+  const baseObservationThreshold = isAdaptiveMode
     ? getBaseThresholdValue(omAgentConfig?.observationThreshold, 10000)
     : undefined;
   const baseReflectionThreshold = isAdaptiveMode
     ? getBaseThresholdValue(omAgentConfig?.reflectionThreshold, 30000)
     : undefined;
-  
+
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
-  const observationThreshold = streamProgress?.threshold 
-    ?? recordConfig?.observationThreshold 
-    ?? getThresholdValue(omAgentConfig?.observationThreshold, 10000);
-  
+  const observationThreshold =
+    streamProgress?.threshold ??
+    recordConfig?.observationThreshold ??
+    getThresholdValue(omAgentConfig?.observationThreshold, 10000);
+
   // For observations bar: use the configured reflection threshold (not calculated remaining)
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configReflectionThreshold = getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
-  const reflectionThreshold = streamProgress?.reflectionThreshold 
-    ?? recordConfig?.reflectionThreshold 
-    ?? configReflectionThreshold;
+  const reflectionThreshold =
+    streamProgress?.reflectionThreshold ?? recordConfig?.reflectionThreshold ?? configReflectionThreshold;
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
@@ -326,27 +354,27 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // Scroll to the most recent date section when observations change
   useEffect(() => {
     if (!observations || !observationsContentRef.current || !isExpanded) return;
-    
+
     // Find all date headers (elements with "Date:" text pattern)
     const container = observationsContentRef.current;
     const dateHeaders = container.querySelectorAll<HTMLElement>('[class*="sticky"]');
-    
+
     if (dateHeaders.length > 0) {
       // Get the last (most recent) date section
       const lastDateHeader = dateHeaders[dateHeaders.length - 1];
       const scrollContainer = container.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
-      
+
       if (scrollContainer && lastDateHeader) {
         // Calculate position to scroll so date header is at top
         const containerTop = container.getBoundingClientRect().top;
         const headerTop = lastDateHeader.getBoundingClientRect().top;
         const offsetFromTop = headerTop - containerTop;
-        
+
         // Use requestAnimationFrame for smooth scrolling after render
         requestAnimationFrame(() => {
           scrollContainer.scrollTo({
             top: offsetFromTop,
-            behavior: 'smooth'
+            behavior: 'smooth',
           });
         });
       }
@@ -410,7 +438,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-4 h-4 text-purple-400" />
         <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-
       </div>
 
       {/* Progress Bars for Thresholds - Side by side */}
@@ -449,16 +476,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-neutral5">Observations</span>
                 {tokenCount !== undefined && (
-                  <span className="text-xs text-neutral3">
-                    {tokenCount.toLocaleString()} tokens
-                  </span>
+                  <span className="text-xs text-neutral3">{tokenCount.toLocaleString()} tokens</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-neutral3">
-                  {record?.lastObservedAt 
+                  {record?.lastObservedAt
                     ? formatRelativeTime(record.lastObservedAt)
-                    : record?.updatedAt 
+                    : record?.updatedAt
                       ? formatRelativeTime(record.updatedAt)
                       : ''}
                 </span>
@@ -477,7 +502,11 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                     className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs overflow-hidden w-full"
                     onClick={handleCopy}
                   >
-                    <ObservationRenderer observations={observations} maxHeight={undefined} className="break-words w-full overflow-hidden" />
+                    <ObservationRenderer
+                      observations={observations}
+                      maxHeight={undefined}
+                      className="break-words w-full overflow-hidden"
+                    />
                     {isCopied && (
                       <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
                         Copied!
@@ -499,16 +528,12 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                 onClick={() => setShowHistory(!showHistory)}
                 className="flex items-center gap-2 text-xs text-neutral3 hover:text-neutral5 transition-colors"
               >
-                {showHistory ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
+                {showHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <span>Previous observations ({previousObservations.length})</span>
               </button>
               {showHistory && (
                 <div className="mt-2 space-y-2">
-                  {previousObservations.map((historyRecord) => {
+                  {previousObservations.map(historyRecord => {
                     const isRecordExpanded = expandedReflections.has(historyRecord.id);
                     return (
                       <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
@@ -536,8 +561,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                         {isRecordExpanded && (
                           <div className="px-3 pb-3 max-h-48 overflow-y-auto border-t border-border1">
                             {historyRecord.activeObservations ? (
-                              <ObservationRenderer 
-                                observations={historyRecord.activeObservations} 
+                              <ObservationRenderer
+                                observations={historyRecord.activeObservations}
                                 maxHeight={undefined}
                               />
                             ) : (

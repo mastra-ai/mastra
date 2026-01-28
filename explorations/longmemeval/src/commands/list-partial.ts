@@ -114,7 +114,7 @@ export class ListPartialCommand {
       // Print summary with actionable commands
       console.log(chalk.blue('─'.repeat(50)));
       console.log(chalk.white('\nTo resume preparation:'));
-      
+
       const allIds = [...failedQuestions, ...partialQuestions].map(q => q.questionId);
       if (allIds.length === 1) {
         console.log(chalk.gray(`  pnpm prepare -q ${allIds[0]}`));

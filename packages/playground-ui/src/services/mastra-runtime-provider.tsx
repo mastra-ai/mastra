@@ -77,7 +77,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
 /**
  * Converts a data-om-* part to dynamic-tool format so toAssistantUIMessage can transform it.
  * The ToolFallback component will detect the om-observation-* prefix and render ObservationMarkerBadge.
- * 
+ *
  * Input: { type: 'data-om-observation-start', data: {...} }
  * Output: { type: 'dynamic-tool', toolCallId, toolName: 'om-observation-start', input: {...}, output: {...}, state: 'output-available' }
  */
@@ -89,7 +89,7 @@ const OM_TOOL_NAME = 'mastra-memory-om-observation';
  * - end/failed marker with same cycleId updates it to 'output-available' (complete) state
  * If both start and end exist for the same cycleId, only the final state is kept.
  * The tool call is placed at the position of the START marker to preserve order.
- * 
+ *
  * Note: cycleId is unique per observation cycle, while recordId is constant for the entire
  * memory record. Using cycleId ensures each observation cycle gets its own UI element.
  */
@@ -133,19 +133,19 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
 
   for (const part of message.parts) {
     const cycleId = (part as any).data?.cycleId;
-    
+
     if (part.type === 'data-om-observation-start' && cycleId && !processedCycleIds.has(cycleId)) {
       // Replace start marker with merged tool call
       const parts = omPartsByCycleId.get(cycleId)!;
       const startData = parts.start?.data || {};
       const endData = parts.end?.data || {};
       const failedData = parts.failed?.data || {};
-      
+
       const isFailed = !!parts.failed;
       const isComplete = !!parts.end;
       const isDisconnected = isComplete && !!endData.disconnectedAt;
       const isLoading = !isFailed && !isComplete;
-      
+
       const mergedData = {
         ...startData,
         ...(isComplete ? endData : {}),
@@ -158,15 +158,21 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
         toolCallId: `om-observation-${cycleId}`,
         toolName: OM_TOOL_NAME,
         input: mergedData,
-        output: isLoading ? undefined : { 
-          status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
-          omData: mergedData,
-        },
+        output: isLoading
+          ? undefined
+          : {
+              status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+              omData: mergedData,
+            },
         state: isLoading ? 'input-available' : 'output-available',
       });
-      
+
       processedCycleIds.add(cycleId);
-    } else if ((part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') && cycleId && !processedCycleIds.has(cycleId)) {
+    } else if (
+      (part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') &&
+      cycleId &&
+      !processedCycleIds.has(cycleId)
+    ) {
       // Handle end/failed markers that don't have a corresponding start (e.g., disconnected state)
       const parts = omPartsByCycleId.get(cycleId);
       if (parts && !parts.start) {
@@ -175,7 +181,7 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
         const failedData = parts.failed?.data || {};
         const isFailed = !!parts.failed;
         const isDisconnected = !!endData.disconnectedAt;
-        
+
         const mergedData = {
           ...(parts.end ? endData : failedData),
           _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
@@ -186,13 +192,13 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
           toolCallId: `om-observation-${cycleId}`,
           toolName: OM_TOOL_NAME,
           input: mergedData,
-          output: { 
+          output: {
             status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
             omData: mergedData,
           },
           state: 'output-available',
         });
-        
+
         processedCycleIds.add(cycleId);
       }
       // Skip if already processed or has a start marker (will be merged there)
@@ -202,8 +208,6 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
       convertedParts.push(part);
     }
   }
-
-
 
   return {
     ...message,
@@ -346,7 +350,8 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
-  const { setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, setStreamProgress } = useObservationalMemoryContext();
+  const { setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, setStreamProgress } =
+    useObservationalMemoryContext();
 
   // Helper to signal observation/reflection started (from streaming)
   const handleObservationStart = (operationType?: string) => {
@@ -396,11 +401,11 @@ export function MastraRuntimeProvider({
     console.log('[OM DEBUG] markOmMarkersAsDisconnected called with', msgs.length, 'messages');
     return msgs.map((msg, msgIdx) => {
       if (msg.role !== 'assistant') return msg;
-      
+
       // Handle both 'parts' (v2/v3) and 'content' (legacy) message formats
       const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
       if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
-      
+
       let foundOmMarker = false;
       const updatedParts = msg[partsKey].map((part: any) => {
         // Check for raw data-om-observation-start parts (before conversion to tool-call)
@@ -439,7 +444,7 @@ export function MastraRuntimeProvider({
         }
         return part;
       });
-      
+
       if (foundOmMarker) {
         console.log('[OM DEBUG] Returning updated message with', updatedParts.length, 'parts');
       }
@@ -454,11 +459,11 @@ export function MastraRuntimeProvider({
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
     setStreamProgress(null);
-    
+
     // Mark any in-progress observation markers as disconnected
     setMessages(prev => markOmMarkersAsDisconnected(prev));
     setLegacyMessages(prev => markOmMarkersAsDisconnected(prev));
-    
+
     // Refresh to get latest state from server
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
     queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
@@ -529,7 +534,12 @@ export function MastraRuntimeProvider({
     });
 
     try {
-      console.log('[OM DEBUG] try block started, isSupportedModel:', isSupportedModel, 'chatWithNetwork:', chatWithNetwork);
+      console.log(
+        '[OM DEBUG] try block started, isSupportedModel:',
+        isSupportedModel,
+        'chatWithNetwork:',
+        chatWithNetwork,
+      );
       if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
@@ -567,7 +577,10 @@ export function MastraRuntimeProvider({
               }
 
               // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
-              if ((chunk as any).type === 'data-om-observation-end' || (chunk as any).type === 'data-om-observation-failed') {
+              if (
+                (chunk as any).type === 'data-om-observation-end' ||
+                (chunk as any).type === 'data-om-observation-failed'
+              ) {
                 refreshObservationalMemory((chunk as any).data?.operationType);
               }
             },

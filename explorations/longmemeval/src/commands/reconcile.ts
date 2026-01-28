@@ -16,10 +16,7 @@ import { Agent } from '@mastra/core/agent';
 
 import { getMemoryConfig } from '../config';
 import type { MemoryConfigType } from '../data/types';
-import {
-  buildObserverSystemPrompt,
-  PATTERN_INSTRUCTIONS,
-} from '@mastra/memory/experiments';
+import { buildObserverSystemPrompt, PATTERN_INSTRUCTIONS } from '@mastra/memory/experiments';
 
 export interface ReconcileOptions {
   /** The target config we're reconciling for */
@@ -130,13 +127,13 @@ If there are no patterns to extract (fewer than 2 related items), output:
  */
 function parsePatternOutput(output: string): Record<string, string[]> {
   const patterns: Record<string, string[]> = {};
-  
+
   // Extract <patterns> content
   const patternsMatch = output.match(/^[ \t]*<patterns>([\s\S]*?)^[ \t]*<\/patterns>/im);
   if (!patternsMatch?.[1]) {
     return patterns;
   }
-  
+
   const patternsContent = patternsMatch[1];
   // Find all named pattern tags
   const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
@@ -156,7 +153,7 @@ function parsePatternOutput(output: string): Record<string, string[]> {
       patterns[patternName] = items;
     }
   }
-  
+
   return patterns;
 }
 
@@ -222,7 +219,7 @@ async function extractPatternsForQuestion(
     // Merge new patterns with any existing patterns on the record
     const existingPatterns = record.patterns || {};
     const mergedPatterns: Record<string, string[]> = { ...existingPatterns };
-    
+
     for (const [patternName, items] of Object.entries(patterns)) {
       if (mergedPatterns[patternName]) {
         // Merge and deduplicate
@@ -252,9 +249,7 @@ async function extractPatternsForQuestion(
 /**
  * Reconcile a single question's data from base config to target config.
  */
-export async function reconcileQuestion(
-  options: ReconcileOptions & { questionId: string },
-): Promise<ReconcileResult> {
+export async function reconcileQuestion(options: ReconcileOptions & { questionId: string }): Promise<ReconcileResult> {
   const configDef = getMemoryConfig(options.targetConfig);
 
   // If no base config, nothing to reconcile
@@ -288,13 +283,7 @@ export async function reconcileQuestion(
   // If this config needs pattern extraction, do it
   if (configDef.recognizePatterns) {
     const model = options.model || configDef.omModel || 'openai/gpt-4o';
-    patternsExtracted = await extractPatternsForQuestion(
-      preparedDataDir,
-      dataset,
-      targetConfig,
-      questionId,
-      model,
-    );
+    patternsExtracted = await extractPatternsForQuestion(preparedDataDir, dataset, targetConfig, questionId, model);
   }
 
   return { needed: true, copied: true, patternsExtracted };
@@ -331,7 +320,9 @@ export async function reconcileFromBaseConfig(options: ReconcileOptions): Promis
     }
 
     if (result.copied) {
-      spinner.succeed(`Reconciled ${questionId} from ${baseConfig}${result.patternsExtracted ? ' (patterns extracted)' : ''}`);
+      spinner.succeed(
+        `Reconciled ${questionId} from ${baseConfig}${result.patternsExtracted ? ' (patterns extracted)' : ''}`,
+      );
       return { total: 1, copied: 1, patternsExtracted: result.patternsExtracted ? 1 : 0, errors: [] };
     }
 
@@ -358,7 +349,9 @@ export async function reconcileFromBaseConfig(options: ReconcileOptions): Promis
     return { total: 0, copied: 0, patternsExtracted: 0, errors: [] };
   }
 
-  console.log(chalk.blue(`\n📦 Reconciling ${questionIds.length} questions from ${baseConfig} to ${targetConfig}...\n`));
+  console.log(
+    chalk.blue(`\n📦 Reconciling ${questionIds.length} questions from ${baseConfig} to ${targetConfig}...\n`),
+  );
 
   let copied = 0;
   let patternsExtracted = 0;
@@ -377,7 +370,11 @@ export async function reconcileFromBaseConfig(options: ReconcileOptions): Promis
     }
   }
 
-  console.log(chalk.green(`\n✓ Reconciliation complete: ${copied} copied, ${patternsExtracted} patterns extracted, ${errors.length} errors\n`));
+  console.log(
+    chalk.green(
+      `\n✓ Reconciliation complete: ${copied} copied, ${patternsExtracted} patterns extracted, ${errors.length} errors\n`,
+    ),
+  );
 
   return { total: questionIds.length, copied, patternsExtracted, errors };
 }

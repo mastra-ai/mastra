@@ -22,37 +22,39 @@ This document describes the architecture for resource-scoped Observational Memor
   resourceId: string
   threadId: null  // Always null for resource scope
   scope: 'resource'
-  
+
   // Timestamps
   createdAt: Date
   updatedAt: Date
   lastObservedAt: Date          // Single cursor for ALL threads
-  
+
   // Observations with thread attribution
   // Contains <thread id="...">...</thread> sections
   activeObservations: string
-  
+
   // Generation type (previous generation derived by sorting createdAt)
   originType: 'initial' | 'reflection'
-  
+
   // Token tracking
   observationTokenCount: number
   totalTokensObserved: number
-  
+
   // State flags
   isObserving: boolean
   isReflecting: boolean
-  
+
   // Extensible metadata (app-specific)
   metadata?: Record<string, unknown>
 }
 ```
 
 **Derived values (no storage needed):**
+
 - `reflectionCount` → count records with `originType: 'reflection'`
 - `lastReflectionAt` → `createdAt` of most recent reflection record
 - `previousGeneration` → record with next-oldest `createdAt`
-```
+
+````
 
 ### Thread Record (Mastra's Existing Storage)
 
@@ -60,10 +62,10 @@ This document describes the architecture for resource-scoped Observational Memor
 {
   threadId: string
   resourceId: string
-  
+
   metadata: {
     // ... other app metadata ...
-    
+
     mastra: {
       om: {
         currentTask?: string
@@ -72,7 +74,7 @@ This document describes the architecture for resource-scoped Observational Memor
     }
   }
 }
-```
+````
 
 ### Why Thread Metadata Lives on Thread Records
 
@@ -129,7 +131,7 @@ Single query to load all unobserved messages for the resource:
 ```typescript
 const unobservedMessages = await storage.listMessages({
   resourceId,
-  dateRange: { start: record.metadata.lastObservedAt }
+  dateRange: { start: record.metadata.lastObservedAt },
 });
 
 // Group by thread at runtime
@@ -170,7 +172,7 @@ Observe threads from **oldest unobserved messages first** to **most recent**:
 const threadOrder = Object.entries(byThread)
   .map(([threadId, messages]) => ({
     threadId,
-    oldestMessage: Math.min(...messages.map(m => m.createdAt))
+    oldestMessage: Math.min(...messages.map(m => m.createdAt)),
   }))
   .sort((a, b) => a.oldestMessage - b.oldestMessage);
 
@@ -198,26 +200,22 @@ async function observeThread(threadId: string, messages: Message[]) {
   //    - Unobserved messages from THIS thread only
   //    - NO unobserved messages from other threads
   const prompt = buildObserverPrompt({
-    allObservations: record.activeObservations,  // Full pool
-    newMessages: messages,                        // This thread's unobserved messages
-    threadId,                                     // For context
+    allObservations: record.activeObservations, // Full pool
+    newMessages: messages, // This thread's unobserved messages
+    threadId, // For context
   });
-  
+
   // 2. Call observer
   const result = await observerAgent.generate(prompt);
-  
+
   // 3. Parse and wrap with thread attribution
   const parsed = parseObserverOutput(result);
   const attributed = `<thread id="${threadId}">\n${parsed.observations}\n</thread>`;
-  
+
   // 4. Replace thread section in observations
   //    (or append if this thread has no section yet)
-  record.activeObservations = replaceOrAppendThreadSection(
-    record.activeObservations,
-    threadId,
-    attributed
-  );
-  
+  record.activeObservations = replaceOrAppendThreadSection(record.activeObservations, threadId, attributed);
+
   // 5. Update thread metadata
   await storage.updateThreadMetadata(threadId, {
     'mastra.om.currentTask': parsed.currentTask,
@@ -239,6 +237,7 @@ await storage.updateObservationalMemory(record);
 ### Why Locking is Needed
 
 Two threads active simultaneously could both:
+
 1. Detect threshold exceeded
 2. Start observing the same threads
 3. Overwrite each other's work
@@ -249,16 +248,16 @@ Two threads active simultaneously could both:
 async function maybeObserve(resourceId: string) {
   // Quick check without lock
   if (!isOverThreshold()) return;
-  
+
   // Acquire lock (blocks if another request has it)
   await storage.acquireResourceLock(resourceId);
-  
+
   try {
     // Re-check after acquiring lock
     // Another request may have already observed!
     await reloadRecord();
     if (!isOverThreshold()) return;
-    
+
     // Safe to observe
     await observeThreads();
   } finally {
@@ -291,7 +290,7 @@ Reflection can ONLY happen when there are **zero unobserved messages**. This is 
 ```typescript
 // Step 1: Observe ALL threads (no skipping, no early exit)
 for (const thread of threadsWithUnobservedMessages) {
-  await observeThread(thread);  // Extracts currentTask/suggestedResponse
+  await observeThread(thread); // Extracts currentTask/suggestedResponse
 }
 
 // Step 2: Update cursor AFTER all threads observed
@@ -314,12 +313,10 @@ if (record.observationTokenCount > reflectionThreshold) {
 
 ```typescript
 async function reflect(currentRecord: ObservationalMemoryRecord) {
-  const result = await reflectorAgent.generate(
-    buildReflectorPrompt(currentRecord.activeObservations)
-  );
-  
+  const result = await reflectorAgent.generate(buildReflectorPrompt(currentRecord.activeObservations));
+
   const now = new Date();
-  
+
   // Create new generation (previous generation derived by sorting createdAt)
   const newRecord = await storage.createObservationalMemory({
     resourceId: currentRecord.resourceId,
@@ -331,7 +328,7 @@ async function reflect(currentRecord: ObservationalMemoryRecord) {
     updatedAt: now,
     lastObservedAt: now,
   });
-  
+
   // newRecord is now the active one (most recent by createdAt)
 }
 ```
@@ -339,6 +336,7 @@ async function reflect(currentRecord: ObservationalMemoryRecord) {
 ### Reflector Instructions for Thread Attribution
 
 The Reflector is instructed to:
+
 - Maintain `<thread id="...">` sections where thread context matters
 - Consolidate cross-thread facts that are stable/universal
 - Preserve thread attribution for recent or context-specific observations
@@ -350,6 +348,7 @@ The Reflector is instructed to:
 The Observer should NOT add thread tags - we add them ourselves. To prevent the Observer from doing this:
 
 1. **Instruct explicitly:**
+
    ```
    Do not add thread identifiers or thread IDs to observations.
    Thread attribution is handled externally by the system.
@@ -366,10 +365,12 @@ The Observer should NOT add thread tags - we add them ourselves. To prevent the 
 ### Observer Prompt for Cross-Thread Context
 
 When observing Thread A, the Observer sees:
+
 - **All observations** (full pool with all thread sections)
 - **New messages from Thread A only** (not other threads' unobserved messages)
 
 This allows the Observer to:
+
 - Avoid duplicating facts already in other thread sections
 - Make cross-thread connections
 - Know what's already known vs. what's new from this thread
@@ -406,6 +407,7 @@ For v1, we use full UUIDs and revisit this for readability later.
 ### Stale Threads
 
 Thread A inactive for weeks, has unobserved messages:
+
 - Messages still included in query (after `lastObservedAt`)
 - Thread A observed when threshold exceeded (oldest first)
 - No special handling needed for v1
@@ -414,6 +416,7 @@ Thread A inactive for weeks, has unobserved messages:
 ### Failed Observation Mid-Way
 
 Observing threads [A, B, C], B fails:
+
 - A already observed (its section updated)
 - B and C still have unobserved messages
 - `lastObservedAt` NOT updated (only update after ALL complete)
@@ -425,6 +428,7 @@ Observing threads [A, B, C], B fails:
 20 threads × 10 unobserved messages = 200 messages total.
 
 **This is handled naturally by the observation loop:**
+
 - We observe threads one-by-one (oldest first)
 - After each observation, messages are converted to observations
 - Loop continues until unobserved messages are under threshold
@@ -437,6 +441,7 @@ The observation loop IS the mitigation for context explosion.
 ### Per-Thread to Per-Resource Switching
 
 No migration needed. When switching modes:
+
 - Per-thread: Each thread has its own OM record
 - Per-resource: Single shared OM record
 
@@ -445,6 +450,7 @@ The code paths are the same - per-thread is just per-resource with N=1 threads.
 ### Existing Per-Thread Records
 
 If switching an existing resource from per-thread to per-resource:
+
 - Old per-thread records remain (historical)
 - New per-resource record created
 - Could optionally merge old observations (future enhancement)

@@ -47,10 +47,7 @@ export interface DataOmObservationFailedPart {
   };
 }
 
-export type DataOmObservationPart =
-  | DataOmObservationStartPart
-  | DataOmObservationEndPart
-  | DataOmObservationFailedPart;
+export type DataOmObservationPart = DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart;
 
 /**
  * Check if a part is an OM observation marker.
@@ -111,7 +108,7 @@ const ObservationStartMarker = ({ data }: { data: DataOmObservationStartPart['da
       className={cn(
         'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
         'bg-accent1/10 border border-accent1/20 text-accent1',
-        'text-ui-xs leading-ui-xs'
+        'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-start"
     >
@@ -126,9 +123,8 @@ const ObservationStartMarker = ({ data }: { data: DataOmObservationStartPart['da
  */
 const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data'] }) => {
   const tokensK = (data.tokensObserved / 1000).toFixed(1);
-  const compressionRatio = data.tokensObserved > 0 
-    ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0)
-    : 0;
+  const compressionRatio =
+    data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
 
   return (
@@ -136,7 +132,7 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
       className={cn(
         'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
         'bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400',
-        'text-ui-xs leading-ui-xs'
+        'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-end"
     >
@@ -159,7 +155,7 @@ const ObservationFailedMarker = ({ data }: { data: DataOmObservationFailedPart['
       className={cn(
         'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
         'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400',
-        'text-ui-xs leading-ui-xs'
+        'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-failed"
       title={data.error}

@@ -7,42 +7,45 @@ This document outlines the plan for implementing Observational Memory (OM) suppo
 ## Current State
 
 ### Reference Implementation
+
 - **`InMemoryMemory`** (`packages/core/src/storage/domains/memory/inmemory.ts`): Full 881-line reference implementation of all OM methods
 - **`PersistableInMemoryMemory`** (`explorations/longmemeval/src/storage/persistable-inmemory-memory.ts`): Extends InMemoryMemory with disk persistence for benchmarking
 
 ### Storage Adapters Requiring Implementation
+
 All 22 adapters in `stores/` need OM method implementations:
 
-| Adapter | Priority | Complexity | Notes |
-|---------|----------|------------|-------|
-| `pg` (PostgreSQL) | **HIGH** | Medium | Most common production DB |
-| `mongodb` | **HIGH** | Medium | Popular NoSQL option |
-| `clickhouse` | **HIGH** | Medium | Already used in LongMemEval testing |
-| `dynamodb` | Medium | High | AWS native, complex queries |
-| `redis` | Medium | Medium | Fast caching layer |
-| `sqlite` | Medium | Low | Good for local dev |
-| `cloudflare-d1` | Medium | Medium | Edge deployment |
-| `turso` | Medium | Low | SQLite-compatible |
-| `upstash` | Medium | Medium | Serverless Redis |
-| `lance` | Low | High | Vector-focused |
-| `chroma` | Low | High | Vector-focused |
-| `opensearch` | Low | High | Search-focused |
-| `pinecone` | Low | High | Vector-focused |
-| `qdrant` | Low | High | Vector-focused |
-| `astra` | Low | Medium | Cassandra-based |
-| `neon` | Low | Low | PostgreSQL-compatible |
-| `supabase` | Low | Low | PostgreSQL-compatible |
-| `xata` | Low | Medium | Serverless Postgres |
-| `libsql` | Low | Low | SQLite-compatible |
-| `vercel-kv` | Low | Medium | Serverless KV |
-| `vercel-postgres` | Low | Low | PostgreSQL-compatible |
-| `weaviate` | Low | High | Vector-focused |
+| Adapter           | Priority | Complexity | Notes                               |
+| ----------------- | -------- | ---------- | ----------------------------------- |
+| `pg` (PostgreSQL) | **HIGH** | Medium     | Most common production DB           |
+| `mongodb`         | **HIGH** | Medium     | Popular NoSQL option                |
+| `clickhouse`      | **HIGH** | Medium     | Already used in LongMemEval testing |
+| `dynamodb`        | Medium   | High       | AWS native, complex queries         |
+| `redis`           | Medium   | Medium     | Fast caching layer                  |
+| `sqlite`          | Medium   | Low        | Good for local dev                  |
+| `cloudflare-d1`   | Medium   | Medium     | Edge deployment                     |
+| `turso`           | Medium   | Low        | SQLite-compatible                   |
+| `upstash`         | Medium   | Medium     | Serverless Redis                    |
+| `lance`           | Low      | High       | Vector-focused                      |
+| `chroma`          | Low      | High       | Vector-focused                      |
+| `opensearch`      | Low      | High       | Search-focused                      |
+| `pinecone`        | Low      | High       | Vector-focused                      |
+| `qdrant`          | Low      | High       | Vector-focused                      |
+| `astra`           | Low      | Medium     | Cassandra-based                     |
+| `neon`            | Low      | Low        | PostgreSQL-compatible               |
+| `supabase`        | Low      | Low        | PostgreSQL-compatible               |
+| `xata`            | Low      | Medium     | Serverless Postgres                 |
+| `libsql`          | Low      | Low        | SQLite-compatible                   |
+| `vercel-kv`       | Low      | Medium     | Serverless KV                       |
+| `vercel-postgres` | Low      | Low        | PostgreSQL-compatible               |
+| `weaviate`        | Low      | High       | Vector-focused                      |
 
 ## OM Methods to Implement
 
 From `packages/memory/src/experiments/observational-memory/observational-memory.ts`:
 
 ### Core OM Record Methods
+
 ```typescript
 // Initialize/Get OM record for a resource
 initializeObservationalMemory(resourceId: string): Promise<ObservationalMemoryRecord>
@@ -52,6 +55,7 @@ clearObservationalMemory(resourceId: string): Promise<void>
 ```
 
 ### Observation Management
+
 ```typescript
 updateActiveObservations(resourceId: string, observations: string, tokenCount: number, version: number): Promise<boolean>
 updateBufferedObservations(resourceId: string, observations: string): Promise<void>
@@ -59,12 +63,14 @@ addPendingMessageTokens(resourceId: string, threadId: string, tokenCount: number
 ```
 
 ### Reflection Management
+
 ```typescript
 createReflectionGeneration(resourceId: string, reflectedObservations: string, version: number): Promise<ObservationalMemoryRecord>
 updateBufferedReflection(resourceId: string, reflection: string): Promise<void>
 ```
 
 ### Thread Management
+
 ```typescript
 getThreadById(threadId: string): Promise<Thread | null>
 listThreadsByResourceId(resourceId: string): Promise<Thread[]>
@@ -72,12 +78,14 @@ updateThread(threadId: string, updates: Partial<Thread>): Promise<void>
 ```
 
 ### Message Management
+
 ```typescript
 listMessages(options: { threadId?: string; resourceId?: string; before?: Date; after?: Date; limit?: number }): Promise<MastraDBMessage[]>
 markMessagesAsBuffering(messageIds: string[]): Promise<void>
 ```
 
 ### Concurrency Control
+
 ```typescript
 setObservingFlag(resourceId: string, isObserving: boolean): Promise<void>
 setReflectingFlag(resourceId: string, isReflecting: boolean): Promise<void>
@@ -86,6 +94,7 @@ setReflectingFlag(resourceId: string, isReflecting: boolean): Promise<void>
 ## Data Schema Requirements
 
 ### ObservationalMemoryRecord
+
 ```typescript
 interface ObservationalMemoryRecord {
   id: string;
@@ -105,6 +114,7 @@ interface ObservationalMemoryRecord {
 ```
 
 ### Thread Metadata Extension
+
 ```typescript
 interface ThreadOMMetadata {
   currentTask?: string;
@@ -117,6 +127,7 @@ interface ThreadOMMetadata {
 ## Implementation Strategy
 
 ### Phase 1: High-Priority SQL Adapters
+
 **Target: PostgreSQL, ClickHouse, SQLite**
 
 1. **Create migration/schema for OM tables:**
@@ -135,6 +146,7 @@ interface ThreadOMMetadata {
    - Test concurrent observation/reflection scenarios
 
 ### Phase 2: NoSQL Adapters
+
 **Target: MongoDB, DynamoDB, Redis**
 
 1. **MongoDB:**
@@ -153,20 +165,24 @@ interface ThreadOMMetadata {
    - Consider TTL for buffered data
 
 ### Phase 3: PostgreSQL-Compatible Adapters
+
 **Target: Neon, Supabase, Vercel Postgres, Turso (SQLite)**
 
 These can largely reuse the PostgreSQL implementation with minor adjustments.
 
 ### Phase 4: Vector/Search Adapters
+
 **Target: Chroma, Lance, Pinecone, Qdrant, OpenSearch, Weaviate**
 
 These are lower priority as they're primarily for vector search, not general storage. May need hybrid approach:
+
 - Store OM records in a separate SQL/NoSQL store
 - Use vector store only for semantic search on observations
 
 ## Testing Strategy
 
 ### Unit Tests
+
 - Port `packages/memory/src/experiments/observational-memory/__tests__/` to each adapter
 - Key test scenarios:
   - Basic CRUD for OM records
@@ -176,11 +192,13 @@ These are lower priority as they're primarily for vector search, not general sto
   - Reflection generation creates new record
 
 ### Integration Tests
+
 - Run LongMemEval subset with each adapter
 - Verify observation/reflection flow works end-to-end
 - Check performance characteristics
 
 ### Benchmarks
+
 - Compare adapter performance on:
   - OM record read/write latency
   - Message listing with large datasets
@@ -199,13 +217,13 @@ These are lower priority as they're primarily for vector search, not general sto
 
 ## Estimated Effort
 
-| Phase | Adapters | Estimated Time |
-|-------|----------|----------------|
-| Phase 1 | pg, clickhouse, sqlite | 2-3 days |
-| Phase 2 | mongodb, dynamodb, redis | 2-3 days |
-| Phase 3 | neon, supabase, vercel-postgres, turso | 1 day |
-| Phase 4 | Vector adapters | 2-3 days (if needed) |
-| Testing | All adapters | 2-3 days |
+| Phase   | Adapters                               | Estimated Time       |
+| ------- | -------------------------------------- | -------------------- |
+| Phase 1 | pg, clickhouse, sqlite                 | 2-3 days             |
+| Phase 2 | mongodb, dynamodb, redis               | 2-3 days             |
+| Phase 3 | neon, supabase, vercel-postgres, turso | 1 day                |
+| Phase 4 | Vector adapters                        | 2-3 days (if needed) |
+| Testing | All adapters                           | 2-3 days             |
 
 **Total: ~10-15 days**
 

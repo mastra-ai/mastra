@@ -445,7 +445,6 @@ export interface ObservationalMemoryObserverConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
-
 }
 
 /**

@@ -256,7 +256,10 @@ export class TokensCommand {
       }
     } else {
       // Aggregate view
-      const tokenCounts = stats.filter(s => s.found).map(s => s.observationTokens).sort((a, b) => a - b);
+      const tokenCounts = stats
+        .filter(s => s.found)
+        .map(s => s.observationTokens)
+        .sort((a, b) => a - b);
 
       const percentile = (arr: number[], p: number) => {
         if (arr.length === 0) return 0;
@@ -267,7 +270,9 @@ export class TokensCommand {
       console.log(chalk.bold('Summary:'));
       console.log(`  Questions with data:  ${foundCount}/${targetQuestions.length}`);
       console.log(`  Total tokens:         ${this.formatTokens(totalTokens)}`);
-      console.log(`  Avg tokens/question:  ${this.formatTokens(foundCount > 0 ? Math.round(totalTokens / foundCount) : 0)}`);
+      console.log(
+        `  Avg tokens/question:  ${this.formatTokens(foundCount > 0 ? Math.round(totalTokens / foundCount) : 0)}`,
+      );
       console.log();
 
       if (tokenCounts.length > 0) {
@@ -285,7 +290,9 @@ export class TokensCommand {
         console.log(chalk.bold(`Top ${Math.min(topN, sorted.length)} Largest:`));
         for (let i = 0; i < Math.min(topN, sorted.length); i++) {
           const s = sorted[i];
-          console.log(`  ${(i + 1).toString().padStart(2)}. ${s.questionId}  ${this.formatTokens(s.observationTokens)}`);
+          console.log(
+            `  ${(i + 1).toString().padStart(2)}. ${s.questionId}  ${this.formatTokens(s.observationTokens)}`,
+          );
         }
         console.log();
 
@@ -301,10 +308,7 @@ export class TokensCommand {
     console.log();
   }
 
-  private async calculateQuestionStats(
-    question: LongMemEvalQuestion,
-    options: TokensOptions,
-  ): Promise<QuestionStats> {
+  private async calculateQuestionStats(question: LongMemEvalQuestion, options: TokensOptions): Promise<QuestionStats> {
     const sessions: SessionStats[] = [];
     const answerSessionIdSet = new Set(question.answer_session_ids || []);
 
@@ -493,7 +497,9 @@ export class TokensCommand {
       for (const session of sortedSessions) {
         const answerTag = session.isAnswerSession ? chalk.green(' (answer)') : '';
         const tokens = this.formatTokens(session.tokens);
-        const breakdown = chalk.gray(`(${session.messageCount} msgs, U:${this.formatTokens(session.userTokens)} A:${this.formatTokens(session.assistantTokens)})`);
+        const breakdown = chalk.gray(
+          `(${session.messageCount} msgs, U:${this.formatTokens(session.userTokens)} A:${this.formatTokens(session.assistantTokens)})`,
+        );
 
         console.log(`  ${session.sessionId}${answerTag}`);
         console.log(`    ${tokens} ${breakdown}`);
@@ -503,11 +509,17 @@ export class TokensCommand {
 
     console.log(chalk.bold('Summary:'));
     console.log(`  Total tokens:         ${this.formatTokens(stats.totalTokens)}`);
-    console.log(`  Answer session tokens: ${this.formatTokens(stats.answerSessionTokens)} ${chalk.gray(`(${stats.answerSessionCount} sessions)`)}`);
+    console.log(
+      `  Answer session tokens: ${this.formatTokens(stats.answerSessionTokens)} ${chalk.gray(`(${stats.answerSessionCount} sessions)`)}`,
+    );
     console.log(`  Total messages:       ${stats.messageCount}`);
     console.log(`  Avg tokens/message:   ${stats.avgTokensPerMessage}`);
-    console.log(`  Largest session:      ${stats.largestSession.id} (${this.formatTokens(stats.largestSession.tokens)})`);
-    console.log(`  Smallest session:     ${stats.smallestSession.id} (${this.formatTokens(stats.smallestSession.tokens)})`);
+    console.log(
+      `  Largest session:      ${stats.largestSession.id} (${this.formatTokens(stats.largestSession.tokens)})`,
+    );
+    console.log(
+      `  Smallest session:     ${stats.smallestSession.id} (${this.formatTokens(stats.smallestSession.tokens)})`,
+    );
 
     if (stats.preparedObservationTokens !== undefined) {
       console.log();
@@ -591,8 +603,12 @@ export class TokensCommand {
     if (showSessions) {
       console.log(chalk.bold('Per-Question Details:\n'));
       for (const stats of questionStats) {
-        const compression = stats.compressionRatio ? chalk.green(` (${stats.compressionRatio.toFixed(1)}x compression)`) : '';
-        console.log(`  ${stats.questionId} - ${this.formatTokens(stats.totalTokens)} (${stats.sessionCount} sessions, ${stats.messageCount} msgs)${compression}`);
+        const compression = stats.compressionRatio
+          ? chalk.green(` (${stats.compressionRatio.toFixed(1)}x compression)`)
+          : '';
+        console.log(
+          `  ${stats.questionId} - ${this.formatTokens(stats.totalTokens)} (${stats.sessionCount} sessions, ${stats.messageCount} msgs)${compression}`,
+        );
       }
       console.log();
     }

@@ -6,7 +6,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 // Priority emoji to color mapping
 // P1 (🔴) = highest priority = purple theme
-// P2 (🟡) = medium priority = blue theme  
+// P2 (🟡) = medium priority = blue theme
 // P3 (🟢) = lower priority = green theme
 const PRIORITY_COLORS = {
   '🔴': 'text-foreground',
@@ -61,9 +61,9 @@ interface ParsedObservations {
 function parseObservationLine(line: string, isNested: boolean = false): ParsedObservation | null {
   // Match: * 🔴 (14:30) Content or * -> nested content
   const trimmed = line.trim();
-  
+
   if (!trimmed) return null;
-  
+
   // Check for nested arrow format: * -> content
   if (trimmed.startsWith('* ->') || trimmed.startsWith('->')) {
     const content = trimmed.replace(/^\*?\s*->\s*/, '');
@@ -75,10 +75,10 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
       isNested: true,
     };
   }
-  
+
   // Check for standard format: * 🔴 (14:30) Content
   const match = trimmed.match(/^\*\s*(🔴|🟡|🟢)?\s*(?:\((\d{1,2}:\d{2})\))?\s*(.+)$/);
-  
+
   if (match) {
     const [, priority, time, content] = match;
     return {
@@ -89,7 +89,7 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
       isNested,
     };
   }
-  
+
   // Fallback for lines that don't match the pattern
   if (trimmed.startsWith('*')) {
     return {
@@ -100,7 +100,7 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
       isNested,
     };
   }
-  
+
   return null;
 }
 
@@ -111,48 +111,48 @@ function parseObservations(raw: string): ParsedObservations {
   const result: ParsedObservations = {
     threads: [],
   };
-  
+
   // Extract current-task if present
   const currentTaskMatch = raw.match(/<current-task>\s*([\s\S]*?)\s*<\/current-task>/);
   if (currentTaskMatch) {
     result.currentTask = currentTaskMatch[1].trim();
   }
-  
+
   // Extract suggested-response if present
   const suggestedMatch = raw.match(/<suggested-response>\s*([\s\S]*?)\s*<\/suggested-response>/);
   if (suggestedMatch) {
     result.suggestedResponse = suggestedMatch[1].trim();
   }
-  
+
   // Extract observations content
   const observationsMatch = raw.match(/<observations>\s*([\s\S]*?)\s*<\/observations>/);
   const observationsContent = observationsMatch ? observationsMatch[1] : raw;
-  
+
   // Split by thread headers if present
   const threadSections = observationsContent.split(/(?=Thread [a-f0-9]+:)/i);
-  
+
   for (const section of threadSections) {
     const trimmedSection = section.trim();
     if (!trimmedSection) continue;
-    
+
     // Check for thread header
     const threadMatch = trimmedSection.match(/^Thread ([a-f0-9]+):/i);
     const threadId = threadMatch ? threadMatch[1] : 'default';
     const content = threadMatch ? trimmedSection.replace(/^Thread [a-f0-9]+:\s*/i, '') : trimmedSection;
-    
+
     const thread: ParsedThread = {
       threadId,
       dateBlocks: [],
     };
-    
+
     // Split by date headers
     const lines = content.split('\n');
     let currentDateBlock: ParsedDateBlock | null = null;
     let lastObservation: ParsedObservation | null = null;
-    
+
     for (const line of lines) {
       const trimmedLine = line.trim();
-      
+
       // Check for date header: "Date: Dec 4, 2025" or "Date: Dec 4, 2025 (3 days ago)"
       const dateMatch = trimmedLine.match(/^Date:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
       if (dateMatch) {
@@ -167,14 +167,14 @@ function parseObservations(raw: string): ParsedObservations {
         lastObservation = null;
         continue;
       }
-      
+
       // Check indentation for nested observations
       const indentMatch = line.match(/^(\s*)/);
       const indent = indentMatch ? indentMatch[1].length : 0;
       const isNested = indent >= 2 && (trimmedLine.startsWith('* ->') || trimmedLine.startsWith('->'));
-      
+
       const observation = parseObservationLine(trimmedLine, isNested);
-      
+
       if (observation) {
         if (!currentDateBlock) {
           // Create a default date block if none exists
@@ -183,7 +183,7 @@ function parseObservations(raw: string): ParsedObservations {
             observations: [],
           };
         }
-        
+
         if (observation.isNested && lastObservation) {
           // Add as child of last observation
           lastObservation.children.push(observation);
@@ -193,50 +193,69 @@ function parseObservations(raw: string): ParsedObservations {
         }
       }
     }
-    
+
     if (currentDateBlock) {
       thread.dateBlocks.push(currentDateBlock);
     }
-    
+
     if (thread.dateBlocks.length > 0) {
       result.threads.push(thread);
     }
   }
-  
+
   return result;
 }
 
 /**
  * Render a single observation
  */
-function ObservationItem({ observation, useInheritedTextColor }: { observation: ParsedObservation; useInheritedTextColor?: boolean }) {
+function ObservationItem({
+  observation,
+  useInheritedTextColor,
+}: {
+  observation: ParsedObservation;
+  useInheritedTextColor?: boolean;
+}) {
   // When useInheritedTextColor is true, don't apply priority colors - inherit from parent
-  const priorityColor = useInheritedTextColor 
-    ? '' 
-    : (observation.priority ? PRIORITY_COLORS[observation.priority] : 'text-muted-foreground');
-  const bgColor = useInheritedTextColor ? '' : (observation.priority ? PRIORITY_BG[observation.priority] : '');
-  
+  const priorityColor = useInheritedTextColor
+    ? ''
+    : observation.priority
+      ? PRIORITY_COLORS[observation.priority]
+      : 'text-muted-foreground';
+  const bgColor = useInheritedTextColor ? '' : observation.priority ? PRIORITY_BG[observation.priority] : '';
+
   // Get a subtle left border color based on priority (using blue shades for visual hierarchy)
-  const borderColor = observation.priority 
-    ? PRIORITY_BORDER[observation.priority]
-    : 'border-l-transparent';
-  
+  const borderColor = observation.priority ? PRIORITY_BORDER[observation.priority] : 'border-l-transparent';
+
   return (
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
-      <div className={cn(
-        'flex items-start gap-1.5 text-xs',
-        bgColor && 'rounded px-1.5 py-0.5',
-        bgColor,
-        !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`
-      )}>
+      <div
+        className={cn(
+          'flex items-start gap-1.5 text-xs',
+          bgColor && 'rounded px-1.5 py-0.5',
+          bgColor,
+          !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`,
+        )}
+      >
         {observation.isNested && (
           <span className={cn('flex-shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
-        <span className={cn('flex-1', priorityColor, '[&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]')}>
+        <span
+          className={cn(
+            'flex-1',
+            priorityColor,
+            '[&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]',
+          )}
+        >
           <MarkdownRenderer>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
-          <span className={cn('flex-shrink-0 font-mono text-[10px] ml-2', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+          <span
+            className={cn(
+              'flex-shrink-0 font-mono text-[10px] ml-2',
+              useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
+            )}
+          >
             {observation.time}
           </span>
         )}
@@ -258,10 +277,19 @@ function ObservationItem({ observation, useInheritedTextColor }: { observation: 
 function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; useInheritedTextColor?: boolean }) {
   return (
     <div className="mb-2">
-      <div className={cn('flex items-center gap-2 mb-1 sticky top-0 backdrop-blur-sm pt-1 pb-1', useInheritedTextColor ? 'bg-transparent' : 'bg-background/95')}>
-        <span className={cn('text-xs font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>{block.date}</span>
+      <div
+        className={cn(
+          'flex items-center gap-2 mb-1 sticky top-0 backdrop-blur-sm pt-1 pb-1',
+          useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
+        )}
+      >
+        <span className={cn('text-xs font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
+          {block.date}
+        </span>
         {block.relativeTime && (
-          <span className={cn('text-[10px]', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>({block.relativeTime})</span>
+          <span className={cn('text-[10px]', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+            ({block.relativeTime})
+          </span>
         )}
       </div>
       <div className="space-y-0">
@@ -276,11 +304,24 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
 /**
  * Render a thread section
  */
-function ThreadSection({ thread, showThreadId, useInheritedTextColor }: { thread: ParsedThread; showThreadId: boolean; useInheritedTextColor?: boolean }) {
+function ThreadSection({
+  thread,
+  showThreadId,
+  useInheritedTextColor,
+}: {
+  thread: ParsedThread;
+  showThreadId: boolean;
+  useInheritedTextColor?: boolean;
+}) {
   return (
     <div className="mb-3">
       {showThreadId && thread.threadId !== 'default' && (
-        <div className={cn('text-[10px] font-mono mb-1 px-1 py-0.5 rounded inline-block', useInheritedTextColor ? 'opacity-60 bg-current/10' : 'text-muted-foreground bg-muted/50')}>
+        <div
+          className={cn(
+            'text-[10px] font-mono mb-1 px-1 py-0.5 rounded inline-block',
+            useInheritedTextColor ? 'opacity-60 bg-current/10' : 'text-muted-foreground bg-muted/50',
+          )}
+        >
           Thread {thread.threadId}
         </div>
       )}
@@ -313,53 +354,43 @@ export function ObservationRenderer({
   useInheritedTextColor = false,
 }: ObservationRendererProps) {
   const parsed = useMemo(() => parseObservations(observations), [observations]);
-  
-  const hasMultipleThreads = parsed.threads.length > 1 || 
-    (parsed.threads.length === 1 && parsed.threads[0].threadId !== 'default');
-  
+
+  const hasMultipleThreads =
+    parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0].threadId !== 'default');
+
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return (
-      <div className={cn('text-xs text-muted-foreground italic', className)}>
-        No observations
-      </div>
-    );
+    return <div className={cn('text-xs text-muted-foreground italic', className)}>No observations</div>;
   }
-  
+
   return (
     <div className={cn('text-sm overflow-hidden', className)}>
-      <div 
+      <div
         className={cn('break-words', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
       >
         {parsed.threads.map((thread, i) => (
-          <ThreadSection 
-            key={thread.threadId + i} 
-            thread={thread} 
+          <ThreadSection
+            key={thread.threadId + i}
+            thread={thread}
             showThreadId={hasMultipleThreads}
             useInheritedTextColor={useInheritedTextColor}
           />
         ))}
       </div>
-      
+
       {showCurrentTask && parsed.currentTask && (
         <div className="mt-2 pt-2 border-t border-border">
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-            Current Task
-          </div>
-          <div className="text-xs text-foreground whitespace-pre-wrap">
-            {parsed.currentTask}
-          </div>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Current Task</div>
+          <div className="text-xs text-foreground whitespace-pre-wrap">{parsed.currentTask}</div>
         </div>
       )}
-      
+
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="mt-2 pt-2 border-t border-border">
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Suggested Response
           </div>
-          <div className="text-xs text-foreground/80 italic whitespace-pre-wrap">
-            {parsed.suggestedResponse}
-          </div>
+          <div className="text-xs text-foreground/80 italic whitespace-pre-wrap">{parsed.suggestedResponse}</div>
         </div>
       )}
     </div>

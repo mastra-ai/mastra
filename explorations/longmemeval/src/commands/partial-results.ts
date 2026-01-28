@@ -89,12 +89,14 @@ export class PartialResultsCommand {
     const fixedCorrect = results.filter(r => r.is_correct || r.improved_is_correct).length;
 
     const status = isComplete ? chalk.green('(complete)') : chalk.yellow('(partial)');
-    
+
     console.log(chalk.bold(`\n📊 Results for ${chalk.cyan(config)} ${status}\n`));
     console.log(`Progress: ${chalk.bold(total)}/500 questions (${(total / 5).toFixed(1)}%)`);
     console.log();
-    console.log(`Overall Accuracy: ${correct}/${total} = ${chalk.bold((100 * correct / total).toFixed(2) + '%')}`);
-    console.log(`Fixed Accuracy:   ${fixedCorrect}/${total} = ${chalk.bold((100 * fixedCorrect / total).toFixed(2) + '%')}`);
+    console.log(`Overall Accuracy: ${correct}/${total} = ${chalk.bold(((100 * correct) / total).toFixed(2) + '%')}`);
+    console.log(
+      `Fixed Accuracy:   ${fixedCorrect}/${total} = ${chalk.bold(((100 * fixedCorrect) / total).toFixed(2) + '%')}`,
+    );
     console.log();
 
     // By type
@@ -113,18 +115,18 @@ export class PartialResultsCommand {
       chalk.gray('Type'.padEnd(32)),
       chalk.gray('Count'.padEnd(8)),
       chalk.gray('Accuracy'.padEnd(12)),
-      chalk.gray('Fixed')
+      chalk.gray('Fixed'),
     );
     console.log(chalk.gray('─'.repeat(70)));
 
     for (const [t, stats] of Object.entries(byType).sort((a, b) => a[0].localeCompare(b[0]))) {
-      const acc = stats.total > 0 ? (100 * stats.correct / stats.total) : 0;
-      const fix = stats.total > 0 ? (100 * stats.fixed / stats.total) : 0;
+      const acc = stats.total > 0 ? (100 * stats.correct) / stats.total : 0;
+      const fix = stats.total > 0 ? (100 * stats.fixed) / stats.total : 0;
       console.log(
         t.padEnd(32),
         String(stats.total).padEnd(8),
         (acc.toFixed(1) + '%').padStart(6).padEnd(12),
-        (fix.toFixed(1) + '%').padStart(6)
+        (fix.toFixed(1) + '%').padStart(6),
       );
     }
     console.log();
@@ -150,12 +152,15 @@ export class PartialResultsCommand {
           const metricsFile = join(configDir, latestRun, 'metrics.json');
           if (existsSync(resultsFile)) {
             const content = await readFile(resultsFile, 'utf-8');
-            const count = content.trim().split('\n').filter(l => l.trim()).length;
+            const count = content
+              .trim()
+              .split('\n')
+              .filter(l => l.trim()).length;
             configsWithResults.push({
               config,
               runId: latestRun,
               count,
-              isComplete: existsSync(metricsFile)
+              isComplete: existsSync(metricsFile),
             });
           }
         }
@@ -175,18 +180,15 @@ export class PartialResultsCommand {
       chalk.gray('Config'.padEnd(40)),
       chalk.gray('Run'.padEnd(24)),
       chalk.gray('Questions'.padEnd(12)),
-      chalk.gray('Status')
+      chalk.gray('Status'),
     );
     console.log(chalk.gray('─'.repeat(80)));
 
-    for (const { config, runId, count, isComplete } of configsWithResults.sort((a, b) => a.config.localeCompare(b.config))) {
+    for (const { config, runId, count, isComplete } of configsWithResults.sort((a, b) =>
+      a.config.localeCompare(b.config),
+    )) {
       const status = isComplete ? chalk.green('complete') : chalk.yellow('partial');
-      console.log(
-        config.padEnd(40),
-        runId.padEnd(24),
-        String(count).padEnd(12),
-        status
-      );
+      console.log(config.padEnd(40), runId.padEnd(24), String(count).padEnd(12), status);
     }
 
     console.log();

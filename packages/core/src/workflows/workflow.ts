@@ -714,7 +714,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // and tracingContext for proper span nesting when processors call internal agents
       // state is per-processor state that persists across all method calls within this request
       // writer enables real-time streaming of data-* parts to the UI
-      
+
       // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
       // Otherwise fall back to the state passed in inputData
       let processorState: Record<string, unknown>;
@@ -729,7 +729,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       } else {
         processorState = state ?? {};
       }
-      
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
@@ -2710,7 +2710,9 @@ export class Run<
 
         if (!validatedInitialState.success) {
           const errors = getZodErrors(validatedInitialState.error);
-          throw new Error('Invalid initial state: ' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
+          throw new Error(
+            'Invalid initial state: ' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          );
         }
 
         initialStateToUse = validatedInitialState.data;

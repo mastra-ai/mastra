@@ -37,7 +37,7 @@ async function hashThreadId(threadId: string): Promise<string> {
 /**
  * Replace thread IDs in a string with their hashed versions.
  * Handles XML patterns:
- * - <thread id="...">  
+ * - <thread id="...">
  * - <other-conversation id="...">
  */
 function replaceThreadIdsInString(
@@ -47,30 +47,24 @@ function replaceThreadIdsInString(
   let replacements = 0;
 
   // Replace <thread id="..."> patterns
-  let result = content.replace(
-    /<thread\s+id="([^"]+)"/g,
-    (match, threadId) => {
-      const hashed = threadIdMap.get(threadId);
-      if (hashed && hashed !== threadId) {
-        replacements++;
-        return `<thread id="${hashed}"`;
-      }
-      return match;
-    },
-  );
+  let result = content.replace(/<thread\s+id="([^"]+)"/g, (match, threadId) => {
+    const hashed = threadIdMap.get(threadId);
+    if (hashed && hashed !== threadId) {
+      replacements++;
+      return `<thread id="${hashed}"`;
+    }
+    return match;
+  });
 
   // Replace <other-conversation id="..."> patterns
-  result = result.replace(
-    /<other-conversation\s+id="([^"]+)"/g,
-    (match, threadId) => {
-      const hashed = threadIdMap.get(threadId);
-      if (hashed && hashed !== threadId) {
-        replacements++;
-        return `<other-conversation id="${hashed}"`;
-      }
-      return match;
-    },
-  );
+  result = result.replace(/<other-conversation\s+id="([^"]+)"/g, (match, threadId) => {
+    const hashed = threadIdMap.get(threadId);
+    if (hashed && hashed !== threadId) {
+      replacements++;
+      return `<other-conversation id="${hashed}"`;
+    }
+    return match;
+  });
 
   return { content: result, replacements };
 }
@@ -78,8 +72,8 @@ function replaceThreadIdsInString(
 /**
  * Process an om.json file: parse JSON, replace thread IDs in observation fields,
  * and return the modified JSON.
- * 
- * Structure: 
+ *
+ * Structure:
  *   observationalMemory[i] = [resourceKey, innerArray]
  *   innerArray = [recordKey, record]
  *   record.activeObservations contains the observation text with <thread id="..."> tags
@@ -98,26 +92,20 @@ function processOmJson(
       for (const outerEntry of data.observationalMemory) {
         if (Array.isArray(outerEntry) && outerEntry.length === 2) {
           const innerArray = outerEntry[1]; // [recordKey, record]
-          
+
           if (Array.isArray(innerArray) && innerArray.length === 2) {
             const record = innerArray[1]; // The actual OM record
-            
+
             // Replace in activeObservations
             if (record.activeObservations && typeof record.activeObservations === 'string') {
-              const { content, replacements } = replaceThreadIdsInString(
-                record.activeObservations,
-                threadIdMap,
-              );
+              const { content, replacements } = replaceThreadIdsInString(record.activeObservations, threadIdMap);
               record.activeObservations = content;
               totalReplacements += replacements;
             }
 
             // Replace in bufferedObservations (if present)
             if (record.bufferedObservations && typeof record.bufferedObservations === 'string') {
-              const { content, replacements } = replaceThreadIdsInString(
-                record.bufferedObservations,
-                threadIdMap,
-              );
+              const { content, replacements } = replaceThreadIdsInString(record.bufferedObservations, threadIdMap);
               record.bufferedObservations = content;
               totalReplacements += replacements;
             }
@@ -225,9 +213,7 @@ export class ObscureThreadIdsCommand {
           }
           filesModified++;
           totalReplacements += replacements;
-          console.log(
-            chalk.green(`  ✓ ${questionDir}: ${replacements} thread ID(s) replaced`),
-          );
+          console.log(chalk.green(`  ✓ ${questionDir}: ${replacements} thread ID(s) replaced`));
         } else {
           filesSkipped++;
         }

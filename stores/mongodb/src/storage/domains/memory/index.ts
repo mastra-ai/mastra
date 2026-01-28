@@ -37,7 +37,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_OBSERVATIONAL_MEMORY] as const;
+  static readonly MANAGED_COLLECTIONS = [
+    TABLE_THREADS,
+    TABLE_MESSAGES,
+    TABLE_RESOURCES,
+    TABLE_OBSERVATIONAL_MEMORY,
+  ] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -233,7 +238,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     // Validate that either threadId or resourceId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasThreadId =
+      threadId !== undefined &&
+      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
     const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
     if (!hasThreadId && !hasResourceId) {
@@ -242,7 +249,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );
@@ -990,17 +1000,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     };
   }
 
-  async getObservationalMemory(
-    threadId: string | null,
-    resourceId: string,
-  ): Promise<ObservationalMemoryRecord | null> {
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
-      const doc = await collection.findOne(
-        { lookupKey },
-        { sort: { generationCount: -1 } },
-      );
+      const doc = await collection.findOne({ lookupKey }, { sort: { generationCount: -1 } });
       if (!doc) return null;
       return this.parseOMDocument(doc);
     } catch (error) {
@@ -1024,11 +1028,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
-      const docs = await collection
-        .find({ lookupKey })
-        .sort({ generationCount: -1 })
-        .limit(limit)
-        .toArray();
+      const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
       return docs.map((doc: any) => this.parseOMDocument(doc));
     } catch (error) {
       throw new MastraError(
@@ -1224,10 +1224,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
-      const result = await collection.updateOne(
-        { id },
-        { $set: { isReflecting, updatedAt: new Date() } },
-      );
+      const result = await collection.updateOne({ id }, { $set: { isReflecting, updatedAt: new Date() } });
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -1257,10 +1254,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
-      const result = await collection.updateOne(
-        { id },
-        { $set: { isObserving, updatedAt: new Date() } },
-      );
+      const result = await collection.updateOne({ id }, { $set: { isObserving, updatedAt: new Date() } });
 
       if (result.matchedCount === 0) {
         throw new MastraError({

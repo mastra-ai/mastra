@@ -177,10 +177,7 @@ function App() {
   }
 
   // Memoize router to prevent recreation on every render (which causes component remounts)
-  const router = useMemo(
-    () => createBrowserRouter(routes, { basename: studioBasePath }),
-    [studioBasePath]
-  );
+  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>

@@ -130,5 +130,4 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
       observationalMemoryRecords: this._db.observationalMemory.size,
     };
   }
-
 }

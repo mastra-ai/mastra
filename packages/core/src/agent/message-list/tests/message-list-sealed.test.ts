@@ -69,9 +69,7 @@ describe('MessageList sealed message handling', () => {
     const newMessage = allMessages.find(m => m.id !== assistantMessageId && m.role === 'assistant');
     expect(newMessage).toBeDefined();
     expect(newMessage?.content.parts).toHaveLength(1); // Only the new part!
-    expect((newMessage?.content.parts[0] as { text?: string })?.text).toBe(
-      'Here is more content after observation.',
-    );
+    expect((newMessage?.content.parts[0] as { text?: string })?.text).toBe('Here is more content after observation.');
 
     // The new message should have a different ID
     expect(newMessage?.id).not.toBe(assistantMessageId);

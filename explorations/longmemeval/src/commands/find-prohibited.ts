@@ -66,7 +66,7 @@ async function findProhibitedInSession(
   // First, test the entire session
   const fullContent = session.map(m => `${m.role}: ${m.content}`).join('\n\n');
   const fullResult = await testContent(fullContent);
-  
+
   if (!fullResult.blocked) {
     return []; // Session is clean
   }
@@ -180,7 +180,7 @@ export class FindProhibitedCommand {
       const firstHalfContent = firstHalfSessions
         .map(s => s.session.map(m => `${m.role}: ${m.content}`).join('\n\n'))
         .join('\n\n---SESSION BREAK---\n\n');
-      
+
       console.log(chalk.gray(`  Testing sessions ${start}-${mid} (${mid - start + 1} sessions)...`));
       const firstResult = await testContent(firstHalfContent);
 
@@ -189,7 +189,7 @@ export class FindProhibitedCommand {
       const secondHalfContent = secondHalfSessions
         .map(s => s.session.map(m => `${m.role}: ${m.content}`).join('\n\n'))
         .join('\n\n---SESSION BREAK---\n\n');
-      
+
       console.log(chalk.gray(`  Testing sessions ${mid + 1}-${end} (${end - mid} sessions)...`));
       const secondResult = await testContent(secondHalfContent);
 
@@ -208,10 +208,10 @@ export class FindProhibitedCommand {
     const allContent = sessionsWithMeta
       .map(s => s.session.map(m => `${m.role}: ${m.content}`).join('\n\n'))
       .join('\n\n---SESSION BREAK---\n\n');
-    
+
     console.log(chalk.gray(`  Testing all ${sessionsWithMeta.length} sessions combined...`));
     const allResult = await testContent(allContent);
-    
+
     if (!allResult.blocked) {
       console.log(chalk.green('\n✅ No prohibited content found in any session!'));
       return;
@@ -239,11 +239,8 @@ export class FindProhibitedCommand {
 
     for (const sessionMeta of prohibitedSessions) {
       console.log(chalk.blue(`\nSearching session ${sessionMeta.sessionId} (${sessionMeta.date})...`));
-      
-      const prohibitedIndices = await findProhibitedInSession(
-        sessionMeta.session,
-        sessionMeta.sessionId,
-      );
+
+      const prohibitedIndices = await findProhibitedInSession(sessionMeta.session, sessionMeta.sessionId);
 
       if (prohibitedIndices.length > 0) {
         results.push({
@@ -272,13 +269,11 @@ export class FindProhibitedCommand {
     for (const result of results) {
       console.log(chalk.yellow(`\nSession: ${result.sessionId} (${result.date})`));
       console.log(chalk.yellow(`Message indices: ${result.messageIndices.join(', ')}`));
-      
+
       for (const msg of result.messages) {
         console.log(chalk.red(`\n  [${msg.index}] ${msg.role}:`));
         // Truncate long content
-        const preview = msg.content.length > 500 
-          ? msg.content.slice(0, 500) + '...' 
-          : msg.content;
+        const preview = msg.content.length > 500 ? msg.content.slice(0, 500) + '...' : msg.content;
         console.log(chalk.gray(`  ${preview.replace(/\n/g, '\n  ')}`));
       }
     }

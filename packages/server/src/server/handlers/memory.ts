@@ -199,7 +199,7 @@ async function getOMConfigFromAgent(
     // Use getResolvedConfig if available (properly resolves model names)
     // Fall back to .config for backwards compatibility
     const hasResolvedConfig = typeof (omProcessor as any).getResolvedConfig === 'function';
-    
+
     if (hasResolvedConfig) {
       const resolvedConfig = await (omProcessor as any).getResolvedConfig(requestContext);
       return {

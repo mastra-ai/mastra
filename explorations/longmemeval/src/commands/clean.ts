@@ -43,7 +43,7 @@ export class CleanCommand {
 
     // Get all prepared question directories
     const questionDirs = await readdir(preparedDir);
-    
+
     // Sort by original dataset order
     const sortedDirs = questionDirs
       .filter(dir => questionIdOrder.has(dir))
@@ -85,11 +85,11 @@ export class CleanCommand {
       // Apply offset and subset
       const offset = options.offset || 0;
       let selected = sortedDirs.slice(offset);
-      
+
       if (options.subset) {
         selected = selected.slice(0, options.subset);
       }
-      
+
       toDelete = selected;
     }
 
@@ -101,7 +101,9 @@ export class CleanCommand {
     // Show what will be deleted
     const offset = options.offset || 0;
     console.log(
-      chalk.yellow(`\n${options.dryRun ? '[DRY RUN] Would delete' : 'Deleting'} ${toDelete.length} prepared question(s):`),
+      chalk.yellow(
+        `\n${options.dryRun ? '[DRY RUN] Would delete' : 'Deleting'} ${toDelete.length} prepared question(s):`,
+      ),
     );
     console.log(chalk.gray(`  Range: ${offset + 1}-${offset + toDelete.length} of ${sortedDirs.length} total\n`));
 

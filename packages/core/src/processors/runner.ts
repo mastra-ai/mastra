@@ -178,7 +178,7 @@ export class ProcessorRunner {
       } as ProcessorStepOutput,
       tracingContext,
       requestContext,
-      outputWriter: writer ? (chunk => writer.custom(chunk)) : undefined,
+      outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
     });
 
     // Check for tripwire status - this means a processor in the workflow called abort()

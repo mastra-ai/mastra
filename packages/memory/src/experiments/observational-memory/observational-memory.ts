@@ -669,24 +669,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.observeFutureOnly = config.observeFutureOnly ?? false;
 
     // Get base thresholds first (needed for adaptive calculation)
-    const observerThreshold = config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold;
-    const reflectorThreshold = config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold;
+    const observerThreshold =
+      config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold;
+    const reflectorThreshold =
+      config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold;
     const isAdaptive = config.adaptiveThreshold ?? false;
-    
+
     // Total context budget when adaptive is enabled
     const totalBudget = observerThreshold + reflectorThreshold;
-    
+
     // Debug: log adaptive threshold config
     omDebug(`[OM] Observer config: threshold=${observerThreshold}, adaptive=${isAdaptive}, totalBudget=${totalBudget}`);
-    
+
     // Resolve observer config with defaults
     this.observerConfig = {
       model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
       // When adaptive, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
-      observationThreshold: isAdaptive
-        ? { min: observerThreshold, max: totalBudget }
-        : observerThreshold,
+      observationThreshold: isAdaptive ? { min: observerThreshold, max: totalBudget } : observerThreshold,
       adaptiveThreshold: isAdaptive,
       modelSettings: {
         temperature:
@@ -786,7 +786,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Helper to safely resolve a model config
     const safeResolveModel = async (modelConfig: ObservationalMemoryModelConfig): Promise<string> => {
       const modelToResolve = getModelToResolve(modelConfig);
-      
+
       try {
         // resolveModelConfig handles both static configs and functions
         const resolved = await resolveModelConfig(modelToResolve, requestContext);
@@ -859,19 +859,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Calculate dynamic threshold based on observation space.
    * When adaptiveThreshold is enabled, the message threshold can expand
    * into unused observation space, up to the total context budget.
-   * 
+   *
    * Total budget = observationThreshold + reflectionThreshold
    * Effective threshold = totalBudget - currentObservationTokens
-   * 
+   *
    * Example with 20k:20k thresholds (40k total):
    * - 0 observations → messages can use ~40k
-   * - 3k observations → messages can use ~37k  
+   * - 3k observations → messages can use ~37k
    * - 20k observations → messages back to ~20k
    */
-  private calculateDynamicThreshold(
-    threshold: number | ThresholdRange,
-    currentObservationTokens: number,
-  ): number {
+  private calculateDynamicThreshold(threshold: number | ThresholdRange, currentObservationTokens: number): number {
     // If not using adaptive threshold (simple number), return as-is
     if (typeof threshold === 'number') {
       return threshold;
@@ -882,14 +879,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Base threshold is stored as threshold.min
     const totalBudget = threshold.max;
     const baseThreshold = threshold.min;
-    
+
     // Effective threshold = total budget minus current observations
     // But never go below the base threshold
-    const effectiveThreshold = Math.max(
-      totalBudget - currentObservationTokens,
-      baseThreshold,
-    );
-    
+    const effectiveThreshold = Math.max(totalBudget - currentObservationTokens, baseThreshold);
+
     return Math.round(effectiveThreshold);
   }
 
@@ -1326,7 +1320,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * For end/failed markers, this should be called AFTER writer.custom() has added the part,
    * so we just find the part and add sealing metadata.
    */
-
 
   /**
    * Get unobserved parts from a message.
@@ -1776,7 +1769,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
-    
+
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
 
@@ -1878,7 +1871,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             `This may indicate the observations cannot be further condensed.`,
         );
       } else {
-        omDebug(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold})`);
+        omDebug(
+          `[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold})`,
+        );
       }
     } else {
       omDebug(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens}, target: ${targetThreshold})`);
@@ -2028,9 +2023,7 @@ ${suggestedResponse}
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, messages, requestContext, stepNumber, state, writer } = args;
 
-    omDebug(
-      `[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer in args: ${!!args.writer}, writer destructured: ${!!writer}`,
-    );
+    omDebug(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer: ${!!writer}`);
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
@@ -2139,8 +2132,8 @@ ${suggestedResponse}
       // Reflection threshold = total budget - message threshold (what's left for observations)
       const baseReflectionThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
       const isAdaptive = typeof this.observerConfig.observationThreshold !== 'number';
-      const totalBudget = isAdaptive 
-        ? (this.observerConfig.observationThreshold as { min: number; max: number }).max 
+      const totalBudget = isAdaptive
+        ? (this.observerConfig.observationThreshold as { min: number; max: number }).max
         : 0;
       const effectiveReflectionThreshold = isAdaptive
         ? Math.max(totalBudget - threshold, 1000) // What's left after message threshold
@@ -3417,7 +3410,12 @@ ${formattedMessages}
       });
 
       // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
-      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount, currentThreadId, writer);
+      await this.maybeReflect(
+        { ...record, activeObservations: currentObservations },
+        totalTokenCount,
+        currentThreadId,
+        writer,
+      );
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
       for (const [threadId, msgs] of threadsWithMessages) {
@@ -3524,18 +3522,26 @@ ${formattedMessages}
     });
 
     // Create mutable stream context for retry tracking
-    const streamContext = writer ? {
-      writer,
-      cycleId,
-      startedAt,
-      recordId: record.id,
-      threadId,
-    } : undefined;
+    const streamContext = writer
+      ? {
+          writer,
+          cycleId,
+          startedAt,
+          recordId: record.id,
+          threadId,
+        }
+      : undefined;
 
     try {
       // Only pass patterns to Reflector if reflector patterns are enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
-      const reflectResult = await this.callReflector(record.activeObservations, undefined, patternsToReflect, streamContext, reflectThreshold);
+      const reflectResult = await this.callReflector(
+        record.activeObservations,
+        undefined,
+        patternsToReflect,
+        streamContext,
+        reflectThreshold,
+      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       writeDebugEntry('maybeReflect:before_createReflectionGeneration', {
@@ -3643,7 +3649,13 @@ ${formattedMessages}
       // Manual reflect also passes patterns if enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
       const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-      const reflectResult = await this.callReflector(record.activeObservations, prompt, patternsToReflect, undefined, reflectThreshold);
+      const reflectResult = await this.callReflector(
+        record.activeObservations,
+        prompt,
+        patternsToReflect,
+        undefined,
+        reflectThreshold,
+      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({

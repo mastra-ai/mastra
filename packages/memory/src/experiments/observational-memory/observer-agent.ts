@@ -68,7 +68,8 @@ ACTIONABLE INSIGHTS:
  * Check which prompt variant to use (for A/B testing)
  */
 const USE_LEGACY_PROMPT = process.env.OM_USE_LEGACY_PROMPT === '1' || process.env.OM_USE_LEGACY_PROMPT === 'true';
-const USE_CONDENSED_PROMPT = process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
+const USE_CONDENSED_PROMPT =
+  process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
 
 /**
  * Condensed V3 extraction instructions - principle-based, relies on model's common sense.
@@ -329,8 +330,8 @@ ACTIONABLE INSIGHTS:
  */
 export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
   ? CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS
-  : USE_LEGACY_PROMPT 
-    ? LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS 
+  : USE_LEGACY_PROMPT
+    ? LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS
     : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
 
 /**
@@ -480,7 +481,7 @@ const CONDENSED_OBSERVER_GUIDELINES = `- Be specific: "User prefers short answer
  * The guidelines for the Observer.
  * This is exported so the Reflector can reference them.
  */
-export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT 
+export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
   ? CONDENSED_OBSERVER_GUIDELINES
   : `- Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
@@ -503,10 +504,10 @@ export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
 export function buildObserverSystemPrompt(recognizePatterns: boolean = true, multiThread: boolean = false): string {
   // Use condensed output format when condensed prompt is enabled
   // Otherwise, conditionally include patterns section based on config
-  const outputFormat = USE_CONDENSED_PROMPT 
+  const outputFormat = USE_CONDENSED_PROMPT
     ? CONDENSED_OBSERVER_OUTPUT_FORMAT
-    : recognizePatterns 
-      ? OBSERVER_OUTPUT_FORMAT 
+    : recognizePatterns
+      ? OBSERVER_OUTPUT_FORMAT
       : OBSERVER_OUTPUT_FORMAT_BASE;
 
   if (multiThread) {

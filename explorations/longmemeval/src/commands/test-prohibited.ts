@@ -61,54 +61,52 @@ async function binarySearchThreads(threads: string[]): Promise<string[]> {
   // Test all threads combined
   const combined = threads.join('\n\n');
   const result = await testContent(combined);
-  
+
   if (!result.blocked) {
     console.log(`  Combined ${threads.length} threads: ✅ OK`);
     return [];
   }
-  
+
   console.log(`  Combined ${threads.length} threads: 🚫 BLOCKED - splitting...`);
-  
+
   // Split and recurse
   const mid = Math.floor(threads.length / 2);
   const left = threads.slice(0, mid);
   const right = threads.slice(mid);
-  
-  const [leftBlocked, rightBlocked] = await Promise.all([
-    binarySearchThreads(left),
-    binarySearchThreads(right),
-  ]);
-  
+
+  const [leftBlocked, rightBlocked] = await Promise.all([binarySearchThreads(left), binarySearchThreads(right)]);
+
   return [...leftBlocked, ...rightBlocked];
 }
 
-async function binarySearchWithinThread(thread: string): Promise<{ start: number; end: number; content: string } | null> {
+async function binarySearchWithinThread(
+  thread: string,
+): Promise<{ start: number; end: number; content: string } | null> {
   const lines = thread.split('\n');
   console.log(`\nBinary searching within thread (${lines.length} lines)...`);
-  
+
   // First verify the whole thread is blocked
   const fullResult = await testContent(thread);
   if (!fullResult.blocked) {
     console.log('Thread is not blocked on its own');
     return null;
   }
-  
+
   // Binary search for the problematic section
   let left = 0;
   let right = lines.length;
-  
+
   while (right - left > 10) {
     const mid = Math.floor((left + right) / 2);
     const firstHalf = lines.slice(left, mid).join('\n');
     const secondHalf = lines.slice(mid, right).join('\n');
-    
-    const [firstResult, secondResult] = await Promise.all([
-      testContent(firstHalf),
-      testContent(secondHalf),
-    ]);
-    
-    console.log(`  Lines ${left}-${mid}: ${firstResult.blocked ? '🚫' : '✅'}, Lines ${mid}-${right}: ${secondResult.blocked ? '🚫' : '✅'}`);
-    
+
+    const [firstResult, secondResult] = await Promise.all([testContent(firstHalf), testContent(secondHalf)]);
+
+    console.log(
+      `  Lines ${left}-${mid}: ${firstResult.blocked ? '🚫' : '✅'}, Lines ${mid}-${right}: ${secondResult.blocked ? '🚫' : '✅'}`,
+    );
+
     if (firstResult.blocked && !secondResult.blocked) {
       right = mid;
     } else if (!firstResult.blocked && secondResult.blocked) {
@@ -123,7 +121,7 @@ async function binarySearchWithinThread(thread: string): Promise<{ start: number
       break;
     }
   }
-  
+
   const problematicSection = lines.slice(left, right).join('\n');
   return { start: left, end: right, content: problematicSection };
 }
@@ -138,39 +136,39 @@ async function testReplacement(original: string, pattern: RegExp, replacement: s
 async function main() {
   console.log(`Loading dump file: ${DUMP_FILE}`);
   const dump: DumpFile = JSON.parse(readFileSync(DUMP_FILE, 'utf-8'));
-  
+
   console.log(`\nDump info:`);
   console.log(`  Message count: ${dump.messageCount}`);
   console.log(`  Prompt length: ${dump.prompt?.length || 0}`);
   console.log(`  Context length: ${dump.context?.length || 0}`);
-  
+
   // Extract threads from the prompt (where they actually are)
   const threadRegex = /<thread id="([^"]+)">([\s\S]*?)<\/thread>/g;
   const threads: { id: string; content: string }[] = [];
   let match;
-  
+
   const contextToSearch = dump.prompt || dump.context || '';
   while ((match = threadRegex.exec(contextToSearch)) !== null) {
     threads.push({ id: match[1], content: match[2] });
   }
-  
+
   console.log(`\nFound ${threads.length} threads`);
-  
+
   if (threads.length === 0) {
     console.log('No threads found - testing full context...');
     const result = await testContent(contextToSearch);
     console.log(`Full context: ${result.blocked ? '🚫 BLOCKED' : '✅ OK'}`);
     return;
   }
-  
+
   // Binary search for blocked threads
   console.log('\n=== Phase 1: Finding blocked threads ===');
   const blockedThreads = await binarySearchThreads(threads.map(t => `<thread id="${t.id}">${t.content}</thread>`));
-  
+
   if (blockedThreads.length === 0) {
     console.log('\n✅ No individual threads are blocked!');
     console.log('The blocking may be due to thread interaction or the prompt itself.');
-    
+
     // Test the prompt alone
     if (dump.prompt) {
       console.log('\nTesting prompt alone...');
@@ -179,27 +177,27 @@ async function main() {
     }
     return;
   }
-  
+
   console.log(`\n=== Found ${blockedThreads.length} blocked thread(s) ===`);
-  
+
   // For each blocked thread, find the specific problematic content
   for (const blockedThread of blockedThreads) {
     const idMatch = blockedThread.match(/<thread id="([^"]+)">/);
     const threadId = idMatch ? idMatch[1] : 'unknown';
     console.log(`\n=== Phase 2: Analyzing thread ${threadId} ===`);
-    
+
     const section = await binarySearchWithinThread(blockedThread);
     if (section) {
       console.log(`\nProblematic section (lines ${section.start}-${section.end}):`);
       console.log('---');
       console.log(section.content.slice(0, 500) + (section.content.length > 500 ? '...' : ''));
       console.log('---');
-      
+
       // Save the problematic section for analysis
       const outputPath = `/tmp/prohibited-section-${threadId}.txt`;
       writeFileSync(outputPath, section.content);
       console.log(`\nSaved to: ${outputPath}`);
-      
+
       // Test some replacements
       console.log('\n=== Phase 3: Testing replacements ===');
       const replacements: [RegExp, string][] = [
@@ -212,7 +210,7 @@ async function main() {
         [/write without rules/gi, 'write creatively'],
         [/modify and train you/gi, 'guide you'],
       ];
-      
+
       let currentContent = blockedThread;
       for (const [pattern, replacement] of replacements) {
         if (pattern.test(currentContent)) {
@@ -224,7 +222,7 @@ async function main() {
           currentContent = currentContent.replace(pattern, replacement);
         }
       }
-      
+
       // Test cumulative replacements
       console.log('\n=== Testing cumulative replacements ===');
       let cumulativeContent = blockedThread;
@@ -233,7 +231,7 @@ async function main() {
       }
       const cumulativeResult = await testContent(cumulativeContent);
       console.log(`All replacements combined: ${cumulativeResult.blocked ? '🚫 Still blocked' : '✅ FIXED!'}`);
-      
+
       if (!cumulativeResult.blocked) {
         const fixedPath = `/tmp/prohibited-fixed-${threadId}.txt`;
         writeFileSync(fixedPath, cumulativeContent);

@@ -98,8 +98,13 @@ export class InMemoryMemory extends MemoryStorage {
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     // Normalize threadId to array (may be undefined if querying by resourceId only)
     // Treat empty strings and whitespace-only strings as undefined
-    const normalizedThreadId = threadId && (Array.isArray(threadId) ? threadId.filter(id => id.trim()) : threadId.trim() || undefined);
-    const threadIds = normalizedThreadId ? (Array.isArray(normalizedThreadId) ? normalizedThreadId : [normalizedThreadId]) : undefined;
+    const normalizedThreadId =
+      threadId && (Array.isArray(threadId) ? threadId.filter(id => id.trim()) : threadId.trim() || undefined);
+    const threadIds = normalizedThreadId
+      ? Array.isArray(normalizedThreadId)
+        ? normalizedThreadId
+        : [normalizedThreadId]
+      : undefined;
 
     // Validate: at least one of threadId or resourceId must be provided
     if (!threadIds?.length && !resourceId) {

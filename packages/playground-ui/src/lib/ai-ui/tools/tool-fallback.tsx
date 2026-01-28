@@ -16,7 +16,7 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
   if (toolName === 'mastra-memory-om-observation') {
     return <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />;
   }
-  
+
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />

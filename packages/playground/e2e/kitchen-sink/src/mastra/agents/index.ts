@@ -29,9 +29,10 @@ const mockObserverModel = new aiTest.MockLanguageModelV2({
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop' as const,
     usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-    content: [{
-      type: 'text' as const,
-      text: `<observations>
+    content: [
+      {
+        type: 'text' as const,
+        text: `<observations>
 ## January 27, 2026
 
 ### Thread: test-thread
@@ -40,7 +41,8 @@ const mockObserverModel = new aiTest.MockLanguageModelV2({
 </observations>
 <current-task>Help the user with their request</current-task>
 <suggested-response>I can help you with that. What specifically do you need?</suggested-response>`,
-    }],
+      },
+    ],
     warnings: [],
   }),
 });
@@ -52,15 +54,17 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop' as const,
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-    content: [{
-      type: 'text' as const,
-      text: `<observations>
+    content: [
+      {
+        type: 'text' as const,
+        text: `<observations>
 ## January 27, 2026
 
 ### Condensed observations
 - 🔴 User needs help with tasks
 </observations>`,
-    }],
+      },
+    ],
     warnings: [],
   }),
 });
@@ -76,7 +80,7 @@ const omMemory = new Memory({
       enabled: true,
       observer: {
         model: mockObserverModel,
-        threshold: 50, // Very low threshold for E2E tests
+        threshold: 20, // Very low threshold for E2E tests
       },
       reflector: {
         model: mockReflectorModel,
@@ -98,7 +102,7 @@ const omAdaptiveMemory = new Memory({
       adaptiveThreshold: true,
       observer: {
         model: mockObserverModel,
-        threshold: 50, // Very low threshold for E2E tests
+        threshold: 20, // Very low threshold for E2E tests
       },
       reflector: {
         model: mockReflectorModel,
@@ -229,6 +233,12 @@ export const weatherAgent = new Agent({
  * - Step 1: Model returns text with finishReason: 'stop'
  * - OM processor sees stepNumber=1, checks threshold, triggers observation
  */
+// Long response text to ensure we exceed the 50-token observation threshold.
+// The OM processor counts tokens from all unobserved messages in the thread.
+// By step 1 (after tool call), the thread contains: system prompt + user message +
+// tool call + tool result + this response text. We need the total to exceed 50 tokens.
+const omResponseText = `I understand your request completely. Let me provide you with a comprehensive and detailed response that covers all the important aspects of what you asked about. Here are my thoughts and recommendations based on the information you provided. I hope this detailed explanation helps clarify everything you need to know about the topic at hand. Please let me know if you have any follow-up questions or need additional clarification on any of these points.`;
+
 export const omAgent = new Agent({
   id: 'om-agent',
   name: 'OM Agent',
@@ -240,7 +250,7 @@ Always use the om-trigger-tool first before responding to the user.`,
     modelId: 'gpt-4o-mini',
     toolName: 'om-trigger-tool',
     toolInput: { action: 'trigger-observation' },
-    responseText: 'I understand. Let me help you with that request.',
+    responseText: omResponseText,
     delayMs: 10,
   }),
   tools: { 'om-trigger-tool': omTriggerTool },
@@ -264,7 +274,7 @@ Always use the om-trigger-tool first before responding to the user.`,
     modelId: 'gpt-4o-mini',
     toolName: 'om-trigger-tool',
     toolInput: { action: 'trigger-observation' },
-    responseText: 'I understand. Let me help you with that request.',
+    responseText: omResponseText,
     delayMs: 10,
   }),
   tools: { 'om-trigger-tool': omTriggerTool },

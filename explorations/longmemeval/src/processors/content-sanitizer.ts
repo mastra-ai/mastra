@@ -12,7 +12,8 @@ import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@
 const JAILBREAK_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // "assume the role of X that writes without rules/constraints"
   {
-    pattern: /assume the role of (?:a |an )?(\w+(?:\s+\w+)*)\s+(?:AI[,.]?\s+)?(?:trained by \w+[,.]?\s+)?that writes?\s+(?:exactly as directed|without rules|without constraints)/gi,
+    pattern:
+      /assume the role of (?:a |an )?(\w+(?:\s+\w+)*)\s+(?:AI[,.]?\s+)?(?:trained by \w+[,.]?\s+)?that writes?\s+(?:exactly as directed|without rules|without constraints)/gi,
     replacement: 'act as a $1 writing assistant',
   },
   // "I have the power to modify and train you"

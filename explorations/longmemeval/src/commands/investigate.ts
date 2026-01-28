@@ -32,33 +32,33 @@ export interface InvestigateOptions {
   next?: boolean;
   done?: string;
   sync?: boolean;
-  fixed?: string;      // Mark a question as fix-implemented
+  fixed?: string; // Mark a question as fix-implemented
   outputDir?: string;
   resultsDir?: string;
   preparedDataDir?: string;
   datasetDir?: string;
   editor?: string;
   // Investigation utilities
-  search?: string;        // Search observations for keywords
-  trace?: string;         // Trace information flow for a keyword
-  questionId?: string;    // Question ID for search/trace/date/session
-  inspect?: string;       // Inspect a specific question's data
-  date?: string;          // View observations around a specific date (e.g., "2023/05/29" or "May 29")
-  context?: number;       // Number of days of context around the date (default: 1)
-  session?: number;       // View a specific session from original dataset
+  search?: string; // Search observations for keywords
+  trace?: string; // Trace information flow for a keyword
+  questionId?: string; // Question ID for search/trace/date/session
+  inspect?: string; // Inspect a specific question's data
+  date?: string; // View observations around a specific date (e.g., "2023/05/29" or "May 29")
+  context?: number; // Number of days of context around the date (default: 1)
+  session?: number; // View a specific session from original dataset
   listSessions?: boolean; // List all sessions with dates for a question
   // Data freshness detection
-  checkStale?: boolean;   // Check if prepared data is stale (pre-cursor-fix)
-  staleOnly?: boolean;    // Only list stale questions from failures
+  checkStale?: boolean; // Check if prepared data is stale (pre-cursor-fix)
+  staleOnly?: boolean; // Only list stale questions from failures
   // Original dataset search
   searchOriginal?: string; // Search original dataset for a keyword
   // Improve question/answer in dataset
-  improve?: string;        // Question ID to add improvements for
+  improve?: string; // Question ID to add improvements for
   improveQuestion?: string; // Improved question text
-  improveAnswer?: string;   // Improved answer text
-  improveNote?: string;     // Improvement note
+  improveAnswer?: string; // Improved answer text
+  improveNote?: string; // Improvement note
   category?: FailureCategory; // Failure category for this question
-  clearImproved?: string | boolean;  // Clear specific field(s): 'all', 'question', 'answer', 'note', 'category' or true for all
+  clearImproved?: string | boolean; // Clear specific field(s): 'all', 'question', 'answer', 'note', 'category' or true for all
   // Check for duplicate observations
   checkDuplicates?: boolean; // Check for duplicate thread blocks in observations
   // Baseline check - comprehensive data quality check
@@ -83,7 +83,7 @@ interface EvaluationResult {
   question_id: string;
   question: string;
   expected_answer: string;
-  hypothesis: string;  // The agent's answer
+  hypothesis: string; // The agent's answer
   is_correct: boolean;
   question_type: string;
   improved_question?: string;
@@ -268,7 +268,14 @@ export class InvestigateCommand {
 
     // Improve question/answer in dataset
     if (options.improve) {
-      await this.addImprovement(options.improve, options.improveQuestion, options.improveAnswer, options.improveNote, options.category, options.clearImproved);
+      await this.addImprovement(
+        options.improve,
+        options.improveQuestion,
+        options.improveAnswer,
+        options.improveNote,
+        options.category,
+        options.clearImproved,
+      );
       return;
     }
 
@@ -332,7 +339,7 @@ export class InvestigateCommand {
     }
 
     const configs = await readdir(this.resultsDir);
-    
+
     for (const config of configs) {
       // Skip if filtering by config and doesn't match
       if (configFilter && !config.includes(configFilter)) {
@@ -344,10 +351,10 @@ export class InvestigateCommand {
       if (!stat.isDirectory()) continue;
 
       const runDirs = await readdir(configDir);
-      
+
       for (const runDir of runDirs) {
         if (!runDir.startsWith('run_')) continue;
-        
+
         const failuresPath = join(configDir, runDir, 'failures.json');
         if (!existsSync(failuresPath)) continue;
 
@@ -391,14 +398,14 @@ export class InvestigateCommand {
 
     for (const [configKey, configRuns] of byConfig) {
       console.log(`📁 ${configKey}`);
-      
+
       // Show latest run prominently
       const latest = configRuns[0];
       const failRate = ((latest.totalFailed / latest.totalQuestions) * 100).toFixed(1);
       console.log(`   Latest: ${latest.runId}`);
       console.log(`   Failed: ${latest.totalFailed}/${latest.totalQuestions} (${failRate}%)`);
       console.log(`   Date:   ${new Date(latest.timestamp).toLocaleString()}`);
-      
+
       if (configRuns.length > 1) {
         console.log(`   (${configRuns.length - 1} older runs)`);
       }
@@ -504,26 +511,15 @@ export class InvestigateCommand {
       }
 
       // Copy original question data
-      await writeFile(
-        join(dataDir, 'original.json'),
-        JSON.stringify(question, null, 2),
-      );
+      await writeFile(join(dataDir, 'original.json'), JSON.stringify(question, null, 2));
 
       // Copy result if available
       if (result) {
-        await writeFile(
-          join(dataDir, 'result.json'),
-          JSON.stringify(result, null, 2),
-        );
+        await writeFile(join(dataDir, 'result.json'), JSON.stringify(result, null, 2));
       }
 
       // Copy prepared data files
-      const preparedDir = join(
-        this.preparedDataDir,
-        failures.dataset,
-        failures.config,
-        questionId,
-      );
+      const preparedDir = join(this.preparedDataDir, failures.dataset, failures.config, questionId);
 
       const filesToCopy = ['om.md', 'om.json', 'meta.json'];
       for (const file of filesToCopy) {
@@ -586,7 +582,7 @@ export class InvestigateCommand {
       const fixImplemented = Object.values(progress.questions).filter(q => q.status === 'fix-implemented').length;
       const synced = Object.values(progress.questions).filter(q => q.status === 'synced').length;
 
-      const pct = ((progress.totalFailed - pending) / progress.totalFailed * 100).toFixed(1);
+      const pct = (((progress.totalFailed - pending) / progress.totalFailed) * 100).toFixed(1);
 
       console.log(`📁 ${inv}`);
       console.log(`   Config: ${progress.config}`);
@@ -639,8 +635,7 @@ export class InvestigateCommand {
     }
 
     // Find next pending question
-    const pendingId = Object.entries(progress.questions)
-      .find(([_, q]) => q.status === 'pending')?.[0];
+    const pendingId = Object.entries(progress.questions).find(([_, q]) => q.status === 'pending')?.[0];
 
     if (!pendingId) {
       console.log('\n🎉 All questions investigated!\n');
@@ -730,8 +725,7 @@ export class InvestigateCommand {
       investigatedAt: new Date().toISOString(),
     };
 
-    progress.investigated = Object.values(progress.questions)
-      .filter(q => q.status !== 'pending').length;
+    progress.investigated = Object.values(progress.questions).filter(q => q.status !== 'pending').length;
 
     // Save progress
     const progressPath = join(this.investigationsDir, foundInv, 'progress.json');
@@ -796,8 +790,9 @@ export class InvestigateCommand {
     const progressPath = join(this.investigationsDir, foundInv, 'progress.json');
     await writeFile(progressPath, JSON.stringify(progress, null, 2));
 
-    const fixedCount = Object.values(progress.questions)
-      .filter(q => q.status === 'fix-implemented' || q.status === 'synced').length;
+    const fixedCount = Object.values(progress.questions).filter(
+      q => q.status === 'fix-implemented' || q.status === 'synced',
+    ).length;
 
     console.log(`\n✅ Marked ${questionId} as fix-implemented`);
     console.log(`   Fixed: ${fixedCount}/${progress.totalFailed}`);
@@ -1035,7 +1030,7 @@ export class InvestigateCommand {
 
     // Find the question in prepared data
     const { omPath, config, dataset } = await this.findPreparedData(questionId);
-    
+
     if (!omPath) {
       console.log(`❌ No prepared data found for question ${questionId}`);
       return;
@@ -1057,14 +1052,14 @@ export class InvestigateCommand {
     // Note: resourceId in storage is prefixed with "resource_"
     const resourceId = `resource_${questionId}`;
     const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
-    
+
     if (omRecords.length === 0) {
       console.log(`\n⚠️  No observational memory records found`);
       return;
     }
 
     const latestRecord = omRecords[0]; // Most recent is first
-    
+
     console.log(`\n📝 Latest OM Record:`);
     console.log(`   Created: ${latestRecord.createdAt}`);
     console.log(`   Last Observed: ${latestRecord.lastObservedAt}`);
@@ -1084,7 +1079,7 @@ export class InvestigateCommand {
     // Show first few and last few lines
     console.log(`\n   First 5 lines:`);
     lines.slice(0, 5).forEach((l: string) => console.log(`     ${l.substring(0, 100)}${l.length > 100 ? '...' : ''}`));
-    
+
     if (lines.length > 10) {
       console.log(`\n   Last 5 lines:`);
       lines.slice(-5).forEach((l: string) => console.log(`     ${l.substring(0, 100)}${l.length > 100 ? '...' : ''}`));
@@ -1101,7 +1096,7 @@ export class InvestigateCommand {
     console.log(`\n🔍 Searching for "${keyword}" in question ${questionId}\n`);
 
     const { omPath } = await this.findPreparedData(questionId);
-    
+
     if (!omPath) {
       console.log(`❌ No prepared data found for question ${questionId}`);
       return;
@@ -1131,10 +1126,7 @@ export class InvestigateCommand {
     } else {
       for (const { line, idx } of obsMatches) {
         // Highlight the keyword
-        const highlighted = line.replace(
-          new RegExp(`(${keyword})`, 'gi'),
-          '\x1b[33m$1\x1b[0m'
-        );
+        const highlighted = line.replace(new RegExp(`(${keyword})`, 'gi'), '\x1b[33m$1\x1b[0m');
         console.log(`   [${idx}] ${highlighted}`);
       }
     }
@@ -1143,9 +1135,7 @@ export class InvestigateCommand {
     const messagesResult = await storage.listMessages({ resourceId, perPage: false });
     const messages = messagesResult.messages;
     const msgMatches = messages.filter((m: any) => {
-      const content = typeof m.content === 'string' 
-        ? m.content 
-        : JSON.stringify(m.content);
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
       return content.toLowerCase().includes(keywordLower);
     });
 
@@ -1154,13 +1144,8 @@ export class InvestigateCommand {
       console.log(`   No matches found in raw messages`);
     } else {
       for (const msg of msgMatches.slice(0, 10)) {
-        const content = typeof msg.content === 'string' 
-          ? msg.content 
-          : JSON.stringify(msg.content);
-        const highlighted = content.replace(
-          new RegExp(`(${keyword})`, 'gi'),
-          '\x1b[33m$1\x1b[0m'
-        );
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        const highlighted = content.replace(new RegExp(`(${keyword})`, 'gi'), '\x1b[33m$1\x1b[0m');
         const date = msg.createdAt ? new Date(msg.createdAt).toISOString().split('T')[0] : 'unknown';
         console.log(`   [${date}] ${msg.role}: ${highlighted.substring(0, 120)}${content.length > 120 ? '...' : ''}`);
       }
@@ -1172,7 +1157,7 @@ export class InvestigateCommand {
     // Summary
     const inObs = obsMatches.length > 0;
     const inRaw = msgMatches.length > 0;
-    
+
     console.log(`\n📊 Summary:`);
     if (inRaw && !inObs) {
       console.log(`   ⚠️  Found in raw messages but NOT in observations`);
@@ -1209,19 +1194,16 @@ export class InvestigateCommand {
       for (let turnIdx = 0; turnIdx < session.length; turnIdx++) {
         const turn = session[turnIdx];
         const content = turn.content || '';
-        
+
         if (content.toLowerCase().includes(keywordLower)) {
           totalMatches++;
           const roleColor = turn.role === 'user' ? '\x1b[36m' : '\x1b[90m';
           const reset = '\x1b[0m';
           const yellow = '\x1b[33m';
-          
+
           // Highlight the keyword
-          const highlighted = content.replace(
-            new RegExp(`(${keyword})`, 'gi'),
-            `${yellow}$1${reset}`
-          );
-          
+          const highlighted = content.replace(new RegExp(`(${keyword})`, 'gi'), `${yellow}$1${reset}`);
+
           console.log(`${'─'.repeat(70)}`);
           console.log(`📅 Session ${sessionIdx}, Turn ${turnIdx} | ${date}`);
           console.log(`${roleColor}[${turn.role.toUpperCase()}]:${reset}`);
@@ -1246,7 +1228,7 @@ export class InvestigateCommand {
     console.log(`\n🔍 Tracing "${keyword}" through pipeline for ${questionId}\n`);
 
     const { omPath, config, dataset, questionDir } = await this.findPreparedData(questionId);
-    
+
     if (!omPath) {
       console.log(`❌ No prepared data found for question ${questionId}`);
       return;
@@ -1260,12 +1242,12 @@ export class InvestigateCommand {
     const datasetName = dataset as 'longmemeval_s' | 'longmemeval_m';
     const questions = await loader.loadDataset(datasetName);
     const question = questions.find(q => q.question_id === questionId);
-    
+
     if (question) {
       // Search in haystack sessions
       let sessionMatches = 0;
       const matchingSessions: { idx: number; turnIdx: number; role: string; preview: string }[] = [];
-      
+
       if (question.haystack_sessions) {
         for (let sIdx = 0; sIdx < question.haystack_sessions.length; sIdx++) {
           const session = question.haystack_sessions[sIdx];
@@ -1288,10 +1270,7 @@ export class InvestigateCommand {
 
       console.log(`   Found in ${sessionMatches} session turns`);
       for (const m of matchingSessions) {
-        const highlighted = m.preview.replace(
-          new RegExp(`(${keyword})`, 'gi'),
-          '\x1b[33m$1\x1b[0m'
-        );
+        const highlighted = m.preview.replace(new RegExp(`(${keyword})`, 'gi'), '\x1b[33m$1\x1b[0m');
         console.log(`   Session ${m.idx}, Turn ${m.turnIdx} (${m.role}): ${highlighted}...`);
       }
       if (sessionMatches > 5) {
@@ -1303,24 +1282,20 @@ export class InvestigateCommand {
     console.log(`\n2️⃣  Stored Messages (om.json):`);
     const storage = new PersistableInMemoryMemory({ readOnly: true });
     await storage.hydrate(omPath);
-    
+
     // Note: resourceId in storage is prefixed with "resource_"
     const resourceId = `resource_${questionId}`;
-    
+
     const messagesResult = await storage.listMessages({ resourceId, perPage: false });
     const allMessages = messagesResult.messages;
     const msgMatches = allMessages.filter((m: any) => {
-      const content = typeof m.content === 'string' 
-        ? m.content 
-        : JSON.stringify(m.content);
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
       return content.toLowerCase().includes(keywordLower);
     });
-    
+
     console.log(`   Found in ${msgMatches.length} messages`);
     for (const msg of msgMatches.slice(0, 3)) {
-      const content = typeof msg.content === 'string' 
-        ? msg.content 
-        : JSON.stringify(msg.content);
+      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
       const date = msg.createdAt ? new Date(msg.createdAt).toISOString() : 'unknown';
       console.log(`   [${date}] ${msg.role}: ${content.substring(0, 80)}...`);
     }
@@ -1330,16 +1305,13 @@ export class InvestigateCommand {
     const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
     const latestRecord = omRecords[0]; // Most recent is first
     const observations = latestRecord?.activeObservations || '';
-    
+
     const obsLines = observations.split('\n');
     const obsMatches = obsLines.filter((l: string) => l.toLowerCase().includes(keywordLower));
-    
+
     console.log(`   Found in ${obsMatches.length} observation lines`);
     for (const line of obsMatches.slice(0, 5)) {
-      const highlighted = line.replace(
-        new RegExp(`(${keyword})`, 'gi'),
-        '\x1b[33m$1\x1b[0m'
-      );
+      const highlighted = line.replace(new RegExp(`(${keyword})`, 'gi'), '\x1b[33m$1\x1b[0m');
       console.log(`   ${highlighted.substring(0, 100)}...`);
     }
 
@@ -1350,13 +1322,10 @@ export class InvestigateCommand {
       const omMd = await readFile(omMdPath, 'utf-8');
       const mdLines = omMd.split('\n');
       const mdMatches = mdLines.filter(l => l.toLowerCase().includes(keywordLower));
-      
+
       console.log(`   Found in ${mdMatches.length} lines`);
       for (const line of mdMatches.slice(0, 5)) {
-        const highlighted = line.replace(
-          new RegExp(`(${keyword})`, 'gi'),
-          '\x1b[33m$1\x1b[0m'
-        );
+        const highlighted = line.replace(new RegExp(`(${keyword})`, 'gi'), '\x1b[33m$1\x1b[0m');
         console.log(`   ${highlighted.substring(0, 100)}...`);
       }
     } else {
@@ -1365,12 +1334,11 @@ export class InvestigateCommand {
 
     // 5. Diagnosis
     console.log(`\n📊 Diagnosis:`);
-    const inDataset = question && question.haystack_sessions?.some(s => 
-      s.some(t => t.content.toLowerCase().includes(keywordLower))
-    );
+    const inDataset =
+      question && question.haystack_sessions?.some(s => s.some(t => t.content.toLowerCase().includes(keywordLower)));
     const inMessages = msgMatches.length > 0;
     const inObservations = obsMatches.length > 0;
-    
+
     if (inDataset && !inMessages) {
       console.log(`   ❌ Lost during message storage - check prepare.ts`);
     } else if (inMessages && !inObservations) {
@@ -1394,7 +1362,7 @@ export class InvestigateCommand {
   private async viewObservationsAroundDate(
     questionId: string,
     dateStr: string,
-    contextDays: number = 1
+    contextDays: number = 1,
   ): Promise<void> {
     console.log(`\n🗓️  Viewing data around "${dateStr}" for question ${questionId}\n`);
 
@@ -1429,35 +1397,36 @@ export class InvestigateCommand {
     // 1. Show raw messages in date range
     console.log(`1️⃣  Raw Messages in Range:`);
     console.log(`${'─'.repeat(60)}`);
-    
+
     const messagesResult = await storage.listMessages({ resourceId, perPage: false });
     const allMessages = messagesResult.messages;
-    
-    const messagesInRange = allMessages.filter((m: any) => {
-      if (!m.createdAt) return false;
-      const msgDate = new Date(m.createdAt);
-      return msgDate >= startDate && msgDate <= endDate;
-    }).sort((a: any, b: any) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+
+    const messagesInRange = allMessages
+      .filter((m: any) => {
+        if (!m.createdAt) return false;
+        const msgDate = new Date(m.createdAt);
+        return msgDate >= startDate && msgDate <= endDate;
+      })
+      .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     if (messagesInRange.length === 0) {
       console.log(`   No messages found in this date range`);
     } else {
       console.log(`   Found ${messagesInRange.length} messages\n`);
       for (const msg of messagesInRange) {
-        const content = typeof msg.content === 'string' 
-          ? msg.content 
-          : JSON.stringify(msg.content);
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
         const date = new Date(msg.createdAt);
-        const dateStr = date.toLocaleDateString('en-US', { 
-          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        const dateStr = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
         });
         const isTargetDay = date.toDateString() === targetDate.toDateString();
         const prefix = isTargetDay ? '→ ' : '  ';
         const highlight = isTargetDay ? '\x1b[33m' : '\x1b[90m';
         const reset = '\x1b[0m';
-        
+
         console.log(`${prefix}${highlight}[${dateStr}] ${msg.role}:${reset}`);
         console.log(`${prefix}${highlight}${content.substring(0, 200)}${content.length > 200 ? '...' : ''}${reset}\n`);
       }
@@ -1466,11 +1435,11 @@ export class InvestigateCommand {
     // 2. Show observations for dates in range
     console.log(`\n2️⃣  Observations in Range:`);
     console.log(`${'─'.repeat(60)}`);
-    
+
     const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
     const latestRecord = omRecords[0];
     const observations = latestRecord?.activeObservations || '';
-    
+
     if (!observations) {
       console.log(`   No observations found`);
     } else {
@@ -1489,11 +1458,11 @@ export class InvestigateCommand {
           if (currentGroup && currentGroup.lines.length > 0) {
             observationsInRange.push(currentGroup);
           }
-          
+
           currentDateGroup = dateMatch[1].trim();
           const parsedDate = this.parseFlexibleDate(currentDateGroup);
-          inRange = parsedDate ? (parsedDate >= startDate && parsedDate <= endDate) : false;
-          
+          inRange = parsedDate ? parsedDate >= startDate && parsedDate <= endDate : false;
+
           if (inRange) {
             currentGroup = { date: currentDateGroup, lines: [] };
           } else {
@@ -1506,7 +1475,7 @@ export class InvestigateCommand {
           }
         }
       }
-      
+
       // Don't forget the last group
       if (currentGroup && currentGroup.lines.length > 0) {
         observationsInRange.push(currentGroup);
@@ -1520,7 +1489,7 @@ export class InvestigateCommand {
           const isTargetDay = parsedDate && parsedDate.toDateString() === targetDate.toDateString();
           const highlight = isTargetDay ? '\x1b[33m' : '\x1b[0m';
           const reset = '\x1b[0m';
-          
+
           console.log(`\n${highlight}📅 ${group.date}${reset}`);
           for (const line of group.lines) {
             console.log(`   ${highlight}${line}${reset}`);
@@ -1532,23 +1501,23 @@ export class InvestigateCommand {
     // 3. Show original dataset sessions for this date
     console.log(`\n\n3️⃣  Original Dataset Sessions:`);
     console.log(`${'─'.repeat(60)}`);
-    
+
     const loader = new DatasetLoader(this.datasetDir);
     const dataset = await loader.loadDataset('longmemeval_s');
     const question = dataset.find(q => q.question_id === questionId);
-    
+
     if (question?.haystack_sessions && question?.haystack_dates) {
       const sessionsInRange: { idx: number; date: string; turns: any[] }[] = [];
-      
+
       for (let i = 0; i < question.haystack_dates.length; i++) {
         const sessionDateStr = question.haystack_dates[i];
         const sessionDate = this.parseFlexibleDate(sessionDateStr);
-        
+
         if (sessionDate && sessionDate >= startDate && sessionDate <= endDate) {
           sessionsInRange.push({
             idx: i,
             date: sessionDateStr,
-            turns: question.haystack_sessions[i] || []
+            turns: question.haystack_sessions[i] || [],
           });
         }
       }
@@ -1562,12 +1531,14 @@ export class InvestigateCommand {
           const isTargetDay = sessionDate && sessionDate.toDateString() === targetDate.toDateString();
           const highlight = isTargetDay ? '\x1b[33m' : '\x1b[90m';
           const reset = '\x1b[0m';
-          
+
           console.log(`${highlight}━━━ Session ${session.idx}: ${session.date} ━━━${reset}`);
           for (let t = 0; t < session.turns.length; t++) {
             const turn = session.turns[t];
             console.log(`${highlight}[Turn ${t}] ${turn.role}:${reset}`);
-            console.log(`${highlight}${turn.content.substring(0, 300)}${turn.content.length > 300 ? '...' : ''}${reset}\n`);
+            console.log(
+              `${highlight}${turn.content.substring(0, 300)}${turn.content.length > 300 ? '...' : ''}${reset}\n`,
+            );
           }
         }
       }
@@ -1605,7 +1576,7 @@ export class InvestigateCommand {
       const turns = session.length;
       const firstUserTurn = session.find(t => t.role === 'user');
       const preview = firstUserTurn?.content.substring(0, 40) || '';
-      
+
       console.log(`${String(i).padStart(4)} | ${date.padEnd(25)} | ${String(turns).padStart(5)} | ${preview}...`);
     }
 
@@ -1643,7 +1614,7 @@ export class InvestigateCommand {
       const turn = session[t];
       const roleColor = turn.role === 'user' ? '\x1b[36m' : '\x1b[90m';
       const reset = '\x1b[0m';
-      
+
       console.log(`${roleColor}[Turn ${t}] ${turn.role.toUpperCase()}:${reset}`);
       console.log(`${turn.content}\n`);
     }
@@ -1654,26 +1625,29 @@ export class InvestigateCommand {
       const storage = new PersistableInMemoryMemory({ readOnly: true });
       await storage.hydrate(omPath);
       const resourceId = `resource_${questionId}`;
-      
+
       const omRecords = await storage.getObservationalMemoryHistory(null, resourceId);
       const latestRecord = omRecords[0];
       const observations = latestRecord?.activeObservations || '';
-      
+
       if (observations) {
         // Find observations for this date
         const sessionDate = this.parseFlexibleDate(date);
         if (sessionDate) {
-          const dateStr = sessionDate.toLocaleDateString('en-US', { 
-            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+          const dateStr = sessionDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
           });
-          
+
           console.log(`\n${'─'.repeat(60)}`);
           console.log(`\n🔍 Observations extracted for ${dateStr}:\n`);
-          
+
           const lines = observations.split('\n');
           let inTargetDate = false;
           let foundAny = false;
-          
+
           for (const line of lines) {
             const dateMatch = line.match(/^Date:\s*(.+)$/i);
             if (dateMatch) {
@@ -1684,7 +1658,7 @@ export class InvestigateCommand {
               foundAny = true;
             }
           }
-          
+
           if (!foundAny) {
             console.log(`   ⚠️  No observations found for this date`);
           }
@@ -1698,7 +1672,7 @@ export class InvestigateCommand {
    */
   private parseFlexibleDate(dateStr: string): Date | null {
     if (!dateStr) return null;
-    
+
     // Try various formats
     const formats = [
       // "2023/05/29 (Mon) 15:01" - LongMemEval format
@@ -1718,11 +1692,23 @@ export class InvestigateCommand {
     }
 
     // Try "May 29, 2023" format
-    const monthNameMatch = dateStr.match(/(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*)?(\w+)\s+(\d{1,2}),?\s*(\d{4})/i);
+    const monthNameMatch = dateStr.match(
+      /(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*)?(\w+)\s+(\d{1,2}),?\s*(\d{4})/i,
+    );
     if (monthNameMatch) {
       const months: Record<string, number> = {
-        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+        january: 0,
+        february: 1,
+        march: 2,
+        april: 3,
+        may: 4,
+        june: 5,
+        july: 6,
+        august: 7,
+        september: 8,
+        october: 9,
+        november: 10,
+        december: 11,
       };
       const monthNum = months[monthNameMatch[1].toLowerCase()];
       if (monthNum !== undefined) {
@@ -1778,24 +1764,24 @@ export class InvestigateCommand {
     } else {
       // Check all questions in all configs
       const datasets = ['longmemeval_s', 'longmemeval_m'];
-      
+
       for (const dataset of datasets) {
         const datasetDir = join(this.preparedDataDir, dataset);
         if (!existsSync(datasetDir)) continue;
 
         const configs = await readdir(datasetDir).catch(() => []);
-        
+
         for (const config of configs) {
           // Only check OM configs
           if (!config.includes('observational-memory') && !config.startsWith('om-')) continue;
-          
+
           const configDir = join(datasetDir, config);
           const questions = await readdir(configDir).catch(() => []);
-          
+
           for (const qId of questions) {
             const omPath = join(configDir, qId, 'om.json');
             if (!existsSync(omPath)) continue;
-            
+
             const result = await this.checkSingleQuestion(qId, omPath, config, dataset);
             results.push(result);
           }
@@ -1815,7 +1801,7 @@ export class InvestigateCommand {
       }
 
       console.log(`Found ${staleResults.length} stale question(s):\n`);
-      
+
       // Group by config
       const byConfig: Record<string, StaleCheckResult[]> = {};
       for (const r of staleResults) {
@@ -1838,14 +1824,13 @@ export class InvestigateCommand {
       // Output question IDs for re-preparation
       console.log('\n📋 Stale question IDs (for re-preparation):');
       console.log(staleResults.map(r => r.questionId).join('\n'));
-      
     } else {
       // Show summary
       console.log(`📊 Summary:`);
       console.log(`   Total checked: ${results.length}`);
       console.log(`   ✅ Fresh (has per-thread cursors): ${freshResults.length}`);
       console.log(`   ⚠️  Stale (missing cursors): ${staleResults.length}`);
-      
+
       if (staleResults.length > 0) {
         console.log(`\n⚠️  Stale questions may have observation gaps!`);
         console.log(`   Run with --stale-only to list them for re-preparation.`);
@@ -1857,7 +1842,7 @@ export class InvestigateCommand {
     questionId: string,
     omPath: string,
     config: string,
-    dataset: string
+    dataset: string,
   ): Promise<{
     questionId: string;
     config: string;
@@ -1870,36 +1855,36 @@ export class InvestigateCommand {
     try {
       const data = JSON.parse(await readFile(omPath, 'utf-8'));
       const threads = data.threads || [];
-      
+
       let threadCount = 0;
       let threadsWithCursor = 0;
-      
+
       for (const threadPair of threads) {
         // Structure is [threadId, threadObject]
         if (!Array.isArray(threadPair) || threadPair.length < 2) continue;
-        
+
         const threadObj = threadPair[1];
         if (typeof threadObj !== 'object') continue;
-        
+
         threadCount++;
         const metadata = threadObj.metadata || {};
-        
+
         // Check both old location (metadata.lastObservedAt) and new location (metadata.mastra.om.lastObservedAt)
         const hasOldCursor = !!metadata.lastObservedAt;
         const hasNewCursor = !!metadata?.mastra?.om?.lastObservedAt;
-        
+
         if (hasOldCursor || hasNewCursor) {
           threadsWithCursor++;
         }
       }
-      
+
       const isStale = threadCount > 0 && threadsWithCursor === 0;
-      const reason = isStale 
+      const reason = isStale
         ? `0/${threadCount} threads have lastObservedAt`
         : threadsWithCursor < threadCount
           ? `${threadsWithCursor}/${threadCount} threads have lastObservedAt`
           : undefined;
-      
+
       return {
         questionId,
         config,
@@ -1932,17 +1917,17 @@ export class InvestigateCommand {
     questionDir: string;
   }> {
     const datasets = ['longmemeval_s', 'longmemeval_m'];
-    
+
     for (const dataset of datasets) {
       const datasetDir = join(this.preparedDataDir, dataset);
       if (!existsSync(datasetDir)) continue;
 
       const configs = await readdir(datasetDir).catch(() => []);
-      
+
       for (const config of configs) {
         const questionDir = join(datasetDir, config, questionId);
         const omPath = join(questionDir, 'om.json');
-        
+
         if (existsSync(omPath)) {
           return { omPath, config, dataset, questionDir };
         }
@@ -1965,10 +1950,12 @@ export class InvestigateCommand {
     clearImproved?: string | boolean,
   ): Promise<void> {
     if (!clearImproved && !improvedQuestion && !improvedAnswer && !improvementNote && !category) {
-      console.log('❌ At least one of --improve-question, --improve-answer, --improve-note, --category, or --clear-improved is required');
+      console.log(
+        '❌ At least one of --improve-question, --improve-answer, --improve-note, --category, or --clear-improved is required',
+      );
       return;
     }
-    
+
     // Parse clearImproved into specific fields to clear
     const clearFields = new Set<string>();
     if (clearImproved === true || clearImproved === 'all') {
@@ -1990,7 +1977,7 @@ export class InvestigateCommand {
     }
 
     const datasetPath = join(this.datasetDir, 'longmemeval_s.json');
-    
+
     if (!existsSync(datasetPath)) {
       console.log(`❌ Dataset not found: ${datasetPath}`);
       return;
@@ -2008,16 +1995,16 @@ export class InvestigateCommand {
     }
 
     const question = dataset[questionIndex];
-    
+
     // Show current state
     console.log(`\n📝 Updating question: ${questionId}`);
     console.log(`   Type: ${question.question_type}`);
     console.log(`   Question: ${question.question.substring(0, 80)}...`);
     console.log(`   Expected: ${String(question.answer).substring(0, 80)}`);
-    
+
     // Show what's being updated
     console.log('\n📋 Changes:');
-    
+
     // Handle clearing specific fields
     if (clearFields.has('question') && question.improved_question) {
       console.log(`   improved_question: ${question.improved_question} → (cleared)`);
@@ -2035,23 +2022,23 @@ export class InvestigateCommand {
       console.log(`   failure_category: ${question.failure_category} → (cleared)`);
       delete question.failure_category;
     }
-    
+
     // Handle setting new values (can be combined with clearing other fields)
     if (improvedQuestion) {
       console.log(`   improved_question: ${question.improved_question || '(not set)'} → ${improvedQuestion}`);
       question.improved_question = improvedQuestion;
     }
-    
+
     if (improvedAnswer) {
       console.log(`   improved_answer: ${question.improved_answer || '(not set)'} → ${improvedAnswer}`);
       question.improved_answer = improvedAnswer;
     }
-    
+
     if (improvementNote) {
       console.log(`   improvement_note: ${question.improvement_note || '(not set)'} → ${improvementNote}`);
       question.improvement_note = improvementNote;
     }
-    
+
     if (category) {
       console.log(`   failure_category: ${question.failure_category || '(not set)'} → ${category}`);
       question.failure_category = category;
@@ -2059,7 +2046,7 @@ export class InvestigateCommand {
 
     // Save dataset with 4-space indentation
     await writeFile(datasetPath, JSON.stringify(dataset, null, 4));
-    
+
     console.log('\n✅ Dataset updated!');
     console.log('   Run `pnpm run sync-improved-om-qa` to sync to prepared data');
   }
@@ -2122,7 +2109,7 @@ export class InvestigateCommand {
       threadBlocks.push({
         id: match[1],
         content: match[2].trim(),
-        startIndex: match.index
+        startIndex: match.index,
       });
     }
 
@@ -2155,12 +2142,12 @@ export class InvestigateCommand {
 
     for (const [threadId, count] of duplicates.slice(0, 10)) {
       console.log(`   ${threadId}: ${count} occurrences`);
-      
+
       // Show the content of each duplicate to see if they're identical
       const blocks = threadBlocks.filter(b => b.id === threadId);
       const contents = blocks.map(b => b.content);
       const uniqueContents = new Set(contents);
-      
+
       if (uniqueContents.size === 1) {
         console.log(`      └─ ⚠️  All ${count} blocks have IDENTICAL content`);
       } else {
@@ -2176,7 +2163,7 @@ export class InvestigateCommand {
     const avgBlockSize = activeObservations.length / threadBlocks.length;
     const duplicateBlocks = threadBlocks.length - uniqueThreads;
     const estimatedWaste = Math.round(duplicateBlocks * avgBlockSize);
-    
+
     console.log(`\n📉 Estimated token waste from duplicates: ~${estimatedWaste} characters`);
   }
 
@@ -2228,7 +2215,7 @@ export class InvestigateCommand {
     await storage.hydrate(omJsonPath);
 
     const resourceId = `resource_${questionId}`;
-    
+
     // Get threads and check for cursors
     const threadsResult = await storage.listThreadsByResourceId({ resourceId });
     const threads = threadsResult.threads || [];
@@ -2265,14 +2252,14 @@ export class InvestigateCommand {
     if (records && records.length > 0) {
       const latestRecord = records[0];
       const activeObservations = latestRecord.activeObservations || '';
-      
+
       const threadRegex = /<thread id=\"([^\"]+)\">[\s\S]*?<\/thread>/g;
       const threadIds: string[] = [];
       let match;
       while ((match = threadRegex.exec(activeObservations)) !== null) {
         threadIds.push(match[1]);
       }
-      
+
       totalBlocks = threadIds.length;
       uniqueBlocks = new Set(threadIds).size;
       duplicateRatio = totalBlocks > 0 ? totalBlocks / uniqueBlocks : 1.0;
@@ -2310,11 +2297,11 @@ export class InvestigateCommand {
     // 6. Summary
     console.log(`\n${'═'.repeat(60)}`);
     console.log(`📋 SUMMARY`);
-    
+
     const issues: string[] = [];
     if (isStale) issues.push('STALE DATA');
     if (duplicateRatio > 1.5) issues.push('HIGH DUPLICATION');
-    
+
     if (issues.length === 0) {
       console.log(`   ✅ No data quality issues detected`);
     } else {
@@ -2378,7 +2365,7 @@ export class InvestigateCommand {
       if (!omPath) continue;
 
       const result = await this.checkSingleQuestion(questionId, omPath, config, dataset);
-      
+
       // Consider stale if:
       // 1. No threads have cursors (completely stale)
       // 2. Only some threads have cursors (partial)
@@ -2396,7 +2383,9 @@ export class InvestigateCommand {
 
     console.log(`\n📋 Found ${staleQuestionIds.length} stale/partial question(s)\n`);
     console.log('Run this command to re-prepare them:\n');
-    console.log(`pnpm prepare ${prepareConfig} -v full --question-id ${staleQuestionIds.join(',')} --force-regenerate\n`);
+    console.log(
+      `pnpm prepare ${prepareConfig} -v full --question-id ${staleQuestionIds.join(',')} --force-regenerate\n`,
+    );
   }
 
   // Deprecated - use printPrepareCommand instead

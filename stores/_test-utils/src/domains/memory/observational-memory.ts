@@ -293,9 +293,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
 
         // Date comparison - handle both Date objects and ISO strings
         const newLastObserved =
-          newRecord.lastObservedAt instanceof Date
-            ? newRecord.lastObservedAt
-            : new Date(newRecord.lastObservedAt ?? 0);
+          newRecord.lastObservedAt instanceof Date ? newRecord.lastObservedAt : new Date(newRecord.lastObservedAt ?? 0);
         expect(newLastObserved.toISOString()).toBe(observedAt.toISOString());
       });
 
@@ -550,7 +548,9 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         );
 
         // Create thread-scoped record for same resource but different thread
-        await memoryStorage.initializeObservationalMemory(createSampleOMInput({ resourceId, threadId, scope: 'thread' }));
+        await memoryStorage.initializeObservationalMemory(
+          createSampleOMInput({ resourceId, threadId, scope: 'thread' }),
+        );
 
         const resourceRecord = await memoryStorage.getObservationalMemory(null, resourceId);
         const threadRecord = await memoryStorage.getObservationalMemory(threadId, resourceId);

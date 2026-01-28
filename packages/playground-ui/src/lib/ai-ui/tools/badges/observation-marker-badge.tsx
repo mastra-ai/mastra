@@ -52,31 +52,30 @@ const formatTokens = (tokens: number): string => {
  * Renders an inline badge for OM observation markers.
  * These are converted from data-om-* parts to tool-call format for assistant-ui compatibility.
  */
-export const ObservationMarkerBadge = ({ 
-  toolName, 
-  args,
-  metadata,
-}: ObservationMarkerBadgeProps) => {
+export const ObservationMarkerBadge = ({ toolName, args, metadata }: ObservationMarkerBadgeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
   const [isTaskExpanded, setIsTaskExpanded] = useState(false);
   const [isResponseExpanded, setIsResponseExpanded] = useState(false);
   const omData = (metadata?.omData || args) as OmMarkerData;
-  
+
   // Use the _state field set during part merging, or fallback to detecting from data
-  const state = omData._state || (
-    omData.failedAt ? 'failed' : 
-    omData.completedAt ? 'complete' : 
-    (omData as any).disconnectedAt ? 'disconnected' :
-    'loading'
-  );
-  
+  const state =
+    omData._state ||
+    (omData.failedAt
+      ? 'failed'
+      : omData.completedAt
+        ? 'complete'
+        : (omData as any).disconnectedAt
+          ? 'disconnected'
+          : 'loading');
+
   const isStart = state === 'loading';
   const isEnd = state === 'complete';
   const isFailed = state === 'failed';
   const isDisconnected = state === 'disconnected';
   const isReflection = omData.operationType === 'reflection';
-  
+
   // Colors - same scheme for both observation and reflection
   const bgColor = 'bg-blue-500/10';
   const textColor = 'text-blue-600';
@@ -94,10 +93,15 @@ export const ObservationMarkerBadge = ({
   if (isStart) {
     const tokensToObserve = omData.tokensToObserve;
     return (
-      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${bgColor} ${textColor} text-xs font-medium my-1`}>
+      <div
+        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${bgColor} ${textColor} text-xs font-medium my-1`}
+      >
         <Loader2 className="w-3 h-3 animate-spin" />
         <Brain className="w-3 h-3" />
-        <span>{actionLabel}{tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}</span>
+        <span>
+          {actionLabel}
+          {tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}
+        </span>
       </div>
     );
   }
@@ -109,10 +113,11 @@ export const ObservationMarkerBadge = ({
     const currentTask = omData.currentTask;
     const suggestedResponse = omData.suggestedResponse;
     const durationMs = omData.durationMs;
-    const compressionRatio = tokensObserved && observationTokens && observationTokens > 0 
-      ? Math.round(tokensObserved / observationTokens) 
-      : null;
-    
+    const compressionRatio =
+      tokensObserved && observationTokens && observationTokens > 0
+        ? Math.round(tokensObserved / observationTokens)
+        : null;
+
     const handleToggle = (e: React.MouseEvent) => {
       // Prevent scroll jump by preserving scroll position
       const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
@@ -133,50 +138,43 @@ export const ObservationMarkerBadge = ({
           {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           <Brain className="w-3 h-3" />
           <span>
-            {completedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→{observationTokens ? formatTokens(observationTokens) : '?'} tokens
+            {completedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→
+            {observationTokens ? formatTokens(observationTokens) : '?'} tokens
             {compressionRatio ? ` (-${compressionRatio}x)` : ''}
           </span>
         </button>
         {isExpanded && (
-          <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}>
+          <div
+            className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
+          >
             {/* Stats row - all green */}
             <div className={`flex gap-4 text-[11px] ${labelColor}`}>
-              {tokensObserved && (
-                <span>Input: {formatTokens(tokensObserved)}</span>
-              )}
-              {observationTokens && (
-                <span>Output: {formatTokens(observationTokens)}</span>
-              )}
-              {compressionRatio && compressionRatio > 1 && (
-                <span>Compression: {compressionRatio}x</span>
-              )}
-              {durationMs && (
-                <span>Duration: {(durationMs / 1000).toFixed(2)}s</span>
-              )}
+              {tokensObserved && <span>Input: {formatTokens(tokensObserved)}</span>}
+              {observationTokens && <span>Output: {formatTokens(observationTokens)}</span>}
+              {compressionRatio && compressionRatio > 1 && <span>Compression: {compressionRatio}x</span>}
+              {durationMs && <span>Duration: {(durationMs / 1000).toFixed(2)}s</span>}
             </div>
             {observations && (
               <div className={`mt-1 pt-1 border-t ${expandedBorderColor}`}>
                 {/* If there's no currentTask or suggestedResponse, show observations directly without collapsible wrapper */}
                 {!currentTask && !suggestedResponse ? (
-                  <ObservationRenderer 
-                    observations={observations} 
-                    maxHeight="500px"
-                  />
+                  <ObservationRenderer observations={observations} maxHeight="500px" />
                 ) : (
                   <>
                     <button
                       onClick={() => setIsObservationsExpanded(!isObservationsExpanded)}
                       className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
                     >
-                      {isObservationsExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                      {isObservationsExpanded ? (
+                        <ChevronDown className="w-2.5 h-2.5" />
+                      ) : (
+                        <ChevronRight className="w-2.5 h-2.5" />
+                      )}
                       {isReflection ? 'Reflections' : 'Observations'}
                     </button>
                     {isObservationsExpanded && (
                       <div className="mt-1">
-                        <ObservationRenderer 
-                          observations={observations} 
-                          maxHeight="500px"
-                        />
+                        <ObservationRenderer observations={observations} maxHeight="500px" />
                       </div>
                     )}
                   </>
@@ -205,7 +203,11 @@ export const ObservationMarkerBadge = ({
                   onClick={() => setIsResponseExpanded(!isResponseExpanded)}
                   className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
                 >
-                  {isResponseExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                  {isResponseExpanded ? (
+                    <ChevronDown className="w-2.5 h-2.5" />
+                  ) : (
+                    <ChevronRight className="w-2.5 h-2.5" />
+                  )}
                   Suggested Response
                 </button>
                 {isResponseExpanded && (
@@ -227,7 +229,10 @@ export const ObservationMarkerBadge = ({
     return (
       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-medium my-1">
         <Unplug className="w-3 h-3" />
-        <span>{disconnectedLabel}{tokensToObserve ? ` (~${formatTokens(tokensToObserve)} tokens)` : ''}</span>
+        <span>
+          {disconnectedLabel}
+          {tokensToObserve ? ` (~${formatTokens(tokensToObserve)} tokens)` : ''}
+        </span>
       </div>
     );
   }
@@ -245,7 +250,7 @@ export const ObservationMarkerBadge = ({
           <XCircle className="w-3 h-3" />
           <span>{failedLabel}</span>
         </button>
-        
+
         {isExpanded && error && (
           <div className="mt-1 ml-4 p-2 rounded-md bg-red-500/5 text-red-700 text-xs border border-red-500/10">
             <span className="font-medium">Error:</span> {error}

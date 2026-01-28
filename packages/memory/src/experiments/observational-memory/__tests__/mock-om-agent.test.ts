@@ -184,7 +184,12 @@ function createMockObserverModel() {
       const stream = new ReadableStream({
         async start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({ type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer-model', timestamp: new Date() });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'obs-1',
+            modelId: 'mock-observer-model',
+            timestamp: new Date(),
+          });
           controller.enqueue({ type: 'text-start', id: 'text-1' });
           controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
           controller.enqueue({ type: 'text-end', id: 'text-1' });
@@ -242,7 +247,12 @@ function createMockReflectorModel() {
       const stream = new ReadableStream({
         async start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({ type: 'response-metadata', id: 'ref-1', modelId: 'mock-reflector-model', timestamp: new Date() });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'ref-1',
+            modelId: 'mock-reflector-model',
+            timestamp: new Date(),
+          });
           controller.enqueue({ type: 'text-start', id: 'text-1' });
           controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
           controller.enqueue({ type: 'text-end', id: 'text-1' });

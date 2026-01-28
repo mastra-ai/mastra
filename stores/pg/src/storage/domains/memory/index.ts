@@ -71,7 +71,12 @@ export class MemoryPG extends MemoryStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_OBSERVATIONAL_MEMORY] as const;
+  static readonly MANAGED_TABLES = [
+    TABLE_THREADS,
+    TABLE_MESSAGES,
+    TABLE_RESOURCES,
+    TABLE_OBSERVATIONAL_MEMORY,
+  ] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -87,14 +92,20 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    await this.#db.createTable({ tableName: TABLE_OBSERVATIONAL_MEMORY, schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY] });
+    await this.#db.createTable({
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+    });
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
     // Create index on lookupKey for efficient OM queries
-    const omTableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+    const omTableName = getTableName({
+      indexName: TABLE_OBSERVATIONAL_MEMORY,
+      schemaName: getSchemaName(this.#schema),
+    });
     await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -642,7 +653,9 @@ export class MemoryPG extends MemoryStorage {
 
     // Validate that either threadId or resourceId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasThreadId =
+      threadId !== undefined &&
+      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
     const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
     if (!hasThreadId && !hasResourceId) {
@@ -651,7 +664,10 @@ export class MemoryPG extends MemoryStorage {
           id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );
@@ -1389,13 +1405,13 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
-  async getObservationalMemory(
-    threadId: string | null,
-    resourceId: string,
-  ): Promise<ObservationalMemoryRecord | null> {
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const result = await this.#db.client.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT 1`,
         [lookupKey],
@@ -1422,7 +1438,10 @@ export class MemoryPG extends MemoryStorage {
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const result = await this.#db.client.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT $2`,
         [lookupKey, limit],
@@ -1466,7 +1485,10 @@ export class MemoryPG extends MemoryStorage {
         config: input.config,
       };
 
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const nowStr = now.toISOString();
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
@@ -1522,7 +1544,10 @@ export class MemoryPG extends MemoryStorage {
     try {
       const now = new Date();
       const patternsJson = input.patterns ? JSON.stringify(input.patterns) : null;
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
 
       const lastObservedAtStr = input.lastObservedAt.toISOString();
       const nowStr = now.toISOString();
@@ -1602,7 +1627,10 @@ export class MemoryPG extends MemoryStorage {
         metadata: input.currentRecord.metadata,
       };
 
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const nowStr = now.toISOString();
       const lastObservedAtStr = record.lastObservedAt?.toISOString() || null;
       await this.#db.client.none(
@@ -1657,7 +1685,10 @@ export class MemoryPG extends MemoryStorage {
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET "isReflecting" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
@@ -1691,7 +1722,10 @@ export class MemoryPG extends MemoryStorage {
 
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET "isObserving" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
@@ -1726,11 +1760,11 @@ export class MemoryPG extends MemoryStorage {
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(
-        `DELETE FROM ${tableName} WHERE "lookupKey" = $1`,
-        [lookupKey],
-      );
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "lookupKey" = $1`, [lookupKey]);
     } catch (error) {
       throw new MastraError(
         {
@@ -1746,7 +1780,10 @@ export class MemoryPG extends MemoryStorage {
 
   async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_OBSERVATIONAL_MEMORY, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET 

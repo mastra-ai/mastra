@@ -218,11 +218,7 @@ export class MessageHistory implements Processor {
    * This method can be called externally by other processors (e.g., ObservationalMemory)
    * that need to save messages incrementally.
    */
-  async persistMessages(args: {
-    messages: MastraDBMessage[];
-    threadId: string;
-    resourceId?: string;
-  }): Promise<void> {
+  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
     const { messages, threadId, resourceId } = args;
 
     if (messages.length === 0) {

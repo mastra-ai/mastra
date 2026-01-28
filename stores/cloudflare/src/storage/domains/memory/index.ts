@@ -783,7 +783,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     // Validate that either threadId or resourceId is provided
-    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 : threadId.trim().length > 0);
+    const hasThreadId =
+      threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 : threadId.trim().length > 0);
     const hasResourceId = resourceId !== undefined && resourceId.trim().length > 0;
 
     if (!hasThreadId && !hasResourceId) {
@@ -792,7 +793,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );

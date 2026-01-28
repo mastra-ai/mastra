@@ -310,7 +310,9 @@ export class StoreMemoryLance extends MemoryStorage {
       threadId !== undefined &&
       (typeof threadId === 'string'
         ? threadId.trim().length > 0
-        : Array.isArray(threadId) && threadId.length > 0 && threadId.every(id => typeof id === 'string' && id.trim().length > 0));
+        : Array.isArray(threadId) &&
+          threadId.length > 0 &&
+          threadId.every(id => typeof id === 'string' && id.trim().length > 0));
 
     // Either threadId or resourceId must be provided
     if (!hasThreadId && !resourceId) {
@@ -319,7 +321,10 @@ export class StoreMemoryLance extends MemoryStorage {
           id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_PARAMS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            resourceId: resourceId ?? '',
+          },
         },
         new Error('Either threadId or resourceId must be provided'),
       );

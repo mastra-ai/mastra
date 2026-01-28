@@ -210,7 +210,8 @@ export const useMemoryWithOMStatus = ({
 
   // Update isActive state when data changes
   useEffect(() => {
-    const newIsActive = query.data?.observationalMemory?.isObserving || query.data?.observationalMemory?.isReflecting || false;
+    const newIsActive =
+      query.data?.observationalMemory?.isObserving || query.data?.observationalMemory?.isReflecting || false;
     setIsActive(newIsActive);
   }, [query.data?.observationalMemory?.isObserving, query.data?.observationalMemory?.isReflecting]);
 
