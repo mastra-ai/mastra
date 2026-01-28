@@ -10,15 +10,7 @@ export interface TruncateProps extends Omit<TxtProps, 'children'> {
   copy?: boolean;
 }
 
-export function Truncate({
-  children,
-  untilChar,
-  charCount,
-  copy,
-  className,
-  as = 'span',
-  ...txtProps
-}: TruncateProps) {
+export function Truncate({ children, untilChar, charCount, copy, className, as = 'span', ...txtProps }: TruncateProps) {
   const fullText = children;
 
   let truncatedText = fullText;
@@ -53,7 +45,9 @@ export function Truncate({
         </TooltipTrigger>
         <TooltipContent>{fullText}</TooltipContent>
       </Tooltip>
-      {copy && <CopyButton content={fullText} iconSize="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+      {copy && (
+        <CopyButton content={fullText} iconSize="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+      )}
     </Txt>
   );
 }
