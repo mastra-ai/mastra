@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
 import {
-  WORKSPACE_INFO_ROUTE,
+  GET_WORKSPACE_ROUTE,
   WORKSPACE_FS_READ_ROUTE,
   WORKSPACE_FS_WRITE_ROUTE,
   WORKSPACE_FS_LIST_ROUTE,
@@ -119,12 +119,12 @@ function createMockMastra(workspace?: any) {
 
 describe('Workspace Handlers', () => {
   // ===========================================================================
-  // WORKSPACE_INFO_ROUTE
+  // GET_WORKSPACE_ROUTE
   // ===========================================================================
-  describe('WORKSPACE_INFO_ROUTE', () => {
-    it('should return isWorkspaceConfigured: false when no workspace', async () => {
+  describe('GET_WORKSPACE_ROUTE', () => {
+    it('should return isWorkspaceConfigured: false when workspace not found', async () => {
       const mastra = createMockMastra();
-      const result = await WORKSPACE_INFO_ROUTE.handler({ mastra });
+      const result = await GET_WORKSPACE_ROUTE.handler({ mastra, workspaceId: 'nonexistent' });
 
       expect(result).toEqual({ isWorkspaceConfigured: false });
     });
@@ -135,7 +135,7 @@ describe('Workspace Handlers', () => {
       const workspace = createMockWorkspace({ fs, skills, canBM25: true });
       const mastra = createMockMastra(workspace);
 
-      const result = await WORKSPACE_INFO_ROUTE.handler({ mastra });
+      const result = await GET_WORKSPACE_ROUTE.handler({ mastra, workspaceId: 'test-workspace' });
 
       expect(result).toEqual({
         isWorkspaceConfigured: true,

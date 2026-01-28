@@ -236,6 +236,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
 
+  // Workspace route params
+  if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';
+
   // Skills route params
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';
   if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';

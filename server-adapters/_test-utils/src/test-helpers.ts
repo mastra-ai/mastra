@@ -683,8 +683,10 @@ Follow these instructions for the test skill.
   fs.writeFileSync(path.join(testDir, 'nested-file.txt'), 'Nested file content');
 
   // Create the workspace with local filesystem and BM25 search
+  // Use 'test-workspace' as the ID to match test utilities' getDefaultValidPathParams
   const filesystem = new LocalFilesystem({ basePath: tempDir });
   const workspace = new Workspace({
+    id: 'test-workspace',
     filesystem,
     skills: ['/skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
