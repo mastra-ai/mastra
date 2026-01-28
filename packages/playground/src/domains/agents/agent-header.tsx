@@ -6,13 +6,13 @@ import {
   Crumb,
   HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
   AgentIcon,
   AgentCombobox,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   return (
@@ -30,9 +30,10 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       </Breadcrumb>
 
       <HeaderGroup>
-        <DividerIcon />
-
         <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
           Traces
         </Button>
       </HeaderGroup>

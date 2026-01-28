@@ -83,7 +83,7 @@ const paths: LinkComponentProviderProps['paths'] = {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path);
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
