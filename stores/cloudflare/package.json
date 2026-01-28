@@ -1,7 +1,7 @@
 {
   "name": "@mastra/cloudflare",
   "version": "1.0.0",
-  "description": "Cloudflare provider for Mastra - includes db storage capabilities",
+  "description": "Cloudflare provider for Mastra - includes KV and Durable Objects storage",
   "type": "module",
   "files": [
     "dist",
@@ -18,6 +18,26 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./kv": {
+      "import": {
+        "types": "./dist/kv/index.d.ts",
+        "default": "./dist/kv/index.js"
+      },
+      "require": {
+        "types": "./dist/kv/index.d.ts",
+        "default": "./dist/kv/index.cjs"
+      }
+    },
+    "./do": {
+      "import": {
+        "types": "./dist/do/index.d.ts",
+        "default": "./dist/do/index.js"
+      },
+      "require": {
+        "types": "./dist/do/index.d.ts",
+        "default": "./dist/do/index.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -50,6 +70,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
