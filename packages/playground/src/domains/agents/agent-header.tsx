@@ -6,40 +6,34 @@ import {
   Crumb,
   HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
   AgentIcon,
   AgentCombobox,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({ agentId }: { agentId: string }) {
   return (
     <Header>
       <Breadcrumb>
-        <Crumb as={Link} to={`/agents`} isCurrent>
+        <Crumb as={Link} to={`/agents`}>
           <Icon>
             <AgentIcon />
           </Icon>
           Agents
         </Crumb>
+        <Crumb as="span" to="" isCurrent>
+          <AgentCombobox value={agentId} variant="ghost" />
+        </Crumb>
       </Breadcrumb>
 
       <HeaderGroup>
-        <div className="w-48">
-          <AgentCombobox value={agentId} />
-        </div>
-
-        <DividerIcon />
-
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
-
-        <DividerIcon />
-
         <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
           Traces
         </Button>
       </HeaderGroup>

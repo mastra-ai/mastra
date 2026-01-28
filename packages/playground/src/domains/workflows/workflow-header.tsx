@@ -15,6 +15,7 @@ import {
   WorkflowCombobox,
   Badge,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
 export function WorkflowHeader({
   workflowName,
@@ -29,29 +30,29 @@ export function WorkflowHeader({
     <div className="shrink-0">
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/workflows`} isCurrent>
+          <Crumb as={Link} to={`/workflows`}>
             <Icon>
               <WorkflowIcon />
             </Icon>
             Workflows
           </Crumb>
+          <Crumb as="span" to="" isCurrent>
+            <WorkflowCombobox value={workflowId} variant="ghost" />
+          </Crumb>
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-48">
-            <WorkflowCombobox value={workflowId} />
-          </div>
-
           {runId && (
             <>
-              <DividerIcon />
               <Badge variant="default">Run: {runId}</Badge>
+              <DividerIcon />
             </>
           )}
 
-          <DividerIcon />
-
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
+            <Icon>
+              <EyeIcon />
+            </Icon>
             Traces
           </Button>
         </HeaderGroup>

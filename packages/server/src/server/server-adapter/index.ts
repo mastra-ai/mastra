@@ -41,6 +41,24 @@ export interface StreamOptions {
 }
 
 /**
+ * MCP transport options for configuring MCP HTTP and SSE transports.
+ */
+export interface MCPOptions {
+  /**
+   * When true, runs in stateless mode without session management.
+   * Ideal for serverless environments (Cloudflare Workers, Vercel Edge, etc.)
+   * where you can't maintain persistent connections across requests.
+   *
+   * @default false
+   */
+  serverless?: boolean;
+  /**
+   * Custom session ID generator function.
+   */
+  sessionIdGenerator?: () => string;
+}
+
+/**
  * Query parameter values parsed from HTTP requests.
  * Supports both single values and arrays (for repeated query params like ?tag=a&tag=b).
  */
@@ -102,6 +120,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
   protected customApiRoutes?: ApiRoute[];
+  protected mcpOptions?: MCPOptions;
 
   constructor({
     app,
@@ -114,6 +133,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     customRouteAuthConfig,
     streamOptions,
     customApiRoutes,
+    mcpOptions,
   }: {
     app: TApp;
     mastra: Mastra;
@@ -125,6 +145,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
     customApiRoutes?: ApiRoute[];
+    /**
+     * MCP transport options applied to all MCP HTTP and SSE routes.
+     * Individual routes can override these via MCPHttpTransportResult.mcpOptions.
+     */
+    mcpOptions?: MCPOptions;
   }) {
     super({ app, name: 'MastraServer' });
     this.mastra = mastra;
@@ -136,6 +161,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
     this.customApiRoutes = customApiRoutes;
+    this.mcpOptions = mcpOptions;
 
     // Automatically register this adapter with Mastra so getServerApp() works
     mastra.setMastraServer(this);

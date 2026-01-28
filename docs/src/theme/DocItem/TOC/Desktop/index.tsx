@@ -1,16 +1,16 @@
-import { useDoc } from "@docusaurus/plugin-content-docs/client";
-import { ThemeClassNames } from "@docusaurus/theme-common";
-import { type ReactNode } from "react";
+import { useDoc } from '@docusaurus/plugin-content-docs/client'
+import { ThemeClassNames } from '@docusaurus/theme-common'
+import { type ReactNode } from 'react'
 
-import { FeedbackTrigger } from "@site/src/components/feedback-trigger";
-import SubscribeForm from "@site/src/components/subscribe-form";
-import TOC from "@theme/TOC";
+import { FeedbackTrigger } from '@site/src/components/feedback-trigger'
+import SubscribeForm from '@site/src/components/subscribe-form'
+import TOC from '@theme/TOC'
 
 export default function DocItemTOCDesktop(): ReactNode {
-  const { toc, frontMatter } = useDoc();
+  const { toc, frontMatter } = useDoc()
   return (
     <>
-      <div className="flex items-center text-(--mastra-text-secondary) gap-1.5">
+      <div className="flex items-center gap-1.5 text-(--mastra-text-secondary)">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -19,7 +19,7 @@ export default function DocItemTOCDesktop(): ReactNode {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className=" size-4"
+          className="size-4"
         >
           <path d="M15 18H3"></path>
           <path d="M17 6H3"></path>
@@ -34,11 +34,11 @@ export default function DocItemTOCDesktop(): ReactNode {
         maxHeadingLevel={frontMatter.toc_max_heading_level}
         className={ThemeClassNames.docs.docTocDesktop}
       />
-      <div className="mt-4 hidden xl:flex flex-col gap-4">
+      <div className="mt-4 hidden flex-col gap-4 xl:flex">
         <SubscribeForm />
         {/* TODO: Move feedback to side footer */}
         <FeedbackTrigger />
       </div>
     </>
-  );
+  )
 }
