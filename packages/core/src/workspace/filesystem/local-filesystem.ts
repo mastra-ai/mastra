@@ -5,6 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
+import { constants as fsConstants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import {
@@ -202,15 +203,16 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     // When recursive is explicitly false, verify parent directory exists
     if (options?.recursive === false) {
       const dir = nodePath.dirname(absolutePath);
+      const parentPath = nodePath.dirname(inputPath);
       try {
         const stat = await fs.stat(dir);
         if (!stat.isDirectory()) {
-          throw new DirectoryNotFoundError(dir);
+          throw new NotDirectoryError(parentPath);
         }
       } catch (error: unknown) {
-        if (error instanceof DirectoryNotFoundError) throw error;
+        if (error instanceof NotDirectoryError) throw error;
         if (isEnoentError(error)) {
-          throw new DirectoryNotFoundError(dir);
+          throw new DirectoryNotFoundError(parentPath);
         }
         throw error;
       }
@@ -280,16 +282,17 @@ export class LocalFilesystem implements WorkspaceFilesystem {
         }
         await this.copyDirectory(srcPath, destPath, options);
       } else {
-        if (options?.overwrite === false) {
-          try {
-            await fs.access(destPath);
-            throw new FileExistsError(dest);
-          } catch (error: unknown) {
-            if (error instanceof FileExistsError) throw error;
-          }
-        }
         await fs.mkdir(nodePath.dirname(destPath), { recursive: true });
-        await fs.copyFile(srcPath, destPath);
+        // Use COPYFILE_EXCL for atomic overwrite check (avoids TOCTOU race)
+        const copyFlags = options?.overwrite === false ? fsConstants.COPYFILE_EXCL : 0;
+        try {
+          await fs.copyFile(srcPath, destPath, copyFlags);
+        } catch (error: unknown) {
+          if (options?.overwrite === false && isEexistError(error)) {
+            throw new FileExistsError(dest);
+          }
+          throw error;
+        }
       }
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError || error instanceof FileExistsError) throw error;

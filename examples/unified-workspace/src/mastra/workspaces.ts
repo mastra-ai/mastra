@@ -323,4 +323,5 @@ export const skillsOnlyWorkspace = new Workspace({
   skills: [join(PROJECT_ROOT, 'skills'), join(PROJECT_ROOT, 'docs-skills')],
   // Note: BM25/vector search not available without filesystem
   // Skills are still searchable via workspace.skills.search() using simple text matching
+  autoInit: true,
 });

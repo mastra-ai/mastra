@@ -425,26 +425,6 @@ describe('Workspace Resource', () => {
     });
   });
 
-  describe('unindex()', () => {
-    it('should unindex content', async () => {
-      const mockResponse = {
-        success: true,
-        path: '/doc.txt',
-      };
-      mockFetchResponse(mockResponse);
-
-      const result = await workspace.unindex('/doc.txt');
-
-      expect(result).toEqual(mockResponse);
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/unindex?path=%2Fdoc.txt`,
-        expect.objectContaining({
-          method: 'DELETE',
-        }),
-      );
-    });
-  });
-
   // ===========================================================================
   // Skills Operations
   // ===========================================================================
@@ -575,7 +555,7 @@ describe('WorkspaceSkillResource', () => {
         description: 'My skill description',
         instructions: 'Do the thing...',
         path: '/skills/my-skill',
-        source: { type: 'local', path: '/skills/my-skill' },
+        source: { type: 'local', projectPath: '/skills/my-skill' },
         references: ['api.md', 'guide.md'],
         scripts: [],
         assets: [],

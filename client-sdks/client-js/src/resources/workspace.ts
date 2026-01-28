@@ -11,7 +11,6 @@ import type {
   WorkspaceSearchResponse,
   WorkspaceIndexParams,
   WorkspaceIndexResponse,
-  WorkspaceUnindexResponse,
   ListSkillsResponse,
   Skill,
   SearchSkillsParams,
@@ -103,6 +102,9 @@ export class Workspace extends BaseResource {
    * @returns Promise containing workspace info
    */
   info(): Promise<WorkspaceInfoResponse> {
+    if (this.workspaceId) {
+      return this.request(`/workspace?workspaceId=${encodeURIComponent(this.workspaceId)}`);
+    }
     return this.request('/workspace');
   }
 
@@ -233,8 +235,10 @@ export class Workspace extends BaseResource {
     if (params.minScore !== undefined) {
       searchParams.set('minScore', String(params.minScore));
     }
-    if (params.workspaceId) {
-      searchParams.set('workspaceId', params.workspaceId);
+    // Use workspace's workspaceId if not explicitly provided in params
+    const workspaceIdToUse = params.workspaceId ?? this.workspaceId;
+    if (workspaceIdToUse) {
+      searchParams.set('workspaceId', workspaceIdToUse);
     }
     return this.request(`/workspace/search?${searchParams.toString()}`);
   }
@@ -247,20 +251,7 @@ export class Workspace extends BaseResource {
   index(params: WorkspaceIndexParams): Promise<WorkspaceIndexResponse> {
     return this.request('/workspace/index', {
       method: 'POST',
-      body: params,
-    });
-  }
-
-  /**
-   * Removes content from the search index
-   * @param path - Path to unindex
-   * @returns Promise containing success status
-   */
-  unindex(path: string): Promise<WorkspaceUnindexResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.set('path', path);
-    return this.request(`/workspace/unindex?${searchParams.toString()}`, {
-      method: 'DELETE',
+      body: { ...params, workspaceId: this.workspaceId },
     });
   }
 

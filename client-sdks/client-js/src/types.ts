@@ -967,14 +967,6 @@ export interface WorkspaceIndexResponse {
   path: string;
 }
 
-/**
- * Response for unindexing content
- */
-export interface WorkspaceUnindexResponse {
-  success: boolean;
-  path: string;
-}
-
 // ============================================================================
 // Skills Types
 // ============================================================================
