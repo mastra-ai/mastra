@@ -5,6 +5,144 @@ import { MastraClient } from './client';
 global.fetch = vi.fn();
 
 describe('MastraClient', () => {
+  describe('Route Prefix Configuration', () => {
+    const mockFetchResponse = () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: {
+          get: () => 'application/json',
+        },
+        json: async () => ({}),
+      });
+    };
+
+    it('should use custom apiPrefix when provided', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: '/mastra', // Custom prefix instead of default /api
+      });
+
+      await client.listAgents();
+
+      // Should call /mastra/agents, NOT /api/agents
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
+    });
+
+    it('should default to /api apiPrefix for backward compatibility', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        // No apiPrefix specified - should default to /api
+      });
+
+      await client.listAgents();
+
+      // Should default to /api/agents
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/agents', expect.any(Object));
+    });
+
+    it('should use custom apiPrefix for all API endpoints', async () => {
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: '/v2',
+      });
+
+      // Test listTools
+      mockFetchResponse();
+      await client.listTools();
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/tools', expect.any(Object));
+
+      // Test listWorkflows
+      mockFetchResponse();
+      await client.listWorkflows();
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/workflows', expect.any(Object));
+
+      // Test listProcessors
+      mockFetchResponse();
+      await client.listProcessors();
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/processors', expect.any(Object));
+
+      // Test listScorers
+      mockFetchResponse();
+      await client.listScorers();
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/scores/scorers', expect.any(Object));
+
+      // Test getMcpServers
+      mockFetchResponse();
+      await client.getMcpServers();
+      expect(global.fetch).toHaveBeenLastCalledWith('http://localhost:3000/v2/mcp/v0/servers', expect.any(Object));
+    });
+
+    it('should handle apiPrefix with trailing slash correctly', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: '/mastra/', // Trailing slash should be normalized
+      });
+
+      await client.listAgents();
+
+      // Should normalize and call /mastra/agents (not /mastra//agents)
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
+    });
+
+    it('should handle apiPrefix without leading slash', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: 'mastra', // No leading slash should be normalized
+      });
+
+      await client.listAgents();
+
+      // Should normalize and call /mastra/agents
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
+    });
+
+    it('should handle empty string apiPrefix', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000',
+        apiPrefix: '', // Empty string should result in no prefix
+      });
+
+      await client.listAgents();
+
+      // Should call /agents directly with no prefix
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/agents', expect.any(Object));
+    });
+
+    it('should handle baseUrl with trailing slash combined with apiPrefix', async () => {
+      mockFetchResponse();
+
+      const client = new MastraClient({
+        baseUrl: 'http://localhost:3000/', // Trailing slash
+        apiPrefix: '/mastra',
+      });
+
+      await client.listAgents();
+
+      // Should not create double slash
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/mastra/agents', expect.any(Object));
+    });
+
+    it('should throw error for path traversal in apiPrefix', async () => {
+      expect(
+        () =>
+          new MastraClient({
+            baseUrl: 'http://localhost:3000',
+            apiPrefix: '../mastra', // Path traversal should be disallowed
+          }),
+      ).toThrow(/cannot contain/);
+    });
+  });
+
   let client: MastraClient;
   const clientOptions = {
     baseUrl: 'http://localhost:4111',
@@ -80,7 +218,7 @@ describe('MastraClient', () => {
       expect(result).toEqual({ success: true });
       expect(global.fetch).toHaveBeenCalledTimes(3);
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/test',
+        'http://localhost:4111/api/test',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Custom-Header': 'value',
@@ -97,7 +235,7 @@ describe('MastraClient', () => {
       expect(result2).toEqual({ success: true });
       expect(global.fetch).toHaveBeenCalledTimes(4);
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/test',
+        'http://localhost:4111/api/test',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Custom-Header': 'new-value',
