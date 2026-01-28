@@ -149,17 +149,19 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 }
 
 /**
- * Ensures that server.studioBase is normalized.
- *
- * - If server.studioBase is '/' or empty, returns empty string
- * - Normalizes multiple slashes to single slash (e.g., '//' → '/')
- * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * Ensures that server.studioBase is normalized:
  * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Normalizes multiple slashes to single slash (e.g., '//api' → '/api')
+ * - Returns empty string for root paths ('/' or '')
  *
  * @param studioBase - The studioBase path to normalize
  * @returns Normalized studioBase path string
+ * @throws Error if path contains invalid characters ('..', '?', '#')
  */
 export function normalizeStudioBase(studioBase: string): string {
+  studioBase = studioBase.trim();
+
   // Validate: no path traversal, no query params, no special chars
   if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
     throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);
