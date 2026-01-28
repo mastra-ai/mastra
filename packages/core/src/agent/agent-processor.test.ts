@@ -209,20 +209,13 @@ describe('Input and Output Processors', () => {
         inputProcessors: [abortProcessor],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithAbortProcessor.generate('This should be aborted', {
-          format,
-        });
+      const result = await agentWithAbortProcessor.generate('This should be aborted');
 
-        expect(result.tripwire).toBeDefined();
+      expect(result.tripwire).toBeDefined();
 
-        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
+      expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
 
-        expect(await result.finishReason).toBe('other');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.finishReason).toBe('other');
     });
 
     it('should handle processor abort with custom message', async () => {
@@ -243,17 +236,10 @@ describe('Input and Output Processors', () => {
         inputProcessors: [customAbortProcessor],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithCustomAbort.generate('Custom abort test', {
-          format,
-        });
+      const result = await agentWithCustomAbort.generate('Custom abort test');
 
-        expect(result.tripwire).toBeDefined();
-        expect(result.tripwire?.reason).toBe('Custom abort reason');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Custom abort reason');
     });
 
     it('should not execute subsequent processors after abort', async () => {
@@ -607,20 +593,13 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Hello', {
-          format,
-        });
+      const result = await agent.generate('Hello');
 
-        // The output processors should modify the returned result
-        expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
+      // The output processors should modify the returned result
+      expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
 
-        // And the processor should have been called and processed the text
-        expect(processedText).toBe('This is a TEST response with TEST words');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // And the processor should have been called and processed the text
+      expect(processedText).toBe('This is a TEST response with TEST words');
     });
 
     it('should return processed text in result.text property', async () => {
@@ -755,20 +734,13 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Test', {
-          format,
-        });
+      const result = await agent.generate('Test');
 
-        // The output processors should modify the returned result
-        expect((result.response.messages?.[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
+      // The output processors should modify the returned result
+      expect((result.response.messages?.[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
 
-        // And both processors should have been called in sequence
-        expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // And both processors should have been called in sequence
+      expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
     });
 
     it('should handle abort in output processors', async () => {
@@ -821,19 +793,12 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new AbortingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        // Should return tripwire result when processor aborts
-        const result = await agent.generate('Generate inappropriate content', {
-          format,
-        });
+      // Should return tripwire result when processor aborts
+      const result = await agent.generate('Generate inappropriate content');
 
-        expect(result.tripwire).toBeDefined();
-        expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
-        expect(result.finishReason).toBe('other');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
+      expect(result.finishReason).toBe('other');
     });
 
     it('should skip processors that do not implement processOutputResult', async () => {
@@ -891,17 +856,10 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new IncompleteProcessor() as any, new CompleteProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Test incomplete processors', {
-          format,
-        });
+      const result = await agent.generate('Test incomplete processors');
 
-        // Only the complete processor should have run
-        expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Only the complete processor should have run
+      expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
     });
   });
 
@@ -940,29 +898,18 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
+      const stream = await agent.stream('Hello');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        expect(collectedText).toBe(
-          'processed: You are a helpful assistant. Respond with exactly: "This is a TEST response" Hello',
-        );
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(collectedText).toBe(
+        'processed: You are a helpful assistant. Respond with exactly: "This is a TEST response" Hello',
+      );
     });
 
     it('should filter blocked content chunks', async () => {
@@ -987,28 +934,17 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new BlockingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
+      const stream = await agent.stream('Hello');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        // The blocked content should be filtered out completely (not appear in stream)
-        expect(collectedText).toBe('processed: ');
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // The blocked content should be filtered out completely (not appear in stream)
+      expect(collectedText).toBe('processed: ');
     });
 
     it('should emit tripwire when output processor calls abort', async () => {
@@ -1033,44 +969,28 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new AbortingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
-        const chunks: any[] = [];
+      const stream = await agent.stream('Hello');
+      const chunks: any[] = [];
 
-        for await (const chunk of stream.fullStream) {
-          chunks.push(chunk);
-        }
-
-        // Should have received a tripwire chunk
-        const tripwireChunk = chunks.find(chunk => chunk.type === 'tripwire');
-        expect(tripwireChunk).toBeDefined();
-
-        if (format === 'aisdk') {
-          expect(tripwireChunk.payload?.reason).toBe('Content triggered abort');
-        } else {
-          expect(tripwireChunk.payload.reason).toBe('Content triggered abort');
-        }
-
-        // Should not have received the text after the abort trigger
-        let collectedText = '';
-        chunks.forEach(chunk => {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
-        });
-        // The abort happens when "test" is encountered, which is in the first chunk
-        // So we might not get any text before the abort
-        expect(collectedText).not.toContain('test');
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Should have received a tripwire chunk
+      const tripwireChunk = chunks.find(chunk => chunk.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Content triggered abort');
+
+      // Should not have received the text after the abort trigger
+      let collectedText = '';
+      chunks.forEach(chunk => {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      });
+      // The abort happens when "test" is encountered, which is in the first chunk
+      // So we might not get any text before the abort
+      expect(collectedText).not.toContain('test');
     });
 
     it('should process chunks through multiple output processors in sequence', async () => {
@@ -1119,28 +1039,17 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Test', {
-          format,
-        });
+      const stream = await agent.stream('Test');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        // Should be processed by both processors: replace "test" -> "TEST", then add prefix
-        expect(collectedText).toBe('[PROCESSED] SUH DUDE[PROCESSED] SUH DUDE');
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Should be processed by both processors: replace "test" -> "TEST", then add prefix
+      expect(collectedText).toBe('[PROCESSED] SUH DUDE[PROCESSED] SUH DUDE');
     });
   });
 
@@ -1236,49 +1145,39 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new StreamStructuredProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const response = await agent.stream('Who won the 2012 US presidential election?', {
-          structuredOutput: {
-            schema: z.object({
-              winner: z.string(),
-              year: z.string(),
-            }),
-          },
-          format,
-        });
+      const response = await agent.stream('Who won the 2012 US presidential election?', {
+        structuredOutput: {
+          schema: z.object({
+            winner: z.string(),
+            year: z.string(),
+          }),
+        },
+      });
 
-        // Consume the stream
-        let streamedContent = '';
-        for await (const chunk of response.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              streamedContent += chunk.text;
-            } else {
-              streamedContent += chunk.payload.text;
-            }
-          }
+      // Consume the stream
+      let streamedContent = '';
+      for await (const chunk of response.fullStream) {
+        if (chunk.type === 'text-delta') {
+          streamedContent += chunk.payload.text;
         }
-
-        // Wait for the stream to finish
-        await response.getFullOutput();
-
-        // Check that streaming chunks were processed
-        expect(processedChunks.length).toBeGreaterThan(0);
-        expect(processedChunks.join('')).toContain('Barack');
-
-        // Check that streaming content was modified
-        expect(streamedContent).toContain('OBAMA');
-
-        // Check that final object processing occurred
-        expect(finalProcessedObject).toEqual({
-          winner: 'Barack OBAMA',
-          year: '2012',
-          stream_processed: true,
-        });
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Wait for the stream to finish
+      await response.getFullOutput();
+
+      // Check that streaming chunks were processed
+      expect(processedChunks.length).toBeGreaterThan(0);
+      expect(processedChunks.join('')).toContain('Barack');
+
+      // Check that streaming content was modified
+      expect(streamedContent).toContain('OBAMA');
+
+      // Check that final object processing occurred
+      expect(finalProcessedObject).toEqual({
+        winner: 'Barack OBAMA',
+        year: '2012',
+        stream_processed: true,
+      });
     }, 20_000);
   });
 
@@ -1325,19 +1224,12 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const result = await agent.generate('Hello', {
-            format,
-          });
+        const result = await agent.generate('Hello');
 
-          expect(result.tripwire).toBeDefined();
-          expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
 
-          expect(await result.finishReason).toBe('other');
-        }
-
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        expect(result.finishReason).toBe('other');
       });
     });
 
@@ -1363,28 +1255,17 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.stream('Hello', {
-            format,
-          });
-          const chunks: any[] = [];
+        const stream = await agent.stream('Hello');
+        const chunks: any[] = [];
 
-          for await (const chunk of stream.fullStream) {
-            chunks.push(chunk);
-          }
-
-          // Should receive tripwire chunk
-          const tripwireChunk = chunks.find(c => c.type === 'tripwire');
-          expect(tripwireChunk).toBeDefined();
-          if (format === 'aisdk') {
-            expect(tripwireChunk.payload?.reason).toBe('Tripwire triggered by abort-stream-output-processor');
-          } else {
-            expect(tripwireChunk.payload.reason).toBe('Tripwire triggered by abort-stream-output-processor');
-          }
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
         }
 
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        // Should receive tripwire chunk
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.reason).toBe('Tripwire triggered by abort-stream-output-processor');
       });
 
       it('should handle processor abort with custom message', async () => {
@@ -1407,32 +1288,21 @@ describe('Input and Output Processors', () => {
           outputProcessors: [customAbortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.stream('Custom abort test', {
-            format,
-          });
-          const chunks: any[] = [];
+        const stream = await agent.stream('Custom abort test');
+        const chunks: any[] = [];
 
-          for await (const chunk of stream.fullStream) {
-            chunks.push(chunk);
-          }
-
-          const tripwireChunk = chunks.find(c => c.type === 'tripwire');
-          expect(tripwireChunk).toBeDefined();
-          if (format === 'aisdk') {
-            expect(tripwireChunk.payload?.reason).toBe('Custom stream output abort reason');
-          } else {
-            expect(tripwireChunk.payload.reason).toBe('Custom stream output abort reason');
-          }
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
         }
 
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.reason).toBe('Custom stream output abort reason');
       });
     });
   });
 
-  function testStructuredOutput(format: 'aisdk' | 'mastra', model: LanguageModelV2) {
+  function testStructuredOutput(model: LanguageModelV2) {
     describe('StructuredOutputProcessor Integration Tests', () => {
       describe('with real LLM', () => {
         it('should convert unstructured text to structured JSON for color analysis', async () => {
@@ -1465,7 +1335,6 @@ describe('Input and Output Processors', () => {
                 model, // Use smaller model for faster tests
                 errorStrategy: 'strict',
               },
-              format,
             },
           );
 
@@ -1534,7 +1403,6 @@ describe('Input and Output Processors', () => {
               model,
               errorStrategy: 'strict',
             },
-            format,
           });
 
           // Verify we have both natural text AND structured data
@@ -1605,7 +1473,6 @@ describe('Input and Output Processors', () => {
               errorStrategy: 'fallback',
               fallbackValue,
             },
-            format,
           });
 
           // Should preserve natural text but return fallback object
@@ -1640,7 +1507,6 @@ describe('Input and Output Processors', () => {
                 model,
                 errorStrategy: 'strict',
               },
-              format,
             },
           );
 
@@ -1689,7 +1555,6 @@ describe('Input and Output Processors', () => {
               Make sure to include an idea, category, feasibility, and resources.
             `,
           {
-            format,
             structuredOutput: {
               schema: ideaSchema,
               model,
@@ -1738,7 +1603,6 @@ describe('Input and Output Processors', () => {
               Make sure to include an idea, category, feasibility, and resources.
             `,
           {
-            format,
             structuredOutput: {
               schema: ideaSchema,
               model,
@@ -1769,8 +1633,7 @@ describe('Input and Output Processors', () => {
     });
   }
 
-  // testStructuredOutput('aisdk', openai_v5('gpt-4o'));
-  testStructuredOutput('mastra', openai_v5('gpt-4o'));
+  testStructuredOutput(openai_v5('gpt-4o'));
 });
 
 describe('New Processor Features', () => {

@@ -6,7 +6,7 @@ import { Link2 } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from 'sonner';
-import { InputField } from '@/components/ui/elements/form-fields/input-field';
+import { InputField } from '@/ds/components/FormFields';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
@@ -25,6 +25,8 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
 
     const formData = new FormData(e.target as HTMLFormElement);
     const url = formData.get('url') as string;
+    const rawApiPrefix = ((formData.get('apiPrefix') as string) ?? '').trim();
+    const apiPrefix = rawApiPrefix.length ? rawApiPrefix : undefined;
 
     const formHeaders: Record<string, string> = {};
     for (let i = 0; i < headers.length; i++) {
@@ -33,7 +35,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
       formHeaders[headerName] = headerValue;
     }
 
-    setConfig({ headers: formHeaders, baseUrl: url });
+    setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
     toast.success('Configuration saved');
   };
 
@@ -53,6 +55,13 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
         placeholder="e.g: http://localhost:4111"
         required
         defaultValue={initialConfig?.baseUrl}
+      />
+
+      <InputField
+        name="apiPrefix"
+        label="API prefix"
+        placeholder="e.g: /api (default)"
+        defaultValue={initialConfig?.apiPrefix || ''}
       />
 
       <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />

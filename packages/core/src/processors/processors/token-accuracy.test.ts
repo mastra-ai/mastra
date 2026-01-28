@@ -33,11 +33,12 @@ describe('TokenLimiterProcessor', () => {
     expect(result[1].id).toBe('message-9');
   });
 
-  it('should handle empty messages array', async () => {
+  it('should throw TripWire for empty messages array', async () => {
     const limiter = new TokenLimiterProcessor(1000);
     const mockAbort = vi.fn() as any;
-    const result = await limiter.processInput({ messages: [], abort: mockAbort });
-    expect(result).toEqual([]);
+    await expect(limiter.processInput({ messages: [], abort: mockAbort })).rejects.toThrow(
+      'TokenLimiterProcessor: No messages to process',
+    );
   });
 
   it('should use different encodings based on configuration', async () => {

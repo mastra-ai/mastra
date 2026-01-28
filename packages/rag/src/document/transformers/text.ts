@@ -8,7 +8,7 @@ export abstract class TextTransformer implements Transformer {
   protected maxSize: number;
   protected overlap: number;
   protected lengthFunction: (text: string) => number;
-  protected keepSeparator: boolean | 'start' | 'end';
+  protected separatorPosition?: 'start' | 'end';
   protected addStartIndex: boolean;
   protected stripWhitespace: boolean;
 
@@ -16,7 +16,7 @@ export abstract class TextTransformer implements Transformer {
     maxSize = 4000,
     overlap = 200,
     lengthFunction = (text: string) => text.length,
-    keepSeparator = false,
+    separatorPosition,
     addStartIndex = false,
     stripWhitespace = true,
   }: BaseChunkOptions) {
@@ -26,7 +26,7 @@ export abstract class TextTransformer implements Transformer {
     this.maxSize = maxSize;
     this.overlap = overlap;
     this.lengthFunction = lengthFunction;
-    this.keepSeparator = keepSeparator;
+    this.separatorPosition = separatorPosition;
     this.addStartIndex = addStartIndex;
     this.stripWhitespace = stripWhitespace;
   }

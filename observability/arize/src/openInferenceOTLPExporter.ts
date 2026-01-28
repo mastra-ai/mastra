@@ -26,6 +26,8 @@ import {
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
+  ATTR_GEN_AI_TOOL_CALL_ARGUMENTS,
+  ATTR_GEN_AI_TOOL_CALL_RESULT,
 } from '@opentelemetry/semantic-conventions/incubating';
 
 // GenAI usage attribute keys (not all are in @opentelemetry/semantic-conventions yet)
@@ -37,6 +39,9 @@ const GEN_AI_USAGE_AUDIO_OUTPUT_TOKENS = 'gen_ai.usage.audio_output_tokens';
 
 const MASTRA_GENERAL_PREFIX = 'mastra.';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
+const MASTRA_MODEL_STEP_INPUT = 'mastra.model_step.input';
+const MASTRA_MODEL_STEP_OUTPUT = 'mastra.model_step.output';
+const MASTRA_MODEL_CHUNK_OUTPUT = 'mastra.model_chunk.output';
 
 /**
  * Converts GenAI usage metrics to OpenInference LLM token count attributes.
@@ -163,15 +168,44 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
           }
         }
 
-        const inputMessages = attributes[ATTR_GEN_AI_INPUT_MESSAGES];
+        const inputMessages =
+          attributes[ATTR_GEN_AI_INPUT_MESSAGES] ??
+          attributes[ATTR_GEN_AI_TOOL_CALL_ARGUMENTS] ??
+          mastraOther[MASTRA_MODEL_STEP_INPUT];
         if (inputMessages) {
           processedAttributes[INPUT_MIME_TYPE] = 'application/json';
           processedAttributes[INPUT_VALUE] = inputMessages;
         }
-        const outputMessages = attributes[ATTR_GEN_AI_OUTPUT_MESSAGES];
+        const outputMessages =
+          attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] ??
+          attributes[ATTR_GEN_AI_TOOL_CALL_RESULT] ??
+          mastraOther[MASTRA_MODEL_STEP_OUTPUT] ??
+          mastraOther[MASTRA_MODEL_CHUNK_OUTPUT];
         if (outputMessages) {
           processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
           processedAttributes[OUTPUT_VALUE] = outputMessages;
+        }
+
+        // Map generic Mastra span input/output to OpenInference input/output
+        // These are set by Mastra's gen-ai-semantics.ts for non-LLM/tool spans
+        // (e.g., mastra.processor_run.input, mastra.workflow_run.input, etc.)
+        if (!processedAttributes[INPUT_VALUE]) {
+          for (const key of Object.keys(mastraOther)) {
+            if (key.endsWith('.input')) {
+              processedAttributes[INPUT_MIME_TYPE] = 'application/json';
+              processedAttributes[INPUT_VALUE] = mastraOther[key];
+              break;
+            }
+          }
+        }
+        if (!processedAttributes[OUTPUT_VALUE]) {
+          for (const key of Object.keys(mastraOther)) {
+            if (key.endsWith('.output')) {
+              processedAttributes[OUTPUT_MIME_TYPE] = 'application/json';
+              processedAttributes[OUTPUT_VALUE] = mastraOther[key];
+              break;
+            }
+          }
         }
 
         // Convert GenAI usage metrics to OpenInference token count attributes

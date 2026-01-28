@@ -146,9 +146,10 @@ export class DatadogExporter extends BaseExporter {
     super(config);
 
     // Resolve configuration from config object and environment variables
-    const mlApp = config.mlApp || process.env.DD_LLMOBS_ML_APP;
-    const apiKey = config.apiKey || process.env.DD_API_KEY;
-    const site = config.site || process.env.DD_SITE || 'datadoghq.com';
+    const mlApp = config.mlApp ?? process.env.DD_LLMOBS_ML_APP;
+    const apiKey = config.apiKey ?? process.env.DD_API_KEY;
+    const site = config.site ?? process.env.DD_SITE ?? 'datadoghq.com';
+    const env = config.env ?? process.env.DD_ENV;
 
     // Default to agentless mode (true) for consistency with other Mastra exporters
     // Only disable if explicitly set to false via config or env var
@@ -157,18 +158,20 @@ export class DatadogExporter extends BaseExporter {
 
     // Validate required configuration
     if (!mlApp) {
-      this.setDisabled('Missing required mlApp (set config.mlApp or DD_LLMOBS_ML_APP)');
+      this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
       this.config = config as any;
       return;
     }
 
     if (agentless && !apiKey) {
-      this.setDisabled('Missing required apiKey (set config.apiKey or DD_API_KEY)');
+      this.setDisabled(
+        `Missing required apiKey for agentless mode. Set DD_API_KEY environment variable or pass apiKey in config.`,
+      );
       this.config = config as any;
       return;
     }
 
-    this.config = { ...config, mlApp, site, apiKey, agentless };
+    this.config = { ...config, mlApp, site, apiKey, agentless, env };
 
     // Initialize tracer and enable LLM Observability
     ensureTracer({
@@ -177,7 +180,7 @@ export class DatadogExporter extends BaseExporter {
       apiKey,
       agentless,
       service: config.service,
-      env: config.env,
+      env,
       integrationsEnabled: config.integrationsEnabled,
     });
 
@@ -322,6 +325,32 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure spans
+   * are exported before the runtime instance is terminated.
+   */
+  async flush(): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs) return;
+
+    // Flush any pending data to Datadog
+    if (tracer.llmobs?.flush) {
+      try {
+        await tracer.llmobs.flush();
+        this.logger.debug('Datadog llmobs flushed');
+      } catch (e) {
+        this.logger.error('Error flushing llmobs', { error: e });
+      }
+    } else if ((tracer as any).flush) {
+      try {
+        await (tracer as any).flush();
+        this.logger.debug('Datadog tracer flushed');
+      } catch (e) {
+        this.logger.error('Error flushing tracer', { error: e });
+      }
+    }
+  }
+
+  /**
    * Gracefully shuts down the exporter.
    */
   async shutdown(): Promise<void> {
@@ -344,19 +373,7 @@ export class DatadogExporter extends BaseExporter {
     this.traceState.clear();
 
     // Flush any pending data
-    if (tracer.llmobs?.flush) {
-      try {
-        await tracer.llmobs.flush();
-      } catch (e) {
-        this.logger.error('Error flushing llmobs', { error: e });
-      }
-    } else if ((tracer as any).flush) {
-      try {
-        await (tracer as any).flush();
-      } catch (e) {
-        this.logger.error('Error flushing tracer', { error: e });
-      }
-    }
+    await this.flush();
 
     // Disable LLM Observability
     if (tracer.llmobs?.disable) {

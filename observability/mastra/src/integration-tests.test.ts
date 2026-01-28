@@ -16,7 +16,7 @@ import type {
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
+import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -1129,8 +1129,11 @@ describe('Tracing Integration Tests', () => {
         });
 
         const resourceId = 'test-resource-id';
+        const threadId = 'test-thread-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
+        const result = await method(agent, 'Calculate 5 + 3', {
+          memory: { thread: threadId, resource: resourceId },
+        });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
@@ -1311,88 +1314,6 @@ describe('Tracing Integration Tests', () => {
     },
   );
 
-  describe.each(agentMethods)(
-    'should trace agent with multiple tools using aisdk output format using $name',
-    ({ name, method, model }) => {
-      it(`should trace spans correctly`, async () => {
-        const testAgent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'You are a test agent',
-          model,
-          tools: {
-            calculator: calculatorTool,
-            apiCall: apiTool,
-            workflowExecutor: workflowExecutorTool,
-          },
-        });
-
-        const mastra = new Mastra({
-          ...getBaseMastraConfig(testExporter),
-          agents: { testAgent },
-        });
-
-        const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3', { format: 'aisdk' });
-        expect(result.text).toBeDefined();
-        expect(result.traceId).toBeDefined();
-
-        const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
-        const llmStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
-        const toolCallSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
-        const workflowSpans = testExporter.getSpansByType(SpanType.WORKFLOW_RUN);
-        const workflowSteps = testExporter.getSpansByType(SpanType.WORKFLOW_STEP);
-
-        expect(agentRunSpans.length).toBe(1); // one agent run
-        expect(llmGenerationSpans.length).toBe(1); // tool call
-        expect(toolCallSpans.length).toBe(1); // one tool call (calculator)
-        expect(workflowSpans.length).toBe(0); // no workflows
-        expect(workflowSteps.length).toBe(0); // no workflows
-
-        const agentRunSpan = agentRunSpans[0];
-        const llmGenerationSpan = llmGenerationSpans[0];
-        const toolCallSpan = toolCallSpans[0];
-
-        expect(agentRunSpan?.traceId).toBe(result.traceId);
-
-        // verify span nesting
-        expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        if (name.includes('Legacy')) {
-          expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        } else {
-          const llmStepSpan = llmStepSpans[0];
-          expect(llmStepSpan).toBeDefined();
-          expect(toolCallSpan?.parentSpanId).toEqual(llmStepSpan?.id);
-        }
-
-        expect(llmGenerationSpan?.name).toBe("llm: 'mock-model-id'");
-        expect(llmGenerationSpan?.input.messages).toHaveLength(2);
-        switch (name) {
-          case 'generateLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock response');
-            expect(agentRunSpan?.output.text).toBe('Mock response');
-            break;
-          case 'streamLegacy':
-            expect(llmGenerationSpan?.output.text).toBe('Mock streaming response');
-            expect(agentRunSpan?.output.text).toBe('Mock streaming response');
-            break;
-          default: // VNext generate & stream
-            expect(llmGenerationSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
-            break;
-        }
-        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
-
-        expect(llmGenerationSpan?.endTime).toBeDefined();
-        expect(agentRunSpan?.endTime).toBeDefined();
-        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
-
-        testExporter.finalExpectations();
-      });
-    },
-  );
-
   describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
     'should trace agent using structuredOutput format using $name',
     ({ name, method, model }) => {
@@ -1408,7 +1329,7 @@ describe('Tracing Integration Tests', () => {
           items: z.string(),
         });
 
-        const structuredOutput: StructuredOutputOptions<OutputSchema> = {
+        const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
           schema: outputSchema,
           model,
         };
@@ -2320,4 +2241,220 @@ describe('Tracing Integration Tests', () => {
       });
     },
   );
+
+  /**
+   * Tests that tags set in tracingOptions (either via defaultOptions or in generate/stream call)
+   * are properly passed through to the exported spans and received by exporters.
+   */
+  describe('tracingOptions.tags support (Issue #12209)', () => {
+    it('should pass tags from defaultOptions.tracingOptions to exported spans', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-with-tags',
+        name: 'Test Agent With Tags',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        defaultOptions: {
+          tracingOptions: {
+            tags: ['production', 'test-tag', 'experiment-v1'],
+          },
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      // Call generate WITHOUT passing tracingOptions - should use defaultOptions
+      const result = await agent.generate('Hello');
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBe(1);
+
+      const agentRunSpan = agentRunSpans[0];
+      expect(agentRunSpan?.isRootSpan).toBe(true);
+      expect(agentRunSpan?.traceId).toBe(result.traceId);
+
+      // CRITICAL: Tags from defaultOptions.tracingOptions should appear on the root span
+      expect(agentRunSpan?.tags).toBeDefined();
+      expect(agentRunSpan?.tags).toEqual(['production', 'test-tag', 'experiment-v1']);
+
+      testExporter.finalExpectations();
+    });
+
+    it('should pass tags from generate call tracingOptions to exported spans', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-tags-call',
+        name: 'Test Agent Tags Call',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      // Call generate WITH explicit tracingOptions.tags
+      const result = await agent.generate('Hello', {
+        tracingOptions: {
+          tags: ['call-tag-1', 'call-tag-2'],
+        },
+      });
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBe(1);
+
+      const agentRunSpan = agentRunSpans[0];
+      expect(agentRunSpan?.isRootSpan).toBe(true);
+      expect(agentRunSpan?.traceId).toBe(result.traceId);
+
+      // Tags from the generate call should appear on the root span
+      expect(agentRunSpan?.tags).toBeDefined();
+      expect(agentRunSpan?.tags).toEqual(['call-tag-1', 'call-tag-2']);
+
+      testExporter.finalExpectations();
+    });
+
+    it('should merge tags from defaultOptions and generate call tracingOptions', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-merge-tags',
+        name: 'Test Agent Merge Tags',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        defaultOptions: {
+          tracingOptions: {
+            tags: ['default-tag'],
+            metadata: { source: 'default' },
+          },
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      // Call generate with additional tracingOptions - tags should be merged or call-site should win
+      // The current behavior (shallow merge) will lose the default tags entirely
+      // This test documents the expected behavior: call-site tags override defaults
+      const result = await agent.generate('Hello', {
+        tracingOptions: {
+          tags: ['call-tag'],
+          metadata: { source: 'call' },
+        },
+      });
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBe(1);
+
+      const agentRunSpan = agentRunSpans[0];
+
+      // With shallow merge, call-site tracingOptions completely replaces defaultOptions.tracingOptions
+      // So we expect only the call-site tags to be present
+      expect(agentRunSpan?.tags).toBeDefined();
+      expect(agentRunSpan?.tags).toEqual(['call-tag']);
+
+      testExporter.finalExpectations();
+    });
+
+    it('should preserve defaultOptions.tracingOptions.tags when call passes other tracingOptions properties', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-preserve-tags',
+        name: 'Test Agent Preserve Tags',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        defaultOptions: {
+          tracingOptions: {
+            tags: ['preserve-this-tag'],
+          },
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      // Call generate with tracingOptions that has metadata but NO tags
+      // BUG: The shallow merge will replace the entire tracingOptions object,
+      // causing the tags from defaultOptions to be lost
+      const result = await agent.generate('Hello', {
+        tracingOptions: {
+          metadata: { someKey: 'someValue' },
+        },
+      });
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBe(1);
+
+      const agentRunSpan = agentRunSpans[0];
+
+      // EXPECTED: Tags from defaultOptions should be preserved when call doesn't specify tags
+      // ACTUAL BUG: Tags are undefined because shallow merge replaces entire tracingOptions
+      expect(agentRunSpan?.tags).toBeDefined();
+      expect(agentRunSpan?.tags).toEqual(['preserve-this-tag']);
+
+      testExporter.finalExpectations();
+    });
+
+    it('should pass tags from stream call tracingOptions to exported spans', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-stream-tags',
+        name: 'Test Agent Stream Tags',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        defaultOptions: {
+          tracingOptions: {
+            tags: ['stream-default-tag'],
+          },
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      // Call stream without passing any options - should use defaultOptions
+      const result = await agent.stream('Hello');
+      // Consume stream to complete
+      let fullText = '';
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+      }
+
+      expect(fullText).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans.length).toBe(1);
+
+      const agentRunSpan = agentRunSpans[0];
+      expect(agentRunSpan?.isRootSpan).toBe(true);
+
+      // Tags from defaultOptions.tracingOptions should appear on the root span
+      expect(agentRunSpan?.tags).toBeDefined();
+      expect(agentRunSpan?.tags).toEqual(['stream-default-tag']);
+
+      testExporter.finalExpectations();
+    });
+  });
 });

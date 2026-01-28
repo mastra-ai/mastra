@@ -1,21 +1,77 @@
 import type { MastraAuthConfig } from '@mastra/core/server';
 
 import { defaultAuthConfig } from './defaults';
+import { parse } from './path-pattern';
+
+/**
+ * Check if a route is a registered custom route that requires authentication.
+ * Returns true only if the route is explicitly registered with requiresAuth: true.
+ * Returns false if the route is not in the config or has requiresAuth: false.
+ */
+export const isProtectedCustomRoute = (
+  path: string,
+  method: string,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
+  if (!customRouteAuthConfig) {
+    return false;
+  }
+
+  // Check exact match first (fast path for static routes)
+  const exactRouteKey = `${method}:${path}`;
+  if (customRouteAuthConfig.has(exactRouteKey)) {
+    return customRouteAuthConfig.get(exactRouteKey) === true;
+  }
+
+  // Check exact match for ALL method
+  const allRouteKey = `ALL:${path}`;
+  if (customRouteAuthConfig.has(allRouteKey)) {
+    return customRouteAuthConfig.get(allRouteKey) === true;
+  }
+
+  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
+    const colonIndex = routeKey.indexOf(':');
+    if (colonIndex === -1) {
+      continue; // Skip malformed keys
+    }
+
+    const routeMethod = routeKey.substring(0, colonIndex);
+    const routePattern = routeKey.substring(colonIndex + 1);
+
+    // Check if method matches (exact match or ALL)
+    if (routeMethod !== method && routeMethod !== 'ALL') {
+      continue;
+    }
+
+    // Check if path matches the pattern
+    if (pathMatchesPattern(path, routePattern)) {
+      return requiresAuth === true;
+    }
+  }
+
+  return false; // Not in config = not a protected custom route
+};
 
 /**
  * Check if request is from dev playground
  * @param getHeader - Function to get header value from request
+ * @param customRouteAuthConfig - Map of custom route auth configurations
  */
 export const isDevPlaygroundRequest = (
   path: string,
   method: string,
   getHeader: (name: string) => string | undefined,
   authConfig: MastraAuthConfig,
+  customRouteAuthConfig?: Map<string, boolean>,
 ): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
   return (
     process.env.MASTRA_DEV === 'true' &&
-    (!isAnyMatch(path, method, protectedAccess) || getHeader('x-mastra-dev-playground') === 'true')
+    // Allow if path doesn't match protected patterns AND is not a protected custom route
+    ((!isAnyMatch(path, method, protectedAccess) && !isProtectedCustomRoute(path, method, customRouteAuthConfig)) ||
+      // Or if has playground header
+      getHeader('x-mastra-dev-playground') === 'true')
   );
 };
 
@@ -28,16 +84,37 @@ export const isCustomRoutePublic = (
     return false;
   }
 
-  // Check exact match first
-  const routeKey = `${method}:${path}`;
-  if (customRouteAuthConfig.has(routeKey)) {
-    return !customRouteAuthConfig.get(routeKey); // True when route opts out of auth
+  // Check exact match first (fast path for static routes)
+  const exactRouteKey = `${method}:${path}`;
+  if (customRouteAuthConfig.has(exactRouteKey)) {
+    return !customRouteAuthConfig.get(exactRouteKey); // True when route opts out of auth
   }
 
-  // Check ALL method
+  // Check exact match for ALL method
   const allRouteKey = `ALL:${path}`;
   if (customRouteAuthConfig.has(allRouteKey)) {
     return !customRouteAuthConfig.get(allRouteKey);
+  }
+
+  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
+    const colonIndex = routeKey.indexOf(':');
+    if (colonIndex === -1) {
+      continue; // Skip malformed keys
+    }
+
+    const routeMethod = routeKey.substring(0, colonIndex);
+    const routePattern = routeKey.substring(colonIndex + 1);
+
+    // Check if method matches (exact match or ALL)
+    if (routeMethod !== method && routeMethod !== 'ALL') {
+      continue;
+    }
+
+    // Check if path matches the pattern
+    if (pathMatchesPattern(path, routePattern)) {
+      return !requiresAuth; // True when route opts out of auth
+    }
   }
 
   return false;
@@ -92,13 +169,15 @@ const isAnyMatch = (
 };
 
 export const pathMatchesPattern = (path: string, pattern: string): boolean => {
-  // Simple pattern matching that supports wildcards
-  // e.g., '/api/agents/*' matches '/api/agents/123'
-  if (pattern.endsWith('*')) {
-    const prefix = pattern.slice(0, -1);
-    return path.startsWith(prefix);
-  }
-  return path === pattern;
+  // Use regexparam for battle-tested path matching
+  // Supports:
+  // - Exact paths: '/api/users'
+  // - Wildcards: '/api/agents/*' matches '/api/agents/123'
+  // - Path parameters: '/users/:id' matches '/users/123'
+  // - Optional parameters: '/users/:id?' matches '/users' and '/users/123'
+  // - Mixed patterns: '/api/:version/users/:id/profile'
+  const { pattern: regex } = parse(pattern);
+  return regex.test(path);
 };
 
 export const pathMatchesRule = (path: string, rulePath: string | RegExp | string[] | undefined): boolean => {

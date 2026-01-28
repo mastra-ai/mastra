@@ -20,7 +20,6 @@ import type {
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
 import z from 'zod';
-import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -35,7 +34,7 @@ export interface LLMIterationStepResult {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   text?: string;
   reasoning?: ReasoningPart[];
   reasoningText?: string;
@@ -49,7 +48,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   dynamicToolResults?: DynamicToolResult[];
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
 }
 
 export interface LLMIterationMetadata {
@@ -67,7 +66,7 @@ export interface LLMIterationMetadata {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   messageId: string;
   messages: {
     all: ModelMessage[];
@@ -92,9 +91,9 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extend
 // Zod schemas for common types used in validation
 
 const languageModelUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
 });

@@ -1,4 +1,4 @@
-import { Thread } from '@/components/assistant-ui/thread';
+import { Thread } from '@/lib/ai-ui/thread';
 
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';

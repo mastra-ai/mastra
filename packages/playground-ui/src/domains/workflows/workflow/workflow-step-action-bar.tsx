@@ -1,5 +1,12 @@
 import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@/ds/components/Dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useContext, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -65,8 +72,7 @@ export const WorkflowStepActionBar = ({
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 
-  const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
-  const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
+  const dialogContentClass = 'max-w-4xl w-full';
 
   const showTimeTravel =
     !withoutTimeTravel && stepKey && !mapConfig && workflowStatus !== 'running' && workflowStatus !== 'paused';
@@ -171,7 +177,7 @@ export const WorkflowStepActionBar = ({
         showDebugMode) && (
         <div
           className={cn(
-            'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
+            'flex flex-wrap items-center bg-surface4 border-t border-border1 px-2 py-1 gap-2 rounded-b-lg',
             status === 'success' && 'bg-accent1Dark',
             status === 'failed' && 'bg-accent2Dark',
             status === 'tripwire' && 'bg-amber-900/40 border-amber-500/20',
@@ -181,20 +187,24 @@ export const WorkflowStepActionBar = ({
           )}
         >
           {onShowNestedGraph && (
-            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)}>
+            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)} size="sm">
               View nested graph
             </Button>
           )}
           {showTimeTravel && (
             <>
-              <Button onClick={() => setIsTimeTravelOpen(true)}>Time travel</Button>
+              <Button onClick={() => setIsTimeTravelOpen(true)} size="sm">
+                Time travel
+              </Button>
               <Dialog open={isTimeTravelOpen} onOpenChange={setIsTimeTravelOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Time travel to {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Time travel to {stepKey}</DialogTitle>
+                    <DialogDescription>Time travel to a specific workflow step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -209,14 +219,17 @@ export const WorkflowStepActionBar = ({
                     setIsPerStepRunOpen(true);
                   }
                 }}
+                size="sm"
               >
                 Run step
               </Button>
               <Dialog open={isPerStepRunOpen} onOpenChange={setIsPerStepRunOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Run step {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Run step {stepKey}</DialogTitle>
+                    <DialogDescription>Run a specific workflow step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsPerStepRunOpen(false)}
@@ -224,7 +237,7 @@ export const WorkflowStepActionBar = ({
                       buttonText="Run step"
                       inputData={stepPayload?.input}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
 
@@ -236,14 +249,17 @@ export const WorkflowStepActionBar = ({
                     setIsContinueRunOpen(true);
                   }
                 }}
+                size="sm"
               >
                 Continue run
               </Button>
               <Dialog open={isContinueRunOpen} onOpenChange={setIsContinueRunOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Continue run {stepKey}</DialogTitle>
-
-                  <div className="px-4 overflow-scroll max-h-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Continue run {stepKey}</DialogTitle>
+                    <DialogDescription>Continue the workflow run from this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody className="max-h-[600px]">
                     <WorkflowTimeTravelForm
                       stepKey={stepKey}
                       closeModal={() => setIsContinueRunOpen(false)}
@@ -251,27 +267,31 @@ export const WorkflowStepActionBar = ({
                       buttonText="Continue run"
                       inputData={stepPayload?.input}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
           )}
           {mapConfig && (
-            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)}>
+            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)} size="sm">
               Map config
             </Button>
           )}
           {input && (
             <>
-              <Button onClick={() => setIsInputOpen(true)}>Input</Button>
+              <Button onClick={() => setIsInputOpen(true)} size="sm">
+                Input
+              </Button>
 
               <Dialog open={isInputOpen} onOpenChange={setIsInputOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} input</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} input</DialogTitle>
+                    <DialogDescription>View the input data for this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
                     <CodeDialogContent data={input} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -279,15 +299,19 @@ export const WorkflowStepActionBar = ({
 
           {resumeData && (
             <>
-              <Button onClick={() => setIsResumeDataOpen(true)}>Resume data</Button>
+              <Button onClick={() => setIsResumeDataOpen(true)} size="sm">
+                Resume data
+              </Button>
 
               <Dialog open={isResumeDataOpen} onOpenChange={setIsResumeDataOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} resume data</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} resume data</DialogTitle>
+                    <DialogDescription>View the resume data for this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
                     <CodeDialogContent data={resumeData} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -295,14 +319,19 @@ export const WorkflowStepActionBar = ({
 
           {(output ?? suspendOutput) && (
             <>
-              <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
+              <Button onClick={() => setIsOutputOpen(true)} size="sm">
+                Output
+              </Button>
 
               <Dialog open={isOutputOpen} onOpenChange={setIsOutputOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} output</DialogTitle>
+                    <DialogDescription>View the output data for this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
                     <CodeDialogContent data={output ?? suspendOutput} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -310,15 +339,19 @@ export const WorkflowStepActionBar = ({
 
           {error && (
             <>
-              <Button onClick={() => setIsErrorOpen(true)}>Error</Button>
+              <Button onClick={() => setIsErrorOpen(true)} size="sm">
+                Error
+              </Button>
 
               <Dialog open={isErrorOpen} onOpenChange={setIsErrorOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} error</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} error</DialogTitle>
+                    <DialogDescription>View the error details for this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
                     <CodeDialogContent data={error} />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>
@@ -326,15 +359,17 @@ export const WorkflowStepActionBar = ({
 
           {tripwire && (
             <>
-              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300">
+              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300" size="sm">
                 Tripwire
               </Button>
 
               <Dialog open={isTripwireOpen} onOpenChange={setIsTripwireOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} tripwire</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>{stepName} tripwire</DialogTitle>
+                    <DialogDescription>View the tripwire details for this step</DialogDescription>
+                  </DialogHeader>
+                  <DialogBody>
                     <CodeDialogContent
                       data={{
                         reason: tripwire.reason,
@@ -343,7 +378,7 @@ export const WorkflowStepActionBar = ({
                         processorId: tripwire.processorId,
                       }}
                     />
-                  </div>
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>

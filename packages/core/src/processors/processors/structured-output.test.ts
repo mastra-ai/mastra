@@ -560,7 +560,6 @@ describe('Structured Output with Tool Execution', () => {
 
     // Stream the response
     const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
-      format: 'aisdk',
       maxSteps: 5,
       structuredOutput: {
         schema: responseSchema,

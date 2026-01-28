@@ -2,6 +2,7 @@ export * from './agent';
 export * from './memory-thread';
 export * from './vector';
 export * from './tool';
+export * from './processor';
 export * from './base';
 export * from './workflow';
 export * from './a2a';

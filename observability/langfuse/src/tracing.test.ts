@@ -16,12 +16,22 @@ import type {
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Langfuse } from 'langfuse';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LangfuseExporter } from './tracing';
 import type { LangfuseExporterConfig } from './tracing';
 
 // Mock Langfuse constructor (must be at the top level)
 vi.mock('langfuse');
+
+class TestLangfuseExporter extends LangfuseExporter {
+  _getTraceData(traceId: string) {
+    return this.getTraceData({ traceId, method: 'test' });
+  }
+
+  get _traceMapSize(): number {
+    return this.traceMapSize();
+  }
+}
 
 describe('LangfuseExporter', () => {
   // Mock objects
@@ -31,36 +41,50 @@ describe('LangfuseExporter', () => {
   let mockLangfuseClient: any;
   let LangfuseMock: any;
 
-  let exporter: LangfuseExporter;
+  let exporter: TestLangfuseExporter;
   let config: LangfuseExporterConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
     // Set up mocks
     mockGeneration = {
-      update: vi.fn(),
+      kind: 'mockGeneration',
       event: vi.fn(),
+      generation: vi.fn(),
+      span: vi.fn(),
+      update: vi.fn(),
+      end: vi.fn(),
     };
 
+    // Set up circular reference
+    mockGeneration.generation.mockReturnValue(mockGeneration);
+
     mockSpan = {
+      kind: 'mockSpan',
       update: vi.fn(),
+      end: vi.fn(),
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn(),
       event: vi.fn(),
     };
 
+    // Set up circular reference
+    mockSpan.span.mockReturnValue(mockSpan);
+    mockGeneration.span.mockReturnValue(mockSpan);
+
     mockTrace = {
+      kind: 'mockTrace',
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn().mockReturnValue(mockSpan),
       update: vi.fn(),
+      end: vi.fn(),
       event: vi.fn(),
     };
 
-    // Set up circular reference
-    mockSpan.span.mockReturnValue(mockSpan);
-
     mockLangfuseClient = {
+      kind: 'mockLangfuseClient',
       trace: vi.fn().mockReturnValue(mockTrace),
       shutdownAsync: vi.fn().mockResolvedValue(undefined),
     };
@@ -80,9 +104,16 @@ describe('LangfuseExporter', () => {
         flushAt: 1,
         flushInterval: 1000,
       },
+      logLevel: 'debug',
+      // Short cleanup delay for faster tests
+      traceCleanupDelayMs: 10,
     };
 
-    exporter = new LangfuseExporter(config);
+    exporter = new TestLangfuseExporter(config);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -100,63 +131,92 @@ describe('LangfuseExporter', () => {
     });
 
     it('should initialize without baseUrl (uses Langfuse default)', () => {
-      const configWithoutBaseUrl = {
-        publicKey: 'test-public-key',
-        secretKey: 'test-secret-key',
-      };
+      // Clear env var to ensure baseUrl comes from config only
+      const originalBaseUrl = process.env.LANGFUSE_BASE_URL;
+      delete process.env.LANGFUSE_BASE_URL;
 
-      const exporterWithoutBaseUrl = new LangfuseExporter(configWithoutBaseUrl);
+      try {
+        const configWithoutBaseUrl = {
+          publicKey: 'test-public-key',
+          secretKey: 'test-secret-key',
+        };
 
-      expect(exporterWithoutBaseUrl.name).toBe('langfuse');
-      expect(LangfuseMock).toHaveBeenCalledWith({
-        publicKey: 'test-public-key',
-        secretKey: 'test-secret-key',
-        baseUrl: undefined,
-      });
+        const exporterWithoutBaseUrl = new LangfuseExporter(configWithoutBaseUrl);
+
+        expect(exporterWithoutBaseUrl.name).toBe('langfuse');
+        expect(LangfuseMock).toHaveBeenCalledWith({
+          publicKey: 'test-public-key',
+          secretKey: 'test-secret-key',
+          baseUrl: undefined,
+        });
+      } finally {
+        if (originalBaseUrl !== undefined) process.env.LANGFUSE_BASE_URL = originalBaseUrl;
+      }
     });
 
     it('should warn and disable exporter when publicKey is missing', () => {
+      // Clear env vars to ensure exporter is truly disabled
+      const originalPublicKey = process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_PUBLIC_KEY;
       const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const exporterWithMissingKey = new LangfuseExporter({
-        secretKey: 'test-secret-key',
-        baseUrl: 'https://test-langfuse.com',
-      });
+      try {
+        const exporterWithMissingKey = new LangfuseExporter({
+          secretKey: 'test-secret-key',
+          baseUrl: 'https://test-langfuse.com',
+        });
 
-      // Should create exporter but disable it
-      expect(exporterWithMissingKey.name).toBe('langfuse');
-      expect((exporterWithMissingKey as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
+        // Should create exporter but disable it
+        expect(exporterWithMissingKey.name).toBe('langfuse');
+        expect(exporterWithMissingKey.isDisabled).toBeTruthy();
+      } finally {
+        mockConsoleWarn.mockRestore();
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+      }
     });
 
     it('should warn and disable exporter when secretKey is missing', () => {
+      // Clear env vars to ensure exporter is truly disabled
+      const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
       const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const exporterWithMissingKey = new LangfuseExporter({
-        publicKey: 'test-public-key',
-        baseUrl: 'https://test-langfuse.com',
-      });
+      try {
+        const exporterWithMissingKey = new LangfuseExporter({
+          publicKey: 'test-public-key',
+          baseUrl: 'https://test-langfuse.com',
+        });
 
-      // Should create exporter but disable it
-      expect(exporterWithMissingKey.name).toBe('langfuse');
-      expect((exporterWithMissingKey as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
+        // Should create exporter but disable it
+        expect(exporterWithMissingKey.name).toBe('langfuse');
+        expect(exporterWithMissingKey.isDisabled).toBeTruthy();
+      } finally {
+        mockConsoleWarn.mockRestore();
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+      }
     });
 
     it('should warn and disable exporter when both keys are missing', () => {
+      // Clear env vars to ensure exporter is truly disabled
+      const originalPublicKey = process.env.LANGFUSE_PUBLIC_KEY;
+      const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
       const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const exporterWithMissingKeys = new LangfuseExporter({
-        baseUrl: 'https://test-langfuse.com',
-      });
+      try {
+        const exporterWithMissingKeys = new LangfuseExporter({
+          baseUrl: 'https://test-langfuse.com',
+        });
 
-      // Should create exporter but disable it
-      expect(exporterWithMissingKeys.name).toBe('langfuse');
-      expect((exporterWithMissingKeys as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
+        // Should create exporter but disable it
+        expect(exporterWithMissingKeys.name).toBe('langfuse');
+        expect(exporterWithMissingKeys.isDisabled).toBeTruthy();
+      } finally {
+        mockConsoleWarn.mockRestore();
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+      }
     });
   });
 
@@ -648,6 +708,7 @@ describe('LangfuseExporter', () => {
       // First, start a span
       const llmSpan = createMockSpan({
         id: 'llm-span',
+        traceId: 'llm-trace',
         name: 'gpt-4-call',
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
@@ -718,6 +779,80 @@ describe('LangfuseExporter', () => {
         }),
         output: { result: 42 },
       });
+    });
+
+    it('should include input in update payload (MODEL_STEP pattern)', async () => {
+      // This test verifies the common pattern where MODEL_STEP spans:
+      // 1. Start empty (to capture start time early)
+      // 2. Get updated with input data later
+      // 3. End with the final data
+
+      // First create a root span (parent for the MODEL_STEP)
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Create MODEL_STEP span with no input (empty start to capture timing)
+      const modelStepSpan = createMockSpan({
+        id: 'model-step-span',
+        name: 'model-step',
+        type: SpanType.MODEL_STEP,
+        isRoot: false,
+        parentSpanId: 'root-span',
+        traceId: 'root-span',
+        attributes: {},
+        // Note: no input here - span starts empty
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: modelStepSpan,
+      });
+
+      // Verify span was created without input
+      expect(mockSpan.span).toHaveBeenCalledTimes(1);
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'model-step-span',
+          name: 'model-step',
+        }),
+      );
+      // Verify the specific call didn't include input
+      const createCallArg = mockSpan.span.mock.calls[0][0];
+      expect(createCallArg).not.toHaveProperty('input');
+
+      // Clear mock to track update calls
+      mockSpan.update.mockClear();
+      // Get the nested span mock (what mockSpan.span returns)
+      const nestedSpan = mockSpan.span.mock.results[0]?.value;
+
+      // Update the span with input data (this is what happens in practice)
+      modelStepSpan.input = {
+        messages: [{ role: 'user', content: 'Hello, world!' }],
+      };
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: modelStepSpan,
+      });
+
+      // Verify update was called with the input
+      expect(nestedSpan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: {
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+          },
+        }),
+      );
     });
   });
 
@@ -797,6 +932,7 @@ describe('LangfuseExporter', () => {
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        traceId: 'trace-id',
       });
 
       rootSpan.output = { result: 'success' };
@@ -807,10 +943,10 @@ describe('LangfuseExporter', () => {
         exportedSpan: rootSpan,
       });
 
+      const traceData = exporter._getTraceData(rootSpan.traceId);
+
       // Verify trace was created and span is tracked as active
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('root-span-id');
-      expect(traceData.activeSpans.has('root-span-id')).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: rootSpan.id })).toBe(true);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -822,8 +958,14 @@ describe('LangfuseExporter', () => {
         output: { result: 'success' },
       });
 
+      // Wait for cleanup delay (config uses 10ms)
+      await vi.advanceTimersByTimeAsync(20);
+
       // Trace should be cleaned up since this was the only active span
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(false);
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      const newTraceData = exporter._getTraceData(rootSpan.traceId);
+      expect(traceData).not.toBe(newTraceData);
     });
   });
 
@@ -1011,6 +1153,8 @@ describe('LangfuseExporter', () => {
 
   describe('Out-of-order span handling with delayed ends', () => {
     it('should handle spans that end after parent trace is removed', async () => {
+      const traceId = 'out-of-order-trace';
+
       // Create a root workflow span
       const workflowSpan = createMockSpan({
         id: 'workflow-1',
@@ -1018,6 +1162,7 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_RUN,
         isRoot: true,
         attributes: { workflowId: 'wf-123' },
+        traceId,
       });
 
       // Create a child step span
@@ -1027,9 +1172,9 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-1' },
+        traceId,
+        parentSpanId: workflowSpan.id,
       });
-      step1Span.traceId = 'workflow-1';
-      step1Span.parentSpanId = 'workflow-1';
 
       // Start workflow and step
       await exporter.exportTracingEvent({
@@ -1042,10 +1187,9 @@ describe('LangfuseExporter', () => {
         exportedSpan: step1Span,
       });
 
-      // Verify trace and spans are tracked
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceInfo = (exporter as any).traceMap.get('workflow-1');
-      expect(traceInfo.spans.has('step-1')).toBe(true);
+      // Verify spans are tracked
+      const traceData = exporter._getTraceData(traceId);
+      expect(traceData.hasSpan({ spanId: 'step-1' })).toBe(true);
 
       // Clear mock calls to make assertions clearer
       mockTrace.span.mockClear();
@@ -1090,9 +1234,9 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-2' },
+        traceId,
+        parentSpanId: workflowSpan.id,
       });
-      step2Span.traceId = 'workflow-1';
-      step2Span.parentSpanId = 'workflow-1';
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -1113,13 +1257,10 @@ describe('LangfuseExporter', () => {
         exportedSpan: workflowSpan,
       });
 
-      // Verify trace is still in map because step-2 hasn't ended yet
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('workflow-1');
       // step-2 should still be in activeSpans
-      expect(traceData.activeSpans.has('step-2')).toBe(true);
-      expect(traceData.activeSpans.has('step-1')).toBe(false); // step-1 already ended
-      expect(traceData.activeSpans.has('workflow-1')).toBe(false); // workflow ended
+      expect(traceData.isActiveSpan({ spanId: 'step-2' })).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: 'step-1' })).toBe(false); // step-1 already ended
+      expect(traceData.isActiveSpan({ spanId: 'workflow-1' })).toBe(false); // workflow ended
 
       // Now end step-2 (the last active span) AFTER the root ended
       step2Span.endTime = new Date();
@@ -1129,12 +1270,12 @@ describe('LangfuseExporter', () => {
         exportedSpan: step2Span,
       });
 
-      // NOW the trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(false);
-
       // Clear mocks for late event testing
       mockSpan.update.mockClear();
       mockTrace.update.mockClear();
+
+      // Wait for cleanup delay (config uses 10ms)
+      await vi.advanceTimersByTimeAsync(20);
 
       // Now try to send late updates/ends for already completed trace
       const lateStep1Update = createMockSpan({
@@ -1143,10 +1284,10 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-1', lateUpdate: true },
+        traceId,
+        parentSpanId: workflowSpan.id,
+        output: { result: 'late-update' },
       });
-      lateStep1Update.traceId = 'workflow-1';
-      lateStep1Update.parentSpanId = 'workflow-1';
-      lateStep1Update.output = { result: 'late-update' };
 
       // This should handle gracefully without errors
       await exporter.exportTracingEvent({
@@ -1172,6 +1313,9 @@ describe('LangfuseExporter', () => {
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
+
+      // get a pointer to the initial traceData for trace
+      const traceData = exporter._getTraceData('root-1');
 
       // Create multiple child spans
       const childSpans: AnyExportedSpan[] = [];
@@ -1241,9 +1385,15 @@ describe('LangfuseExporter', () => {
         exportedSpan: rootSpan,
       });
 
+      // Wait for cleanup delay (config uses 10ms)
+      await vi.advanceTimersByTimeAsync(20);
+
       // All operations should complete without errors
       // Trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('root-1')).toBe(false);
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      const newTraceData = exporter._getTraceData('root-1');
+      expect(traceData).not.toBe(newTraceData);
     });
   });
 
@@ -1312,26 +1462,38 @@ describe('LangfuseExporter', () => {
     });
 
     it('should not call Langfuse client when client is null', async () => {
-      // Create exporter with missing keys to disable client
-      const disabledExporter = new LangfuseExporter({
-        baseUrl: 'https://test-langfuse.com',
-      });
+      // Save and clear env vars to ensure exporter is truly disabled
+      const originalPublicKey = process.env.LANGFUSE_PUBLIC_KEY;
+      const originalSecretKey = process.env.LANGFUSE_SECRET_KEY;
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
 
-      const scoreData = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        score: 0.8,
-        reason: 'Test score',
-        scorerName: 'test-scorer',
-        metadata: {
-          sessionId: 'session-789',
-        },
-      };
+      try {
+        // Create exporter with missing keys to disable client
+        const disabledExporter = new LangfuseExporter({
+          baseUrl: 'https://test-langfuse.com',
+        });
 
-      await disabledExporter.addScoreToTrace(scoreData);
+        const scoreData = {
+          traceId: 'trace-123',
+          spanId: 'span-456',
+          score: 0.8,
+          reason: 'Test score',
+          scorerName: 'test-scorer',
+          metadata: {
+            sessionId: 'session-789',
+          },
+        };
 
-      // Should not call Langfuse client
-      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+        await disabledExporter.addScoreToTrace(scoreData);
+
+        // Should not call Langfuse client
+        expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+      } finally {
+        // Restore env vars safely (avoid setting to string "undefined")
+        if (originalPublicKey !== undefined) process.env.LANGFUSE_PUBLIC_KEY = originalPublicKey;
+        if (originalSecretKey !== undefined) process.env.LANGFUSE_SECRET_KEY = originalSecretKey;
+      }
     });
 
     it('should handle Langfuse client errors gracefully', async () => {
@@ -1715,6 +1877,7 @@ describe('LangfuseExporter', () => {
     it('should inherit langfuse prompt from AGENT_RUN root span to child MODEL_GENERATION span', async () => {
       // First, create a root AGENT_RUN span with langfuse prompt metadata
       // (simulates: tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)))
+      const traceId = 'traceId';
       const agentSpan = createMockSpan({
         id: 'agent-span-id',
         name: 'support-agent',
@@ -1733,6 +1896,7 @@ describe('LangfuseExporter', () => {
             },
           },
         },
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -1756,8 +1920,8 @@ describe('LangfuseExporter', () => {
           runId: 'run-123',
           threadId: 'thread-456',
         },
+        traceId,
       });
-      llmSpan.traceId = 'agent-span-id';
       llmSpan.parentSpanId = 'agent-span-id';
 
       await exporter.exportTracingEvent({
@@ -2863,8 +3027,8 @@ describe('LangfuseExporter', () => {
       });
 
       // Verify maps have data
-      expect((exporter as any).traceMap.size).toBeGreaterThan(0);
-      expect((exporter as any).traceMap.get('test-span').spans.size).toBeGreaterThan(0);
+      const traceData = exporter._getTraceData('test-span');
+      expect(traceData.activeSpanCount()).toBeGreaterThan(0);
 
       // Shutdown
       await exporter.shutdown();
@@ -2873,7 +3037,7 @@ describe('LangfuseExporter', () => {
       expect(mockLangfuseClient.shutdownAsync).toHaveBeenCalled();
 
       // Verify maps were cleared
-      expect((exporter as any).traceMap.size).toBe(0);
+      expect(exporter._traceMapSize).toBe(0);
     });
   });
 });

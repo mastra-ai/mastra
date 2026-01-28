@@ -1,4 +1,4 @@
-@media (min-width: 997px) {
+@media (min-width: 62.25rem) {
   .expandButton {
     position: absolute;
     top: 0;
@@ -21,7 +21,7 @@
     transform: rotate(0);
   }
 
-  [dir="rtl"] .expandButtonIcon {
+  [dir='rtl'] .expandButtonIcon {
     transform: rotate(180deg);
   }
 }

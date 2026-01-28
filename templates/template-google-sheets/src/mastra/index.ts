@@ -17,7 +17,7 @@ export const mastra = new Mastra({
   vectors: {
     default: new LibSQLVector({
       id: 'mastra-vector',
-      connectionUrl: 'file:../../mastra.db',
+      url: 'file:../../mastra.db',
     }),
   },
   logger: new PinoLogger({

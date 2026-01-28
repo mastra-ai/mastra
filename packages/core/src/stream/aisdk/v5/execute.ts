@@ -7,7 +7,6 @@ import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
-import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
@@ -21,7 +20,7 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
   return newObj;
 }
 
-type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
+type ExecutionProps<OUTPUT = undefined> = {
   runId: string;
   model: MastraLanguageModel;
   providerOptions?: SharedProviderOptions;
@@ -46,7 +45,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   generateId?: IdGenerator;
 };
 
-export function execute<OUTPUT extends OutputSchema = undefined>({
+export function execute<OUTPUT = undefined>({
   runId,
   model,
   providerOptions,

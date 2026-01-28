@@ -5,8 +5,8 @@ import type { ChunkStrategy } from './types';
 const baseChunkOptionsSchema = z.object({
   maxSize: z.number().positive().optional(),
   overlap: z.number().min(0).optional(),
-  lengthFunction: z.function().optional(),
-  keepSeparator: z.union([z.boolean(), z.literal('start'), z.literal('end')]).optional(),
+  lengthFunction: z.optional(z.function()),
+  separatorPosition: z.enum(['start', 'end']).optional(),
   addStartIndex: z.boolean().optional(),
   stripWhitespace: z.boolean().optional(),
 });

@@ -31,7 +31,7 @@ export const TracingRunOptions = () => {
 
   return (
     <div className="space-y-2 px-5 py-2">
-      <Txt as="h3" variant="ui-md" className="text-icon3">
+      <Txt as="h3" variant="ui-md" className="text-neutral3">
         Tracing Options
       </Txt>
 

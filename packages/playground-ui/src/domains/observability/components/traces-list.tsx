@@ -1,4 +1,5 @@
-import { EntryList, getShortId } from '@/components/ui/elements';
+import { EntryList } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
 import { SpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 

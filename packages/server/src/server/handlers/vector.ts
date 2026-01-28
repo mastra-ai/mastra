@@ -189,7 +189,7 @@ export async function deleteIndex({
 
 export const UPSERT_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/upsert',
+  path: '/vector/:vectorName/upsert',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: upsertVectorsBodySchema,
@@ -197,6 +197,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
   summary: 'Upsert vectors',
   description: 'Inserts or updates vectors in the specified index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, vectors, metadata, ids } = params;
@@ -216,7 +217,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
 
 export const CREATE_INDEX_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/create-index',
+  path: '/vector/:vectorName/create-index',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: createIndexBodySchema,
@@ -224,6 +225,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
   summary: 'Create index',
   description: 'Creates a new vector index with the specified dimension and metric',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, dimension, metric } = params;
@@ -249,7 +251,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
 
 export const QUERY_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/query',
+  path: '/vector/:vectorName/query',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: queryVectorsBodySchema,
@@ -257,6 +259,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
   summary: 'Query vectors',
   description: 'Performs a similarity search on the vector index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, queryVector, topK, filter, includeVector } = params;
@@ -278,13 +281,14 @@ export const QUERY_VECTORS_ROUTE = createRoute({
 
 export const LIST_INDEXES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes',
+  path: '/vector/:vectorName/indexes',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   responseSchema: listIndexesResponseSchema,
   summary: 'List indexes',
   description: 'Returns a list of all indexes in the vector store',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName }) => {
     try {
       const vector = getVector(mastra, vectorName);
@@ -298,13 +302,14 @@ export const LIST_INDEXES_ROUTE = createRoute({
 
 export const DESCRIBE_INDEX_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: describeIndexResponseSchema,
   summary: 'Describe index',
   description: 'Returns statistics and metadata for a specific index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -327,13 +332,14 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
 
 export const DELETE_INDEX_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: deleteIndexResponseSchema,
   summary: 'Delete index',
   description: 'Deletes a vector index and all its data',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {

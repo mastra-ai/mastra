@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { ZodLikeSchema } from '../types/zod-compat';
+import type { SchemaWithValidation } from '../stream/base/schema';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
 
 export interface ValidationError<T = any> {
@@ -35,7 +35,7 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
  * @returns The validated data or a validation error
  */
 export function validateToolSuspendData<T = any>(
-  schema: ZodLikeSchema | undefined,
+  schema: SchemaWithValidation<T> | undefined,
   suspendData: unknown,
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
@@ -52,9 +52,7 @@ export function validateToolSuspendData<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -74,18 +72,18 @@ export function validateToolSuspendData<T = any>(
  * @param input The input to normalize
  * @returns The normalized input (original value, {}, or [])
  */
-function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
+function normalizeNullishInput(schema: SchemaWithValidation<unknown>, input: unknown): unknown {
   if (input !== undefined && input !== null) {
     return input;
   }
 
   // Check if schema is an array type (using typeName to avoid dual-package hazard)
-  if (isZodArray(schema as z.ZodTypeAny)) {
+  if (isZodArray(schema)) {
     return [];
   }
 
   // Check if schema is an object type (using typeName to avoid dual-package hazard)
-  if (isZodObject(schema as z.ZodTypeAny)) {
+  if (isZodObject(schema)) {
     return {};
   }
 
@@ -157,7 +155,7 @@ function convertUndefinedToNull(input: unknown): unknown {
  * @returns The validated data or a validation error
  */
 export function validateToolInput<T = any>(
-  schema: ZodLikeSchema | undefined,
+  schema: SchemaWithValidation<T> | undefined,
   input: unknown,
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
@@ -185,9 +183,7 @@ export function validateToolInput<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -207,7 +203,7 @@ export function validateToolInput<T = any>(
  * @returns The validated data or a validation error
  */
 export function validateToolOutput<T = any>(
-  schema: ZodLikeSchema | undefined,
+  schema: SchemaWithValidation<T> | undefined,
   output: unknown,
   toolId?: string,
   suspendCalled?: boolean,
@@ -225,9 +221,7 @@ export function validateToolOutput<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,

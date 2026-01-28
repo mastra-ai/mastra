@@ -571,14 +571,13 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative perPage - should fall back to default behavior (40)
-        const resultNeg = await memoryStorage.listMessages({
-          threadId: thread.id,
-          perPage: -5,
-        });
-        // Should fall back to default perPage (40) and return all 5 available messages
-        expect(resultNeg.messages).toHaveLength(5);
-        expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
+        // Test negative perPage - should throw an error (invalid input)
+        await expect(
+          memoryStorage.listMessages({
+            threadId: thread.id,
+            perPage: -5,
+          }),
+        ).rejects.toThrow('perPage must be >= 0');
       });
     });
 

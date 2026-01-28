@@ -19,5 +19,8 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "resolutions": {
+    "ssri": "^6.0.2"
   }
 }

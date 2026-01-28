@@ -1,4 +1,5 @@
-import { SelectField, DateTimePicker } from '@/components/ui/elements';
+import { SelectField } from '@/ds/components/FormFields';
+import { DateTimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
@@ -34,7 +35,7 @@ export function TracesTools({
   isLoading,
 }: TracesToolsProps) {
   return (
-    <div className={cn('flex flex-wrap gap-x-[2rem] gap-y-[1rem]')}>
+    <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
       <SelectField
         label="Filter by Entity"
         name={'select-entity'}
@@ -50,8 +51,8 @@ export function TracesTools({
         className="min-w-[20rem]"
         disabled={isLoading}
       />
-      <div className={cn('flex gap-[1rem] items-center flex-wrap')}>
-        <span className={cn('shrink-0 text-[0.875rem] text-icon3')}>Filter by Date & time range</span>
+      <div className={cn('flex gap-4 items-center flex-wrap')}>
+        <span className={cn('shrink-0 text-ui-md text-neutral3')}>Filter by Date & time range</span>
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}

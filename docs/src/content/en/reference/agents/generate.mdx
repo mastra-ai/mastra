@@ -42,6 +42,12 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
     resource: "user-123",
   },
 });
+
+// Accessing response headers
+const result = await agent.generate("Hello!");
+const remainingRequests = result.response?.headers?.["anthropic-ratelimit-requests-remaining"];
+const remainingTokens = result.response?.headers?.["x-ratelimit-remaining-tokens"];
+console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remainingTokens}`);
 ```
 
 :::info
@@ -187,13 +193,13 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "requireToolApproval",
       type: "boolean",
       isOptional: true,
-      description: "Require approval for all tool calls before execution.",
+      description: "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
     },
     {
       name: "autoResumeSuspendedTools",
       type: "boolean",
       isOptional: true,
-      description: "Automatically resume suspended tools.",
+      description: "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
     },
     {
       name: "toolCallConcurrency",
@@ -401,13 +407,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
         "Callback fired after each generation step.",
     },
     {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.resource instead. Identifier for the resource/user.",
-    },
-    {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
@@ -457,13 +456,6 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       ],
     },
     MODEL_SETTINGS_OBJECT,
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Deprecated. Use memory.thread instead. Thread identifier for conversation continuity.",
-    },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
@@ -737,7 +729,179 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       name: "finishReason",
       type: "string",
       description:
-        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
+        "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (waiting for tool approval), or 'error' (error occurred).",
+    },
+    {
+      name: "response",
+      type: "object",
+      description:
+        "Response metadata from the model provider. Useful for accessing rate limit headers and request IDs.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "Response ID from the model provider.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "timestamp",
+              type: "Date",
+              isOptional: true,
+              description: "Timestamp when the response was generated.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "modelId",
+              type: "string",
+              isOptional: true,
+              description: "Model identifier used for this response.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "headers",
+              type: "Record<string, string>",
+              isOptional: true,
+              description: "HTTP response headers from the model provider. Contains rate limit information (e.g., `anthropic-ratelimit-requests-remaining`, `x-ratelimit-remaining-tokens`) and other provider-specific metadata.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "messages",
+              type: "ResponseMessage[]",
+              isOptional: true,
+              description: "Response messages in model format.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "uiMessages",
+              type: "UIMessage[]",
+              isOptional: true,
+              description: "Response messages in UI format, includes any metadata added by output processors.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "request",
+      type: "object",
+      isOptional: true,
+      description:
+        "The request that was sent to the model.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "body",
+              type: "unknown",
+              isOptional: true,
+              description: "The request body sent to the model provider.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "warnings",
+      type: "LanguageModelWarning[]",
+      isOptional: true,
+      description:
+        "Any warnings from the model provider during generation.",
+    },
+    {
+      name: "providerMetadata",
+      type: "Record<string, unknown>",
+      isOptional: true,
+      description:
+        "Provider-specific metadata returned with the response.",
+    },
+    {
+      name: "reasoning",
+      type: "ReasoningChunk[]",
+      isOptional: true,
+      description:
+        "Reasoning details from models that support reasoning (e.g., OpenAI o1 series).",
+    },
+    {
+      name: "reasoningText",
+      type: "string",
+      isOptional: true,
+      description:
+        "Combined reasoning text from reasoning models.",
+    },
+    {
+      name: "sources",
+      type: "SourceChunk[]",
+      isOptional: true,
+      description:
+        "Sources referenced by the model during generation.",
+    },
+    {
+      name: "files",
+      type: "FileChunk[]",
+      isOptional: true,
+      description:
+        "Files generated by the model.",
+    },
+    {
+      name: "suspendPayload",
+      type: "object",
+      isOptional: true,
+      description:
+        "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "Unique identifier for the pending tool call.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              description: "Name of the tool that requires approval.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "args",
+              type: "Record<string, any>",
+              description: "Arguments that will be passed to the tool.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "Unique identifier for this execution run. Required when calling `approveToolCallGenerate()` or `declineToolCallGenerate()` to resume a suspended execution.",
     },
     {
       name: "traceId",
@@ -745,6 +909,39 @@ const memoryResult = await agent.generate("Remember my favorite color is blue", 
       isOptional: true,
       description:
         "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description:
+        "All messages from this execution including input, memory history, and response.",
+    },
+    {
+      name: "rememberedMessages",
+      type: "MastraDBMessage[]",
+      description:
+        "Only messages loaded from memory (conversation history).",
+    },
+    {
+      name: "error",
+      type: "Error",
+      isOptional: true,
+      description:
+        "Error object if the generation failed.",
+    },
+    {
+      name: "tripwire",
+      type: "StepTripwireData",
+      isOptional: true,
+      description:
+        "Tripwire data if content was blocked by a processor.",
+    },
+    {
+      name: "scoringData",
+      type: "object",
+      isOptional: true,
+      description:
+        "Scoring data for evals when `returnScorerData` is enabled.",
     },
   ]}
 />

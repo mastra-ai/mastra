@@ -98,18 +98,10 @@ constructor(options: MastraServerOptions<TApp>)
       isOptional: true,
     },
     {
-      name: "playground",
-      type: "boolean",
-      description: "Can be read to set context values in adapters implementing the MastraServer",
+      name: "mcpOptions",
+      type: "MCPOptions",
+      description: "MCP transport options for serverless environments",
       isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "isDev",
-      type: "boolean",
-      description: "Development mode flag",
-      isOptional: true,
-      defaultValue: "false",
     },
   ]}
 />
@@ -299,6 +291,20 @@ interface StreamOptions {
 }
 ```
 
+### MCPOptions
+
+```typescript
+interface MCPOptions {
+  serverless?: boolean;
+  sessionIdGenerator?: () => string;
+}
+```
+
+| Property | Description |
+|----------|-------------|
+| `serverless` | When `true`, runs MCP in stateless mode without session management. Use for serverless environments like Cloudflare Workers or Vercel Edge. |
+| `sessionIdGenerator` | Custom function to generate session IDs. |
+
 ## Example
 
 ```typescript
@@ -343,6 +349,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters
-- [Custom Adapters](/docs/v1/server/custom-adapters) - Creating custom adapters
-- [createRoute()](/reference/v1/server/create-route) - Creating custom routes
+- [Server Adapters](/docs/server/server-adapters) - Using adapters
+- [Custom Adapters](/docs/server/custom-adapters) - Creating custom adapters
+- [createRoute()](/reference/server/create-route) - Creating custom routes

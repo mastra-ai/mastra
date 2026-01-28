@@ -1,0 +1,42 @@
+---
+title: "Deployment | v1 Migration Guide"
+description: "Learn how to migrate deployment configuration when upgrading to v1."
+---
+
+# Deployment
+
+The `CloudflareDeployer` configuration has been updated to use standard `wrangler.json` property names.
+
+## Changed
+
+### CloudflareDeployer uses standard wrangler.json property names
+
+The `CloudflareDeployer` constructor now accepts standard `wrangler.json` property names instead of custom camelCase variants. This change aligns the deployer with Cloudflare's official configuration format and provides access to all wrangler configuration options.
+
+Deprecated fields are automatically migrated at runtime with console warnings, but you should update your code to use the new field names.
+
+```diff
+  const deployer = new CloudflareDeployer({
+-   projectName: 'my-worker',
++   name: 'my-worker',
+-   d1Databases: [
++   d1_databases: [
+      {
+        binding: 'DB',
+        database_name: 'my-db',
+        database_id: 'xxx',
+      },
+    ],
+-   kvNamespaces: [
++   kv_namespaces: [
+      {
+        binding: 'KV',
+        id: 'yyy',
+      },
+    ],
+  });
+```
+
+The `workerNamespace` field has been removed as it is no longer used.
+
+For all available configuration options, see the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/).

@@ -11,7 +11,7 @@ export const lodashTitleCase = (str: string): string => {
     .trim();
 };
 
-export const toTitleCase = (str: string, splitChar = ' ') => {
+const toTitleCase = (str: string, splitChar = ' ') => {
   return str
     .split(splitChar)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

@@ -13,7 +13,7 @@ const { embeddings } = await embedMany({
 });
 
 const libsql = new LibSQLVector({
-  connectionUrl: process.env.DATABASE_URL!,
+  url: process.env.DATABASE_URL!,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
 

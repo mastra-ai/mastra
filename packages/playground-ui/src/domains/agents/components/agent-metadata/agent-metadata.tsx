@@ -7,22 +7,17 @@ import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
-import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { GaugeIcon } from 'lucide-react';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
-import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
+import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
-import {
-  useReorderModelList,
-  useResetAgentModel,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-} from '../../hooks/use-agents';
+import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {
@@ -59,9 +54,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
-  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -81,39 +74,22 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const agentWorkflows = agent.workflows ?? {};
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
+  const inputProcessors = agent.inputProcessors ?? [];
+  const outputProcessors = agent.outputProcessors ?? [];
+
   return (
     <AgentMetadataWrapper>
       {agent?.description && (
         <AgentMetadataSection title="Description">
-          <p className="text-sm text-muted-foreground">{agent.description}</p>
+          <p className="text-sm text-neutral6">{agent.description}</p>
         </AgentMetadataSection>
       )}
-      {agent.modelList ? (
+      {agent.modelList && (
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
             updateModelInModelList={updateModelInModelList}
             reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      ) : (
-        <AgentMetadataSection
-          title={'Model'}
-          hint={
-            agent.modelVersion === 'v2' || agent.modelVersion === 'v3'
-              ? undefined
-              : {
-                  link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
-                  title: 'You are using a legacy v1 model',
-                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
-                }
-          }
-        >
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            resetModel={resetModel}
           />
         </AgentMetadataSection>
       )}
@@ -181,6 +157,18 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataWorkflowList workflows={workflows} />
       </AgentMetadataSection>
 
+      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
+        <AgentMetadataSection
+          title="Processors"
+          hint={{
+            link: 'https://mastra.ai/docs/agents/processors',
+            title: 'Processors documentation',
+          }}
+        >
+          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
+        </AgentMetadataSection>
+      )}
+
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
@@ -208,7 +196,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       {tools.map(tool => (
         <AgentMetadataListItem key={tool.id}>
           <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
-            <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{tool.id}</Badge>
+            <Badge icon={<ToolsIcon className="text-accent6" />}>{tool.id}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}
@@ -273,10 +261,49 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
       {scorerList.map(scorer => (
         <AgentMetadataListItem key={scorer.id}>
           <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
-            <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
+            <Badge icon={<GaugeIcon className="text-neutral3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataCombinedProcessorListProps {
+  inputProcessors: Array<{ id: string; name: string }>;
+  outputProcessors: Array<{ id: string; name: string }>;
+}
+
+export const AgentMetadataCombinedProcessorList = ({
+  inputProcessors,
+  outputProcessors,
+}: AgentMetadataCombinedProcessorListProps) => {
+  const { Link, paths } = useLinkComponent();
+
+  if (inputProcessors.length === 0 && outputProcessors.length === 0) {
+    return <AgentMetadataListEmpty>No processors</AgentMetadataListEmpty>;
+  }
+
+  // Use the first processor's ID for the link (they're grouped into a single workflow per type)
+  const inputProcessorId = inputProcessors[0]?.id;
+  const outputProcessorId = outputProcessors[0]?.id;
+
+  return (
+    <AgentMetadataList>
+      {inputProcessors.length > 0 && inputProcessorId && (
+        <AgentMetadataListItem>
+          <Link href={`${paths.workflowLink(inputProcessorId)}/graph`} data-testid="processor-badge">
+            <Badge icon={<ProcessorIcon className="text-accent4" />}>input</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      )}
+      {outputProcessors.length > 0 && outputProcessorId && (
+        <AgentMetadataListItem>
+          <Link href={`${paths.workflowLink(outputProcessorId)}/graph`} data-testid="processor-badge">
+            <Badge icon={<ProcessorIcon className="text-accent5" />}>output</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      )}
     </AgentMetadataList>
   );
 };

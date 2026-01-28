@@ -1,3 +1,4 @@
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import type {
   LanguageModelV2,
   LanguageModelV2Middleware,

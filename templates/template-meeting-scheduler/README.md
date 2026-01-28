@@ -23,7 +23,7 @@ This template provides an AI-powered assistant that:
 
 ## Prerequisites
 
-- Node.js >= 20.9.0
+- Node.js 22.13.0 or later
 - Google account (for Gmail and Calendar access)
 - Anthropic API key
 - Arcade API key

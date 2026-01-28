@@ -12,6 +12,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
 
 ## Constructor Options
 
+The constructor accepts all [Pinecone configuration options](https://docs.pinecone.io/reference/typescript-sdk) plus Mastra-specific fields.
+
 <PropertiesTable
   content={[
     {
@@ -25,24 +27,36 @@ It provides real-time vector search, with features like hybrid search, metadata 
       description: "Pinecone API key",
     },
     {
-      name: "environment",
+      name: "controllerHostUrl",
       type: "string",
       isOptional: true,
-      description: "Pinecone environment controller host URL",
+      description: "Custom Pinecone controller host URL",
+    },
+    {
+      name: "additionalHeaders",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "Additional HTTP headers to include in requests",
+    },
+    {
+      name: "sourceTag",
+      type: "string",
+      isOptional: true,
+      description: "Source tag for request tracking",
     },
     {
       name: "cloud",
       type: "'aws' | 'gcp' | 'azure'",
       isOptional: true,
       defaultValue: "aws",
-      description: "Cloud provider for Pinecone serverless",
+      description: "Cloud provider for new index creation",
     },
     {
       name: "region",
       type: "string",
       isOptional: true,
       defaultValue: "us-east-1",
-      description: "Region for Pinecone serverless",
+      description: "Region for new index creation",
     },
   ]}
 />
@@ -340,7 +354,6 @@ try {
 Required environment variables:
 
 - `PINECONE_API_KEY`: Your Pinecone API key
-- `PINECONE_ENVIRONMENT`: Pinecone environment (e.g., 'us-west1-gcp')
 
 ## Hybrid Search
 

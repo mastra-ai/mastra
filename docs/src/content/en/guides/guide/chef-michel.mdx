@@ -18,8 +18,8 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 ## Prerequisites
 
 - Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Creating the Agent
 
@@ -151,7 +151,7 @@ Great! You can make a comforting chicken curry...
 
 <StepItem>
 
-Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/v1/agents/overview#structured-output).
+Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/overview#structured-output).
 
 Change your `src/index.ts` to the following:
 
@@ -224,7 +224,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/v1/getting-started/studio) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your agent through a UI.
 
 </StepItem>
 

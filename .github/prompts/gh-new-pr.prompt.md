@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Create a new pull request on GitHub
 ---
 

@@ -20,6 +20,22 @@ export type MastraUIMessageMetadata = {
 } & (
   | {
       mode: 'generate';
+      requireApprovalMetadata?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          runId?: string;
+        };
+      };
+      suspendedTools?: {
+        [toolName: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+          suspendPayload: any;
+        };
+      };
     }
   | {
       mode: 'stream';

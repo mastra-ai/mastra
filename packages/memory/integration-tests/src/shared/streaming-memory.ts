@@ -44,7 +44,7 @@ export async function setupStreamingMemoryTest({
 
       // First weather check
       const stream1 = isV5Plus
-        ? await agent.stream('what is the weather in LA?', { threadId, resourceId })
+        ? await agent.stream('what is the weather in LA?', { memory: { thread: threadId, resource: resourceId } })
         : await agent.streamLegacy('what is the weather in LA?', { threadId, resourceId });
 
       if (isV5Plus) {
@@ -75,7 +75,7 @@ export async function setupStreamingMemoryTest({
 
       // Second weather check
       const stream2Raw = isV5Plus
-        ? await agent.stream('what is the weather in Seattle?', { threadId, resourceId })
+        ? await agent.stream('what is the weather in Seattle?', { memory: { thread: threadId, resource: resourceId } })
         : await agent.streamLegacy('what is the weather in Seattle?', { threadId, resourceId });
 
       if (isV5Plus) {
@@ -135,8 +135,7 @@ export async function setupStreamingMemoryTest({
       const isV5Plus = isV5PlusModel(model);
       if (isV5Plus) {
         await agent.generate('Hello, world!', {
-          threadId,
-          resourceId,
+          memory: { thread: threadId, resource: resourceId },
         });
       } else {
         await agent.generateLegacy('Hello, world!', {

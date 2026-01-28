@@ -4,7 +4,7 @@
 
 ## Related Issue(s)
 
-<!-- Link to the issue(s) this PR addresses, using hashtag notation: #123 -->
+<!-- Link to the issue(s) this PR addresses, using hashtag notation: Fixes #123 -->
 
 ## Type of Change
 

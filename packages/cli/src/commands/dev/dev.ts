@@ -129,7 +129,7 @@ const startServer = async (
       );
     }
 
-    // Filter server output to remove playground message
+    // Filter server output to remove Studio message
     if (currentServerProcess.stdout) {
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();

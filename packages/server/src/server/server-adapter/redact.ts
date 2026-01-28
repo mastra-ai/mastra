@@ -1,4 +1,4 @@
-import type { ChunkType, OutputSchema } from '@mastra/core/stream';
+import type { ChunkType } from '@mastra/core/stream';
 
 /**
  * Redacts request data from a v2 format payload.
@@ -54,9 +54,7 @@ function redactV2Payload(payload: Record<string, unknown>): Record<string, unkno
  * @param chunk - The stream chunk to redact
  * @returns A new chunk with sensitive data removed, or the original chunk if no redaction needed
  */
-export function redactStreamChunk<OUTPUT extends OutputSchema = undefined>(
-  chunk: ChunkType<OUTPUT>,
-): ChunkType<OUTPUT> {
+export function redactStreamChunk<OUTPUT = undefined>(chunk: ChunkType<OUTPUT>): ChunkType<OUTPUT> {
   if (!chunk || typeof chunk !== 'object') {
     return chunk;
   }

@@ -808,7 +808,8 @@ describe('Observability Registry', () => {
 
       // Restore mocks
       infoSpy.mockRestore();
-      if (originalToken) {
+      // Restore env var safely (avoid setting to string "undefined")
+      if (originalToken !== undefined) {
         process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
       }
     });

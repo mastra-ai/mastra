@@ -101,7 +101,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     // Create a simple test agent
     const testAgent = new Agent({
-      id: 'test-agent',
+      id: 'testAgent',
       name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
       model: 'openai/gpt-4.1-mini',
@@ -116,7 +116,9 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
           default: {
             serviceName,
             exporters: [
-              new DefaultExporter(), // Persists traces to storage
+              // Use realtime strategy for tests to ensure spans are persisted immediately
+              // (default batch strategy has 5 second flush interval which is too slow for tests)
+              new DefaultExporter({ strategy: 'realtime' }),
             ],
           },
         },
@@ -147,7 +149,26 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     let server: ReturnType<typeof serve> | undefined;
 
     try {
-      await mastraServer.init();
+      // Register context middleware first (sets mastra, requestContext, etc. in context)
+      mastraServer.registerContextMiddleware();
+
+      // Register custom API routes from Mastra config
+      // MastraServer.init() only registers SERVER_ROUTES, not custom routes
+      const serverConfig = mastra.getServer();
+      const routes = serverConfig?.apiRoutes;
+      if (routes) {
+        for (const route of routes) {
+          const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
+          if (route.method === 'ALL') {
+            app.all(route.path, handler);
+          } else {
+            app.on(route.method, route.path, handler);
+          }
+        }
+      }
+
+      // Register built-in API routes
+      await mastraServer.registerRoutes();
 
       // Start HTTP server
       server = serve({

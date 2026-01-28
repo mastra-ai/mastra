@@ -45,7 +45,7 @@ export async function build({
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
       if (studio) {
         logger.info(
-          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/playground node .mastra/output/index.mjs`,
+          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs`,
         );
       } else {
         logger.info(`To start the server, run: node .mastra/output/index.mjs`);

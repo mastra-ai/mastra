@@ -6,6 +6,7 @@ dist/
 .vscode/
 .idea/
 .history/
+.context/
 
 # Dev artifacts
 .dev/db/*
@@ -48,3 +49,5 @@ mastra-cli.json
 *storybook.log
 storybook-static
 test-output.log
+
+.playwright-mcp

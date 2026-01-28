@@ -34,14 +34,12 @@ export function MastraRuntimeProvider({
 
     try {
       const agent = mastra.getAgent('ycAgent');
-      const response = await agent.stream({
-        messages: [
-          {
-            role: 'user',
-            content: input,
-          },
-        ],
-      });
+      const response = await agent.stream([
+        {
+          role: 'user',
+          content: input,
+        },
+      ]);
 
       if (!response.body) throw new Error('No response body');
 
