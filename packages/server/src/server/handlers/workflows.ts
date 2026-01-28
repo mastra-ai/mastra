@@ -376,7 +376,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = run.stream(params);
+      const result = run.stream({ ...params, requestContext });
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
@@ -435,7 +435,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
 
-      const stream = _run.resumeStream(params).fullStream.pipeThrough(
+      const stream = _run.resumeStream({ ...params, requestContext }).fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
             if (serverCache) {
@@ -483,7 +483,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
       }
 
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = await _run.start(params);
+      const result = await _run.start({ ...params, requestContext });
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -532,6 +532,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       void _run.start({
         ...params,
+        requestContext,
       });
 
       return { message: 'Workflow run started' };
@@ -675,7 +676,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume(params);
+      const result = await _run.resume({ ...params, requestContext });
 
       return result;
     } catch (error) {
@@ -724,7 +725,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.resume(params);
+      void _run.resume({ ...params, requestContext });
 
       return { message: 'Workflow run resumed' };
     } catch (error) {
@@ -772,7 +773,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart(params);
+      const result = await _run.restart({ ...params, requestContext });
 
       return result;
     } catch (error) {
@@ -821,7 +822,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart(params);
+      void _run.restart({ ...params, requestContext });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
@@ -931,7 +932,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel(params);
+      const result = await _run.timeTravel({ ...params, requestContext });
 
       return result;
     } catch (error) {
@@ -980,7 +981,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.timeTravel(params);
+      void _run.timeTravel({ ...params, requestContext });
 
       return { message: 'Workflow run time travel started' };
     } catch (error) {
@@ -1028,7 +1029,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
-      const result = run.timeTravelStream(params);
+      const result = run.timeTravelStream({ ...params, requestContext });
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
@@ -1129,6 +1130,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = run.streamLegacy({
         ...params,
+        requestContext,
         onChunk: async chunk => {
           if (serverCache) {
             const cacheKey = runId;

@@ -314,4 +314,54 @@ describe('Agent Routes Authorization', () => {
       expect(capturedMemoryOption.resource).toBe('user-a');
     });
   });
+
+  describe('requestContext passthrough', () => {
+    it('GENERATE_AGENT_ROUTE should pass requestContext to agent.generate()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      requestContext.set('custom-key', 'custom-value');
+
+      // Mock agent.generate to capture the full options
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedOptions = options;
+        return { text: 'mocked response' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('custom-value');
+    });
+
+    it('STREAM_GENERATE_ROUTE should pass requestContext to agent.stream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      requestContext.set('custom-key', 'stream-value');
+
+      // Mock agent.stream to capture the full options
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-value');
+    });
+  });
 });
