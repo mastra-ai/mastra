@@ -9,9 +9,12 @@ packages:
   - "@mastra/pinecone"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Storage
 
-For agents to remember previous conversations, Mastra needs a database. Configure a storage adapter by choosing one of the [supported providers](#supported-providers) and passing it to your Mastra instance.
+For agents to remember previous interactions, Mastra needs a database. Use a storage adapter for one of the [supported databases](#supported-providers) and pass it to your Mastra instance. 
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -24,6 +27,7 @@ export const mastra = new Mastra({
   }),
 });
 ```
+This configures instance-level storage, which all agents share by default. You can also configure [agent-level storage](#agent-level-storage) for isolated data boundaries.
 
 Mastra automatically creates the necessary tables on first interaction. See the [core schema](/reference/storage/overview#core-schema) for details on what gets created, including tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
@@ -43,7 +47,7 @@ Each provider page includes installation instructions, configuration parameters,
 - [Microsoft SQL Server](/reference/storage/mssql)
 
 :::tip
-libSQL is the easiest way to get started because it doesn’t require running a separate database server
+libSQL is the easiest way to get started because it doesn’t require running a separate database server.
 :::
 
 ## Configuration scope
@@ -123,19 +127,34 @@ export const agent = new Agent({
 ```
 
 :::warning
-[Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store) does not support agent-level storage. You must use instance-level storage or bring your own database.
+[Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store) doesn't support agent-level storage.
 :::
 
 ## Threads and resources
 
 Mastra organizes conversations using two identifiers: 
 
-- **Thread**: a conversation session containing a sequence of messages.
-- **Resource**: the entity that owns the thread - a user, organization, project, or any domain entity in your application.
+- **Thread** - a conversation session containing a sequence of messages.
+- **Resource** - the entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
 
 Both identifiers are required for agents to store information:
 
-```typescript title="src/mastra/agents/my-agent.ts"
+<Tabs>
+  <TabItem value="generate" label="Generate">
+
+```typescript
+const response = await agent.generate("hello", {
+  memory: {
+    thread: "conversation-abc-123",
+    resource: "user_123",
+  },
+});
+```
+
+  </TabItem>
+  <TabItem value="stream" label="Stream">
+
+```typescript
 const stream = await agent.stream("hello", {
   memory: {
     thread: "conversation-abc-123",
@@ -144,8 +163,11 @@ const stream = await agent.stream("hello", {
 });
 ```
 
+  </TabItem>
+</Tabs>
+
 :::note
-[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. Pass these explicitly when calling `stream()` or `generate()` yourself, as illustrated above.
+[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
 :::
 
 ### Thread title generation
@@ -185,43 +207,5 @@ export const agent = new Agent({
 
 ## Semantic recall
 
-[Semantic recall](/docs/memory/semantic-recall) uses vector embeddings to retrieve relevant past messages based on meaning rather than recency. Unlike standard storage providers, it relies on a vector database for similarity search, which you can configure at the instance or agent level.
-
-The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
-
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
-});
-```
-
-```typescript title="src/mastra/agents/your-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { PineconeVector } from "@mastra/pinecone";
-
-export const agent = new Agent({
-  id: "agent",
-  memory: new Memory({
-    vector: new PineconeVector({
-      id: 'agent-vector',
-      apiKey: process.env.PINECONE_API_KEY,
-    }),
-    options: {
-      semanticRecall: {
-        topK: 5,
-        messageRange: 2,
-      },
-    },
-  }),
-});
-```
-
-For the full list of supported vector providers, see [Semantic Recall storage configuration](/docs/memory/semantic-recall#storage-configuration).
+Semantic recall has different storage requirements - it needs a vector database in addition to the standard storage adapter. See [Semantic recall](/docs/memory/semantic-recall) for setup and supported vector providers.
 
