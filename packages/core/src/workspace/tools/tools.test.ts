@@ -392,9 +392,11 @@ describe('createWorkspaceTools', () => {
       // With default maxDepth of 3, should show up to level3 but not level4 contents
       expect(result.tree).toContain('level1');
       expect(result.tree).toContain('level2');
+      // Verify level3 directory itself is shown (confirms depth=3)
       expect(result.tree).toContain('level3');
       expect(result.tree).not.toContain('level4');
       expect(result.tree).not.toContain('deep.txt');
+      expect(result.summary).toContain('truncated at depth 3');
     });
 
     it('should filter by extension (tree -P flag)', async () => {

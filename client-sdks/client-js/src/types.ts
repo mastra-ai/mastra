@@ -88,8 +88,8 @@ export interface GetAgentResponse {
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
-  skills: Array<{ name: string; description: string; license?: string }>;
-  workspaceTools: string[];
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
   provider: string;
   modelId: string;
   modelVersion: string;

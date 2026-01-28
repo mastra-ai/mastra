@@ -884,6 +884,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       // Search in references if included
       if (includeReferences) {
         for (const refPath of skill.references) {
+          if (results.length >= topK) break;
           const content = await this.getReference(skill.name, refPath);
           if (content && content.toLowerCase().includes(queryLower)) {
             results.push({

@@ -465,7 +465,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
         // Only recurse into directories (follow symlinks to directories)
         if (options?.recursive && resolvedType === 'directory') {
-          const depth = options.maxDepth ?? Infinity;
+          // Default to 100 to prevent stack overflow on deeply nested structures
+          const depth = options.maxDepth ?? 100;
           if (depth > 0) {
             const subEntries = await this.readdir(this.toRelativePath(entryPath), { ...options, maxDepth: depth - 1 });
             result.push(

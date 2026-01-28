@@ -186,14 +186,8 @@ ${skillsMd}`;
    * Format activated skills based on configured format
    */
   private async formatActivatedSkills(): Promise<string> {
-    const activatedSkillsList: Skill[] = [];
-
-    for (const name of this._activatedSkills) {
-      const skill = await this.skills?.get(name);
-      if (skill) {
-        activatedSkillsList.push(skill);
-      }
-    }
+    const skillPromises = Array.from(this._activatedSkills).map(name => this.skills?.get(name));
+    const activatedSkillsList = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
 
     if (activatedSkillsList.length === 0) {
       return '';
