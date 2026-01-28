@@ -11,19 +11,13 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { AlertTriangleIcon, GaugeIcon, Folder } from 'lucide-react';
-import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace/constants';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
-import {
-  useReorderModelList,
-  useResetAgentModel,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-} from '../../hooks/use-agents';
+import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
@@ -63,9 +57,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
-  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -97,32 +89,12 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           <p className="text-sm text-neutral6">{agent.description}</p>
         </AgentMetadataSection>
       )}
-      {agent.modelList ? (
+      {agent.modelList && (
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
             updateModelInModelList={updateModelInModelList}
             reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      ) : (
-        <AgentMetadataSection
-          title={'Model'}
-          hint={
-            agent.modelVersion === 'v2' || agent.modelVersion === 'v3'
-              ? undefined
-              : {
-                  link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
-                  title: 'You are using a legacy v1 model',
-                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
-                }
-          }
-        >
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            resetModel={resetModel}
           />
         </AgentMetadataSection>
       )}
