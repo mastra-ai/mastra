@@ -267,6 +267,7 @@ export class CoreToolBuilder extends MastraBase {
         name: `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
+        entityId: options.name,
         entityName: options.name,
         attributes: {
           toolDescription: options.description,

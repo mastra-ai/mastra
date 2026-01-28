@@ -24,17 +24,14 @@ const config: Config = {
       onBrokenMarkdownLinks: 'warn',
     },
   },
-  // Enable v4 features in prod
-
-  ...(process.env.NODE_ENV === 'production' && {
-    future: {
-      v4: {
-        useCssCascadeLayers: false,
-        removeLegacyPostBuildHeadAttribute: true,
-      },
-      experimental_faster: true,
+  future: {
+    v4: {
+      // TODO: Turn this to true and fix everything
+      useCssCascadeLayers: false,
+      removeLegacyPostBuildHeadAttribute: true,
     },
-  }),
+    experimental_faster: true,
+  },
 
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
