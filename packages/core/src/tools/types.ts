@@ -19,6 +19,45 @@ import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
+/**
+ * The field name used to store internal/debug data in tool results.
+ *
+ * When a tool returns a result with this field, the data will be:
+ * - Preserved in storage (database)
+ * - Visible in the UI
+ * - Automatically stripped when sending messages to the LLM
+ *
+ * This allows tools to include debug information, raw API responses,
+ * or other internal data that shouldn't be sent to the model.
+ *
+ * @example
+ * ```typescript
+ * import { INTERNAL_DATA_FIELD } from '@mastra/core/tools';
+ *
+ * const myTool = createTool({
+ *   id: 'myTool',
+ *   execute: async () => {
+ *     const rawResponse = await fetchSomeApi();
+ *     return {
+ *       result: rawResponse.summary,
+ *       [INTERNAL_DATA_FIELD]: {
+ *         rawResponse,
+ *         processingTime: 150,
+ *         debugInfo: 'some debug data'
+ *       }
+ *     };
+ *   }
+ * });
+ * ```
+ */
+export const INTERNAL_DATA_FIELD = '_internal' as const;
+
+/**
+ * Type for the internal data field value.
+ * Can be any object containing debug/internal information.
+ */
+export type InternalDataFieldValue = Record<string, unknown>;
+
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
 

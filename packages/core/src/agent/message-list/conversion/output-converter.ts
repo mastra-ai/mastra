@@ -2,6 +2,7 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
+import { INTERNAL_DATA_FIELD } from '../../../tools/types';
 import { AIV4Adapter, AIV5Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
@@ -130,6 +131,44 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Strips the internal data field (_internal) from tool results in model messages.
+ * This field is preserved in storage and UI but should not be sent to the LLM.
+ *
+ * @see INTERNAL_DATA_FIELD
+ */
+export function stripInternalDataFromToolResults(messages: AIV5Type.ModelMessage[]): AIV5Type.ModelMessage[] {
+  return messages.map(msg => {
+    // Only process tool messages
+    if (msg.role !== 'tool') return msg;
+
+    const content = Array.isArray(msg.content) ? msg.content : [msg.content];
+    const strippedContent = content.map(part => {
+      // Only process tool-result parts with object results
+      if (
+        typeof part === 'object' &&
+        part !== null &&
+        'type' in part &&
+        part.type === 'tool-result' &&
+        'result' in part &&
+        typeof part.result === 'object' &&
+        part.result !== null
+      ) {
+        const result = part.result as Record<string, unknown>;
+        // Check if the internal field exists
+        if (INTERNAL_DATA_FIELD in result) {
+          // Create a new result object without the internal field
+          const { [INTERNAL_DATA_FIELD]: _removed, ...cleanResult } = result;
+          return { ...part, result: cleanResult };
+        }
+      }
+      return part;
+    });
+
+    return { ...msg, content: strippedContent } as AIV5Type.ModelMessage;
+  });
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -166,8 +205,11 @@ export function aiV5UIMessagesToAIV5ModelMessages(
     return modelMsg;
   });
 
+  // Strip internal data field from tool results before sending to LLM (fixes issue #12385)
+  const withoutInternalData = stripInternalDataFromToolResults(withProviderOptions);
+
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  return ensureAnthropicCompatibleMessages(withProviderOptions, dbMessages);
+  return ensureAnthropicCompatibleMessages(withoutInternalData, dbMessages);
 }
 
 /**
