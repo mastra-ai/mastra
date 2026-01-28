@@ -35,6 +35,7 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  WorkflowRunStatus,
   StepParams,
   ToolStep,
   DefaultEngineType,
@@ -1191,6 +1192,8 @@ export class EventedWorkflow<
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
         validateInputs: this.options?.validateInputs,
+        inputSchema: this.inputSchema,
+        stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
       });
 
@@ -1207,6 +1210,11 @@ export class EventedWorkflow<
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
+    if (existsInStorage && existingRun.status) {
+      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+    }
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1258,6 +1266,8 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    inputSchema?: SchemaWithValidation<TInput>;
+    stateSchema?: SchemaWithValidation<TState>;
     workflowEngineType: WorkflowEngineType;
   }) {
     super(params);

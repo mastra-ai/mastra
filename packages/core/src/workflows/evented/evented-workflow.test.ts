@@ -5373,7 +5373,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should persist error message without stack trace in snapshot - evented runtime snapshots show running status for failed workflows', async () => {
+    it('should persist error message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
       const workflowsStore = await mockStorage.getStore('workflows');
       const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
@@ -5434,7 +5434,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should persist MastraError message without stack trace in snapshot - evented runtime snapshots show running status for failed workflows', async () => {
+    it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
       const workflowsStore = await mockStorage.getStore('workflows');
       const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
@@ -6434,7 +6434,7 @@ describe('Workflow', () => {
   });
 
   describe('Schema Validation', () => {
-    it.skip('should throw error if trigger data is invalid (needs workflow input validation fix)', async () => {
+    it('should throw error if trigger data is invalid', async () => {
       const triggerSchema = z.object({
         required: z.string(),
         nested: z.object({
@@ -7049,7 +7049,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should throw error when you try to resume a workflow step with invalid resume data (Phase 4)', async () => {
+    it.skip('should throw error when you try to resume a workflow step with invalid resume data (test hangs - needs investigation)', async () => {
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
@@ -7135,7 +7135,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should use default value from resumeSchema when resuming a workflow (Phase 4)', async () => {
+    it.skip('should use default value from resumeSchema when resuming a workflow (test hangs - needs investigation)', async () => {
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
@@ -11694,7 +11694,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should return correct status from storage when creating run with existing runId from different workflow instance - evented runtime does not check storage status on createRun', async () => {
+    it('should return correct status from storage when creating run with existing runId from different workflow instance', async () => {
       const suspendStepAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
@@ -11828,7 +11828,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should update run status from storage snapshot when run exists in memory map - evented runtime does not update status from storage on createRun', async () => {
+    it('should update run status from storage snapshot when run exists in memory map', async () => {
       const suspendStepAction = vi.fn().mockImplementation(async ({ suspend }) => {
         return suspend({ message: 'Workflow suspended' });
       });
@@ -11898,7 +11898,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should use shouldPersistSnapshot option - evented runtime persists all snapshots regardless of option', async () => {
+    it('should use shouldPersistSnapshot option', async () => {
       const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 

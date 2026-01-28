@@ -212,6 +212,49 @@ export async function processWorkflowForEach(
           outputOptions,
         },
       });
+      return;
+    }
+
+    // If forEachIndex was provided but the iteration is already complete,
+    // check if there are still pending (null or suspended) iterations.
+    // If so, re-suspend the workflow to wait for those to be resumed.
+    const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
+    if (pendingIterations.length > 0) {
+      // Re-suspend the workflow - there are still pending iterations
+      // Use workflow.step.end with suspended status to update storage
+      await pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: {
+              ...currentResult,
+              status: 'suspended',
+              suspendedAt: Date.now(),
+              suspendPayload: { __workflow_meta: { foreachIndex: forEachIndex } },
+            },
+          },
+          prevResult: {
+            status: 'suspended',
+            output: currentResult.output,
+            suspendPayload: { __workflow_meta: { foreachIndex: forEachIndex } },
+            payload: currentResult.payload,
+            startedAt: currentResult.startedAt,
+            suspendedAt: Date.now(),
+          },
+          activeSteps,
+          requestContext,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
     }
     return;
   }

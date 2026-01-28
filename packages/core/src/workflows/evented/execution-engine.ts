@@ -79,6 +79,42 @@ export class EventedExecutionEngine extends ExecutionEngine {
       throw new Error('No Pubsub adapter configured on the Mastra instance');
     }
 
+    // Set up promise that will resolve when workflow finishes
+    // CRITICAL: Must subscribe BEFORE publishing events to avoid race condition
+    let resolveResult: (data: any) => void;
+    const resultPromise = new Promise<any>((resolve, _reject) => {
+      resolveResult = resolve;
+    });
+
+    const finishCb = async (event: Event, ack?: () => Promise<void>) => {
+      if (event.runId !== params.runId) {
+        await ack?.();
+        return;
+      }
+
+      if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
+        await ack?.();
+        await pubsub.unsubscribe('workflows-finish', finishCb);
+        // Re-hydrate serialized errors back to Error instances when workflow fails
+        if (event.type === 'workflow.fail' && event.data.stepResults) {
+          event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+        }
+        resolveResult(event.data);
+        return;
+      }
+
+      await ack?.();
+    };
+
+    // AWAIT subscription first - ensures listener is registered before any events fire
+    try {
+      await pubsub.subscribe('workflows-finish', finishCb);
+    } catch (err) {
+      this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
+      throw err;
+    }
+
+    // NOW safe to publish - listener is guaranteed to be registered
     if (params.resume) {
       const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
       const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
@@ -140,32 +176,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
       });
     }
 
-    const resultData: any = await new Promise((resolve, reject) => {
-      const finishCb = async (event: Event, ack?: () => Promise<void>) => {
-        if (event.runId !== params.runId) {
-          await ack?.();
-          return;
-        }
-
-        if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
-          await ack?.();
-          await pubsub.unsubscribe('workflows-finish', finishCb);
-          // Re-hydrate serialized errors back to Error instances when workflow fails
-          if (event.type === 'workflow.fail' && event.data.stepResults) {
-            event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
-          }
-          resolve(event.data);
-          return;
-        }
-
-        await ack?.();
-      };
-
-      pubsub.subscribe('workflows-finish', finishCb).catch(err => {
-        this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
-        reject(err);
-      });
-    });
+    // Wait for workflow to complete
+    const resultData: any = await resultPromise;
 
     // Extract state from resultData (stored in stepResults.__state)
     const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};

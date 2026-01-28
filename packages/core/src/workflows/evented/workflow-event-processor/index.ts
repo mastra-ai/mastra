@@ -214,29 +214,40 @@ export class WorkflowEventProcessor extends EventProcessor {
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
     const resourceId = existingRun?.resourceId;
 
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflow.id,
-      runId,
-      resourceId,
-      snapshot: {
-        activePaths: [],
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        activeStepsPath: {},
-        serializedStepGraph: workflow.serializedStepGraph,
-        timestamp: Date.now(),
+    // Check shouldPersistSnapshot option - default to true if not specified
+    // This is particularly important for resume: if shouldPersist returns false for 'running',
+    // we shouldn't overwrite the existing 'suspended' status with 'running'
+    const shouldPersist =
+      workflow?.options?.shouldPersistSnapshot?.({
+        stepResults: stepResults ?? {},
+        workflowStatus: 'running',
+      }) ?? true;
+
+    if (shouldPersist) {
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflow.id,
         runId,
-        context: {
-          ...(stepResults ?? {
-            input: prevResult?.status === 'success' ? prevResult.output : undefined,
-          }),
-          __state: initialState,
+        resourceId,
+        snapshot: {
+          activePaths: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          activeStepsPath: {},
+          serializedStepGraph: workflow.serializedStepGraph,
+          timestamp: Date.now(),
+          runId,
+          context: {
+            ...(stepResults ?? {
+              input: prevResult?.status === 'success' ? prevResult.output : undefined,
+            }),
+            __state: initialState,
+          },
+          status: 'running',
+          value: initialState,
         },
-        status: 'running',
-        value: initialState,
-      },
-    });
+      });
+    }
 
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.run',
@@ -267,16 +278,27 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
-    const { workflowId, runId, prevResult, perStep } = args;
+    const { workflowId, runId, prevResult, perStep, workflow, stepResults } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
-      workflowName: workflowId,
-      runId,
-      opts: {
-        status: perStep && status === 'success' ? 'paused' : status,
-        result: prevResult,
-      },
-    });
+
+    // Check shouldPersistSnapshot option - default to true if not specified
+    const finalStatus = perStep && status === 'success' ? 'paused' : status;
+    const shouldPersist =
+      workflow?.options?.shouldPersistSnapshot?.({
+        stepResults: stepResults ?? {},
+        workflowStatus: finalStatus,
+      }) ?? true;
+
+    if (shouldPersist) {
+      await workflowsStore?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: finalStatus,
+          result: prevResult,
+        },
+      });
+    }
 
     if (perStep) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -435,6 +457,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       state,
       outputOptions,
+      workflow,
     } = args;
 
     // Extract final state from stepResults or args
@@ -444,14 +467,24 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.cleanupRun(runId);
 
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
-      workflowName: workflowId,
-      runId,
-      opts: {
-        status: 'failed',
-        error: (prevResult as any).error,
-      },
-    });
+
+    // Check shouldPersistSnapshot option - default to true if not specified
+    const shouldPersist =
+      workflow?.options?.shouldPersistSnapshot?.({
+        stepResults: stepResults ?? {},
+        workflowStatus: 'failed',
+      }) ?? true;
+
+    if (shouldPersist) {
+      await workflowsStore?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: 'failed',
+          error: (prevResult as any).error,
+        },
+      });
+    }
 
     // handle nested workflow
     if (parentWorkflow) {
@@ -501,6 +534,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     perStep,
     state,
     outputOptions,
+    forEachIndex,
   }: ProcessorArgs) {
     // Get current state from stepResults.__state or from passed state
     const currentState = stepResults?.__state ?? state ?? {};
@@ -690,6 +724,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: currentState,
           outputOptions,
+          forEachIndex,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -1063,6 +1098,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           perStep,
           state: updatedState,
           outputOptions,
+          forEachIndex,
         },
       });
     }
@@ -1084,6 +1120,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     perStep,
     state,
     outputOptions,
+    forEachIndex,
   }: ProcessorArgs) {
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
@@ -1222,26 +1259,35 @@ export class WorkflowEventProcessor extends EventProcessor {
       const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
         prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
 
-      // Persist state to snapshot context before suspending
-      // We use a special '__state' key to store state at the context level
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflow.id,
-        runId,
-        stepId: '__state',
-        result: currentState as any,
-        requestContext,
-      });
+      // Check shouldPersistSnapshot option - default to true if not specified
+      const shouldPersist =
+        workflow?.options?.shouldPersistSnapshot?.({
+          stepResults: stepResults ?? {},
+          workflowStatus: 'suspended',
+        }) ?? true;
 
-      await workflowsStore?.updateWorkflowState({
-        workflowName: workflowId,
-        runId,
-        opts: {
-          status: 'suspended',
-          result: prevResult,
-          suspendedPaths,
-          resumeLabels,
-        },
-      });
+      if (shouldPersist) {
+        // Persist state to snapshot context before suspending
+        // We use a special '__state' key to store state at the context level
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: '__state',
+          result: currentState as any,
+          requestContext,
+        });
+
+        await workflowsStore?.updateWorkflowState({
+          workflowName: workflowId,
+          runId,
+          opts: {
+            status: 'suspended',
+            result: prevResult,
+            suspendedPaths,
+            resumeLabels,
+          },
+        });
+      }
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.suspend',
@@ -1401,6 +1447,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel,
           state: currentState,
           outputOptions,
+          forEachIndex,
         },
       });
     } else if (executionPath[0]! >= workflow.stepGraph.length - 1) {
