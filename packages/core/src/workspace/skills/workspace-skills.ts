@@ -11,12 +11,12 @@
 
 import matter from 'gray-matter';
 
-import type { ContentSource } from '../../artifacts';
 import type { IndexDocument, SearchResult } from '../search';
 import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
 import { isWritableSource } from './skill-source';
 import type {
+  ContentSource,
   Skill,
   SkillMetadata,
   SkillSearchResult,

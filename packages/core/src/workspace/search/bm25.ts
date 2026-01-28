@@ -6,10 +6,7 @@
  * taking into account term frequency and document length normalization.
  */
 
-import type { LineRange } from '../../artifacts';
-
-// Re-export LineRange for consumers who import from bm25
-export type { LineRange };
+import type { LineRange } from '../line-utils';
 
 /**
  * BM25 configuration parameters

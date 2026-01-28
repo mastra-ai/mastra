@@ -4,14 +4,18 @@
  * Utility functions for working with line-based content:
  * - Extract lines by range
  * - Convert character positions to line numbers
- * - Find line ranges containing specific terms
  * - Format content with line number prefixes
  */
 
-import type { LineRange } from '../artifacts';
-
-// Re-export LineRange for convenience
-export type { LineRange };
+/**
+ * Line range where content was found
+ */
+export interface LineRange {
+  /** Starting line number (1-indexed) */
+  start: number;
+  /** Ending line number (1-indexed, inclusive) */
+  end: number;
+}
 
 /**
  * Extract lines from content by line range.
