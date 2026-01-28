@@ -49,6 +49,23 @@ export const WithCopyButton: Story = {
   },
 };
 
+export const WithoutTooltip: Story = {
+  args: {
+    children: 'This is a very long text that should be truncated',
+    charCount: 15,
+    withTooltip: false,
+  },
+};
+
+export const WithoutTooltipWithCopy: Story = {
+  args: {
+    children: 'This is a very long text that should be truncated',
+    charCount: 15,
+    withTooltip: false,
+    copy: true,
+  },
+};
+
 export const LongTextWithTooltip: Story = {
   args: {
     children:

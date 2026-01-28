@@ -8,9 +8,19 @@ export interface TruncateProps extends Omit<TxtProps, 'children'> {
   untilChar?: string;
   charCount?: number;
   copy?: boolean;
+  withTooltip?: boolean;
 }
 
-export function Truncate({ children, untilChar, charCount, copy, className, as = 'span', ...txtProps }: TruncateProps) {
+export function Truncate({
+  children,
+  untilChar,
+  charCount,
+  copy,
+  withTooltip = true,
+  className,
+  as = 'span',
+  ...txtProps
+}: TruncateProps) {
   const fullText = children;
 
   let truncatedText = fullText;
@@ -35,16 +45,22 @@ export function Truncate({ children, untilChar, charCount, copy, className, as =
     );
   }
 
+  const truncatedContent = (
+    <Txt as="span" className="cursor-default" variant={txtProps.variant} font={txtProps.font}>
+      {truncatedText}...
+    </Txt>
+  );
+
   return (
     <Txt as={as} className={cn('group inline-flex items-center gap-1', className)} {...txtProps}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Txt as="span" className="cursor-default" variant={txtProps.variant} font={txtProps.font}>
-            {truncatedText}...
-          </Txt>
-        </TooltipTrigger>
-        <TooltipContent>{fullText}</TooltipContent>
-      </Tooltip>
+      {withTooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{truncatedContent}</TooltipTrigger>
+          <TooltipContent>{fullText}</TooltipContent>
+        </Tooltip>
+      ) : (
+        truncatedContent
+      )}
       {copy && (
         <CopyButton content={fullText} iconSize="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" />
       )}
