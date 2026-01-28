@@ -2123,7 +2123,6 @@ export async function networkLoop<OUTPUT = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      console.dir({ inputData }, { depth: null });
       const configuredScorers = validation?.scorers || [];
 
       // Build completion context
