@@ -37,7 +37,15 @@ export function ReferenceViewerDialog({
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => onOpenChange(false)} />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-4xl max-h-[85vh] mx-4 bg-surface2 rounded-xl border border-border1 shadow-2xl flex flex-col overflow-hidden">
+      <div
+        className="relative w-full max-w-4xl max-h-[85vh] mx-4 bg-surface2 rounded-xl border border-border1 shadow-2xl flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reference-viewer-title"
+        onKeyDown={e => {
+          if (e.key === 'Escape') onOpenChange(false);
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border1 bg-surface3">
           <div className="flex items-center gap-3">
@@ -45,7 +53,9 @@ export function ReferenceViewerDialog({
               <FileText className="h-4 w-4 text-icon4" />
             </div>
             <div>
-              <h2 className="text-base font-medium text-icon6">{referencePath}</h2>
+              <h2 id="reference-viewer-title" className="text-base font-medium text-icon6">
+                {referencePath}
+              </h2>
               <p className="text-xs text-icon3">from {skillName}</p>
             </div>
           </div>
@@ -58,6 +68,7 @@ export function ReferenceViewerDialog({
             </Button>
             <button
               onClick={() => onOpenChange(false)}
+              aria-label="Close reference viewer"
               className="p-2 rounded-lg hover:bg-surface4 text-icon3 hover:text-icon5 transition-colors"
             >
               <X className="h-4 w-4" />

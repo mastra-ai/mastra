@@ -171,7 +171,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skills.clear();
     this.#searchEngine?.clear();
     this.#initialized = false;
+    this.#initPromise = null;
     await this.#discoverSkills();
+    this.#initialized = true;
   }
 
   async maybeRefresh(context?: SkillsContext): Promise<void> {
@@ -330,10 +332,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const refsDir = this.#joinPath(skillDir, 'references');
       await fs.mkdir(refsDir);
       for (const ref of references) {
-        const refPath = this.#joinPath(refsDir, ref.path);
+        const safeRefPath = this.#assertRelativePath(ref.path, 'reference');
+        const refPath = this.#joinPath(refsDir, safeRefPath);
         await this.#ensureParentDir(refPath);
         await fs.writeFile(refPath, ref.content);
-        refPaths.push(ref.path);
+        refPaths.push(safeRefPath);
       }
     }
 
@@ -343,10 +346,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const scriptsDir = this.#joinPath(skillDir, 'scripts');
       await fs.mkdir(scriptsDir);
       for (const script of scripts) {
-        const scriptPath = this.#joinPath(scriptsDir, script.path);
+        const safeScriptPath = this.#assertRelativePath(script.path, 'script');
+        const scriptPath = this.#joinPath(scriptsDir, safeScriptPath);
         await this.#ensureParentDir(scriptPath);
         await fs.writeFile(scriptPath, script.content);
-        scriptPaths.push(script.path);
+        scriptPaths.push(safeScriptPath);
       }
     }
 
@@ -356,10 +360,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const assetsDir = this.#joinPath(skillDir, 'assets');
       await fs.mkdir(assetsDir);
       for (const asset of assets) {
-        const assetPath = this.#joinPath(assetsDir, asset.path);
+        const safeAssetPath = this.#assertRelativePath(asset.path, 'asset');
+        const assetPath = this.#joinPath(assetsDir, safeAssetPath);
         await this.#ensureParentDir(assetPath);
         await fs.writeFile(assetPath, asset.content);
-        assetPaths.push(asset.path);
+        assetPaths.push(safeAssetPath);
       }
     }
 
@@ -476,7 +481,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const refFilePath = this.#joinPath(skill.path, 'references', referencePath);
+    const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
+    const refFilePath = this.#joinPath(skill.path, 'references', safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
       return null;
@@ -496,7 +502,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const scriptFilePath = this.#joinPath(skill.path, 'scripts', scriptPath);
+    const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
+    const scriptFilePath = this.#joinPath(skill.path, 'scripts', safeScriptPath);
 
     if (!(await this.#source.exists(scriptFilePath))) {
       return null;
@@ -516,7 +523,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const assetFilePath = this.#joinPath(skill.path, 'assets', assetPath);
+    const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
+    const assetFilePath = this.#joinPath(skill.path, 'assets', safeAssetPath);
 
     if (!(await this.#source.exists(assetFilePath))) {
       return null;
@@ -940,6 +948,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       })
       .filter(Boolean)
       .join('/');
+  }
+
+  /**
+   * Validate and normalize a relative path to prevent directory traversal.
+   * Throws if the path contains traversal segments (..) or is absolute.
+   */
+  #assertRelativePath(input: string, label: string): string {
+    const normalized = input.replace(/\\/g, '/');
+    const segments = normalized.split('/').filter(Boolean);
+    if (normalized.startsWith('/') || segments.some(seg => seg === '.' || seg === '..')) {
+      throw new Error(`Invalid ${label} path: ${input}`);
+    }
+    return segments.join('/');
   }
 
   /**

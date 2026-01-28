@@ -280,6 +280,11 @@ export class Workspace {
     this._fs = config.filesystem;
     this._sandbox = config.sandbox;
 
+    // Validate vector search config - embedder is required with vectorStore
+    if (config.vectorStore && !config.embedder) {
+      throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
+    }
+
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
       this._searchEngine = new SearchEngine({
@@ -310,7 +315,10 @@ export class Workspace {
     if (config.autoInit) {
       // Use void to indicate we intentionally don't await
       // This allows construction to complete while init runs in background
-      void this.init();
+      void this.init().catch(error => {
+        this._status = 'error';
+        console.error('[Workspace] autoInit failed:', error);
+      });
     }
   }
 

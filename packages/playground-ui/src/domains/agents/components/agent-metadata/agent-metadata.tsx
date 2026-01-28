@@ -85,8 +85,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const agentWorkflows = agent.workflows ?? {};
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
-  const skills = (agent as any).skills ?? [];
-  const workspaceTools: string[] = (agent as any).workspaceTools ?? [];
+  const skills = agent.skills ?? [];
+  const workspaceTools = agent.workspaceTools ?? [];
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
 

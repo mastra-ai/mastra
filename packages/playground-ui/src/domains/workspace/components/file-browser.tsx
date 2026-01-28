@@ -170,7 +170,7 @@ export function FileBrowser({
         <Breadcrumb path={currentPath} onNavigate={onNavigate} />
         <div className="flex items-center gap-1">
           {onRefresh && (
-            <Button variant="ghost" size="md" onClick={onRefresh} disabled={isLoading}>
+            <Button variant="ghost" size="md" onClick={onRefresh} disabled={isLoading} aria-label="Refresh files">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           )}
@@ -179,6 +179,7 @@ export function FileBrowser({
               variant="ghost"
               size="md"
               disabled={isCreatingDirectory}
+              aria-label="Create directory"
               onClick={() => {
                 const name = prompt('Directory name:');
                 if (name) {
@@ -191,7 +192,7 @@ export function FileBrowser({
             </Button>
           )}
           {onUpload && (
-            <Button variant="ghost" size="md" onClick={onUpload}>
+            <Button variant="ghost" size="md" onClick={onUpload} aria-label="Upload files">
               <Upload className="h-4 w-4" />
             </Button>
           )}
@@ -241,6 +242,7 @@ export function FileBrowser({
                   {onDelete && (
                     <button
                       onClick={() => handleDelete(entry)}
+                      aria-label={`Delete ${entry.name}`}
                       className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -428,7 +430,14 @@ export function WorkspaceNotConfigured() {
           No workspace is configured. Add a workspace to your Mastra configuration to manage files, skills, and enable
           semantic search.
         </p>
-        <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+        <Button
+          size="lg"
+          variant="default"
+          as="a"
+          href="https://mastra.ai/en/docs/workspace/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Learn about Workspaces
         </Button>
       </div>
