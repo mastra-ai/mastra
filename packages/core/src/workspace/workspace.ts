@@ -588,8 +588,11 @@ export class Workspace {
       if (this._fs?.destroy) {
         await this._fs.destroy();
       }
-    } finally {
+
       this._status = 'destroyed';
+    } catch (error) {
+      this._status = 'error';
+      throw error;
     }
   }
 
