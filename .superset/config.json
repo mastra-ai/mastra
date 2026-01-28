@@ -1,0 +1,6 @@
+{
+  "setup": [
+    "pnpm i\npnpm build"
+  ],
+  "teardown": []
+}
