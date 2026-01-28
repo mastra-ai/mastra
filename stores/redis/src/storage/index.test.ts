@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { createTestSuite, createConfigValidationTests } from '@internal/storage-test-utils';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { createClient } from 'redis';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryRedis } from './domains/memory';
 import { ScoresRedis } from './domains/scores';
@@ -23,6 +26,34 @@ const createTestClient = async (): Promise<RedisClient> => {
   await client.connect();
   return client as unknown as RedisClient;
 };
+
+const createThread = (overrides: Partial<StorageThreadType> = {}): StorageThreadType => ({
+  id: `thread-${randomUUID()}`,
+  resourceId: `resource-${randomUUID()}`,
+  title: 'Test Thread',
+  metadata: {},
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+const createMessage = (params: {
+  threadId: string;
+  resourceId: string;
+  createdAt: Date;
+  content: string;
+}): MastraDBMessage => ({
+  id: randomUUID(),
+  threadId: params.threadId,
+  resourceId: params.resourceId,
+  role: 'user',
+  createdAt: params.createdAt,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text: params.content }],
+    content: params.content,
+  },
+});
 
 createTestSuite(
   new RedisStore({
@@ -168,5 +199,131 @@ describe('RedisStore connection options', () => {
     expect(typeof client.get).toBe('function');
     expect(typeof client.set).toBe('function');
     await storage.close();
+  });
+});
+
+describe('Redis ordering regression tests', () => {
+  let storage: RedisStore;
+  let memory: MemoryStorage;
+
+  beforeAll(async () => {
+    storage = new RedisStore({
+      id: `redis-ordering-test-${Date.now()}`,
+      ...TEST_CONFIG,
+    });
+    await storage.init();
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory storage not found');
+    }
+    memory = store;
+  });
+
+  afterAll(async () => {
+    await storage.close();
+  });
+
+  it('should include chronological next messages across multiple save batches', async () => {
+    const thread = createThread();
+    await memory.saveThread({ thread });
+
+    const baseTime = Date.now();
+    const batch1 = [
+      createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(baseTime + 1000),
+        content: 'A',
+      }),
+      createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(baseTime + 2000),
+        content: 'B',
+      }),
+      createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(baseTime + 3000),
+        content: 'C',
+      }),
+    ];
+    await memory.saveMessages({ messages: batch1 });
+
+    const batch2 = [
+      createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(baseTime + 4000),
+        content: 'D',
+      }),
+      createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(baseTime + 5000),
+        content: 'E',
+      }),
+    ];
+    await memory.saveMessages({ messages: batch2 });
+
+    const result = await memory.listMessages({
+      threadId: thread.id,
+      perPage: 1,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      include: [
+        {
+          id: batch1[1]!.id,
+          withNextMessages: 2,
+        },
+      ],
+    });
+
+    const contents = result.messages.map(message => message.content.content);
+    expect(contents).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  it('should preserve chronological order when moving a message between threads', async () => {
+    const thread1 = createThread();
+    const thread2 = createThread();
+    await memory.saveThread({ thread: thread1 });
+    await memory.saveThread({ thread: thread2 });
+
+    const baseTime = Date.now();
+    const thread2Messages = [
+      createMessage({
+        threadId: thread2.id,
+        resourceId: thread2.resourceId,
+        createdAt: new Date(baseTime + 2000),
+        content: 'Two',
+      }),
+      createMessage({
+        threadId: thread2.id,
+        resourceId: thread2.resourceId,
+        createdAt: new Date(baseTime + 4000),
+        content: 'Four',
+      }),
+    ];
+    await memory.saveMessages({ messages: thread2Messages });
+
+    const movingMessage = createMessage({
+      threadId: thread1.id,
+      resourceId: thread1.resourceId,
+      createdAt: new Date(baseTime + 3000),
+      content: 'Three',
+    });
+    await memory.saveMessages({ messages: [movingMessage] });
+
+    await memory.updateMessages({
+      messages: [{ id: movingMessage.id, threadId: thread2.id }],
+    });
+
+    const result = await memory.listMessages({
+      threadId: thread2.id,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const contents = result.messages.map(message => message.content.content);
+    expect(contents).toEqual(['Two', 'Three', 'Four']);
   });
 });
