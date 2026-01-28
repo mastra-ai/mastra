@@ -1,0 +1,7 @@
+API Rate Limits by Plan:
+- Free: 100 requests/minute, 1,000 requests/day
+- Pro: 1,000 requests/minute, 50,000 requests/day
+- Team: 5,000 requests/minute, 500,000 requests/day
+- Enterprise: Custom limits
+
+When you hit a rate limit, you'll receive a 429 error. Implement exponential backoff in your code to handle this gracefully.
