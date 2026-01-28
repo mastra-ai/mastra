@@ -213,6 +213,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -231,7 +233,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath: `${prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -258,8 +260,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath: `${prefix ?? ''}${ssePath}`,
-          messagePath: `${prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           context: response,
         });
       } catch {

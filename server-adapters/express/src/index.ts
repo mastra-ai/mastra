@@ -221,6 +221,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     request?: Request,
     prefix?: string,
   ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -259,7 +261,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: request,
           res: response,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -286,8 +288,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${prefix ?? ''}${ssePath}`,
-          messagePath: `${prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: request,
           res: response,
         });

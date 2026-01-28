@@ -230,6 +230,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       ctx.body = result;
     } else if (route.responseType === 'stream') {
@@ -279,7 +281,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath: `${prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: ctx.res,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -313,8 +315,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath: `${prefix ?? ''}${ssePath}`,
-          messagePath: `${prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });

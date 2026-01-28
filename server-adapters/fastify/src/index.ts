@@ -231,6 +231,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     request?: FastifyRequest,
     prefix?: string,
   ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -280,7 +282,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: reply.raw,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -321,8 +323,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${prefix ?? ''}${ssePath}`,
-          messagePath: `${prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
