@@ -207,6 +207,7 @@
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "generate:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
+    "test:gemini": "vitest run --config vitest.gemini.config.ts",
     "test:types:zod": "node test-zod-compat.mjs",
     "test": "npm run test:unit"
   },

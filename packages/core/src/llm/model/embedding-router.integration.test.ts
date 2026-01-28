@@ -12,10 +12,12 @@ vi.mock('@ai-sdk/openai-compatible-v5', async () => {
 
 const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
 
+// Note: Google embedding tests have been moved to embedding-router.gemini.test.ts
+// Run them separately with: pnpm test:gemini
 describe('ModelRouterEmbeddingModel Integration', () => {
   beforeAll(() => {
-    if (!process.env.OPENAI_API_KEY || !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      throw new Error('OPENAI_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY are required for integration tests');
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required for integration tests');
     }
   });
 
@@ -92,32 +94,8 @@ describe('ModelRouterEmbeddingModel Integration', () => {
     });
   });
 
-  describe('Google embedding (with real API)', () => {
-    it('should successfully embed text using Google', async () => {
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-        throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is required for this test');
-      }
-
-      const model = new ModelRouterEmbeddingModel('google/text-embedding-004');
-      const result = await model.doEmbed({ values: ['hello world'] });
-
-      expect(result.embeddings).toBeDefined();
-      expect(result.embeddings.length).toBe(1);
-      expect(result.embeddings[0].length).toBeGreaterThan(0);
-    });
-
-    it('should work with different Google models', async () => {
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-        throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is required for this test');
-      }
-
-      const model = new ModelRouterEmbeddingModel('google/gemini-embedding-001');
-      const result = await model.doEmbed({ values: ['test'] });
-
-      expect(result.embeddings).toBeDefined();
-      expect(result.embeddings.length).toBe(1);
-    });
-  });
+  // Note: Google embedding tests have been moved to embedding-router.gemini.test.ts
+  // Run them separately with: pnpm test:gemini
 
   describe('Custom URL Support', () => {
     beforeEach(() => {
