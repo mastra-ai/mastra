@@ -17,7 +17,7 @@ export function CardItem({ links }: { links: Array<{ title: string; href: string
             style={{
               textDecoration: 'none',
             }}
-            className="group mb-0 flex flex-1 items-center justify-center rounded-md border-[0.5px] border-[var(--light-border-muted)] bg-[var(--light-color-surface-3)] p-2 px-4 text-center text-sm dark:border-[#343434] dark:bg-[#1a1a1a]/50"
+            className="group mb-0 flex flex-1 items-center justify-center rounded-md border-[0.5px] border-(--light-border-muted) bg-(--light-color-surface-3) p-2 px-4 text-center text-sm dark:border-[#343434] dark:bg-[#1a1a1a]/50"
           >
             {item.title}
           </Link>

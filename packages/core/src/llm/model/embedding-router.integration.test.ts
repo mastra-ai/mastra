@@ -98,24 +98,12 @@ describe('ModelRouterEmbeddingModel Integration', () => {
         throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is required for this test');
       }
 
-      const model = new ModelRouterEmbeddingModel('google/text-embedding-004');
+      const model = new ModelRouterEmbeddingModel('google/gemini-embedding-001');
       const result = await model.doEmbed({ values: ['hello world'] });
 
       expect(result.embeddings).toBeDefined();
       expect(result.embeddings.length).toBe(1);
       expect(result.embeddings[0].length).toBeGreaterThan(0);
-    });
-
-    it('should work with different Google models', async () => {
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-        throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is required for this test');
-      }
-
-      const model = new ModelRouterEmbeddingModel('google/gemini-embedding-001');
-      const result = await model.doEmbed({ values: ['test'] });
-
-      expect(result.embeddings).toBeDefined();
-      expect(result.embeddings.length).toBe(1);
     });
   });
 

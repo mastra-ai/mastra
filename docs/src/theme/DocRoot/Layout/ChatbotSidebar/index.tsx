@@ -1,17 +1,15 @@
 import { Markdown } from '@copilotkit/react-ui'
 import { prefersReducedMotion } from '@docusaurus/theme-common'
 import { useChat } from '@kapaai/react-sdk'
-import { PulsingDots } from '@site/src/components/loading'
 import { Button } from '@site/src/components/ui/button'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@site/src/components/ui/conversation'
 import { Textarea } from '@site/src/components/ui/textarea'
 import { cn } from '@site/src/lib/utils'
 import clsx from 'clsx'
 import { ArrowUp, PanelLeftClose, PanelRightClose, Square, ThumbsDown, ThumbsUp } from 'lucide-react'
-import React, { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatbotSidebar } from './context'
 import styles from './styles.module.css'
-import { TextShimmer } from './text-shimmer'
 
 function LeftClickableBorder({
   toggleSidebar,
@@ -141,7 +139,7 @@ export default function ChatbotSidebar() {
             </button>
             <span>Chat with Mastra docs</span>
           </div>
-          <Conversation className="relative mt-[41px] flex-1 overflow-y-auto font-sans">
+          <Conversation className="relative mt-10.25 flex-1 overflow-y-auto font-sans">
             <ConversationContent>
               {conversation.length > 0
                 ? conversation.map(({ answer: a, question: q, id, reaction }) => {
@@ -192,11 +190,7 @@ export default function ChatbotSidebar() {
                     )
                   })
                 : null}
-              {isPreparingAnswer && (
-                <TextShimmer className="font-mono text-xs" duration={2}>
-                  Generating answer...
-                </TextShimmer>
-              )}
+              {isPreparingAnswer && <div className="animate-pulse font-mono text-xs">Generating answer...</div>}
             </ConversationContent>
             <ConversationScrollButton className="border-none bg-white/50 ring-1 ring-(--border-subtle) backdrop-blur-lg dark:bg-black/50" />
           </Conversation>
