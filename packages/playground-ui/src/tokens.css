@@ -1,3 +1,48 @@
-.hello {
-    color: red;
+:root {
+  /* Surfaces */
+  --color-surface1: 9 9 11;
+  --color-surface2: 17 17 19;
+  --color-surface3: 24 24 27;
+  --color-surface4: 33 33 36;
+  --color-surface5: 39 39 42;
+
+  /* Accents */
+  --color-accent1: 34 197 94;
+  --color-accent2: 239 68 68;
+  --color-accent3: 59 130 246;
+  --color-accent5: 96 165 250;
+  --color-accent6: 245 158 11;
+
+  /* Accent dark */
+  --color-accent1Dark: 13 40 24;
+  --color-accent2Dark: 42 21 21;
+  --color-accent3Dark: 21 32 54;
+  --color-accent5Dark: 21 32 42;
+  --color-accent6Dark: 38 29 13;
+
+  /* Accent darker */
+  --color-accent1Darker: 10 26 16;
+  --color-accent2Darker: 26 16 16;
+  --color-accent3Darker: 15 21 32;
+  --color-accent5Darker: 15 21 26;
+  --color-accent6Darker: 26 20 10;
+
+  /* Neutrals */
+  --color-neutral1: 82 82 91;
+  --color-neutral2: 113 113 122;
+  --color-neutral3: 161 161 170;
+  --color-neutral4: 212 212 216;
+  --color-neutral5: 228 228 231;
+  --color-neutral6: 250 250 250;
+
+  /* Semantic */
+  --color-error: 239 68 68;
+
+  /* Overlay + borders: RGB channels + companion alpha vars */
+  --color-overlay: 0 0 0;
+  --color-overlay-alpha: 0.75;
+  --color-border1: 255 255 255;
+  --color-border1-alpha: 0.08;
+  --color-border2: 255 255 255;
+  --color-border2-alpha: 0.12;
 }

@@ -1,39 +1,43 @@
+function colorVar(name: string): string {
+  return `rgb(var(--color-${name}) / <alpha-value>)`;
+}
+
+function colorVarWithAlpha(name: string): string {
+  return `rgb(var(--color-${name}) / var(--color-${name}-alpha))`;
+}
+
 export const Colors = {
-  surface1: '#09090B',
-  surface2: '#111113',
-  surface3: '#18181B',
-  surface4: '#212124',
-  surface5: 'rgba(39, 39, 42, 0.9)',
-  accent1: '#22C55E',
-  accent2: '#EF4444',
-  accent3: '#3B82F6',
-  accent5: '#60A5FA',
-  accent6: '#F59E0B',
-  accent1Dark: '#0D2818',
-  accent2Dark: '#2A1515',
-  accent3Dark: '#152036',
-  accent5Dark: '#15202A',
-  accent6Dark: '#261D0D',
-  accent1Darker: '#0A1A10',
-  accent2Darker: '#1A1010',
-  accent3Darker: '#0F1520',
-  accent5Darker: '#0F151A',
-  accent6Darker: '#1A140A',
-  neutral1: '#52525B',
-  neutral2: '#71717A',
-  neutral3: '#A1A1AA',
-  neutral4: '#D4D4D8',
-  neutral5: '#E4E4E7',
-  neutral6: '#FAFAFA',
-
-  // Semantic state colors
-  error: '#EF4444',
-
-  // Overlay colors
-  overlay: 'rgba(0, 0, 0, 0.75)',
+  surface1: colorVar('surface1'),
+  surface2: colorVar('surface2'),
+  surface3: colorVar('surface3'),
+  surface4: colorVar('surface4'),
+  surface5: colorVar('surface5'),
+  accent1: colorVar('accent1'),
+  accent2: colorVar('accent2'),
+  accent3: colorVar('accent3'),
+  accent5: colorVar('accent5'),
+  accent6: colorVar('accent6'),
+  accent1Dark: colorVar('accent1Dark'),
+  accent2Dark: colorVar('accent2Dark'),
+  accent3Dark: colorVar('accent3Dark'),
+  accent5Dark: colorVar('accent5Dark'),
+  accent6Dark: colorVar('accent6Dark'),
+  accent1Darker: colorVar('accent1Darker'),
+  accent2Darker: colorVar('accent2Darker'),
+  accent3Darker: colorVar('accent3Darker'),
+  accent5Darker: colorVar('accent5Darker'),
+  accent6Darker: colorVar('accent6Darker'),
+  neutral1: colorVar('neutral1'),
+  neutral2: colorVar('neutral2'),
+  neutral3: colorVar('neutral3'),
+  neutral4: colorVar('neutral4'),
+  neutral5: colorVar('neutral5'),
+  neutral6: colorVar('neutral6'),
+  error: colorVar('error'),
+  overlay: colorVarWithAlpha('overlay'),
 };
 
 export const BorderColors = {
-  border1: 'rgba(255, 255, 255, 0.08)',
-  border2: 'rgba(255, 255, 255, 0.12)',
+  border1: colorVarWithAlpha('border1'),
+  border2: colorVarWithAlpha('border2'),
 };
