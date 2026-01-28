@@ -143,7 +143,7 @@ export const FileTreeBadge = ({
             <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">
               <div>
                 <p className="font-medium pb-2">Tool arguments</p>
-                <CodeEditor data={parsedArgs} data-testid="tool-args" />
+                <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
               </div>
               <ToolApprovalButtons
                 toolCalled={toolCalled}

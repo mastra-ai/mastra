@@ -7,7 +7,7 @@
  * and do not import any Node.js dependencies.
  */
 
-import type { WorkspaceToolName } from './constants';
+import type { WorkspaceToolName } from '../constants';
 
 // =============================================================================
 // Tool Configuration Types

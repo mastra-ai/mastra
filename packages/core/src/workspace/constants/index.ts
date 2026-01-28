@@ -1,12 +1,3 @@
-/**
- * Workspace Tool Constants
- *
- * BROWSER-SAFE EXPORTS ONLY
- *
- * Constants for workspace tools with no Node.js dependencies,
- * making it safe to import in browser environments.
- */
-
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 const TOOLS_NAMESPACE = WORKSPACE_TOOLS_PREFIX;
 
@@ -16,7 +7,7 @@ const TOOLS_NAMESPACE = WORKSPACE_TOOLS_PREFIX;
  *
  * @example
  * ```typescript
- * import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+ * import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
  *
  * if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
  *   // Handle sandbox execution
