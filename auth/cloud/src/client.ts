@@ -110,6 +110,55 @@ export class MastraCloudClient {
   }
 
   /**
+   * Make authenticated request to Cloud API.
+   * Handles Authorization header and response envelope unwrapping.
+   */
+  private async request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Project-ID': this.projectId,
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Merge with any provided headers
+    const mergedHeaders = {
+      ...headers,
+      ...((options.headers as Record<string, string>) || {}),
+    };
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...options,
+      headers: mergedHeaders,
+    });
+
+    // Handle non-JSON responses (network errors, etc)
+    let json: CloudApiResponse<T>;
+    try {
+      json = (await response.json()) as CloudApiResponse<T>;
+    } catch {
+      throw new CloudApiError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+    }
+
+    // Check BOTH response.ok AND json.ok (Cloud returns 200 with ok:false for some errors)
+    if (!response.ok || !json.ok) {
+      throw new CloudApiError(
+        json.error?.message ?? `Request failed: ${response.status}`,
+        json.error?.status ?? response.status,
+        json.error?.code,
+      );
+    }
+
+    if (json.data === undefined) {
+      throw new CloudApiError('No data in response', 500);
+    }
+
+    return json.data;
+  }
+
+  /**
    * Verify a token and get the user.
    */
   async verifyToken(token: string): Promise<CloudUser | null> {
