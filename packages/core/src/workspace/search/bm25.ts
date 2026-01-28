@@ -6,7 +6,7 @@
  * taking into account term frequency and document length normalization.
  */
 
-import type { LineRange } from '../artifacts';
+import type { LineRange } from '../../artifacts';
 
 // Re-export LineRange for consumers who import from bm25
 export type { LineRange };
@@ -164,7 +164,7 @@ export {
   replaceString,
   StringNotFoundError,
   StringNotUniqueError,
-} from './line-utils';
+} from '../line-utils';
 
 /**
  * Compute term frequencies for a list of tokens

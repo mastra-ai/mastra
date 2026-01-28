@@ -9,8 +9,8 @@
  */
 
 import type { LineRange } from '../artifacts';
-import { tokenize } from './bm25';
-import type { TokenizeOptions } from './bm25';
+import { tokenize } from './search';
+import type { TokenizeOptions } from './search';
 
 // Re-export LineRange for convenience
 export type { LineRange };

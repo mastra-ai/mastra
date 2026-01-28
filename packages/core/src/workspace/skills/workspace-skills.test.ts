@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import type { SearchResult, IndexDocument } from '../search-engine';
+import type { SearchResult, IndexDocument } from '../search';
 import type { SkillSource, SkillSourceEntry } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
 

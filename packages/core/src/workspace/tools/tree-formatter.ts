@@ -21,7 +21,7 @@
  * ```
  */
 
-import type { WorkspaceFilesystem, FileEntry } from './filesystem';
+import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 
 // =============================================================================
 // Types

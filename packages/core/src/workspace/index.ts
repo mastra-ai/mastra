@@ -40,7 +40,7 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools } from './tools';
+export { createWorkspaceTools } from './tools/tools';
 export {
   WORKSPACE_TOOLS,
   type WorkspaceToolConfig,

@@ -3,11 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { WORKSPACE_TOOLS } from './constants';
-import { LocalFilesystem } from './filesystem';
-import { LocalSandbox } from './sandbox';
+import { WORKSPACE_TOOLS } from '../constants';
+import { LocalFilesystem } from '../filesystem';
+import { LocalSandbox } from '../sandbox';
+import { Workspace } from '../workspace';
 import { createWorkspaceTools } from './tools';
-import { Workspace } from './workspace';
 
 describe('createWorkspaceTools', () => {
   let tempDir: string;
