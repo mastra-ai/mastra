@@ -116,12 +116,19 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     const updateMap: Record<string, string> = {
       snapshot: 'excluded.snapshot',
       updatedAt: 'excluded.updatedAt',
+      resourceId: 'excluded.resourceId',
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     // Use the new insert method with ON CONFLICT
-    const query = createSqlBuilder().insert(fullTableName, columns, values as SqlParam[], ['workflow_name', 'run_id'], updateMap);
+    const query = createSqlBuilder().insert(
+      fullTableName,
+      columns,
+      values as SqlParam[],
+      ['workflow_name', 'run_id'],
+      updateMap,
+    );
 
     const { sql, params } = query.build();
 
@@ -250,7 +257,9 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
       }
 
       const results = await this.#db.executeQuery({ sql, params });
-      const runs = (isArrayOfRecords(results) ? results : []).map((row: Record<string, unknown>) => this.parseWorkflowRun(row));
+      const runs = (isArrayOfRecords(results) ? results : []).map((row: Record<string, unknown>) =>
+        this.parseWorkflowRun(row),
+      );
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(
