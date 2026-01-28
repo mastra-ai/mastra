@@ -31,7 +31,10 @@ type LinkComponentPaths = {
   scorerLink: (scorerId: string) => string;
 
   toolLink: (toolId: string) => string;
-  skillLink: (skillName: string) => string;
+  skillLink: (skillName: string, workspaceId?: string) => string;
+  workspacesLink: () => string;
+  workspaceLink: (workspaceId?: string) => string;
+  workspaceSkillLink: (skillName: string, workspaceId?: string) => string;
   processorsLink: () => string;
   processorLink: (processorId: string) => string;
 
@@ -62,6 +65,9 @@ const LinkComponentContext = createContext<{
     scorerLink: () => '',
     toolLink: () => '',
     skillLink: () => '',
+    workspacesLink: () => '',
+    workspaceLink: () => '',
+    workspaceSkillLink: () => '',
     processorsLink: () => '',
     processorLink: () => '',
     mcpServerLink: () => '',

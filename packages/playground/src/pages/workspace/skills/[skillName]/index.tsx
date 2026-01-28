@@ -14,19 +14,15 @@ import {
   useWorkspaceSkillReference,
 } from '@mastra/playground-ui';
 
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
-  const { skillName } = useParams<{ skillName: string }>();
-  const [searchParams] = useSearchParams();
+  const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
   const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
-  const workspaceId = searchParams.get('workspaceId') ?? undefined;
 
-  // Build back link with workspaceId if present
-  const workspaceBackLink = workspaceId
-    ? `/workspace?workspaceId=${encodeURIComponent(workspaceId)}&tab=skills`
-    : '/workspace?tab=skills';
+  // Build back link with workspaceId
+  const workspaceBackLink = workspaceId ? `/workspaces/${workspaceId}?tab=skills` : '/workspaces';
 
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 

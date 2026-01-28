@@ -26,18 +26,19 @@ import {
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
-import { Link, useSearchParams } from 'react-router';
+import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
 import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
 export default function Workspace() {
+  const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
 
-  // Get state from URL params
-  const workspaceIdFromUrl = searchParams.get('workspaceId');
+  // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
   const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
@@ -46,15 +47,18 @@ export default function Workspace() {
   const { data: workspacesData } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
-  // Workspace info (currently always fetches global workspace)
-  const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo();
-
-  // Get the selected workspace from the list (use URL param or default to first)
-  const selectedWorkspace: WorkspaceItem | undefined = workspaceIdFromUrl
-    ? workspaces.find(w => w.id === workspaceIdFromUrl)
+  // Get the selected workspace from the list (use path param or default to first)
+  const selectedWorkspace: WorkspaceItem | undefined = workspaceIdFromPath
+    ? workspaces.find(w => w.id === workspaceIdFromPath)
     : workspaces[0];
 
-  // Helper to update URL params while preserving others
+  // Effective workspace ID to use for API calls
+  const effectiveWorkspaceId = selectedWorkspace?.id;
+
+  // Workspace info - pass workspaceId (required by the hook)
+  const { data: workspaceInfo, isLoading: isLoadingInfo } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Helper to update URL query params while preserving others
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
@@ -67,10 +71,9 @@ export default function Workspace() {
     setSearchParams(newParams);
   };
 
-  // State setters that update URL
-  const setSelectedWorkspaceId = (id: string | null) => {
-    // Reset path and file when workspace changes
-    updateSearchParams({ workspaceId: id, path: '/', file: null });
+  // Navigate to a different workspace (changes path, resets query params)
+  const setSelectedWorkspaceId = (id: string) => {
+    navigate(`/workspaces/${id}`);
   };
 
   const setCurrentPath = (path: string) => {
@@ -89,9 +92,6 @@ export default function Workspace() {
   const currentPath = pathFromUrl;
   const selectedFile = fileFromUrl;
   const activeTab = tabFromUrl;
-
-  // Effective workspace ID to use for API calls
-  const effectiveWorkspaceId = selectedWorkspace?.id;
 
   // Files - pass workspaceId to get files from the selected workspace
   const {
@@ -401,7 +401,7 @@ export default function Workspace() {
                 skills={skills}
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
-                basePath="/workspace/skills"
+                basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
                 workspaceId={effectiveWorkspaceId}
               />
             )}
