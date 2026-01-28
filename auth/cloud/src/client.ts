@@ -31,6 +31,38 @@ interface ExchangeCodeResponse {
 }
 
 /**
+ * Cloud API response envelope.
+ * All responses wrapped with ok/data/error structure.
+ */
+interface CloudApiResponse<T> {
+  ok: boolean;
+  data?: T;
+  error?: {
+    message: string;
+    code?: string;
+    status: number;
+  };
+}
+
+/**
+ * Error thrown by Cloud API requests.
+ * Contains status code and optional error code for programmatic handling.
+ */
+export class CloudApiError extends Error {
+  public readonly status: number;
+  public readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'CloudApiError';
+    this.status = status;
+    this.code = code;
+    // Required for proper instanceof checks when extending Error in TypeScript
+    Object.setPrototypeOf(this, CloudApiError.prototype);
+  }
+}
+
+/**
  * User from Mastra Cloud.
  */
 export interface CloudUser {
