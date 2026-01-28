@@ -49,10 +49,10 @@ Plans:
 4. `getUserPermissions(userId, token)` signature accepts token parameter
 5. All methods use transport layer from Phase 1
 
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 02-01: Update API paths and method signatures
+- [ ] 02-01-PLAN.md — Update config, option interfaces, and migrate all methods to request<T>()
 
 ### Phase 3: Provider Integration
 **Goal**: Wire `MastraCloudAuth` to use updated client and handle `sessionToken` flow
@@ -98,6 +98,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Transport Layer | 1/1 | ✓ Complete | 2026-01-28 |
-| 2. API Paths + Methods | 0/1 | Not started | - |
+| 2. API Paths + Methods | 0/1 | Ready | - |
 | 3. Provider Integration | 0/1 | Not started | - |
 | 4. Testing + Validation | 0/1 | Not started | - |
