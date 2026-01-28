@@ -7,6 +7,36 @@ import type { ZodType } from 'zod';
 import type { z as zv4 } from 'zod/v4';
 
 /**
+ * Normalizes a route path to ensure consistent formatting.
+ * - Removes leading/trailing whitespace
+ * - Validates no path traversal (..), query strings (?), or fragments (#)
+ * - Collapses multiple consecutive slashes
+ * - Removes trailing slashes
+ * - Ensures leading slash (unless empty)
+ *
+ * @param path - The route path to normalize
+ * @returns The normalized path (empty string for root paths)
+ * @throws Error if path contains invalid characters
+ */
+export function normalizeRoutePath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
+    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
+  }
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/' || normalized === '') {
+    return '';
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  return normalized;
+}
+
+/**
  * Check if a schema looks like a processor step schema.
  * Processor step schemas are discriminated unions on 'phase' with specific values.
  */

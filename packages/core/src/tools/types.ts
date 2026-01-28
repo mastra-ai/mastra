@@ -265,13 +265,9 @@ export interface ToolAction<
   TSchemaOut,
   TSuspend = unknown,
   TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
-    TSuspend,
-    TResume,
-    TRequestContext
-  >,
+  TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TId;
   description: string;

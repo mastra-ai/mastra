@@ -200,11 +200,11 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TRequestContext extends Record<string, any> | unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, any>,
   TId extends string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TRequestContext, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 

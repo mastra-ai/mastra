@@ -77,7 +77,7 @@ export const dynamicAgent = new Agent({
     return openai('gpt-4o-mini');
   },
   tools: ({ requestContext }) => {
-    const tools = {
+    const tools: Record<string, any> = {
       cookingTool,
     };
 
@@ -198,39 +198,6 @@ export const chefAgentResponses = new Agent({
     // languageDetector,
     // promptInjectionDetector,
     // moderationDetector,
-    {
-      name: 'no-soup-for-you',
-      process: async ({ messages, abort }) => {
-        const hasSoup = messages.some(msg => {
-          for (const part of msg.content.parts) {
-            if (part.type === 'text' && part.text.includes('soup')) {
-              return true;
-            }
-          }
-          return false;
-        });
-
-        if (hasSoup) {
-          abort('No soup for you!');
-        }
-
-        return messages;
-      },
-    },
-    {
-      name: 'remove-spinach',
-      process: async ({ messages }) => {
-        for (const message of messages) {
-          for (const part of message.content.parts) {
-            if (part.type === 'text' && part.text.includes('spinach')) {
-              part.text = part.text.replaceAll('spinach', '');
-            }
-          }
-        }
-
-        return messages;
-      },
-    },
   ],
 });
 

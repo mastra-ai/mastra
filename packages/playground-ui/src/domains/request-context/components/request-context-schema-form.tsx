@@ -7,8 +7,8 @@ import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { useSchemaRequestContext } from '../context/schema-request-context';
-import { TooltipIconButton } from '@/lib/ai-ui/tooltip-icon-button';
 import { CopyIcon } from 'lucide-react';
+import { IconButton } from '@/ds/components/IconButton';
 
 export interface RequestContextSchemaFormRef {
   /** Get the current form values (for use when executing) */
@@ -91,9 +91,9 @@ export const RequestContextSchemaForm = forwardRef<RequestContextSchemaFormRef, 
           <Txt as="label" variant="ui-md" className="text-neutral3">
             Request Context
           </Txt>
-          <TooltipIconButton variant="ghost" tooltip="Copy Request Context" onClick={handleCopy}>
+          <IconButton size="sm" variant="ghost" tooltip="Copy Request Context" onClick={handleCopy}>
             <CopyIcon />
-          </TooltipIconButton>
+          </IconButton>
         </div>
 
         <DynamicForm schema={zodSchema} onValuesChange={handleSchemaFormChange} defaultValues={requestContext} />

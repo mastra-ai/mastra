@@ -24,10 +24,14 @@ const step = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  execute: async ({ inputData }) => {
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async ({ inputData, requestContext }) => {
+    const userId = requestContext?.get('userId');
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
-      result: inputData.ingredient,
+      result: inputData.ingredient + ' from ' + userId,
     };
   },
 });
