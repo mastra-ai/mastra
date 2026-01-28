@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.24.10-alpha.1
+
+### Patch Changes
+
+- Update models and beta migration prompts and tools for mcp docs server. ([#12105](https://github.com/mastra-ai/mastra/pull/12105))
+
+- Fix MODEL_STEP span startTime appearing later than expected ([#11413](https://github.com/mastra-ai/mastra/pull/11413))
+
 ## 0.24.10-alpha.0
 
 ### Patch Changes
