@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
-import { TooltipIconButton } from '../../tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -161,7 +161,7 @@ export const FileTreeBadge = ({
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
                 {summary && <span className="text-icon6 text-xs">{summary}</span>}
-                <TooltipIconButton tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
+                <IconButton variant="light" size="sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
                       style={{ gridArea: '1/1' }}
@@ -176,7 +176,7 @@ export const FileTreeBadge = ({
                       <CopyIcon size={14} />
                     </span>
                   </span>
-                </TooltipIconButton>
+                </IconButton>
               </div>
 
               {/* Tree content */}

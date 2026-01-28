@@ -4,7 +4,7 @@ import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-b
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
-import { TooltipIconButton } from '../../tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
@@ -114,7 +114,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
             <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
-            <TooltipIconButton tooltip="Copy output" onClick={onCopy} className="shrink-0">
+            <IconButton variant="light" size="sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
               <span className="grid">
                 <span
                   style={{ gridArea: '1/1' }}
@@ -129,7 +129,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
                   <CopyIcon size={14} />
                 </span>
               </span>
-            </TooltipIconButton>
+            </IconButton>
           )}
         </div>
       )}
