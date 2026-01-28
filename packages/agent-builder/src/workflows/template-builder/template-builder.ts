@@ -565,12 +565,16 @@ const programmaticFileCopyStep = createStep({
 
         // Helper: split a name into words by hyphens, underscores, or camelCase boundaries
         const toWords = (s: string): string[] => {
-          return s
-            .replace(/[-_]/g, ' ')
-            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-            .split(/\s+/)
-            .filter(Boolean)
-            .map(w => w.toLowerCase());
+          return (
+            s
+              .replace(/[-_]/g, ' ')
+              // split "HTTPServer" -> "HTTP Server"
+              .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+              .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map(w => w.toLowerCase())
+          );
         };
 
         const words = toWords(baseName);
