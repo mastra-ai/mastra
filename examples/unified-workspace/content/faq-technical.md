@@ -3,6 +3,7 @@
 ## API Rate Limits
 
 API Rate Limits by Plan:
+
 - Free: 100 requests/minute, 1,000 requests/day
 - Pro: 1,000 requests/minute, 50,000 requests/day
 - Team: 5,000 requests/minute, 500,000 requests/day
@@ -13,6 +14,7 @@ When you hit a rate limit, you'll receive a 429 error. Implement exponential bac
 ## Webhook Setup
 
 Setting up webhooks:
+
 1. Go to Settings > Integrations > Webhooks
 2. Click "Add Webhook"
 3. Enter your endpoint URL (must be HTTPS)
@@ -24,6 +26,7 @@ All webhook payloads include a signature header (X-Signature) for verification. 
 ## Data Export
 
 Exporting your data:
+
 1. Go to Settings > Data & Privacy
 2. Click "Request Data Export"
 3. Select what data to include (profile, content, analytics)
@@ -35,6 +38,7 @@ Exports are available in JSON or CSV format. Large exports may take longer to pr
 ## Support Hours
 
 Support is available:
+
 - Email: 24/7 (response within 24 hours)
 - Live Chat: Monday-Friday, 9am-6pm EST
 - Phone (Enterprise only): Monday-Friday, 9am-6pm EST

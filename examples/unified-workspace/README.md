@@ -51,33 +51,33 @@ pnpm demo:safety        # Readonly, requireReadBeforeWrite, approval
 
 ## Workspaces
 
-| Workspace | Features |
-|-----------|----------|
-| globalWorkspace | Full access, global skills, BM25 search |
-| docsAgentWorkspace | Global + agent-specific skills (brand-guidelines) |
-| isolatedDocsWorkspace | Agent-specific skills only |
-| readonlyWorkspace | `readOnly: true` - blocks all writes |
-| safeWriteWorkspace | `requireReadBeforeWrite` on write/edit tools |
-| supervisedSandboxWorkspace | `requireApproval` on execute_command |
-| fsWriteApprovalWorkspace | `requireApproval` on write operations |
-| fsAllApprovalWorkspace | `requireApproval` on all operations |
-| testAgentWorkspace | Different basePath (/agent-files) |
-| skillsOnlyWorkspace | No filesystem/sandbox, only skills |
+| Workspace                  | Features                                          |
+| -------------------------- | ------------------------------------------------- |
+| globalWorkspace            | Full access, global skills, BM25 search           |
+| docsAgentWorkspace         | Global + agent-specific skills (brand-guidelines) |
+| isolatedDocsWorkspace      | Agent-specific skills only                        |
+| readonlyWorkspace          | `readOnly: true` - blocks all writes              |
+| safeWriteWorkspace         | `requireReadBeforeWrite` on write/edit tools      |
+| supervisedSandboxWorkspace | `requireApproval` on execute_command              |
+| fsWriteApprovalWorkspace   | `requireApproval` on write operations             |
+| fsAllApprovalWorkspace     | `requireApproval` on all operations               |
+| testAgentWorkspace         | Different basePath (/agent-files)                 |
+| skillsOnlyWorkspace        | No filesystem/sandbox, only skills                |
 
 ## Agents
 
-| Agent | Workspace | Purpose |
-|-------|-----------|---------|
-| developerAgent | globalWorkspace | Full access baseline |
-| docsAgent | docsAgentWorkspace | Skill inheritance demo |
-| supportAgent | isolatedDocsWorkspace | Agent-specific skills |
-| researchAgent | readonlyWorkspace | Readonly safety |
-| editorAgent | safeWriteWorkspace | Read-before-write |
-| automationAgent | supervisedSandboxWorkspace | Sandbox approval |
-| fsWriteApprovalAgent | fsWriteApprovalWorkspace | Write approval |
-| fsAllApprovalAgent | fsAllApprovalWorkspace | All ops approval |
-| testAgent | testAgentWorkspace | Different basePath |
-| skillsOnlyAgent | skillsOnlyWorkspace | Minimal workspace |
+| Agent                | Workspace                  | Purpose                |
+| -------------------- | -------------------------- | ---------------------- |
+| developerAgent       | globalWorkspace            | Full access baseline   |
+| docsAgent            | docsAgentWorkspace         | Skill inheritance demo |
+| supportAgent         | isolatedDocsWorkspace      | Agent-specific skills  |
+| researchAgent        | readonlyWorkspace          | Readonly safety        |
+| editorAgent          | safeWriteWorkspace         | Read-before-write      |
+| automationAgent      | supervisedSandboxWorkspace | Sandbox approval       |
+| fsWriteApprovalAgent | fsWriteApprovalWorkspace   | Write approval         |
+| fsAllApprovalAgent   | fsAllApprovalWorkspace     | All ops approval       |
+| testAgent            | testAgentWorkspace         | Different basePath     |
+| skillsOnlyAgent      | skillsOnlyWorkspace        | Minimal workspace      |
 
 ## Key Concepts
 

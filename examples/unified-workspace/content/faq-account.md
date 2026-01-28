@@ -3,6 +3,7 @@
 ## Password Reset
 
 How to reset your password:
+
 1. Go to the login page and click "Forgot Password"
 2. Enter your email address
 3. Check your inbox for a reset link (check spam folder if not found)
@@ -14,6 +15,7 @@ Note: Password reset links expire after 24 hours.
 ## Two-Factor Authentication (2FA)
 
 Setting up Two-Factor Authentication:
+
 1. Go to Settings > Security
 2. Click "Enable 2FA"
 3. Scan the QR code with an authenticator app (Google Authenticator, Authy, 1Password)
@@ -25,6 +27,7 @@ If you lose access to your authenticator, use a backup code to sign in, then rec
 ## Team Invitations
 
 To invite team members:
+
 1. Go to Settings > Team
 2. Click "Invite Member"
 3. Enter their email address
