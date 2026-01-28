@@ -1670,6 +1670,69 @@ export async function createNetworkLoop({
         });
       }
 
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'tool',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'tool-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'tool',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        await saveMessagesWithProcessors(
+          memory,
+          [
+            {
+              id: generateId({
+                idType: 'message',
+                source: 'agent',
+                entityId: toolId,
+                threadId: initData.threadId,
+                resourceId: initData.threadResourceId || networkName,
+                role: 'assistant',
+              }),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      isNetwork: true,
+                      selectionReason: inputData.selectionReason,
+                      primitiveType: inputData.primitiveType,
+                      primitiveId: toolId,
+                      finalResult: { result: 'Aborted', toolCallId },
+                      input: inputDataToUse,
+                    }),
+                  },
+                ],
+                format: 2,
+              },
+              createdAt: new Date(),
+              threadId: initData.threadId || runId,
+              resourceId: initData.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
+
       await saveMessagesWithProcessors(
         memory,
         [
@@ -2060,6 +2123,7 @@ export async function networkLoop<OUTPUT = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
+      console.dir({ inputData }, { depth: null });
       const configuredScorers = validation?.scorers || [];
 
       // Build completion context
@@ -2105,7 +2169,15 @@ export async function networkLoop<OUTPUT = undefined>({
       let generatedFinalResult: string | undefined;
       let structuredObject: OUTPUT | undefined;
 
-      if (hasConfiguredScorers) {
+      if (inputData.result === 'Aborted') {
+        completionResult = {
+          complete: true,
+          completionReason: 'Task aborted',
+          scorers: [],
+          totalDuration: 0,
+          timedOut: false,
+        };
+      } else if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
 
         // Generate and stream finalResult if validation passed
