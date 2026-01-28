@@ -198,6 +198,7 @@ body,
 html {
   overscroll-behavior: none;
 }
+
 /* ==================== SELECTION COLORS ==================== */
 ::selection {
   background: #e3e3e3;
@@ -417,10 +418,6 @@ article a:hover {
   color: var(--mastra-green-accent-2);
 }
 
-p {
-  @apply leading-[1.6] tracking-[-0.09px];
-}
-
 .docusaurus-mt-lg {
   overflow-x: hidden;
 }
@@ -577,11 +574,13 @@ pre * {
 code {
   --bg-color: var(--mastra-surface-5);
   font-family: var(--ifm-font-family-monospace);
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
+  border-radius: 0.375em;
+  font-size: 0.875em;
   border: 1px solid color-mix(in oklab, #000 4%, transparent);
   background: color-mix(in oklab, #000 3%, transparent);
   padding: 0.12em 0.25em;
+  position: relative;
+  bottom: 0.125em;
 }
 
 [data-theme='dark'] code {
@@ -679,6 +678,10 @@ kbd {
   border-bottom-color: var(--mastra-green-accent);
 }
 
+article p {
+  color: var(--mastra-text-secondary);
+}
+
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
@@ -736,6 +739,10 @@ kbd {
   }
 
   .markdown {
+    p, ul li, ol li {
+      font-size: 1.125em;
+    }
+
     h1,
     h2,
     h3,
@@ -828,11 +835,12 @@ kbd {
   article p code,
   article li code,
   article td code {
-    font-size: 0.875em;
+    font-size: 0.825em;
     padding: 0.12em 0.25em;
     border-radius: 0.375em;
     background: color-mix(in oklab, #000 3%, transparent);
     border: 1px solid color-mix(in oklab, #000 4%, transparent);
+    bottom: 0.075em;
   }
 
   [data-theme='dark'] article p code,
@@ -889,10 +897,6 @@ kbd {
   }
 
   /* ==================== TYPOGRAPHY ==================== */
-  article p {
-    line-height: 1.7;
-    color: var(--mastra-text-secondary);
-  }
 
   article h1,
   article h2,
@@ -1159,10 +1163,6 @@ kbd {
 
   .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
     padding-inline-start: 0.5rem;
-  }
-
-  p {
-    @apply leading-[1.6] tracking-[-0.09px];
   }
 
   [class*='docItemContainer'] {
