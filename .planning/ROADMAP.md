@@ -30,10 +30,10 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 3. `CloudApiResponse<T>` type defined matching Cloud spec
 4. `CloudApiError` thrown with structured error info on failure
 
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 01-01: Transport layer and response types
+- [ ] 01-01-PLAN.md — Transport layer types and request helper
 
 ### Phase 2: API Paths + Methods
 **Goal**: Update all endpoints to match Cloud spec paths and accept token parameters
@@ -97,7 +97,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transport Layer | 0/1 | Not started | - |
+| 1. Transport Layer | 0/1 | Planned | - |
 | 2. API Paths + Methods | 0/1 | Not started | - |
 | 3. Provider Integration | 0/1 | Not started | - |
 | 4. Testing + Validation | 0/1 | Not started | - |
