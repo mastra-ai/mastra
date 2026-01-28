@@ -161,7 +161,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // ASSERT: Observation completion marker should show compression stats
       // With mock observer model, we expect: "Observed X→Y tokens"
-      const observationMarker = threadWrapper.getByText(/Observed.*→.*tokens/i);
+      // Use .first() because multiple observation cycles may trigger across messages
+      const observationMarker = threadWrapper.getByText(/Observed.*→.*tokens/i).first();
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
     });
 
@@ -207,11 +208,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
   });
 
   test.describe('Observation Persistence', () => {
-    // TODO: data-om-* parts are persisted in real apps (verified with libsql in reese4),
-    // but after page reload the markers don't render. Need to investigate whether the
-    // round-trip through storage → API → toAISdkV5Messages → convertOmPartsInMastraMessage
-    // preserves the data-om-* parts correctly.
-    test.skip('should persist observations after page reload', async ({ page }) => {
+    test('should persist observations after page reload', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
       await page.goto('/agents/om-agent/chat?new=true');
@@ -233,7 +230,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.waitForTimeout(3000);
 
       // Verify observation marker appeared before reload
-      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
+      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
       await page.screenshot({ path: 'test-results/persistence-before-reload.png' });
 
       // Grab the thread URL so we can check it reloads to the same thread
@@ -255,7 +252,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
-      await expect(page.locator('[data-testid="thread-wrapper"]').getByText(/Observed.*→.*tokens/i)).toBeVisible({
+      await expect(page.locator('[data-testid="thread-wrapper"]').getByText(/Observed.*→.*tokens/i).first()).toBeVisible({
         timeout: 10000,
       });
 
@@ -289,10 +286,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.waitForTimeout(3000);
 
       // Observation marker should show (fixture emits observation first)
-      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
+      await expect(threadWrapper.getByText(/Observed.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
 
       // Reflection marker should also show (fixture emits reflection after observation)
-      await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
+      await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
 
       // Click on the Memory tab to verify sidebar
       await page.getByRole('tab', { name: 'Memory' }).click();
