@@ -97,8 +97,8 @@ await workspace.init();
     },
     {
       name: "skills",
-      type: "string[] | ((context) => string[])",
-      description: "Paths where SKILL.md files are located. This can be a static array or a dynamic function.",
+      type: "string[] | ((context: SkillsContext) => string[] | Promise<string[]>)",
+      description: "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically.",
       isOptional: true,
     },
     {
