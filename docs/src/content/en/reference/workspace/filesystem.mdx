@@ -23,7 +23,7 @@ const filesystem = new LocalFilesystem({
 });
 ```
 
-### Constructor parameters
+### Constructor Parameters
 
 <PropertiesTable
   content={[
@@ -33,10 +33,25 @@ const filesystem = new LocalFilesystem({
       description: "Root directory for the filesystem. All paths are relative to this directory.",
     },
     {
-      name: "safety",
-      type: "FilesystemSafetyOptions",
-      description: "Safety configuration for filesystem operations",
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this filesystem instance",
       isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "sandbox",
+      type: "boolean",
+      description: "Restrict operations to basePath (prevents path traversal)",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "Block all write operations. When true, write tools are not added to agents.",
+      isOptional: true,
+      defaultValue: "false",
     },
   ]}
 />
@@ -46,6 +61,16 @@ const filesystem = new LocalFilesystem({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Filesystem instance identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Provider name ('LocalFilesystem')",
+    },
+    {
       name: "provider",
       type: "string",
       description: "Provider identifier ('local')",
@@ -53,12 +78,17 @@ const filesystem = new LocalFilesystem({
     {
       name: "basePath",
       type: "string",
-      description: "The configured base path",
+      description: "The absolute base path on disk",
+    },
+    {
+      name: "readOnly",
+      type: "boolean | undefined",
+      description: "Whether the filesystem is in read-only mode",
     },
   ]}
 />
 
-## WorkspaceFilesystem interface
+## WorkspaceFilesystem Interface
 
 All filesystem providers implement this interface.
 
@@ -123,6 +153,13 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
       description: "Create parent directories if they don't exist",
       isOptional: true,
       defaultValue: "false",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite existing file",
+      isOptional: true,
+      defaultValue: "true",
     },
   ]}
 />
@@ -228,6 +265,13 @@ await filesystem.rmdir('/docs/nested', { recursive: true });
       isOptional: true,
       defaultValue: "false",
     },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "Don't throw if directory doesn't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
   ]}
 />
 
@@ -247,7 +291,7 @@ Get file or directory metadata.
 
 ```typescript
 const stat = await filesystem.stat('/docs/guide.md');
-// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date }
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
 ```
 
 **Returns:** `Promise<FileStat>`
@@ -258,10 +302,11 @@ interface FileStat {
   size: number;
   modifiedAt: Date;
   createdAt: Date;
+  path: string;
 }
 ```
 
-### Optional methods
+### Optional Methods
 
 #### `init()`
 
@@ -299,13 +344,33 @@ Common error codes:
 - `EISDIR` - Expected a file
 - `EACCES` - Permission denied
 
+### FileNotFoundError
+
+Thrown when a file or directory does not exist.
+
+```typescript
+class FileNotFoundError extends FilesystemError {
+  code: 'ENOENT';
+}
+```
+
 ### FileReadRequiredError
 
-Thrown when `requireReadBeforeWrite` is enabled and a write is attempted without reading first.
+Thrown when `requireReadBeforeWrite` is enabled on a tool and a write is attempted without reading first.
 
 ```typescript
 class FileReadRequiredError extends FilesystemError {
   code: 'EREAD_REQUIRED';
+}
+```
+
+### WorkspaceReadOnlyError
+
+Thrown when a write operation is attempted on a read-only filesystem.
+
+```typescript
+class WorkspaceReadOnlyError extends WorkspaceError {
+  code: 'READ_ONLY';
 }
 ```
 
