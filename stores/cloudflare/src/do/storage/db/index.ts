@@ -35,6 +35,18 @@ export class DODB extends MastraBase {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
+    // Validate table and column names against SQL injection
+    const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!identifierPattern.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
+    if (!identifierPattern.test(column)) {
+      throw new Error(`Invalid column name: ${column}`);
+    }
+    if (this.tablePrefix && !identifierPattern.test(this.tablePrefix)) {
+      throw new Error(`Invalid table prefix: ${this.tablePrefix}`);
+    }
+
     // Handle both prefixed and non-prefixed table names
     const fullTableName = table.startsWith(this.tablePrefix) ? table : `${this.tablePrefix}${table}`;
     const sql = `PRAGMA table_info(${fullTableName});`;
