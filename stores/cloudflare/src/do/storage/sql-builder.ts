@@ -128,8 +128,16 @@ export class SqlBuilder {
 
     if (conflictColumns && updateMap) {
       const parsedConflictColumns = conflictColumns.map(col => parseSqlIdentifier(col, 'column name'));
+      // Validate updateMap: keys must be valid identifiers, values must be 'excluded.<column>' pattern
+      const excludedPattern = /^excluded\.[a-zA-Z_][a-zA-Z0-9_]*$/;
       const updateClause = Object.entries(updateMap)
-        .map(([col, expr]) => `${col} = ${expr}`)
+        .map(([col, expr]) => {
+          const parsedCol = parseSqlIdentifier(col, 'update column name');
+          if (!excludedPattern.test(expr)) {
+            throw new Error(`Invalid update expression for column ${col}: must be 'excluded.<column>' pattern`);
+          }
+          return `${parsedCol} = ${expr}`;
+        })
         .join(', ');
       this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(${parsedConflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
       this.params.push(...values);
