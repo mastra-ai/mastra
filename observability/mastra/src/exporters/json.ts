@@ -322,8 +322,9 @@ export class JsonExporter extends BaseExporter {
       })
       .map(state => {
         const endEvent = state.events.find(e => e.type === EventType.SPAN_ENDED);
-        return endEvent!.exportedSpan;
-      }) as ExportedSpan<T>[];
+        return endEvent?.exportedSpan;
+      })
+      .filter((span): span is ExportedSpan<T> => span !== undefined);
   }
 
   /**

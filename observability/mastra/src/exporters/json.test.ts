@@ -398,7 +398,7 @@ describe('JsonExporter', () => {
 
   describe('lifecycle validation warnings', () => {
     it('should warn when span starts twice', async () => {
-      const logger = {
+      const logger: Record<'info' | 'warn' | 'error' | 'debug', ReturnType<typeof vi.fn>> = {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
@@ -406,7 +406,7 @@ describe('JsonExporter', () => {
       };
 
       const validatingExporter = new JsonExporter({
-        logger: logger as any,
+        logger,
         validateLifecycle: true,
       });
 
@@ -419,7 +419,7 @@ describe('JsonExporter', () => {
     });
 
     it('should warn when normal span ends without starting', async () => {
-      const logger = {
+      const logger: Record<'info' | 'warn' | 'error' | 'debug', ReturnType<typeof vi.fn>> = {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
@@ -427,7 +427,7 @@ describe('JsonExporter', () => {
       };
 
       const validatingExporter = new JsonExporter({
-        logger: logger as any,
+        logger,
         validateLifecycle: true,
       });
 

@@ -1297,7 +1297,6 @@ describe('Tracing Integration Tests', () => {
     expect(result.status).toBe('success');
 
     await testExporter.assertMatchesSnapshot('workflow-create-step-agent-trace.json');
-    finalExpectations(testExporter);
   });
 
   it('should have MODEL_STEP span startTime close to MODEL_GENERATION startTime, not endTime (issue #11271)', async () => {
@@ -1387,7 +1386,6 @@ describe('Tracing Integration Tests', () => {
     expect(stepStartToGenerationEnd).toBeGreaterThan(50);
 
     await testExporter.assertMatchesSnapshot('model-step-timing-trace.json');
-    finalExpectations(testExporter);
   });
 
   describe.each(agentMethods)(
@@ -1542,7 +1540,6 @@ describe('Tracing Integration Tests', () => {
         expect(llmGenerationSpan.output?.text).toBe(fullText);
 
         await testExporter.assertMatchesSnapshot('multi-step-text-accumulation-trace.json');
-        finalExpectations(testExporter);
       });
     },
   );
@@ -1588,7 +1585,7 @@ describe('Tracing Integration Tests', () => {
       expect(agentRunSpan?.tags).toBeDefined();
       expect(agentRunSpan?.tags).toEqual(['production', 'test-tag', 'experiment-v1']);
 
-      testExporter.finalExpectations();
+      finalExpectations(testExporter);
     });
 
     it('should pass tags from generate call tracingOptions to exported spans', async () => {
@@ -1626,7 +1623,7 @@ describe('Tracing Integration Tests', () => {
       expect(agentRunSpan?.tags).toBeDefined();
       expect(agentRunSpan?.tags).toEqual(['call-tag-1', 'call-tag-2']);
 
-      testExporter.finalExpectations();
+      finalExpectations(testExporter);
     });
 
     it('should merge tags from defaultOptions and generate call tracingOptions', async () => {
@@ -1672,7 +1669,7 @@ describe('Tracing Integration Tests', () => {
       expect(agentRunSpan?.tags).toBeDefined();
       expect(agentRunSpan?.tags).toEqual(['call-tag']);
 
-      testExporter.finalExpectations();
+      finalExpectations(testExporter);
     });
 
     it('should preserve defaultOptions.tracingOptions.tags when call passes other tracingOptions properties', async () => {
@@ -1716,7 +1713,7 @@ describe('Tracing Integration Tests', () => {
       expect(agentRunSpan?.tags).toBeDefined();
       expect(agentRunSpan?.tags).toEqual(['preserve-this-tag']);
 
-      testExporter.finalExpectations();
+      finalExpectations(testExporter);
     });
 
     it('should pass tags from stream call tracingOptions to exported spans', async () => {
@@ -1759,7 +1756,7 @@ describe('Tracing Integration Tests', () => {
       expect(agentRunSpan?.tags).toBeDefined();
       expect(agentRunSpan?.tags).toEqual(['stream-default-tag']);
 
-      testExporter.finalExpectations();
+      finalExpectations(testExporter);
     });
   });
 });
