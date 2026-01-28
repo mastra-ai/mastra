@@ -12,6 +12,8 @@ import type {
   SearchWorkspaceParams,
   SearchResponse,
 } from '../types';
+import { coreFeatures } from '@mastra/core/features';
+import { MastraClient } from '@mastra/client-js';
 
 // =============================================================================
 // Workspace Info Hook
@@ -36,6 +38,15 @@ export const useWorkspaceInfo = () => {
 // =============================================================================
 // List All Workspaces Hook
 // =============================================================================
+
+const isWorkspaceV1Supported = (client: MastraClient) => {
+  const workspaceClientMethods = ['listWorkspaces', 'getWorkspace'];
+
+  const coreSupported = coreFeatures.has('workspaces-v1');
+  const clientSupported = workspaceClientMethods.every(method => hasMethod(client, method));
+
+  return coreSupported && clientSupported;
+};
 
 export const useWorkspaces = () => {
   const client = useMastraClient();
