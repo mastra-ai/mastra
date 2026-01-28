@@ -230,6 +230,11 @@ export interface Config<
       cb?: () => Promise<void>,
     ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   };
+
+  /**
+   * Path to studio plugins directory.
+   */
+  studioPluginsPath?: string;
 }
 
 /**
@@ -307,6 +312,7 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
+  #studioPluginsPath?: string;
   #pubsub: PubSub;
   #gateways?: Record<string, MastraModelGateway>;
   #events: {
@@ -336,6 +342,10 @@ export class Mastra<
    */
   public getIdGenerator() {
     return this.#idGenerator;
+  }
+
+  public getStudioPluginsPath() {
+    return this.#studioPluginsPath;
   }
 
   /**
@@ -478,6 +488,7 @@ export class Mastra<
     this.#logger = logger;
 
     this.#idGenerator = config?.idGenerator;
+    this.#studioPluginsPath = config?.studioPluginsPath;
 
     let storage = config?.storage;
 
