@@ -93,7 +93,7 @@ export class Workspace extends BaseResource {
   /**
    * Reads a file from the workspace filesystem
    * @param path - Path to the file to read
-   * @param encoding - Optional encoding (default: utf-8)
+   * @param encoding - Optional encoding. Server defaults to utf-8 if not specified.
    * @returns Promise containing file content and metadata
    */
   readFile(path: string, encoding?: string): Promise<WorkspaceFsReadResponse> {

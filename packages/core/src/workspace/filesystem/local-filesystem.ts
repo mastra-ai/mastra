@@ -38,8 +38,12 @@ export interface LocalFilesystemOptions {
   id?: string;
   /** Base directory path on disk */
   basePath: string;
-  /** Restrict operations to basePath (default: true) */
-  sandbox?: boolean;
+  /**
+   * When true, all file operations are restricted to stay within basePath.
+   * Prevents path traversal attacks and symlink escapes.
+   * @default true
+   */
+  contained?: boolean;
   /**
    * When true, all write operations to this filesystem are blocked.
    * Read operations are still allowed.
@@ -73,7 +77,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly readOnly?: boolean;
 
   private readonly _basePath: string;
-  private readonly _sandbox: boolean;
+  private readonly _contained: boolean;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -86,7 +90,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   constructor(options: LocalFilesystemOptions) {
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
-    this._sandbox = options.sandbox ?? true;
+    this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
   }
 
@@ -105,7 +109,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     const normalizedInput = nodePath.normalize(cleanedPath);
     const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
 
-    if (this._sandbox) {
+    if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);
       if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
         throw new PermissionError(inputPath, 'access');
@@ -125,8 +129,51 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     }
   }
 
+  /**
+   * Verify that the resolved path doesn't escape basePath via symlinks.
+   * Uses realpath to resolve symlinks and check the actual target.
+   */
+  private async assertPathContained(absolutePath: string): Promise<void> {
+    if (!this._contained) return;
+
+    const baseReal = await fs.realpath(this._basePath);
+    let targetReal: string;
+    try {
+      targetReal = await fs.realpath(absolutePath);
+    } catch (error: unknown) {
+      // If path doesn't exist, walk up to find an existing parent
+      if (isEnoentError(error)) {
+        let parentPath = absolutePath;
+        while (true) {
+          const nextParent = nodePath.dirname(parentPath);
+          if (nextParent === parentPath) {
+            // Reached filesystem root without finding existing directory
+            throw error;
+          }
+          parentPath = nextParent;
+          try {
+            targetReal = await fs.realpath(parentPath);
+            break;
+          } catch (parentError: unknown) {
+            if (!isEnoentError(parentError)) {
+              throw parentError;
+            }
+            // Continue walking up
+          }
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    if (targetReal !== baseReal && !targetReal.startsWith(baseReal + nodePath.sep)) {
+      throw new PermissionError(absolutePath, 'access');
+    }
+  }
+
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     try {
       const stats = await fs.stat(absolutePath);
@@ -150,6 +197,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
     this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     if (options?.overwrite === false) {
       try {
@@ -171,6 +219,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
     this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
     const dir = nodePath.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
     await fs.appendFile(absolutePath, this.toBuffer(content));
@@ -179,6 +228,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     try {
       const stats = await fs.stat(absolutePath);
@@ -202,6 +252,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
+    await this.assertPathContained(srcPath);
+    await this.assertPathContained(destPath);
 
     try {
       const stats = await fs.stat(srcPath);
@@ -259,6 +311,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
+    await this.assertPathContained(srcPath);
+    await this.assertPathContained(destPath);
 
     try {
       if (options?.overwrite === false) {
@@ -274,8 +328,13 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
       try {
         await fs.rename(srcPath, destPath);
-      } catch {
-        await this.copyFile(src, dest, { ...options, overwrite: true });
+      } catch (error: unknown) {
+        // Only fall back to copy+delete for cross-device moves (EXDEV)
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'EXDEV') {
+          throw error;
+        }
+        await this.copyFile(src, dest, options);
         await fs.rm(srcPath, { recursive: true, force: true });
       }
     } catch (error: unknown) {
@@ -290,6 +349,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
     this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     try {
       await fs.mkdir(absolutePath, { recursive: options?.recursive ?? true });
@@ -308,6 +368,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     try {
       const stats = await fs.stat(absolutePath);
@@ -340,6 +401,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
 
     try {
       const stats = await fs.stat(absolutePath);
@@ -428,11 +490,13 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async exists(inputPath: string): Promise<boolean> {
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
     return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
     const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
     const result = await fsStat(absolutePath, inputPath);
     return {
       ...result,

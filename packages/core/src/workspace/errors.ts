@@ -129,7 +129,10 @@ export class DirectoryNotEmptyError extends FilesystemError {
 }
 
 export class PermissionError extends FilesystemError {
-  constructor(path: string, operation: string) {
+  constructor(
+    path: string,
+    public readonly operation: string,
+  ) {
     super(`Permission denied: ${operation} on ${path}`, 'EACCES', path);
     this.name = 'PermissionError';
   }

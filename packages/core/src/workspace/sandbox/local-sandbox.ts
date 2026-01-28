@@ -244,7 +244,8 @@ export class LocalSandbox implements WorkspaceSandbox {
           generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
 
         // Write profile to file for debugging/inspection purposes
-        this._seatbeltProfilePath = path.join(this.workingDirectory, '.sandbox.sb');
+        // Use unique filename to prevent potential profile replacement attacks
+        this._seatbeltProfilePath = path.join(this.workingDirectory, `.sandbox-${this.id}.sb`);
         await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
       }
 
