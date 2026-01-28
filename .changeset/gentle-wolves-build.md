@@ -9,8 +9,8 @@ Added unified Workspace API for agent filesystem access, code execution, and sea
 **Key features:**
 
 - Filesystem operations (read, write, copy, move, delete) through pluggable providers
-- Code and command execution through sandboxed environments with optional native OS isolation (macOS Seatbelt, Linux Bubblewrap)
-- BM25 keyword search, vector semantic search, and hybrid search modes
+- Code and command execution in secure sandboxed environments with optional OS-level isolation
+- Keyword search, semantic search, and hybrid search modes
 - Skills system for discovering and using SKILL.md instruction files
 - Safety controls including read-before-write guards, approval flows, and read-only mode
 

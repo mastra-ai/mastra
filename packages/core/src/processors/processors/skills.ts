@@ -179,6 +179,11 @@ ${JSON.stringify(
 
 ${skillsMd}`;
       }
+
+      default: {
+        const _exhaustive: never = this._format;
+        return _exhaustive;
+      }
     }
   }
 
@@ -218,6 +223,11 @@ ${skillInstructions}
         return `# Activated Skills
 
 ${skillInstructions}`;
+      }
+
+      default: {
+        const _exhaustive: never = this._format;
+        return _exhaustive;
       }
     }
   }
@@ -499,9 +509,8 @@ ${skillInstructions}`;
       execute: async ({ query, skillNames, topK }) => {
         if (!skills) {
           return {
-            success: true,
+            success: false,
             message: 'No skills configured',
-            results: [],
           };
         }
 

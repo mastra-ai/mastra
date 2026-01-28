@@ -783,16 +783,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Walk a directory recursively and call callback for each file
+   * Walk a directory recursively and call callback for each file.
+   * Limited to maxDepth (default 20) to prevent stack overflow on deep hierarchies.
    */
-  async #walkDirectory(basePath: string, dirPath: string, callback: (relativePath: string) => void): Promise<void> {
+  async #walkDirectory(
+    basePath: string,
+    dirPath: string,
+    callback: (relativePath: string) => void,
+    depth: number = 0,
+    maxDepth: number = 20,
+  ): Promise<void> {
+    if (depth >= maxDepth) {
+      return;
+    }
+
     const entries = await this.#source.readdir(dirPath);
 
     for (const entry of entries) {
       const entryPath = this.#joinPath(dirPath, entry.name);
 
       if (entry.type === 'directory') {
-        await this.#walkDirectory(basePath, entryPath, callback);
+        await this.#walkDirectory(basePath, entryPath, callback, depth + 1, maxDepth);
       } else {
         // Get relative path from base
         const relativePath = entryPath.substring(basePath.length + 1);
@@ -974,12 +985,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   /**
    * Ensure parent directory exists for a file path.
+   * Recursively creates parent directories if they don't exist.
    * Only called from write operations that already checked #isWritable.
    */
   async #ensureParentDir(filePath: string): Promise<void> {
     const parentPath = this.#getParentPath(filePath);
-    if (parentPath && parentPath !== '/' && !(await this.#source.exists(parentPath))) {
-      await this.#getWritableSource().mkdir(parentPath);
+    if (parentPath && parentPath !== '/') {
+      await this.#mkdirRecursive(parentPath);
     }
+  }
+
+  /**
+   * Recursively create directories if they don't exist.
+   */
+  async #mkdirRecursive(dirPath: string): Promise<void> {
+    if (await this.#source.exists(dirPath)) {
+      return;
+    }
+    const parentPath = this.#getParentPath(dirPath);
+    if (parentPath && parentPath !== '/') {
+      await this.#mkdirRecursive(parentPath);
+    }
+    await this.#getWritableSource().mkdir(dirPath);
   }
 }

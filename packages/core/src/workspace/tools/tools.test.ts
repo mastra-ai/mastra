@@ -691,6 +691,10 @@ describe('createWorkspaceTools', () => {
   // ===========================================================================
   // Sandbox Tools
   // ===========================================================================
+
+  // Mock context that satisfies ToolExecutionContext (all properties are optional)
+  const mockToolContext = {};
+
   describe('workspace_execute_command', () => {
     it('should execute command', async () => {
       const workspace = new Workspace({
@@ -704,7 +708,7 @@ describe('createWorkspaceTools', () => {
           command: 'echo',
           args: ['hello'],
         },
-        {} as any,
+        mockToolContext,
       );
 
       expect(result.success).toBe(true);
@@ -721,12 +725,16 @@ describe('createWorkspaceTools', () => {
       await workspace.init();
       const tools = createWorkspaceTools(workspace);
 
+      // Use a command that fails on all platforms (non-existent path)
       const result = await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute(
         {
-          command: 'ls',
-          args: ['/nonexistent/path/that/does/not/exist'],
+          command: process.platform === 'win32' ? 'cmd' : 'ls',
+          args:
+            process.platform === 'win32'
+              ? ['/c', 'dir', 'C:\\nonexistent\\path']
+              : ['/nonexistent/path/that/does/not/exist'],
         },
-        {} as any,
+        mockToolContext,
       );
 
       expect(result.success).toBe(false);
