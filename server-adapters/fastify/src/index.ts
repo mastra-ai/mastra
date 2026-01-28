@@ -141,6 +141,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.headers['content-type'] || '';
@@ -155,13 +156,16 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -369,6 +373,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       const params = await this.getParams(route, request);
+
+      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+      if (params.bodyParseError) {
+        return reply.status(400).send({
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        });
+      }
 
       if (params.queryParams) {
         try {
