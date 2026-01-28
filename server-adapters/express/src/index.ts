@@ -132,6 +132,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.headers['content-type'] || '';
@@ -146,13 +147,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -356,6 +360,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
 
         const params = await this.getParams(route, req);
+
+        // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+        if (params.bodyParseError) {
+          return res.status(400).json({
+            error: 'Invalid request body',
+            issues: [{ field: 'body', message: params.bodyParseError.message }],
+          });
+        }
 
         if (params.queryParams) {
           try {
