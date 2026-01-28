@@ -310,6 +310,8 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, encoding, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path) {
         throw new HTTPException(400, { message: 'Path is required' });
       }
@@ -353,6 +355,8 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, content, encoding, recursive, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path || content === undefined) {
         throw new HTTPException(400, { message: 'Path and content are required' });
       }
@@ -397,6 +401,8 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path) {
         throw new HTTPException(400, { message: 'Path is required' });
       }
@@ -444,6 +450,8 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, recursive, force, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path) {
         throw new HTTPException(400, { message: 'Path is required' });
       }
@@ -495,6 +503,8 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path) {
         throw new HTTPException(400, { message: 'Path is required' });
       }
@@ -533,6 +543,8 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path) {
         throw new HTTPException(400, { message: 'Path is required' });
       }
@@ -580,6 +592,8 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, query, topK, mode, minScore, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!query) {
         throw new HTTPException(400, { message: 'Search query is required' });
       }
@@ -649,6 +663,8 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra, path, content, metadata }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!path || content === undefined) {
         throw new HTTPException(400, { message: 'Path and content are required' });
       }
@@ -690,6 +706,8 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
@@ -725,6 +743,8 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!skillName) {
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
@@ -770,6 +790,8 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!skillName) {
         throw new HTTPException(400, { message: 'Skill name is required' });
       }
@@ -808,6 +830,8 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, skillName, referencePath, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!skillName || !referencePath) {
         throw new HTTPException(400, { message: 'Skill name and reference path are required' });
       }
@@ -847,6 +871,8 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId }) => {
     try {
+      requireWorkspaceV1Support();
+
       if (!query) {
         throw new HTTPException(400, { message: 'Search query is required' });
       }
