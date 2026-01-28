@@ -11,6 +11,7 @@ import {
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
   ActivatedSkillsProvider,
+  SchemaRequestContextProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -88,39 +89,41 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ActivatedSkillsProvider>
-                <AgentLayout
-                  agentId={agentId!}
-                  leftSlot={
-                    Boolean(memory?.result) && (
-                      <AgentSidebar
-                        agentId={agentId!}
-                        threadId={threadId!}
-                        threads={threads || []}
-                        isLoading={isThreadsLoading}
-                      />
-                    )
-                  }
-                  rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
-                >
-                  <AgentChat
-                    key={threadId}
+          <SchemaRequestContextProvider>
+            <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+              <ThreadInputProvider>
+                <ActivatedSkillsProvider>
+                  <AgentLayout
                     agentId={agentId!}
-                    agentName={agent?.name}
-                    modelVersion={agent?.modelVersion}
-                    threadId={threadId}
-                    memory={memory?.result}
-                    refreshThreadList={handleRefreshThreadList}
-                    modelList={agent?.modelList}
-                    messageId={messageId}
-                    isNewThread={isNewThread}
-                  />
-                </AgentLayout>
-              </ActivatedSkillsProvider>
-            </ThreadInputProvider>
-          </WorkingMemoryProvider>
+                    leftSlot={
+                      Boolean(memory?.result) && (
+                        <AgentSidebar
+                          agentId={agentId!}
+                          threadId={threadId!}
+                          threads={threads || []}
+                          isLoading={isThreadsLoading}
+                        />
+                      )
+                    }
+                    rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+                  >
+                    <AgentChat
+                      key={threadId}
+                      agentId={agentId!}
+                      agentName={agent?.name}
+                      modelVersion={agent?.modelVersion}
+                      threadId={threadId}
+                      memory={memory?.result}
+                      refreshThreadList={handleRefreshThreadList}
+                      modelList={agent?.modelList}
+                      messageId={messageId}
+                      isNewThread={isNewThread}
+                    />
+                  </AgentLayout>
+                </ActivatedSkillsProvider>
+              </ThreadInputProvider>
+            </WorkingMemoryProvider>
+          </SchemaRequestContextProvider>
         </AgentSettingsProvider>
       </AgentPromptExperimentProvider>
     </TracingSettingsProvider>

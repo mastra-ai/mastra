@@ -84,6 +84,7 @@ export interface SerializedTool {
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
+  requestContextSchema?: string;
   requireApproval?: boolean;
 }
 
@@ -92,6 +93,7 @@ interface SerializedToolInput {
   description?: string;
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
+  requestContextSchema?: { jsonSchema?: unknown } | unknown;
 }
 
 export interface SerializedWorkflow {
@@ -126,6 +128,8 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   source?: 'code' | 'stored';
 }
 
@@ -142,6 +146,7 @@ export async function getSerializedAgentTools(
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
+    let requestContextSchemaForReturn: string | undefined = undefined;
 
     // Only process schemas if not in partial mode
     if (!partial) {
@@ -175,6 +180,25 @@ export async function getSerializedAgentTools(
             );
           }
         }
+
+        if (tool.requestContextSchema) {
+          if (
+            tool.requestContextSchema &&
+            typeof tool.requestContextSchema === 'object' &&
+            'jsonSchema' in tool.requestContextSchema
+          ) {
+            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
+          } else if (typeof tool.requestContextSchema === 'function') {
+            const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
+            if (requestContextSchema && requestContextSchema.jsonSchema) {
+              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
+            }
+          } else if (tool.requestContextSchema) {
+            requestContextSchemaForReturn = stringify(
+              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
+          }
+        }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
           toolId: tool.id,
@@ -188,6 +212,7 @@ export async function getSerializedAgentTools(
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
+      requestContextSchema: requestContextSchemaForReturn,
     };
     return acc;
   }, {});
@@ -570,6 +595,16 @@ async function formatAgent({
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
 
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      mastra.getLogger().error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
+
   return {
     name: agent.name,
     description,
@@ -588,6 +623,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
   };
 }
@@ -708,7 +744,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ agentId, mastra, abortSignal, requestContext, ...params }) => {
+  handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -716,21 +752,32 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
 
       validateBody({ messages });
+
+      // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
-        const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
-        const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
+        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId && effectiveResourceId) {
-          const memoryInstance = await agent.getMemory({ requestContext });
+          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
             const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
             await validateThreadOwnership(thread, effectiveResourceId);
@@ -747,6 +794,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 
       const result = await agent.generate<unknown>(messages, {
         ...rest,
+        requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
       });
@@ -947,7 +995,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -955,20 +1003,31 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
+
+      // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
-        const effectiveResourceId = getEffectiveResourceId(requestContext, memoryOption.resource);
-        const effectiveThreadId = getEffectiveThreadId(requestContext, clientThreadId);
+        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId && effectiveResourceId) {
-          const memoryInstance = await agent.getMemory({ requestContext });
+          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
             const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
             await validateThreadOwnership(thread, effectiveResourceId);
@@ -985,6 +1044,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       const streamResult = await agent.stream<unknown>(messages, {
         ...rest,
+        requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
       });

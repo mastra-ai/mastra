@@ -128,13 +128,13 @@ const baseColumns: ColumnDef<AgentTableColumn>[] = [
         <Cell>
           <span className="flex flex-row gap-2 w-full items-center flex-wrap">
             <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
-              {agentsCount} agent{agentsCount > 1 ? 's' : ''}
+              {agentsCount} agent{agentsCount !== 1 ? 's' : ''}
             </Badge>
             <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
-              {toolsCount} tool{toolsCount > 1 ? 's' : ''}
+              {toolsCount} tool{toolsCount !== 1 ? 's' : ''}
             </Badge>
             <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
-              {workflowsCount} workflow{workflowsCount > 1 ? 's' : ''}
+              {workflowsCount} workflow{workflowsCount !== 1 ? 's' : ''}
             </Badge>
             {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
               <Tooltip>
