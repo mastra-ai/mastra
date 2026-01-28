@@ -503,7 +503,9 @@ export class Agent<
    * Unlike `listInputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `inputProcessors` option.
    */
-  public async listConfiguredInputProcessors(requestContext?: RequestContext<any>): Promise<InputProcessorOrWorkflow[]> {
+  public async listConfiguredInputProcessors(
+    requestContext?: RequestContext<any>,
+  ): Promise<InputProcessorOrWorkflow[]> {
     if (!this.#inputProcessors) return [];
 
     const configuredProcessors =
@@ -521,7 +523,9 @@ export class Agent<
    * Unlike `listOutputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `outputProcessors` option.
    */
-  public async listConfiguredOutputProcessors(requestContext?: RequestContext<any>): Promise<OutputProcessorOrWorkflow[]> {
+  public async listConfiguredOutputProcessors(
+    requestContext?: RequestContext<any>,
+  ): Promise<OutputProcessorOrWorkflow[]> {
     if (!this.#outputProcessors) return [];
 
     const configuredProcessors =
@@ -599,9 +603,9 @@ export class Agent<
    * }
    * ```
    */
-  public async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}): Promise<
-    MastraMemory | undefined
-  > {
+  public async getMemory({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext<any> } = {}): Promise<MastraMemory | undefined> {
     if (!this.#memory) {
       return undefined;
     }
@@ -675,7 +679,9 @@ export class Agent<
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext<any> } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext<any> } = {}): Promise<
+    Record<string, Workflow<any, any, any, any, any, any, any>>
+  > {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -987,9 +993,9 @@ export class Agent<
    * console.log(options.completion?.scorers); // [testsScorer, buildScorer]
    * ```
    */
-  public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+  public getDefaultNetworkOptions({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext<any> } = {}): NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -3299,16 +3305,7 @@ export class Agent<
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     return this.resumeNetwork({ approved: false }, options);
   }
-  // Overload 1: Typed RequestContext support
-  async generate<OUTPUT = TOutput, TRequestContext extends Record<string, any> | unknown = unknown>(
-    messages: MessageListInput,
-    options?: Omit<AgentExecutionOptions<OUTPUT>, 'requestContext'> & {
-      requestContext?: RequestContext<TRequestContext>;
-    },
-  ): Promise<FullOutput<OUTPUT>>;
-  // Overload 2: Default (backward compatible)
   async generate(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<FullOutput<TOutput>>;
-  // Overload 3: Structured output
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
@@ -3402,28 +3399,20 @@ export class Agent<
     return fullOutput;
   }
 
-  // Overload 1: Typed RequestContext support
-  async stream<OUTPUT = TOutput, TRequestContext extends Record<string, any> | unknown = unknown>(
-    messages: MessageListInput,
-    streamOptions?: Omit<AgentStreamOptions<OUTPUT>, 'requestContext'> & {
-      requestContext?: RequestContext<TRequestContext>;
-    },
-  ): Promise<MastraModelOutput<OUTPUT>>;
-  // Overload 2: Structured output
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  // Overload 3: Catch-all for generics
+  // Catch-all for generics
   async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  // Overload 4: Default (backward compatible)
+  // Default (backward compatible)
   async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
