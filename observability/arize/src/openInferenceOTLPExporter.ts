@@ -47,11 +47,7 @@ const MASTRA_MODEL_CHUNK_OUTPUT = 'mastra.model_chunk.output';
 const MASTRA_SPAN_TYPE = 'mastra.span.type';
 
 /**
- * Maps Mastra span types to OpenInference span kinds.
- *
- * The @arizeai/openinference-genai library defaults all spans to LLM kind,
- * which is incorrect for workflow, agent, tool, and other non-LLM spans.
- * This mapping overrides the span kind based on the mastra.span.type attribute.
+ * Maps Mastra span types to OpenInference span kinds for proper trace categorization.
  *
  * Only non-CHAIN types are mapped here - all other span types default to CHAIN.
  */
@@ -238,9 +234,7 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
 
         mutableSpan.attributes = { ...processedAttributes, ...mastraOther };
 
-        // Override span kind based on mastra.span.type
-        // The @arizeai/openinference-genai library incorrectly defaults all spans to LLM kind.
-        // We need to map based on the actual Mastra span type, defaulting to CHAIN.
+        // Set span kind based on mastra.span.type for proper trace categorization
         const spanType = mastraOther[MASTRA_SPAN_TYPE];
         if (typeof spanType === 'string') {
           mutableSpan.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND] =
