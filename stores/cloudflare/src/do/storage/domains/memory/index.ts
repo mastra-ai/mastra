@@ -480,10 +480,14 @@ export class MemoryStorageDO extends MemoryStorage {
         if (!message.resourceId) {
           throw new Error(`Message at index ${i} missing resourceId`);
         }
-        const thread = await this.getThreadById({ threadId: message.threadId });
-        if (!thread) {
-          throw new Error(`Thread ${message.threadId} not found`);
-        }
+      }
+
+      // Batch validate thread existence to avoid N+1 queries
+      const uniqueThreadIds = [...new Set(messages.map(m => m.threadId))];
+      const threads = await Promise.all(uniqueThreadIds.map(id => this.getThreadById({ threadId: id })));
+      const missingThreadId = uniqueThreadIds.find((id, i) => !threads[i]);
+      if (missingThreadId) {
+        throw new Error(`Thread ${missingThreadId} not found`);
       }
 
       // Prepare all messages for insertion (set timestamps, thread_id, etc.)
