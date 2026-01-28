@@ -21,11 +21,11 @@ await agent.generate(messages, { requestContext: ctx });
 const ctx = new RequestContext<{ userId: string }>();
 ctx.set('userId', '123');
 
-// ✅ Works! Type information preserved
+// ✅ Works! No more TypeScript errors
 await agent.generate(messages, { requestContext: ctx });
 await workflow.start({ requestContext: ctx });
 ```
 
-This fix uses generic type parameters instead of hardcoded `any`, preserving type information while maintaining backward compatibility with untyped RequestContext instances.
+This fix changes method signatures to accept `RequestContext<any>`, which resolves the type variance issue. TypeScript allows `RequestContext<T>` to be passed where `RequestContext<any>` is expected, maintaining backward compatibility with untyped RequestContext instances.
 
 Closes https://github.com/mastra-ai/mastra/issues/12182
