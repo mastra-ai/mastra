@@ -195,11 +195,18 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Strip __state from stepResults at top level
     const { __state: _removedState, ...stepResultsWithoutTopLevelState } = resultData.stepResults ?? {};
 
-    // Strip __state from each individual step result (only for objects, not arrays)
+    // Strip __state and internal metadata (nestedRunId) from each individual step result (only for objects, not arrays)
     const cleanStepResults: Record<string, any> = {};
     for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
       if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult)) {
-        const { __state: _stepState, ...cleanStepResult } = stepResult as any;
+        const { __state: _stepState, metadata, ...cleanStepResult } = stepResult as any;
+        // Strip internal metadata fields (nestedRunId) but preserve other metadata if any
+        if (metadata) {
+          const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
+          if (Object.keys(userMetadata).length > 0) {
+            cleanStepResult.metadata = userMetadata;
+          }
+        }
         cleanStepResults[stepId] = cleanStepResult;
       } else {
         cleanStepResults[stepId] = stepResult;

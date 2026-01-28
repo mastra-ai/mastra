@@ -19520,7 +19520,9 @@ describe('Workflow', () => {
   });
 
   describe('Nested Workflow Information - Phase 6', () => {
-    // Skip: evented runtime nested workflow step retrieval times out - getWorkflowRunById hangs on nested step info
+    // Skip: Evented runtime times out when executing 3-level deep nested workflows
+    // The nestedRunId metadata fix is implemented but the workflow execution itself hangs
+    // This requires deeper investigation into the evented runtime's nested workflow handling
     it.skip('should return workflow run execution result with nested workflow steps information', async () => {
       const incrementStep = createStep({
         id: 'increment',
@@ -19633,7 +19635,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    // Skip: evented runtime nested workflow step retrieval times out - getWorkflowRunById hangs on nested step info
+    // Skip: Same issue as above - evented runtime times out for nested workflows with getWorkflowRunById
     it.skip('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
       const innerStep = createStep({
         id: 'inner-step',

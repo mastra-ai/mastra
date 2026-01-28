@@ -2199,16 +2199,22 @@ export class Workflow<
       const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
-        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
-        if (nestedSteps) {
-          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
-            (acc, [key, value]) => {
-              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
-              return acc;
-            },
-            {} as Record<string, StepResult<any, any, any, any>>,
-          );
-          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        // Get nestedRunId from metadata (evented runtime) or suspendPayload (default runtime fallback)
+        const stepResult = steps[step] as any;
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+
+        if (nestedRunId) {
+          const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+          if (nestedSteps) {
+            const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+              (acc, [key, value]) => {
+                acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+                return acc;
+              },
+              {} as Record<string, StepResult<any, any, any, any>>,
+            );
+            finalSteps = { ...finalSteps, ...updatedNestedSteps };
+          }
         }
       }
     }

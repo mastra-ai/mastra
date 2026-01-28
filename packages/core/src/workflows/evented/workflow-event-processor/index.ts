@@ -46,6 +46,7 @@ export type ProcessorArgs = {
     includeResumeLabels?: boolean;
   };
   forEachIndex?: number;
+  nestedRunId?: string; // runId of nested workflow when reporting back to parent
 };
 
 export type ParentWorkflow = {
@@ -371,6 +372,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel,
           perStep,
           state: finalState,
+          nestedRunId: runId, // Pass nested workflow's runId for step retrieval
         },
       });
     }
@@ -432,6 +434,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentContext: parentWorkflow,
           state: finalState,
           outputOptions,
+          nestedRunId: runId, // Pass nested workflow's runId for step retrieval
         },
       });
     }
@@ -506,6 +509,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentContext: parentWorkflow,
           state: finalState,
           outputOptions,
+          nestedRunId: runId, // Pass nested workflow's runId for step retrieval
         },
       });
     }
@@ -1121,6 +1125,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     state,
     outputOptions,
     forEachIndex,
+    nestedRunId,
   }: ProcessorArgs) {
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
@@ -1400,6 +1405,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult = stepResults[step.step.id] = {
           ...prevResult,
           payload: parentContext.input?.output ?? {},
+          // Store nestedRunId in metadata for getWorkflowRunById retrieval
+          ...(nestedRunId && {
+            metadata: {
+              ...(prevResult as any).metadata,
+              nestedRunId,
+            },
+          }),
         };
       }
 
