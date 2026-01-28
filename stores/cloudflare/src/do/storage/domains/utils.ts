@@ -11,7 +11,7 @@ export function deserializeValue(value: unknown, type?: string): unknown {
 
   if (type === 'jsonb' && typeof value === 'string') {
     try {
-      return JSON.parse(value) as Record<string, unknown>;
+      return JSON.parse(value);
     } catch {
       return value;
     }
@@ -19,7 +19,7 @@ export function deserializeValue(value: unknown, type?: string): unknown {
 
   if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
     try {
-      return JSON.parse(value) as Record<string, unknown>;
+      return JSON.parse(value);
     } catch {
       return value;
     }
