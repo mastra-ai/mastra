@@ -72,7 +72,7 @@ export const useWorkspaceFiles = (
       const workspace = (client as any).getWorkspace(options?.workspaceId);
       return workspace.listFiles(path, options?.recursive);
     },
-    enabled: options?.enabled !== false && !!path && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!path,
   });
 };
 
@@ -91,7 +91,7 @@ export const useWorkspaceFile = (
       const workspace = (client as any).getWorkspace(options?.workspaceId);
       return workspace.readFile(path, options?.encoding);
     },
-    enabled: options?.enabled !== false && !!path && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!path,
   });
 };
 
@@ -107,7 +107,7 @@ export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean
       const workspace = (client as any).getWorkspace(options?.workspaceId);
       return workspace.stat(path);
     },
-    enabled: options?.enabled !== false && !!path && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!path,
   });
 };
 
