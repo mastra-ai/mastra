@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { TooltipIconButton } from '../../tooltip-icon-button';
@@ -8,6 +8,7 @@ import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-b
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 import { MastraUIMessage } from '@mastra/react';
 import { useLinkComponent } from '@/lib/framework';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 interface FilesystemInfo {
   id?: string;
@@ -51,8 +52,14 @@ export const FileTreeBadge = ({
   isNetwork,
   toolCalled: toolCalledProp,
 }: FileTreeBadgeProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  // Expand by default when approval is required (so buttons are visible)
+  const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
   const { isCopied, copyToClipboard } = useCopyToClipboard();
+
+  // Sync collapsed state when toolApprovalMetadata changes (like BadgeWrapper does)
+  useEffect(() => {
+    setIsCollapsed(!toolApprovalMetadata);
+  }, [toolApprovalMetadata]);
   const { Link } = useLinkComponent();
 
   // Parse args
@@ -131,7 +138,24 @@ export const FileTreeBadge = ({
       {/* Content area */}
       {!isCollapsed && (
         <div className="pt-2">
-          {/* Tree output panel */}
+          {/* Approval UI - styled like ToolBadge/BadgeWrapper when awaiting approval */}
+          {toolApprovalMetadata && !toolCalled && (
+            <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">
+              <div>
+                <p className="font-medium pb-2">Tool arguments</p>
+                <CodeEditor data={parsedArgs} data-testid="tool-args" />
+              </div>
+              <ToolApprovalButtons
+                toolCalled={toolCalled}
+                toolCallId={toolCallId}
+                toolApprovalMetadata={toolApprovalMetadata}
+                toolName={toolName}
+                isNetwork={isNetwork}
+              />
+            </div>
+          )}
+
+          {/* Tree output panel - custom UI after tool has been called */}
           {toolCalled && hasResult && (
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
@@ -168,15 +192,6 @@ export const FileTreeBadge = ({
               <span className="text-xs text-icon6">Loading...</span>
             </div>
           )}
-
-          {/* Approval buttons if needed */}
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-          />
         </div>
       )}
     </div>
