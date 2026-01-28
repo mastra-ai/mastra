@@ -11,10 +11,10 @@ import type {
   SearchWorkspaceParams,
   SearchResponse,
 } from '../types';
-import { isWorkspaceV1Supported } from '../compatibility';
+import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from '../compatibility';
 
 // Re-export for other hooks to use
-export { isWorkspaceV1Supported };
+export { isWorkspaceV1Supported, isWorkspaceNotSupportedError };
 
 // =============================================================================
 // Workspace Info Hook
@@ -32,6 +32,7 @@ export const useWorkspaceInfo = () => {
       const workspace = (client as any).getWorkspace();
       return workspace.info();
     },
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -50,6 +51,7 @@ export const useWorkspaces = () => {
       }
       return (client as any).listWorkspaces();
     },
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -73,6 +75,7 @@ export const useWorkspaceFiles = (
       return workspace.listFiles(path, options?.recursive);
     },
     enabled: options?.enabled !== false && !!path,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -92,6 +95,7 @@ export const useWorkspaceFile = (
       return workspace.readFile(path, options?.encoding);
     },
     enabled: options?.enabled !== false && !!path,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
@@ -108,6 +112,7 @@ export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean
       return workspace.stat(path);
     },
     enabled: options?.enabled !== false && !!path,
+    retry: shouldRetryWorkspaceQuery,
   });
 };
 
