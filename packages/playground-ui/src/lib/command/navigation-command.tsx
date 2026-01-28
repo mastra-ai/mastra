@@ -1,4 +1,4 @@
-import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon } from 'lucide-react';
+import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon, SunMoonIcon } from 'lucide-react';
 import React from 'react';
 
 import {
@@ -72,6 +72,23 @@ export const NavigationCommand = () => {
               <CommandShortcut>Ctrl+B</CommandShortcut>
             </CommandItem>
           )}
+          <CommandItem
+            value="toggle theme light dark"
+            onSelect={() => {
+              const isLight = document.documentElement.classList.contains('light');
+              if (isLight) {
+                document.documentElement.classList.remove('light');
+                localStorage.removeItem('theme');
+              } else {
+                document.documentElement.classList.add('light');
+                localStorage.setItem('theme', 'light');
+              }
+              setOpen(false);
+            }}
+          >
+            <SunMoonIcon className="text-neutral3" />
+            <span>Toggle theme</span>
+          </CommandItem>
           <CommandItem value="all agents" onSelect={() => handleSelect('/agents')}>
             <AgentIcon className="text-neutral3" />
             <span>All Agents</span>
