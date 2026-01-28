@@ -9,20 +9,23 @@ export interface MastraClientProviderProps {
   children: ReactNode;
   baseUrl?: string;
   headers?: Record<string, string>;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
 }
 
-export const MastraClientProvider = ({ children, baseUrl, headers }: MastraClientProviderProps) => {
-  const client = createMastraClient(baseUrl, headers);
+export const MastraClientProvider = ({ children, baseUrl, headers, apiPrefix }: MastraClientProviderProps) => {
+  const client = createMastraClient(baseUrl, headers, apiPrefix);
 
   return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };
 
 export const useMastraClient = () => useContext(MastraClientContext);
 
-const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string, string> = {}) => {
+const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string, string> = {}, apiPrefix?: string) => {
   return new MastraClient({
     baseUrl: baseUrl || '',
     // only add the header if the baseUrl is not provided i.e it's a local dev environment
     headers: !baseUrl ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
+    apiPrefix,
   });
 };
