@@ -27,39 +27,47 @@ import {
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
-import { Link, useSearchParams } from 'react-router';
+import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
 import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
 
 type TabType = 'files' | 'skills';
 
 export default function Workspace() {
+  const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
 
-  // Get state from URL params
-  const workspaceIdFromUrl = searchParams.get('workspaceId');
+  // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
-  const tabFromUrl = (searchParams.get('tab') as TabType) || 'files';
+  const tabFromUrl = searchParams.get('tab') as TabType | null;
 
-  // List of all workspaces (global + agent workspaces)
+  // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
   const { data: workspacesData, error: workspacesError } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
-  // Workspace info (currently always fetches global workspace)
-  const { data: workspaceInfo, isLoading: isLoadingInfo, error: workspaceInfoError } = useWorkspaceInfo();
+  // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
+  const effectiveWorkspaceId = workspaceIdFromPath ?? workspaces[0]?.id;
+
+  // Workspace info - calls /api/workspaces/:workspaceId directly
+  const {
+    data: workspaceInfo,
+    isLoading: isLoadingInfo,
+    error: workspaceInfoError,
+  } = useWorkspaceInfo(effectiveWorkspaceId);
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
     isWorkspaceNotSupportedError(workspacesError) || isWorkspaceNotSupportedError(workspaceInfoError);
 
-  // Get the selected workspace from the list (use URL param or default to first)
-  const selectedWorkspace: WorkspaceItem | undefined = workspaceIdFromUrl
-    ? workspaces.find(w => w.id === workspaceIdFromUrl)
-    : workspaces[0];
+  // Get the selected workspace metadata from the list (for displaying name, capabilities badge, etc.)
+  const selectedWorkspace: WorkspaceItem | undefined = effectiveWorkspaceId
+    ? workspaces.find(w => w.id === effectiveWorkspaceId)
+    : undefined;
 
-  // Helper to update URL params while preserving others
+  // Helper to update URL query params while preserving others
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
@@ -72,10 +80,9 @@ export default function Workspace() {
     setSearchParams(newParams);
   };
 
-  // State setters that update URL
-  const setSelectedWorkspaceId = (id: string | null) => {
-    // Reset path and file when workspace changes
-    updateSearchParams({ workspaceId: id, path: '/', file: null });
+  // Navigate to a different workspace (changes path, resets query params)
+  const setSelectedWorkspaceId = (id: string) => {
+    navigate(`/workspaces/${id}`);
   };
 
   const setCurrentPath = (path: string) => {
@@ -93,10 +100,6 @@ export default function Workspace() {
   // Use URL-derived values
   const currentPath = pathFromUrl;
   const selectedFile = fileFromUrl;
-  const activeTab = tabFromUrl;
-
-  // Effective workspace ID to use for API calls
-  const effectiveWorkspaceId = selectedWorkspace?.id;
 
   // Files - pass workspaceId to get files from the selected workspace
   const {
@@ -128,6 +131,19 @@ export default function Workspace() {
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
+
+  // Compute active tab based on URL and workspace capabilities
+  // If URL specifies a tab, use it only if the workspace supports it
+  // Otherwise, fall back to the first available capability
+  const getEffectiveTab = (): TabType => {
+    if (tabFromUrl === 'files' && hasFilesystem) return 'files';
+    if (tabFromUrl === 'skills' && hasSkills) return 'skills';
+    // No valid tab from URL, pick the first available
+    if (hasFilesystem) return 'files';
+    if (hasSkills) return 'skills';
+    return 'files'; // fallback
+  };
+  const activeTab = getEffectiveTab();
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
@@ -457,8 +473,7 @@ export default function Workspace() {
                 skills={skills}
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
-                basePath="/workspace/skills"
-                workspaceId={effectiveWorkspaceId}
+                basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
               />
             )}
 

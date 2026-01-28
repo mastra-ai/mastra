@@ -14,6 +14,7 @@ import {
   // Workspace info
   workspaceInfoResponseSchema,
   listWorkspacesResponseSchema,
+  workspaceIdPathParams,
   // Filesystem schemas
   fsReadQuerySchema,
   fsListQuerySchema,
@@ -35,8 +36,6 @@ import {
   // Skills schemas
   skillNamePathParams,
   skillReferencePathParams,
-  listSkillsQuerySchema,
-  getSkillQuerySchema,
   searchSkillsQuerySchema,
   listSkillsResponseSchema,
   getSkillResponseSchema,
@@ -92,14 +91,6 @@ async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Work
   }
 
   return undefined;
-}
-
-/**
- * Get the workspace from Mastra (legacy helper for backwards compatibility).
- */
-function getWorkspace(mastra: any): Workspace | undefined {
-  requireWorkspaceV1Support();
-  return mastra.getWorkspace?.();
 }
 
 /**
@@ -216,59 +207,25 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Workspace Info Route
+// Get Workspace Route
 // =============================================================================
 
-export const WORKSPACE_INFO_ROUTE = createRoute({
+export const GET_WORKSPACE_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace',
+  path: '/workspaces/:workspaceId',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   responseSchema: workspaceInfoResponseSchema,
   summary: 'Get workspace info',
-  description: 'Returns information about the configured workspace and its capabilities',
+  description: 'Returns information about a specific workspace and its capabilities',
   tags: ['Workspace'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, workspaceId }) => {
     try {
-      // Check if any workspace exists (global or agent)
-      const globalWorkspace = getWorkspace(mastra);
+      const workspace = await getWorkspaceById(mastra, workspaceId);
 
-      // Also check agent workspaces
-      let hasAgentWorkspace = false;
-      const agents = mastra.listAgents?.() ?? {};
-      for (const agent of Object.values(agents)) {
-        if ((agent as any).hasOwnWorkspace?.()) {
-          hasAgentWorkspace = true;
-          break;
-        }
-      }
-
-      // If no workspaces at all
-      if (!globalWorkspace && !hasAgentWorkspace) {
+      if (!workspace) {
         return {
           isWorkspaceConfigured: false,
-        };
-      }
-
-      // Use global workspace for the info if available, otherwise get first agent workspace
-      let workspace = globalWorkspace;
-      if (!workspace) {
-        for (const agent of Object.values(agents)) {
-          if ((agent as any).hasOwnWorkspace?.()) {
-            try {
-              workspace = await (agent as any).getWorkspace?.();
-              if (workspace) break;
-            } catch {
-              continue;
-            }
-          }
-        }
-      }
-
-      // If we have workspaces configured but couldn't get one (dynamic workspace issue)
-      if (!workspace) {
-        return {
-          isWorkspaceConfigured: true,
-          // No specific workspace info since they're all dynamic
         };
       }
 
@@ -301,8 +258,9 @@ export const WORKSPACE_INFO_ROUTE = createRoute({
 
 export const WORKSPACE_FS_READ_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/fs/read',
+  path: '/workspaces/:workspaceId/fs/read',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsReadQuerySchema,
   responseSchema: fsReadResponseSchema,
   summary: 'Read file content',
@@ -346,8 +304,9 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
 
 export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   method: 'POST',
-  path: '/workspace/fs/write',
+  path: '/workspaces/:workspaceId/fs/write',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   bodySchema: fsWriteBodySchema,
   responseSchema: fsWriteResponseSchema,
   summary: 'Write file content',
@@ -392,8 +351,9 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
 
 export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/fs/list',
+  path: '/workspaces/:workspaceId/fs/list',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsListQuerySchema,
   responseSchema: fsListResponseSchema,
   summary: 'List directory contents',
@@ -441,8 +401,9 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
 export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/workspace/fs/delete',
+  path: '/workspaces/:workspaceId/fs/delete',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsDeleteQuerySchema,
   responseSchema: fsDeleteResponseSchema,
   summary: 'Delete file or directory',
@@ -494,8 +455,9 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
 
 export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   method: 'POST',
-  path: '/workspace/fs/mkdir',
+  path: '/workspaces/:workspaceId/fs/mkdir',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   bodySchema: fsMkdirBodySchema,
   responseSchema: fsMkdirResponseSchema,
   summary: 'Create directory',
@@ -534,8 +496,9 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 
 export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/fs/stat',
+  path: '/workspaces/:workspaceId/fs/stat',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: fsStatQuerySchema,
   responseSchema: fsStatResponseSchema,
   summary: 'Get file/directory info',
@@ -583,8 +546,9 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
 
 export const WORKSPACE_SEARCH_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/search',
+  path: '/workspaces/:workspaceId/search',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchQuerySchema,
   responseSchema: searchResponseSchema,
   summary: 'Search workspace content',
@@ -654,14 +618,15 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
 
 export const WORKSPACE_INDEX_ROUTE = createRoute({
   method: 'POST',
-  path: '/workspace/index',
+  path: '/workspaces/:workspaceId/index',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   bodySchema: indexBodySchema,
   responseSchema: indexResponseSchema,
   summary: 'Index content for search',
   description: 'Indexes content for later search operations',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, content, metadata }) => {
+  handler: async ({ mastra, path, content, metadata, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -669,7 +634,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path and content are required' });
       }
 
-      const workspace = getWorkspace(mastra);
+      const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
         throw new HTTPException(404, { message: 'No workspace configured' });
       }
@@ -692,14 +657,14 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Skills Routes (under /workspace/skills)
+// Skills Routes (under /workspaces/:workspaceId/skills)
 // =============================================================================
 
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/skills',
+  path: '/workspaces/:workspaceId/skills',
   responseType: 'json',
-  queryParamSchema: listSkillsQuerySchema,
+  pathParamSchema: workspaceIdPathParams,
   responseSchema: listSkillsResponseSchema,
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
@@ -733,10 +698,9 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/skills/:skillName',
+  path: '/workspaces/:workspaceId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
-  queryParamSchema: getSkillQuerySchema,
   responseSchema: getSkillResponseSchema,
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
@@ -780,10 +744,9 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/skills/:skillName/references',
+  path: '/workspaces/:workspaceId/skills/:skillName/references',
   responseType: 'json',
   pathParamSchema: skillNamePathParams,
-  queryParamSchema: getSkillQuerySchema,
   responseSchema: listReferencesResponseSchema,
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
@@ -820,10 +783,9 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/skills/:skillName/references/:referencePath',
+  path: '/workspaces/:workspaceId/skills/:skillName/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
-  queryParamSchema: getSkillQuerySchema,
   responseSchema: skillReferenceResponseSchema,
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
@@ -862,8 +824,9 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 
 export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspace/skills/search',
+  path: '/workspaces/:workspaceId/skills/search',
   responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
   queryParamSchema: searchSkillsQuerySchema,
   responseSchema: searchSkillsResponseSchema,
   summary: 'Search skills',

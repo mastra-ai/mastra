@@ -72,18 +72,18 @@ export interface FileStatResponse {
 }
 
 export interface WriteFileParams {
+  workspaceId: string;
   path: string;
   content: string;
   encoding?: 'utf-8' | 'base64';
   recursive?: boolean;
-  workspaceId?: string;
 }
 
 export interface WriteFileFromFileParams {
+  workspaceId: string;
   path: string;
   file: File;
   recursive?: boolean;
-  workspaceId?: string;
 }
 
 // =============================================================================
@@ -111,11 +111,11 @@ export interface SearchResponse {
 }
 
 export interface SearchWorkspaceParams {
+  workspaceId: string;
   query: string;
   topK?: number;
   mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
-  workspaceId?: string;
 }
 
 // =============================================================================
@@ -181,10 +181,10 @@ export interface GetReferenceResponse {
 }
 
 export interface SearchSkillsParams {
+  workspaceId: string;
   query: string;
   topK?: number;
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
-  workspaceId?: string;
 }

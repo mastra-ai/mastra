@@ -70,8 +70,8 @@ const mainNavigation: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
-        name: 'Workspace',
-        url: '/workspace',
+        name: 'Workspaces',
+        url: '/workspaces',
         icon: <FolderIcon />,
       },
       {

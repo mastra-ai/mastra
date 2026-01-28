@@ -6,6 +6,8 @@ import { WorkspaceSkillResource } from './workspace';
 // Mock fetch globally
 global.fetch = vi.fn();
 
+const WORKSPACE_ID = 'test-workspace-id';
+
 describe('Workspace Resource', () => {
   let client: MastraClient;
   let workspace: Workspace;
@@ -33,7 +35,7 @@ describe('Workspace Resource', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     client = new MastraClient(clientOptions);
-    workspace = client.getWorkspace();
+    workspace = client.getWorkspace(WORKSPACE_ID);
   });
 
   // ===========================================================================
@@ -50,7 +52,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -98,7 +100,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/read?path=%2Ftest.txt`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/read?path=%2Ftest.txt`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -117,7 +119,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/read?path=%2Fbinary.bin&encoding=base64`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/read?path=%2Fbinary.bin&encoding=base64`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -137,7 +139,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/write`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/write`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),
@@ -157,7 +159,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/write`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/write`,
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ path: '/nested/path/file.txt', content: 'Content', recursive: true }),
@@ -181,7 +183,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/list?path=%2Fdocs`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/list?path=%2Fdocs`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -202,7 +204,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/list?path=%2F&recursive=true`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/list?path=%2F&recursive=true`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -222,7 +224,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/delete?path=%2Ftest.txt`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Ftest.txt`,
         expect.objectContaining({
           method: 'DELETE',
           headers: expect.objectContaining(clientOptions.headers),
@@ -241,7 +243,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/delete?path=%2Fdir&recursive=true&force=true`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Fdir&recursive=true&force=true`,
         expect.objectContaining({
           method: 'DELETE',
         }),
@@ -261,7 +263,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/mkdir`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/mkdir`,
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ path: '/new-dir' }),
@@ -280,7 +282,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/mkdir`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/mkdir`,
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ path: '/nested/dirs/path', recursive: true }),
@@ -305,7 +307,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/fs/stat?path=%2Ftest.txt`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/stat?path=%2Ftest.txt`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -342,7 +344,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/search?query=test+query`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/search?query=test+query`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -366,7 +368,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/search?query=search+term&topK=10&mode=vector&minScore=0.5`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/search?query=search+term&topK=10&mode=vector&minScore=0.5`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -389,7 +391,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/index`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/index`,
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ path: '/doc.txt', content: 'Document content to index' }),
@@ -412,7 +414,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/index`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/index`,
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({
@@ -444,7 +446,7 @@ describe('Workspace Resource', () => {
       expect(result).toEqual(mockResponse);
       expect(result.skills).toHaveLength(2);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -477,7 +479,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/search?query=test`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=test`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -501,7 +503,7 @@ describe('Workspace Resource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/search?query=search+term&topK=5&minScore=0.7&skillNames=skill1%2Cskill2&includeReferences=true`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=search+term&topK=5&minScore=0.7&skillNames=skill1%2Cskill2&includeReferences=true`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -545,7 +547,7 @@ describe('WorkspaceSkillResource', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     client = new MastraClient(clientOptions);
-    skillResource = client.getWorkspace().getSkill('my-skill');
+    skillResource = client.getWorkspace(WORKSPACE_ID).getSkill('my-skill');
   });
 
   describe('details()', () => {
@@ -566,7 +568,7 @@ describe('WorkspaceSkillResource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/my-skill`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/my-skill`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -574,14 +576,14 @@ describe('WorkspaceSkillResource', () => {
     });
 
     it('should encode skill name with special characters', async () => {
-      const specialSkillResource = client.getWorkspace().getSkill('skill/with/slashes');
+      const specialSkillResource = client.getWorkspace(WORKSPACE_ID).getSkill('skill/with/slashes');
       const mockResponse = { name: 'skill/with/slashes' };
       mockFetchResponse(mockResponse);
 
       await specialSkillResource.details();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/skill%2Fwith%2Fslashes`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/skill%2Fwith%2Fslashes`,
         expect.anything(),
       );
     });
@@ -600,7 +602,7 @@ describe('WorkspaceSkillResource', () => {
       expect(result).toEqual(mockResponse);
       expect(result.references).toHaveLength(3);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/my-skill/references`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/my-skill/references`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -621,7 +623,7 @@ describe('WorkspaceSkillResource', () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/my-skill/references/api.md`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/my-skill/references/api.md`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -639,7 +641,7 @@ describe('WorkspaceSkillResource', () => {
       await skillResource.getReference('examples/nested/doc.md');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspace/skills/my-skill/references/examples%2Fnested%2Fdoc.md`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/my-skill/references/examples%2Fnested%2Fdoc.md`,
         expect.anything(),
       );
     });

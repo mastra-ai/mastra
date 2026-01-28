@@ -92,6 +92,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;
@@ -943,7 +945,6 @@ export interface WorkspaceSearchParams {
   topK?: number;
   mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
-  workspaceId?: string;
 }
 
 /**
@@ -1042,7 +1043,6 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
-  workspaceId?: string;
 }
 
 /**

@@ -9,8 +9,8 @@ export interface SkillsTableProps {
   skills: SkillMetadata[];
   isLoading: boolean;
   isSkillsConfigured?: boolean;
+  /** Base path for skill links (should include workspaceId, e.g., /workspaces/{id}/skills) */
   basePath?: string;
-  workspaceId?: string;
 }
 
 const columns = [
@@ -53,7 +53,6 @@ export function SkillsTable({
   isLoading,
   isSkillsConfigured = true,
   basePath = '/workspace/skills',
-  workspaceId,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
@@ -84,7 +83,7 @@ export function SkillsTable({
                   entry={entry}
                   columns={columns}
                   onClick={() => {
-                    const url = `${basePath}/${encodeURIComponent(skill.name)}${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`;
+                    const url = `${basePath}/${encodeURIComponent(skill.name)}`;
                     navigate(url);
                   }}
                 >

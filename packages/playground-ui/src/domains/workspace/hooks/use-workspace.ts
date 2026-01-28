@@ -20,18 +20,22 @@ export { isWorkspaceV1Supported, isWorkspaceNotSupportedError };
 // Workspace Info Hook
 // =============================================================================
 
-export const useWorkspaceInfo = () => {
+export const useWorkspaceInfo = (workspaceId?: string) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'info'],
+    queryKey: ['workspace', 'info', workspaceId],
     queryFn: async (): Promise<WorkspaceInfo> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace();
+      if (!workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(workspaceId);
       return workspace.info();
     },
+    enabled: !!workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -71,10 +75,13 @@ export const useWorkspaceFiles = (
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.listFiles(path, options?.recursive);
     },
-    enabled: options?.enabled !== false && !!path,
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -91,10 +98,13 @@ export const useWorkspaceFile = (
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.readFile(path, options?.encoding);
     },
-    enabled: options?.enabled !== false && !!path,
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -108,10 +118,13 @@ export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.stat(path);
     },
-    enabled: options?.enabled !== false && !!path,
+    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -235,12 +248,21 @@ export const useIndexWorkspaceContent = () => {
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: async (params: { path: string; content: string; metadata?: Record<string, unknown> }) => {
+    mutationFn: async (params: {
+      workspaceId: string;
+      path: string;
+      content: string;
+      metadata?: Record<string, unknown>;
+    }) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace();
-      return workspace.index(params);
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      return workspace.index({
+        path: params.path,
+        content: params.content,
+        metadata: params.metadata,
+      });
     },
   });
 };

@@ -26,9 +26,13 @@ export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       return workspace.listSkills();
     },
+    enabled: !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -45,11 +49,14 @@ export const useWorkspaceSkill = (skillName: string, options?: { enabled?: boole
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       const skill = workspace.getSkill(skillName);
       return skill.details();
     },
-    enabled: options?.enabled !== false && !!skillName,
+    enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -69,11 +76,14 @@ export const useWorkspaceSkillReferences = (
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       const skill = workspace.getSkill(skillName);
       return skill.listReferences();
     },
-    enabled: options?.enabled !== false && !!skillName,
+    enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -94,11 +104,19 @@ export const useWorkspaceSkillReference = (
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       const skill = workspace.getSkill(skillName);
       return skill.getReference(referencePath);
     },
-    enabled: options?.enabled !== false && !!skillName && !!referencePath,
+    enabled:
+      options?.enabled !== false &&
+      !!skillName &&
+      !!referencePath &&
+      !!options?.workspaceId &&
+      isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -143,11 +161,19 @@ export const useAgentSkill = (
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
       }
-      const workspace = (client as any).getWorkspace(options?.workspaceId);
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
       const skill = workspace.getSkill(skillName);
       return skill.details();
     },
-    enabled: options?.enabled !== false && !!agentId && !!skillName,
+    enabled:
+      options?.enabled !== false &&
+      !!agentId &&
+      !!skillName &&
+      !!options?.workspaceId &&
+      isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };

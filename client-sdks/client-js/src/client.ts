@@ -835,10 +835,10 @@ export class MastraClient extends BaseResource {
 
   /**
    * Gets the workspace resource for filesystem, search, and skills operations
-   * @param workspaceId - Optional workspace ID to target a specific workspace
+   * @param workspaceId - Workspace ID to target
    * @returns Workspace instance
    */
-  public getWorkspace(workspaceId?: string): Workspace {
+  public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
   }
 }
