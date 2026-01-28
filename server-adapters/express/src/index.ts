@@ -251,14 +251,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         return;
       }
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
           httpPath: `${prefix ?? ''}${httpPath}`,
           req: request,
           res: response,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {

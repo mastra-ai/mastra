@@ -19,7 +19,8 @@
         "kimi-k2-0905-preview",
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview"
+        "kimi-k2-turbo-preview",
+        "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
       "gateway": "models.dev"
@@ -72,7 +73,8 @@
         "kimi-k2-0905-preview",
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview"
+        "kimi-k2-turbo-preview",
+        "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
       "gateway": "models.dev"
@@ -116,6 +118,7 @@
         "gpt-oss:120b",
         "gpt-oss:20b",
         "kimi-k2-thinking",
+        "kimi-k2.5",
         "kimi-k2:1t",
         "minimax-m2",
         "minimax-m2.1",
@@ -567,6 +570,7 @@
         "moonshotai/kimi-k2-thinking",
         "moonshotai/kimi-k2-thinking-turbo",
         "moonshotai/kimi-k2-turbo",
+        "moonshotai/kimi-k2.5",
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
         "nvidia/nemotron-3-nano-30b-a3b",
@@ -1356,6 +1360,7 @@
         "moonshotai/Kimi-K2-Instruct",
         "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
+        "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.7",
         "zai-org/GLM-4.7-Flash"
       ],
@@ -2227,6 +2232,7 @@
         "accounts/fireworks/models/gpt-oss-20b",
         "accounts/fireworks/models/kimi-k2-instruct",
         "accounts/fireworks/models/kimi-k2-thinking",
+        "accounts/fireworks/models/kimi-k2p5",
         "accounts/fireworks/models/minimax-m2",
         "accounts/fireworks/models/minimax-m2p1",
         "accounts/fireworks/models/qwen3-235b-a22b",
@@ -2489,7 +2495,6 @@
         "gemini/gemini-2.5-flash-image-preview",
         "gemini/gemini-2.5-flash-lite",
         "gemini/gemini-2.5-flash-lite-preview-09-2025",
-        "gemini/gemini-2.5-flash-preview-09-2025",
         "gemini/gemini-2.5-pro",
         "gemini/gemini-3-flash-preview",
         "gemini/gemini-3-pro-image-preview",
@@ -2533,7 +2538,8 @@
       "kimi-k2-0905-preview",
       "kimi-k2-thinking",
       "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview"
+      "kimi-k2-turbo-preview",
+      "kimi-k2.5"
     ],
     "firmware": [
       "cerebras-gpt-oss-120b",
@@ -2562,7 +2568,8 @@
       "kimi-k2-0905-preview",
       "kimi-k2-thinking",
       "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview"
+      "kimi-k2-turbo-preview",
+      "kimi-k2.5"
     ],
     "zai-coding-plan": [
       "glm-4.5",
@@ -2590,6 +2597,7 @@
       "gpt-oss:120b",
       "gpt-oss:20b",
       "kimi-k2-thinking",
+      "kimi-k2.5",
       "kimi-k2:1t",
       "minimax-m2",
       "minimax-m2.1",
@@ -2956,6 +2964,7 @@
       "moonshotai/kimi-k2-thinking",
       "moonshotai/kimi-k2-thinking-turbo",
       "moonshotai/kimi-k2-turbo",
+      "moonshotai/kimi-k2.5",
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
       "nvidia/nemotron-3-nano-30b-a3b",
@@ -3618,6 +3627,7 @@
       "moonshotai/Kimi-K2-Instruct",
       "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
+      "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.7",
       "zai-org/GLM-4.7-Flash"
     ],
@@ -4258,6 +4268,7 @@
       "accounts/fireworks/models/gpt-oss-20b",
       "accounts/fireworks/models/kimi-k2-instruct",
       "accounts/fireworks/models/kimi-k2-thinking",
+      "accounts/fireworks/models/kimi-k2p5",
       "accounts/fireworks/models/minimax-m2",
       "accounts/fireworks/models/minimax-m2p1",
       "accounts/fireworks/models/qwen3-235b-a22b",
@@ -4456,7 +4467,6 @@
       "gemini/gemini-2.5-flash-image-preview",
       "gemini/gemini-2.5-flash-lite",
       "gemini/gemini-2.5-flash-lite-preview-09-2025",
-      "gemini/gemini-2.5-flash-preview-09-2025",
       "gemini/gemini-2.5-pro",
       "gemini/gemini-3-flash-preview",
       "gemini/gemini-3-pro-image-preview",

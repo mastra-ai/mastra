@@ -265,7 +265,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Tell Koa we're handling the response ourselves
       ctx.respond = false;
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
         // Attach parsed body to raw request so MCP server's readJsonBody can use it
@@ -274,11 +274,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           rawReq.body = ctx.request.body;
         }
 
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
           httpPath: `${prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: ctx.res,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {

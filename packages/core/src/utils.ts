@@ -24,7 +24,17 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Deep merges two objects, recursively merging nested objects and arrays
+ * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Deep merges two objects, recursively merging nested plain objects.
+ * Arrays, functions, and other non-plain objects are replaced (not merged).
  */
 export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
   const output = { ...target };
@@ -32,20 +42,15 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   if (!source) return output;
 
   Object.keys(source).forEach(key => {
-    const targetValue = output[key as keyof T];
-    const sourceValue = source[key as keyof T];
+    const targetValue = (output as Record<string, unknown>)[key];
+    const sourceValue = (source as Record<string, unknown>)[key];
 
-    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-      (output as any)[key] = sourceValue;
-    } else if (
-      sourceValue instanceof Object &&
-      targetValue instanceof Object &&
-      !Array.isArray(sourceValue) &&
-      !Array.isArray(targetValue)
-    ) {
-      (output as any)[key] = deepMerge(targetValue, sourceValue as T);
+    // Only deep merge if both values are plain objects
+    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+      (output as Record<string, unknown>)[key] = deepMerge(targetValue, sourceValue);
     } else if (sourceValue !== undefined) {
-      (output as any)[key] = sourceValue;
+      // For arrays, functions, primitives, and other non-plain objects: replace
+      (output as Record<string, unknown>)[key] = sourceValue;
     }
   });
 

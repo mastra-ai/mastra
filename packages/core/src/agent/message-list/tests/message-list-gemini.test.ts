@@ -1,4 +1,6 @@
+import { convertToModelMessages } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
+import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
 
 describe('MessageList - Gemini Compatibility', () => {
@@ -159,6 +161,356 @@ describe('MessageList - Gemini Compatibility', () => {
       await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
         'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
       );
+    });
+  });
+
+  describe('data-* parts filtering - Issue #12363', () => {
+    // After using writer.custom() in a tool, custom data parts get stored in conversation history.
+    // When sending messages to Gemini, these data-* parts must be filtered out because Gemini
+    // doesn't recognize them and will fail with:
+    // "Unable to submit request because it must include at least one parts field"
+
+    it('should filter out data-* parts from aiV5.prompt() for Gemini compatibility', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Create a chart for me' }, 'input');
+
+      // Simulate assistant response with custom data parts from writer.custom()
+      const assistantWithDataParts: MastraDBMessage = {
+        id: 'msg-with-data',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Here is your chart:' },
+            {
+              type: 'data-chart',
+              data: {
+                chartType: 'bar',
+                values: [10, 20, 30],
+              },
+            } as any,
+          ],
+          content: 'Here is your chart:',
+        },
+      };
+
+      list.add(assistantWithDataParts, 'response');
+      list.add({ role: 'user', content: 'Can you modify the chart?' }, 'input');
+
+      const prompt = list.get.all.aiV5.prompt();
+
+      // Find the assistant message in the prompt
+      const assistantMsg = prompt.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // The assistant message content should NOT contain data-* parts
+      if (typeof assistantMsg!.content !== 'string') {
+        const hasDataPart = assistantMsg!.content.some((p: any) => p.type?.startsWith('data-'));
+        expect(hasDataPart).toBe(false);
+      }
+
+      // Text part should still be present
+      if (typeof assistantMsg!.content !== 'string') {
+        const hasTextPart = assistantMsg!.content.some((p: any) => p.type === 'text');
+        expect(hasTextPart).toBe(true);
+      }
+    });
+
+    it('should filter out data-* parts from aiV5.llmPrompt() for Gemini compatibility', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Show me progress' }, 'input');
+
+      // Simulate assistant response with multiple data parts
+      const assistantWithDataParts: MastraDBMessage = {
+        id: 'msg-with-progress',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Processing...' },
+            {
+              type: 'data-progress',
+              data: { percent: 50, status: 'in-progress' },
+            } as any,
+            {
+              type: 'data-file-reference',
+              data: { fileId: 'file-123' },
+            } as any,
+          ],
+          content: 'Processing...',
+        },
+      };
+
+      list.add(assistantWithDataParts, 'response');
+      list.add({ role: 'user', content: 'What is the status?' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+
+      // Find the assistant message in the prompt
+      const assistantMsg = llmPrompt.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // The assistant message content should NOT contain any data-* parts
+      if (typeof assistantMsg!.content !== 'string') {
+        const dataPartsCount = assistantMsg!.content.filter((p: any) => p.type?.startsWith('data-')).length;
+        expect(dataPartsCount).toBe(0);
+      }
+    });
+
+    it('should preserve data-* parts in UI messages but filter from model messages', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Test' }, 'input');
+
+      const assistantWithDataParts: MastraDBMessage = {
+        id: 'msg-test',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Response' }, { type: 'data-custom', data: { key: 'value' } } as any],
+          content: 'Response',
+        },
+      };
+
+      list.add(assistantWithDataParts, 'response');
+
+      // UI messages should preserve data-* parts (for UI rendering)
+      const uiMessages = list.get.all.aiV5.ui();
+      const uiAssistant = uiMessages.find(m => m.role === 'assistant');
+      expect(uiAssistant).toBeDefined();
+      const hasDataPartInUI = uiAssistant!.parts.some((p: any) => p.type?.startsWith('data-'));
+      expect(hasDataPartInUI).toBe(true);
+
+      // Model messages (for LLM) should NOT have data-* parts
+      const modelMessages = list.get.all.aiV5.model();
+      const modelAssistant = modelMessages.find(m => m.role === 'assistant');
+      expect(modelAssistant).toBeDefined();
+
+      if (typeof modelAssistant!.content !== 'string') {
+        const dataPartsInModel = modelAssistant!.content.filter((p: any) => p.type?.startsWith('data-'));
+        // Data-* parts should be filtered out by AIV5.convertToModelMessages
+        expect(dataPartsInModel.length).toBe(0);
+      }
+    });
+
+    it('should not remove messages that only have data-* parts (preserve empty text)', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Generate data' }, 'input');
+
+      // Assistant responds with only custom data (no text)
+      const assistantOnlyData: MastraDBMessage = {
+        id: 'msg-only-data',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'data-result', data: { success: true } } as any],
+          content: '',
+        },
+      };
+
+      list.add(assistantOnlyData, 'response');
+      list.add({ role: 'user', content: 'Next question' }, 'input');
+
+      // The prompt should still be valid - either the message is removed or has empty text
+      // What's important is that it doesn't crash Gemini with invalid parts
+      const prompt = list.get.all.aiV5.prompt();
+
+      // Verify no data-* parts exist in any message
+      for (const msg of prompt) {
+        if (msg.role !== 'system' && typeof msg.content !== 'string') {
+          const hasDataPart = msg.content.some((p: any) => p.type?.startsWith('data-'));
+          expect(hasDataPart).toBe(false);
+        }
+      }
+    });
+
+    it('AI SDK convertToModelMessages should filter out data-* parts', () => {
+      // This test verifies the AI SDK behavior that we rely on
+      const uiMessages = [
+        {
+          id: 'test-1',
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: 'Hello' }],
+        },
+        {
+          id: 'test-2',
+          role: 'assistant' as const,
+          parts: [
+            { type: 'text' as const, text: 'Here is your data:' },
+            { type: 'data-custom', data: { key: 'value' } } as any,
+          ],
+        },
+      ];
+
+      const modelMessages = convertToModelMessages(uiMessages);
+
+      // Find the assistant message
+      const assistantModel = modelMessages.find(m => m.role === 'assistant');
+      expect(assistantModel).toBeDefined();
+
+      // Verify data-* parts are filtered out by the AI SDK
+      if (typeof assistantModel!.content !== 'string') {
+        const hasDataPart = assistantModel!.content.some((p: any) => p.type?.startsWith('data-'));
+        expect(hasDataPart).toBe(false);
+      }
+    });
+
+    it('should not produce messages with empty content arrays - Issue #12363', () => {
+      // Issue #12363: After using writer.custom() in a tool, subsequent messages fail with Gemini
+      // Error: "Unable to submit request because it must include at least one parts field"
+      //
+      // Root cause: When a message contains ONLY data-* parts (custom parts from writer.custom()),
+      // the AI SDK's convertToModelMessages creates a message with an empty content array.
+      // Gemini rejects messages with empty content arrays.
+      //
+      // Fix: sanitizeV5UIMessages now filters out data-* parts before conversion,
+      // and messages with only data-* parts are removed entirely.
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Run the tool' }, 'input');
+
+      // Simulate assistant response with ONLY data-* parts (typical when writer.custom() is used without text)
+      const assistantOnlyDataParts: MastraDBMessage = {
+        id: 'assistant-with-only-data',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'data-progress', data: { percent: 50 } } as any,
+            { type: 'data-chart', data: { chartType: 'bar' } } as any,
+          ],
+          content: '', // No text content
+        },
+      };
+
+      list.add(assistantOnlyDataParts, 'response');
+      list.add({ role: 'user', content: 'Continue the conversation' }, 'input');
+
+      // Get the prompt that would be sent to Gemini
+      const prompt = list.get.all.aiV5.prompt();
+
+      // CRITICAL: No messages should have empty content arrays
+      // This would cause: "Unable to submit request because it must include at least one parts field"
+      for (const msg of prompt) {
+        if (typeof msg.content !== 'string') {
+          expect(msg.content.length).toBeGreaterThan(0);
+        }
+      }
+
+      // The assistant message with only data-* parts should be removed entirely
+      // (only user messages should remain)
+      expect(prompt.filter(m => m.role === 'assistant').length).toBe(0);
+      expect(prompt.filter(m => m.role === 'user').length).toBe(2);
+    });
+
+    it('AI SDK convertToModelMessages produces empty content arrays for data-only messages (documents SDK behavior)', () => {
+      // This test DOCUMENTS the AI SDK behavior that we work around.
+      // The AI SDK's convertToModelMessages produces empty content arrays
+      // for messages that have only data-* parts.
+      // Our fix in sanitizeV5UIMessages filters these parts BEFORE calling convertToModelMessages.
+      const uiMessages = [
+        {
+          id: 'test-1',
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: 'Hello' }],
+        },
+        {
+          id: 'test-2',
+          role: 'assistant' as const,
+          parts: [
+            { type: 'data-progress', data: { percent: 50 } } as any,
+            { type: 'data-result', data: { success: true } } as any,
+          ],
+        },
+        {
+          id: 'test-3',
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: 'Next message' }],
+        },
+      ];
+
+      const modelMessages = convertToModelMessages(uiMessages);
+
+      // Find the assistant message (which had only data-* parts)
+      const assistantMsg = modelMessages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // The AI SDK produces an empty content array
+      // This is why we filter data-* parts in sanitizeV5UIMessages before conversion
+      expect(typeof assistantMsg!.content).not.toBe('string');
+      expect((assistantMsg!.content as any[]).length).toBe(0);
+    });
+
+    it('should preserve data-* parts in DB/UI but filter from model/prompt messages', () => {
+      const list = new MessageList();
+
+      // Add user message
+      list.add({ role: 'user', content: 'Run the tool' }, 'input');
+
+      // Add assistant message with mixed parts (text + data-*)
+      const mixedAssistant: MastraDBMessage = {
+        id: 'mixed-msg',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Processing...' }, { type: 'data-progress', data: { percent: 50 } } as any],
+          content: 'Processing...',
+        },
+      };
+      list.add(mixedAssistant, 'response');
+
+      // Add assistant message with ONLY data-* parts
+      const dataOnlyAssistant: MastraDBMessage = {
+        id: 'data-only-msg',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'data-chart', data: { type: 'bar' } } as any],
+          content: '',
+        },
+      };
+      list.add(dataOnlyAssistant, 'response');
+
+      // 1. DB storage should preserve ALL parts including data-*
+      const dbMessages = list.get.all.db();
+      const dbAssistant = dbMessages.find(m => m.id === 'mixed-msg');
+      expect(dbAssistant?.content.parts?.map(p => p.type)).toContain('data-progress');
+
+      // 2. UI messages should preserve ALL parts (needed for frontend rendering)
+      const uiMessages = list.get.all.aiV5.ui();
+      const uiAssistant = uiMessages.find(m => m.id === 'mixed-msg');
+      expect(uiAssistant?.parts.map(p => p.type)).toContain('data-progress');
+
+      // 3. Model messages should NOT have data-* parts
+      const modelMessages = list.get.all.aiV5.model();
+      for (const msg of modelMessages) {
+        if (msg.role === 'assistant' && typeof msg.content !== 'string') {
+          const hasDataPart = msg.content.some((p: any) => p.type?.startsWith('data-'));
+          expect(hasDataPart).toBe(false);
+        }
+      }
+
+      // 4. Prompt messages should NOT have data-* parts or empty content arrays
+      const promptMessages = list.get.all.aiV5.prompt();
+      for (const msg of promptMessages) {
+        if (typeof msg.content !== 'string') {
+          // No data-* parts
+          const hasDataPart = msg.content.some((p: any) => p.type?.startsWith('data-'));
+          expect(hasDataPart).toBe(false);
+          // No empty content arrays
+          expect(msg.content.length).toBeGreaterThan(0);
+        }
+      }
     });
   });
 
