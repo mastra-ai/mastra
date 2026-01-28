@@ -1,15 +1,13 @@
-import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
+import { Check, CirclePause, CircleSlash, Clock, X } from 'lucide-react';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
+import { NewThreadLink, ThreadDeleteButton, ThreadEmpty, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
-import { formatDate } from 'date-fns';
+import { Truncate } from '@/ds/components/Truncate';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Spinner } from '@/ds/components/Spinner';
-import { useInView } from '@/hooks';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 
@@ -50,43 +48,30 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
       <Threads>
         <ThreadList>
           <ThreadItem>
-            <ThreadLink as={Link} to={paths.workflowLink(workflowId)}>
-              <span className="text-accent1 flex items-center gap-4">
-                <Icon className="bg-surface4 rounded-lg" size="lg">
-                  <Plus />
-                </Icon>
-                New workflow run
-              </span>
-            </ThreadLink>
+            <NewThreadLink as={Link} to={paths.workflowLink(workflowId)} label="New workflow run" />
           </ThreadItem>
 
           {actualRuns.length === 0 && (
-            <Txt variant="ui-md" className="text-neutral3 py-3 px-5">
-              Your run history will appear here once you run the workflow
-            </Txt>
+            <ThreadEmpty>Your run history will appear here once you run the workflow</ThreadEmpty>
           )}
 
-          {actualRuns.map(run => (
-            <ThreadItem isActive={run.runId === runId} key={run.runId} className="h-auto">
-              <ThreadLink as={Link} to={paths.workflowRunLink(workflowId, run.runId)}>
-                {typeof run?.snapshot === 'object' && (
-                  <div className="pb-1">
-                    <WorkflowRunStatusBadge status={run.snapshot.status} />
-                  </div>
-                )}
-                <span className="truncate max-w-32 text-neutral3">{run.runId}</span>
-                <span>
-                  {typeof run?.snapshot === 'string'
-                    ? ''
-                    : run?.snapshot?.timestamp
-                      ? formatDate(run?.snapshot?.timestamp, 'MMM d, yyyy h:mm a')
-                      : ''}
-                </span>
-              </ThreadLink>
+          {actualRuns.map(run => {
+            const isActive = run.runId === runId;
+            return (
+              <ThreadItem isActive={isActive} key={run.runId}>
+                <ThreadLink as={Link} to={paths.workflowRunLink(workflowId, run.runId)} isActive={isActive}>
+                  <span className="flex items-center gap-2">
+                    {typeof run?.snapshot === 'object' && <WorkflowRunStatusBadge status={run.snapshot.status} />}
+                    <Truncate variant="ui-sm" className="text-neutral3" untilChar="-">
+                      {run.runId}
+                    </Truncate>
+                  </span>
+                </ThreadLink>
 
-              <ThreadDeleteButton onClick={() => setDeleteRunId(run.runId)} />
-            </ThreadItem>
-          ))}
+                <ThreadDeleteButton onClick={() => setDeleteRunId(run.runId)} />
+              </ThreadItem>
+            );
+          })}
         </ThreadList>
       </Threads>
 
@@ -118,54 +103,30 @@ interface WorkflowRunStatusProps {
 
 const WorkflowRunStatusBadge = ({ status }: WorkflowRunStatusProps) => {
   if (status === 'running') {
-    return (
-      <Badge variant="default" icon={<Spinner />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<Spinner />} />;
   }
 
   if (status === 'failed') {
-    return (
-      <Badge variant="default" icon={<X className="text-accent2" />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<X className="text-accent2" />} />;
   }
 
   if (status === 'canceled') {
-    return (
-      <Badge variant="default" icon={<CircleSlash className="text-neutral3" />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<CircleSlash className="text-neutral3" />} />;
   }
 
   if (status === 'pending' || status === 'waiting') {
-    return (
-      <Badge variant="default" icon={<Clock className="text-neutral3" />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<Clock className="text-neutral3" />} />;
   }
 
   if (status === 'suspended') {
-    return (
-      <Badge variant="default" icon={<CirclePause className="text-accent3" />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<CirclePause className="text-accent3" />} />;
   }
 
   if (status === 'success') {
-    return (
-      <Badge variant="default" icon={<Check className="text-accent1" />}>
-        {status}
-      </Badge>
-    );
+    return <Badge variant="default" icon={<Check className="text-accent1" />} />;
   }
 
-  return <Badge variant="default">{status}</Badge>;
+  return <Badge variant="default" />;
 };
 
 interface DeleteRunDialogProps {

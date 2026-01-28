@@ -1,12 +1,11 @@
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
-import { Icon } from '@/ds/icons';
+import { NewThreadLink, ThreadDeleteButton, ThreadEmpty, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { useLinkComponent } from '@/lib/framework';
-import { Plus } from 'lucide-react';
 import { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { Truncate } from '@/ds/components/Truncate';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -33,20 +32,11 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
       <Threads>
         <ThreadList>
           <ThreadItem>
-            <ThreadLink as={Link} to={newThreadLink}>
-              <span className="text-accent1 flex items-center gap-4">
-                <Icon className="bg-surface4 rounded-lg" size="lg">
-                  <Plus />
-                </Icon>
-                New Chat
-              </span>
-            </ThreadLink>
+            <NewThreadLink as={Link} to={newThreadLink} label="New Chat" />
           </ThreadItem>
 
           {threads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
-              Your conversations will appear here once you start chatting!
-            </Txt>
+            <ThreadEmpty>Your conversations will appear here once you start chatting!</ThreadEmpty>
           )}
 
           {threads.map(thread => {
@@ -59,9 +49,8 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
 
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
-                <ThreadLink as={Link} to={threadLink}>
+                <ThreadLink as={Link} to={threadLink} isActive={isActive}>
                   <ThreadTitle title={thread.title} id={thread.id} />
-                  <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
                 <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />
@@ -132,20 +121,19 @@ function ThreadTitle({ title, id }: { title?: string; id?: string }) {
   }
 
   if (isDefaultThreadName(title)) {
-    return <span className="text-neutral3">Thread {id ? id.substring(id.length - 5) : null}</span>;
+    return (
+      <Txt variant="ui-sm" className="text-neutral3">
+        Thread{' '}
+        <Truncate variant="ui-sm" className="text-neutral3" untilChar="-">
+          {id ?? ''}
+        </Truncate>
+      </Txt>
+    );
   }
 
-  return <span className="truncate max-w-[14rem] text-neutral3">{title}</span>;
+  return (
+    <Txt variant="ui-sm" className="text-neutral3 truncate max-w-[14rem]">
+      {title}
+    </Txt>
+  );
 }
-
-const formatDay = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true,
-  };
-  return new Date(date).toLocaleString('en-us', options).replace(',', ' at');
-};
