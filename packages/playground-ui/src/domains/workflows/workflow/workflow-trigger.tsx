@@ -18,7 +18,6 @@ import {
   DialogBody,
 } from '@/ds/components/Dialog';
 import { isObjectEmpty } from '@/lib/object';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
@@ -91,8 +90,7 @@ export function WorkflowTrigger({
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const { requestContext: globalRequestContext } = usePlaygroundStore();
-  const requestContext = useMergedRequestContext(globalRequestContext);
+  const requestContext = useMergedRequestContext();
 
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 

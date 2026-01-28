@@ -3,7 +3,6 @@ import { Thread } from '@/lib/ai-ui/thread';
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
 import { useEffect } from 'react';
@@ -22,8 +21,7 @@ export const AgentChat = ({
   isNewThread,
 }: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
   const { settings } = useAgentSettings();
-  const { requestContext: globalRequestContext } = usePlaygroundStore();
-  const requestContext = useMergedRequestContext(globalRequestContext);
+  const requestContext = useMergedRequestContext();
 
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,

@@ -15,7 +15,6 @@ import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunStatus } from '@mastra/core/workflows';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
@@ -69,8 +68,7 @@ export const WorkflowStepActionBar = ({
     setDebugMode,
   } = useContext(WorkflowRunContext);
   const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
-  const { requestContext: globalRequestContext } = usePlaygroundStore();
-  const requestContext = useMergedRequestContext(globalRequestContext);
+  const requestContext = useMergedRequestContext();
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 

@@ -17,7 +17,6 @@ import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
 import { RequestContextSchemaForm } from '@/domains/request-context';
-import { cn } from '@/lib/utils';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -174,12 +173,15 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               )
             ) : null}
           </TabContent>
-          {/* Keep RequestContextSchemaForm mounted to preserve state, use CSS to show/hide */}
+
           {workflow?.requestContextSchema && (
-            <div className={cn('p-5', tab !== 'request-context' && 'hidden')}>
-              <RequestContextSchemaForm requestContextSchema={workflow.requestContextSchema} />
-            </div>
+            <TabContent value="request-context">
+              <div className="p-5">
+                <RequestContextSchemaForm requestContextSchema={workflow.requestContextSchema} />
+              </div>
+            </TabContent>
           )}
+
           <TabContent value="run-options">
             <TracingRunOptions />
           </TabContent>

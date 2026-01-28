@@ -55,7 +55,8 @@ export function useSchemaRequestContext() {
  * Schema form values take precedence over global store values.
  * Works with or without SchemaRequestContextProvider.
  */
-export function useMergedRequestContext(globalRequestContext: Record<string, any> | undefined) {
+export function useMergedRequestContext() {
+  const { requestContext: globalRequestContext } = usePlaygroundStore();
   const schemaContext = useContext(SchemaRequestContext);
   const schemaValues = schemaContext?.schemaValues ?? {};
 
