@@ -398,7 +398,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
 
       if (options?.recursive) {
-        await fs.rm(absolutePath, { recursive: true, force: options?.force });
+        await fs.rm(absolutePath, { recursive: true, force: options?.force ?? false });
       } else {
         const entries = await fs.readdir(absolutePath);
         if (entries.length > 0) {

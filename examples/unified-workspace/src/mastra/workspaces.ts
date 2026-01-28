@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
 
 /**
  * Get the project root directory.
@@ -75,8 +76,8 @@ export const globalWorkspace = new Workspace({
   },
   // Enable BM25 search for skills and files
   bm25: true,
-  // Auto-index support FAQ content for search
-  autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
+  // Auto-index FAQ content for search
+  autoIndexPaths: ['/content'],
   // Discover skills from these paths (global skills only)
   skills: ['/skills'],
   // Auto-initialize on construction (needed for mastra dev)
@@ -100,10 +101,10 @@ export const docsAgentWorkspace = new Workspace({
     basePath: PROJECT_ROOT,
   }),
   // Enable sandbox for command execution
-  // inheritEnv: true allows access to PATH and other system env vars
+  // Spread process.env to inherit all environment variables
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
+    env: { ...process.env },
   }),
   // Tool configuration - full access for documentation agent
   tools: {
@@ -130,18 +131,18 @@ export const isolatedDocsWorkspace = new Workspace({
     basePath: PROJECT_ROOT,
   }),
   // Enable sandbox for command execution
-  // inheritEnv: true allows access to PATH and other system env vars
+  // Spread process.env to inherit all environment variables
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
+    env: { ...process.env },
   }),
   // Tool configuration - full access
   tools: {
     requireApproval: false,
   },
   bm25: true,
-  // Auto-index support FAQ content for search
-  autoIndexPaths: ['/.mastra-knowledge/knowledge/support/default'],
+  // Auto-index FAQ content for search
+  autoIndexPaths: ['/content'],
   // Only agent-specific skills, no global skills
   skills: ['/docs-skills'],
   // Auto-initialize on construction
@@ -184,7 +185,6 @@ export const safeWriteWorkspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
   }),
   // Tool configuration - require read before write on write/edit tools
   tools: {
@@ -215,7 +215,6 @@ export const supervisedSandboxWorkspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
   }),
   // Tool configuration - require approval for sandbox commands
   tools: {
@@ -243,7 +242,6 @@ export const fsWriteApprovalWorkspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
   }),
   // Tool configuration - require approval for write operations
   tools: {
@@ -273,7 +271,6 @@ export const fsAllApprovalWorkspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
-    inheritEnv: true,
   }),
   // Tool configuration - require approval for all tools, except sandbox
   tools: {

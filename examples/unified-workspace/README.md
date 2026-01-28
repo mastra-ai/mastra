@@ -1,167 +1,119 @@
 # Unified Workspace Example
 
-This example demonstrates the unified Workspace API that combines filesystem access, skills discovery, and content search into a single, cohesive interface.
+Demonstrates the unified Workspace API that combines filesystem, sandbox, skills, and search.
 
-## Overview
+## Quick Start
 
-The **Workspace** class provides:
+```bash
+pnpm install
+pnpm mastra:dev
+```
 
-- **Filesystem**: Read/write files in a structured workspace
-- **Skills**: Discover and access SKILL.md files for domain expertise
-- **Search**: BM25 keyword search (and optional vector search) across indexed content
-- **Inheritance**: Agents can inherit global skills AND add their own
+Open http://localhost:4111 to use the Playground UI.
 
 ## Structure
 
 ```
 examples/unified-workspace/
-├── skills/                    # Global skills (code-review, api-design, customer-support)
+├── content/                   # FAQ content (auto-indexed for BM25 search)
+│   ├── faq-account.md
+│   ├── faq-billing.md
+│   └── faq-technical.md
+├── skills/                    # Global skills
 │   ├── api-design/
-│   │   └── SKILL.md
 │   ├── code-review/
-│   │   └── SKILL.md
 │   └── customer-support/
-│       └── SKILL.md
-├── docs-skills/               # Agent-specific skills (brand-guidelines)
+├── docs-skills/               # Agent-specific skills
 │   └── brand-guidelines/
-│       └── SKILL.md
-├── .mastra-knowledge/         # FAQ content (auto-indexed for search)
-│   └── knowledge/support/default/
-│       ├── password-reset
-│       ├── billing-cycle
-│       └── ...
 ├── src/
-│   ├── mastra/
-│   │   ├── agents/
-│   │   │   ├── skills-agent.ts     # Docs agent (inherits global + has brand-guidelines)
-│   │   │   ├── developer-agent.ts  # Dev agent (uses global workspace)
-│   │   │   └── knowledge-agent.ts  # Support agent (uses global workspace + search)
-│   │   ├── workspaces.ts           # Workspace definitions
-│   │   └── index.ts                # Mastra + exports
-│   ├── demo.ts                     # Full demo
-│   └── demo-workspace.ts           # Workspace API demo
+│   ├── demo/
+│   │   └── index.ts           # Consolidated demo script
+│   └── mastra/
+│       ├── agents/            # Agent definitions
+│       ├── workspaces.ts      # Workspace configurations
+│       └── index.ts
 └── package.json
 ```
 
-## Running the Demos
+## Running Demos
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run full demo (agents + workspace inheritance)
+# Run all demos
 pnpm demo
 
-# Run workspace API demo
-pnpm demo:workspace
-
-# Start Mastra dev server
-pnpm mastra:dev
+# Run specific demo
+pnpm demo:filesystem    # Read, write, list, delete, mkdir
+pnpm demo:skills        # Discovery, search, CRUD, assets
+pnpm demo:workspace     # Init, info, BM25 search/index
+pnpm demo:agents        # Workspace inheritance, tools
+pnpm demo:safety        # Readonly, requireReadBeforeWrite, approval
 ```
+
+## Workspaces
+
+| Workspace | Features |
+|-----------|----------|
+| globalWorkspace | Full access, global skills, BM25 search |
+| docsAgentWorkspace | Global + agent-specific skills (brand-guidelines) |
+| isolatedDocsWorkspace | Agent-specific skills only |
+| readonlyWorkspace | `readOnly: true` - blocks all writes |
+| safeWriteWorkspace | `requireReadBeforeWrite` on write/edit tools |
+| supervisedSandboxWorkspace | `requireApproval` on execute_command |
+| fsWriteApprovalWorkspace | `requireApproval` on write operations |
+| fsAllApprovalWorkspace | `requireApproval` on all operations |
+| testAgentWorkspace | Different basePath (/agent-files) |
+| skillsOnlyWorkspace | No filesystem/sandbox, only skills |
+
+## Agents
+
+| Agent | Workspace | Purpose |
+|-------|-----------|---------|
+| developerAgent | globalWorkspace | Full access baseline |
+| docsAgent | docsAgentWorkspace | Skill inheritance demo |
+| supportAgent | isolatedDocsWorkspace | Agent-specific skills |
+| researchAgent | readonlyWorkspace | Readonly safety |
+| editorAgent | safeWriteWorkspace | Read-before-write |
+| automationAgent | supervisedSandboxWorkspace | Sandbox approval |
+| fsWriteApprovalAgent | fsWriteApprovalWorkspace | Write approval |
+| fsAllApprovalAgent | fsAllApprovalWorkspace | All ops approval |
+| testAgent | testAgentWorkspace | Different basePath |
+| skillsOnlyAgent | skillsOnlyWorkspace | Minimal workspace |
 
 ## Key Concepts
 
-### Global vs Agent Workspace
+### Workspace Configuration
 
 ```typescript
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-
-// Global workspace - has global skills only
-const globalWorkspace = new Workspace({
-  id: 'global-workspace',
-  filesystem: new LocalFilesystem({ basePath: '.' }),
-  skillsPaths: ['/skills'], // code-review, api-design, customer-support
-});
-
-// Agent workspace - inherits global skills + adds agent-specific
-const docsAgentWorkspace = new Workspace({
-  id: 'docs-agent-workspace',
-  filesystem: new LocalFilesystem({ basePath: '.' }),
-  skillsPaths: ['/skills', '/docs-skills'], // All global + brand-guidelines
-});
-```
-
-### Agent with Own Workspace
-
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { docsAgentWorkspace } from './workspaces';
-
-const docsAgent = new Agent({
-  id: 'docs-agent',
-  // ...
-  // Agent has its own workspace with inherited + agent-specific skills
-  workspace: docsAgentWorkspace,
-});
-```
-
-### Workspace Inheritance Patterns
-
-| Pattern           | skillsPaths                   | Skills Available                          |
-| ----------------- | ----------------------------- | ----------------------------------------- |
-| Global only       | `['/skills']`                 | code-review, api-design, customer-support |
-| Inherited + Agent | `['/skills', '/docs-skills']` | All global + brand-guidelines             |
-| Agent only        | `['/docs-skills']`            | brand-guidelines only                     |
-
-### Skills API
-
-```typescript
-// List all discovered skills
-const skills = await workspace.skills?.list();
-
-// Get a specific skill
-const skill = await workspace.skills?.get('code-review');
-console.log(skill.instructions);
-
-// Search across skill content
-const results = await workspace.skills?.search('best practices', { topK: 3 });
-```
-
-### Search API
-
-```typescript
-// Index content for search
-await workspace.index('/docs/guide.md', 'This is a guide about...');
-
-// Search indexed content
-const results = await workspace.search('guide', { topK: 5 });
-
-// Check search capabilities
-workspace.canBM25; // true if BM25 enabled
-workspace.canVector; // true if vector search configured
-```
-
-### Using with Mastra
-
-```typescript
-import { Mastra } from '@mastra/core/mastra';
-
-const mastra = new Mastra({
-  agents: {
-    docsAgent, // Has own workspace (inherited + brand-guidelines)
-    supportAgent, // Uses global workspace
-    developerAgent, // Uses global workspace
+const workspace = new Workspace({
+  id: 'my-workspace',
+  filesystem: new LocalFilesystem({ basePath: '.', readOnly: false }),
+  sandbox: new LocalSandbox({ workingDirectory: '.' }),
+  skills: ['/skills'],
+  bm25: true,
+  autoIndexPaths: ['/content'],
+  tools: {
+    requireApproval: false,
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: true },
   },
-  workspace: globalWorkspace, // Global workspace
-  storage,
 });
 ```
 
-## Workspace vs Old Primitives
+### Skill Inheritance
 
-| Old Approach                            | New Unified Workspace                |
-| --------------------------------------- | ------------------------------------ |
-| `Skills` class from `@mastra/skills`    | `workspace.skills` property          |
-| `Knowledge` class from `@mastra/skills` | `workspace.search()` + auto-indexing |
-| Agent `skills` property                 | Agent `workspace` property           |
-| Separate `/api/skills/*` routes         | Unified `/api/workspace/*` routes    |
-| Separate UI pages                       | Single `/workspace` page with tabs   |
+```typescript
+// Global workspace - has global skills only
+const global = new Workspace({ skills: ['/skills'] });
 
-## Benefits of Unified Workspace
+// Agent workspace - inherits global + adds own
+const agent = new Workspace({ skills: ['/skills', '/agent-skills'] });
+```
 
-1. **Single API**: One class for files, skills, and search
-2. **Skill inheritance**: Agents can inherit global skills + add their own
-3. **Automatic discovery**: Skills found from `skillsPaths`
-4. **Auto-indexing**: Content indexed on `init()` from `autoIndexPaths`
-5. **Simpler configuration**: No need for separate Skills/Knowledge instances
-6. **Better UI**: Single Workspace page shows files and skills together
+### Safety Features
+
+- **readOnly**: Block all filesystem write operations
+- **requireReadBeforeWrite**: Must read file before writing (per-tool)
+- **requireApproval**: Show approval dialog before execution (per-tool or global)
+
+## Testing
+
+See `/WORKSPACE_TESTS.md` in the repo root for manual test cases.

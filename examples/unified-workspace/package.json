@@ -29,11 +29,12 @@
     }
   },
   "scripts": {
-    "demo:skills": "npx bun src/demo/demo-skills.ts",
-    "demo:workspace": "npx bun src/demo/demo-workspace.ts",
-    "demo:filesystem": "npx bun src/demo/demo-filesystem.ts",
-    "demo:sandbox": "npx bun src/demo/demo-sandbox.ts",
-    "demo:agents": "npx bun src/demo/demo-agents.ts",
+    "demo": "npx tsx src/demo/index.ts",
+    "demo:filesystem": "npx tsx src/demo/index.ts --type filesystem",
+    "demo:skills": "npx tsx src/demo/index.ts --type skills",
+    "demo:workspace": "npx tsx src/demo/index.ts --type workspace",
+    "demo:agents": "npx tsx src/demo/index.ts --type agents",
+    "demo:safety": "npx tsx src/demo/index.ts --type safety",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },
