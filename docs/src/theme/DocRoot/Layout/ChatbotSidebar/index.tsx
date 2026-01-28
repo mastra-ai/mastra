@@ -139,7 +139,7 @@ export default function ChatbotSidebar() {
             </button>
             <span>Chat with Mastra docs</span>
           </div>
-          <Conversation className="relative mt-[41px] flex-1 overflow-y-auto font-sans">
+          <Conversation className="relative mt-10.25 flex-1 overflow-y-auto font-sans">
             <ConversationContent>
               {conversation.length > 0
                 ? conversation.map(({ answer: a, question: q, id, reaction }) => {
@@ -190,7 +190,7 @@ export default function ChatbotSidebar() {
                     )
                   })
                 : null}
-              {true && <div className="animate-pulse font-mono text-xs">Generating answer...</div>}
+              {isPreparingAnswer && <div className="animate-pulse font-mono text-xs">Generating answer...</div>}
             </ConversationContent>
             <ConversationScrollButton className="border-none bg-white/50 ring-1 ring-(--border-subtle) backdrop-blur-lg dark:bg-black/50" />
           </Conversation>

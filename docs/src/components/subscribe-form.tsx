@@ -131,7 +131,7 @@ const SubscribeForm = ({
                   placeholder={placeholder || 'you@example.com'}
                   {...field}
                   className={cn(
-                    'h-[35px] w-full flex-1 rounded-[10px] border border-(--border) bg-transparent px-4 py-[0.56rem] text-sm placeholder:text-sm placeholder:text-[#939393] focus:ring-2 focus:ring-(--mastra-green-accent)/50 focus:outline-none focus-visible:border-green-500 dark:border-[#343434] dark:text-white',
+                    'h-8.75 w-full flex-1 rounded-[10px] border border-(--border) bg-transparent px-4 py-[0.56rem] text-sm placeholder:text-sm placeholder:text-[#939393] focus:ring-2 focus:ring-(--mastra-green-accent)/50 focus:outline-none focus-visible:border-green-500 dark:border-[#343434] dark:text-white',
                     inputClassName,
                   )}
                 />
@@ -176,7 +176,7 @@ const SubscribeForm = ({
             buttonCopy({
               idleIcon,
               successIcon,
-            })[buttonState as keyof typeof buttonCopy]
+            })[buttonState as keyof ReturnType<typeof buttonCopy>]
           }
         </Button>
       </form>
