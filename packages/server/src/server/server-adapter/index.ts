@@ -72,6 +72,13 @@ export interface ParsedRequestParams {
   urlParams: Record<string, string>;
   queryParams: Record<string, QueryParamValue>;
   body: unknown;
+  /**
+   * Error that occurred while parsing the request body.
+   * When set, the server should return a 400 Bad Request response.
+   */
+  bodyParseError?: {
+    message: string;
+  };
 }
 
 /**

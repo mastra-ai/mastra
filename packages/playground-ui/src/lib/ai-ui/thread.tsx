@@ -7,7 +7,7 @@ import {
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
-import { TooltipIconButton } from './tooltip-icon-button';
+import { IconButton } from '@/ds/components/IconButton';
 import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
@@ -141,14 +141,16 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   }, [composerRuntime, transcript]);
 
   return (
-    <TooltipIconButton
+    <IconButton
+      variant="light"
+      size="md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
-    </TooltipIconButton>
+    </IconButton>
   );
 };
 
@@ -157,33 +159,36 @@ const ComposerAction = () => {
 
   return (
     <>
-      <TooltipIconButton
+      <IconButton
+        variant="light"
+        size="md"
         type="button"
         tooltip="Add attachment"
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
         <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-      </TooltipIconButton>
+      </IconButton>
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
+          <IconButton
+            variant="light"
+            size="md"
             tooltip="Send"
-            variant="default"
             className="rounded-full border border-border1 bg-surface5"
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-          </TooltipIconButton>
+          </IconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel asChild>
-          <TooltipIconButton tooltip="Cancel" variant="default">
+          <IconButton variant="light" size="md" tooltip="Cancel">
             <CircleStopIcon />
-          </TooltipIconButton>
+          </IconButton>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </>
