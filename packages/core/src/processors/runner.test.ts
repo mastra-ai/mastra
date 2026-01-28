@@ -429,6 +429,97 @@ describe('ProcessorRunner', () => {
         expect(content).toBe('New system instruction added by processor.');
       });
     });
+
+    describe('processInput void return', () => {
+      it('should allow processInput to return void for side-effect-only processors', async () => {
+        let sideEffectCalled = false;
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'side-effect-processor',
+            name: 'Side Effect Processor',
+            processInput: async () => {
+              // Side effect only - no message mutation
+              sideEffectCalled = true;
+              // Return void (undefined) - signals no changes to messages
+              return;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        messageList.add([createMessage('original message', 'user')], 'user');
+        const result = await runner.runInputProcessors(messageList);
+
+        // Side effect should have been called
+        expect(sideEffectCalled).toBe(true);
+
+        // Messages should remain unchanged
+        const messages = await result.get.all.prompt();
+        expect(messages).toHaveLength(1);
+        expect((messages[0].content[0] as TextPart).text).toBe('original message');
+      });
+
+      it('should continue processing chain when void-returning processor is in the middle', async () => {
+        const executionOrder: string[] = [];
+
+        const inputProcessors: Processor[] = [
+          {
+            id: 'processor1',
+            name: 'Processor 1',
+            processInput: async ({ messages }) => {
+              executionOrder.push('processor1');
+              messages.push(createMessage('from processor 1', 'user'));
+              return messages;
+            },
+          },
+          {
+            id: 'void-processor',
+            name: 'Void Processor',
+            processInput: async () => {
+              executionOrder.push('void-processor');
+              // Side effect only - return void
+              return undefined;
+            },
+          },
+          {
+            id: 'processor3',
+            name: 'Processor 3',
+            processInput: async ({ messages }) => {
+              executionOrder.push('processor3');
+              messages.push(createMessage('from processor 3', 'user'));
+              return messages;
+            },
+          },
+        ];
+
+        runner = new ProcessorRunner({
+          inputProcessors,
+          outputProcessors: [],
+          logger: mockLogger,
+          agentName: 'test-agent',
+        });
+
+        messageList.add([createMessage('original', 'user')], 'user');
+        const result = await runner.runInputProcessors(messageList);
+
+        // All processors should run in order
+        expect(executionOrder).toEqual(['processor1', 'void-processor', 'processor3']);
+
+        // Messages should include additions from processor1 and processor3
+        const messages = await result.get.all.prompt();
+        expect(messages).toHaveLength(3);
+        expect((messages[0].content[0] as TextPart).text).toBe('original');
+        expect((messages[1].content[0] as TextPart).text).toBe('from processor 1');
+        expect((messages[2].content[0] as TextPart).text).toBe('from processor 3');
+      });
+    });
   });
 
   describe('Output Processors', () => {
