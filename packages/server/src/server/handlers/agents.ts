@@ -11,11 +11,11 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
-import { resolveToolConfig } from '@mastra/core/workspace';
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
-import type { WorkspaceToolName } from '@mastra/core/workspace/constants';
 import { stringify } from 'superjson';
+
 import { z } from 'zod';
+import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import type { WorkspaceToolName } from '../constants';
 
 import { HTTPException } from '../http-exception';
 import {

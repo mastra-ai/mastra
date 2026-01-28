@@ -43,6 +43,9 @@ export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOp
 export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './sandbox';
 export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from './sandbox';
 
+// Constants
+export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
+
 // Skills
 export type {
   SkillFormat,

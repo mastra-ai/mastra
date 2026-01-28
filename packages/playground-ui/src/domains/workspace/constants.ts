@@ -1,18 +1,12 @@
+/**
+ * Workspace tool constants.
+ *
+ * Inlined from @mastra/core/workspace/constants to avoid import compatibility
+ * issues with older core versions that don't have the workspace module.
+ */
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
-/**
- * Workspace tool name constants.
- * Use these to reference workspace tools by name.
- *
- * @example
- * ```typescript
- * import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
- *
- * if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
- *   // Handle sandbox execution
- * }
- * ```
- */
 export const WORKSPACE_TOOLS = {
   FILESYSTEM: {
     READ_FILE: `${WORKSPACE_TOOLS_PREFIX}_read_file` as const,
@@ -32,9 +26,6 @@ export const WORKSPACE_TOOLS = {
   },
 } as const;
 
-/**
- * Type representing any workspace tool name.
- */
 export type WorkspaceToolName =
   | (typeof WORKSPACE_TOOLS.FILESYSTEM)[keyof typeof WORKSPACE_TOOLS.FILESYSTEM]
   | (typeof WORKSPACE_TOOLS.SEARCH)[keyof typeof WORKSPACE_TOOLS.SEARCH]
