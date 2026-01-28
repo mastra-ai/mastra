@@ -15,6 +15,7 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_AUTH_HEADER?: string;
   }
 }
 
@@ -194,9 +195,23 @@ export default function AppWrapper() {
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
+  // Parse CLI auth header (format: "name: value")
+  const cliAuthHeader = window.MASTRA_AUTH_HEADER || '';
+  const defaultHeaders: Record<string, string> = {};
+  if (cliAuthHeader) {
+    const colonIndex = cliAuthHeader.indexOf(':');
+    if (colonIndex > 0) {
+      const name = cliAuthHeader.slice(0, colonIndex).trim();
+      const value = cliAuthHeader.slice(colonIndex + 1).trim();
+      if (name) {
+        defaultHeaders[name] = value;
+      }
+    }
+  }
+
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} defaultHeaders={defaultHeaders}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>
