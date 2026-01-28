@@ -17,15 +17,6 @@ The `registerApiRoute()` function creates custom HTTP routes that integrate with
 import { registerApiRoute } from "@mastra/core/server";
 ```
 
-## Signature
-
-```typescript
-function registerApiRoute<P extends string>(
-  path: P,
-  options: RegisterApiRouteOptions<P>
-): ApiRoute
-```
-
 ## Parameters
 
 ### path
@@ -323,7 +314,7 @@ registerApiRoute("/items/:itemId", {
 
 ## Related
 
-- [Custom API Routes Guide](/docs/v1/server/custom-api-routes) - Usage guide with examples
-- [Server Middleware](/docs/v1/server/middleware) - Global middleware configuration
-- [createRoute()](/reference/v1/server/create-route) - Type-safe route creation for server adapters
-- [Server Routes](/reference/v1/server/routes) - Built-in Mastra server routes
+- [Custom API Routes Guide](/docs/server/custom-api-routes) - Usage guide with examples
+- [Server Middleware](/docs/server/middleware) - Global middleware configuration
+- [createRoute()](/reference/server/create-route) - Type-safe route creation for server adapters
+- [Server Routes](/reference/server/routes) - Built-in Mastra server routes
