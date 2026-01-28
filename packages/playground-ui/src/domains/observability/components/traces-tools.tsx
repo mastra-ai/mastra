@@ -7,7 +7,7 @@ import { EntityType, SpanType } from '@mastra/core/observability';
 import { Icon } from '@/ds/icons/Icon';
 import { useEffect, useState } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { TraceStatus } from '@mastra/core/storage';
+import { TraceSpan, TraceStatus } from '@mastra/core/storage';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
@@ -25,11 +25,13 @@ type TracesToolsProps = {
   selectedType?: SpanType | 'all';
   selectedDateFrom?: Date | undefined;
   selectedDateTo?: Date | undefined;
-  selectedStatus?: TraceStatus | 'all';
+  selectedStatus?: TraceSpan['status'] | 'all';
   selectedRunId?: string;
+  selectedThreadId?: string;
   onEntityChange: (val: EntityOptions) => void;
   onDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   onRunIdChange: (runId: string) => void;
+  onThreadIdChange: (threadId: string) => void;
   onStatusChange: (status: TraceStatus | 'all') => void;
   onTypeChange: (type: SpanType | 'all') => void;
   onReset?: () => void;
@@ -45,6 +47,7 @@ export function TracesTools({
   selectedType = 'all',
   selectedStatus = 'all',
   selectedRunId,
+  selectedThreadId,
   selectedDateFrom,
   selectedDateTo,
   onEntityChange,
@@ -52,6 +55,7 @@ export function TracesTools({
   onTypeChange,
   onStatusChange,
   onRunIdChange,
+  onThreadIdChange,
   onReset,
   onLessFilters,
   entityOptions,
@@ -62,10 +66,10 @@ export function TracesTools({
   const [allFiltersVisible, setAllFiltersVisible] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
-    if (selectedRunId && allFiltersVisible === undefined) {
+    if ((selectedRunId || selectedThreadId) && allFiltersVisible === undefined) {
       setAllFiltersVisible(true);
     }
-  }, [allFiltersVisible, setAllFiltersVisible, selectedRunId]);
+  }, [allFiltersVisible, setAllFiltersVisible, selectedRunId, selectedThreadId]);
 
   const filterApplied =
     selectedEntity?.value !== 'all' ||
@@ -73,7 +77,8 @@ export function TracesTools({
     selectedDateTo ||
     selectedType !== 'all' ||
     selectedStatus !== 'all' ||
-    !!selectedRunId;
+    !!selectedRunId ||
+    !!selectedThreadId;
 
   return (
     <div
@@ -158,6 +163,17 @@ export function TracesTools({
               value={selectedRunId}
               className="min-w-[23rem]"
               onChange={e => onRunIdChange(e.target.value)}
+            />
+
+            <InputField
+              label="Thread Id"
+              name="thread-id"
+              placeholder="..."
+              disabled={isLoading}
+              layout="horizontal"
+              value={selectedThreadId}
+              className="min-w-[23rem]"
+              onChange={e => onThreadIdChange(e.target.value)}
             />
           </div>
         )}

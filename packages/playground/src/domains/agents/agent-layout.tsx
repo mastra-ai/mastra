@@ -4,7 +4,7 @@ import { AgentHeader } from './agent-header';
 import { HeaderTitle, Header, MainContentLayout, useAgent, Skeleton } from '@mastra/playground-ui';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
-  const { agentId } = useParams();
+  const { agentId, threadId } = useParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   return (
     <MainContentLayout>
@@ -15,7 +15,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           </HeaderTitle>
         </Header>
       ) : (
-        <AgentHeader agentName={agent?.name!} agentId={agentId!} />
+        <AgentHeader agentName={agent?.name!} agentId={agentId!} threadId={threadId} />
       )}
       {children}
     </MainContentLayout>

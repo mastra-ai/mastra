@@ -24,12 +24,13 @@ import {
   StatusOptions,
 } from '@mastra/playground-ui';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { TraceSpan } from 'node_modules/@mastra/core/dist/storage/domains/observability/types';
 
 enum TraceStatus {
   SUCCESS = 'success',
@@ -40,28 +41,46 @@ enum TraceStatus {
 export default function Observability() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
-    value: 'all',
-    label: 'All',
-    type: 'all' as const,
-  });
   const [selectedType, setSelectedType] = useState<SpanType | 'all'>('all');
-  const [selectedStatus, setSelectedStatus] = useState<TraceStatus | 'all'>('all');
-  const [selectedRunId, setSelectedRunId] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<TraceSpan['status'] | 'all'>('all');
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
-  const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
 
-  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
-
-  const traceId = searchParams.get('traceId');
+  // Derive values from URL search params (single source of truth)
+  const selectedTraceId = searchParams.get('traceId') || undefined;
+  const dialogIsOpen = !!selectedTraceId;
+  const selectedRunId = searchParams.get('runId') || '';
+  const selectedThreadId = searchParams.get('threadId') || '';
   const spanId = searchParams.get('spanId');
   const spanTab = searchParams.get('tab');
   const scoreId = searchParams.get('scoreId');
+
+  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
+
+  const entityOptions = useMemo<EntityOptions[]>(() => {
+    const agentOpts: EntityOptions[] = Object.values(agents).map(agent => ({
+      value: agent.id,
+      label: agent.name,
+      type: EntityType.AGENT,
+    }));
+    const workflowOpts: EntityOptions[] = Object.values(workflows || {}).map(wf => ({
+      value: wf.name,
+      label: wf.name,
+      type: EntityType.WORKFLOW_RUN,
+    }));
+    return [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOpts, ...workflowOpts];
+  }, [agents, workflows]);
+
+  const selectedEntityOption = useMemo<EntityOptions>(() => {
+    const entityName = searchParams.get('entity');
+    if (!entityName || entityName === 'all') {
+      return { value: 'all', label: 'All', type: 'all' as const };
+    }
+    return entityOptions.find(option => option.value === entityName) || { value: 'all', label: 'All', type: 'all' as const };
+  }, [searchParams, entityOptions]);
 
   const {
     data: traces = [],
@@ -73,9 +92,9 @@ export default function Observability() {
     isError: isTracesError,
   } = useTraces({
     filters: {
-      ...(selectedEntityOption?.type !== 'all' && {
-        entityId: selectedEntityOption?.value,
-        entityType: selectedEntityOption?.type,
+      ...(selectedEntityOption.type !== 'all' && {
+        entityId: selectedEntityOption.value,
+        entityType: selectedEntityOption.type,
       }),
       ...(selectedDateFrom && {
         startedAt: {
@@ -96,33 +115,11 @@ export default function Observability() {
       ...(selectedRunId && {
         runId: selectedRunId,
       }),
+      ...(selectedThreadId && {
+        threadId: selectedThreadId,
+      }),
     },
   });
-
-  useEffect(() => {
-    if (traceId) {
-      setSelectedTraceId(traceId);
-      setDialogIsOpen(true);
-    }
-  }, [traceId]);
-
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
-    value: value.id,
-    label: value.name,
-    type: EntityType.AGENT,
-  }));
-
-  const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
-    value: value.name,
-    label: value.name,
-    type: EntityType.WORKFLOW_RUN,
-  }));
-
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'all' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
 
   const spanTypeOptions: SpanTypeOptions[] = [
     { value: 'all', label: 'All' },
@@ -137,50 +134,31 @@ export default function Observability() {
     { value: TraceStatus.RUNNING, label: 'Running' },
   ];
 
-  useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
-    }
-  }, [searchParams, selectedEntityOption, entityOptions]);
-
-  useEffect(() => {
-    const runId = searchParams.get('runId');
-    if (runId && !selectedRunId) {
-      setSelectedRunId(runId);
-    }
-  }, [searchParams, selectedRunId]);
+  const updateTraceId = (id: string) => {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev);
+      params.set('traceId', id);
+      return params;
+    });
+  };
 
   const handleReset = () => {
-    setSelectedTraceId(undefined);
-    setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
     setSelectedType('all');
     setSelectedStatus('all');
-
     setSearchParams({ entity: 'all' });
-    // postpone clearing runId to avoid race condition
-    setTimeout(() => {
-      setSelectedRunId('');
-    }, 1);
   };
 
   const handleLessFilters = () => {
     setSelectedType('all');
     setSelectedStatus('all');
-
     setSearchParams(prev => {
       const newParams = new URLSearchParams(prev);
       newParams.delete('runId');
+      newParams.delete('threadId');
       return newParams;
     });
-    setTimeout(() => {
-      setSelectedRunId('');
-    }, 1);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -195,46 +173,68 @@ export default function Observability() {
     setSelectedType(type);
   };
 
-  const handleStatusChange = (status: any | 'all') => {
+  const handleStatusChange = (status: TraceSpan['status'] | 'all') => {
     setSelectedStatus(status);
   };
 
   const handleRunIdChange = (runId: string) => {
-    handleReset();
-    setSelectedRunId(runId);
+    setSelectedDateFrom(undefined);
+    setSelectedDateTo(undefined);
+    setSelectedType('all');
+    setSelectedStatus('all');
+    setSearchParams({ entity: 'all', runId });
+  };
+
+  const handleThreadIdChange = (threadId: string) => {
+    setSelectedDateFrom(undefined);
+    setSelectedDateTo(undefined);
+    setSelectedType('all');
+    setSelectedStatus('all');
+    setSearchParams({ entity: 'all', threadId });
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) {
+      setSearchParams({ entity: option.value });
+    }
   };
 
   const handleTraceClick = (id: string) => {
     if (id === selectedTraceId) {
-      return setSelectedTraceId(undefined);
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev);
+        params.delete('traceId');
+        return params;
+      });
+      return;
     }
-    setSelectedTraceId(id);
-    setDialogIsOpen(true);
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev);
+      params.set('traceId', id);
+      return params;
+    });
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
 
   const filtersApplied =
-    selectedEntityOption?.value !== 'all' ||
+    selectedEntityOption.value !== 'all' ||
     selectedDateFrom ||
     selectedDateTo ||
     selectedStatus !== 'all' ||
     selectedType !== 'all' ||
-    !!selectedRunId;
+    !!selectedRunId ||
+    !!selectedThreadId;
 
   const toNextTrace = getToNextEntryFn({
     entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
-    update: setSelectedTraceId,
+    update: updateTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
     entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
-    update: setSelectedTraceId,
+    update: updateTraceId,
   });
 
   return (
@@ -271,6 +271,7 @@ export default function Observability() {
               selectedType={selectedType}
               selectedStatus={selectedStatus}
               selectedRunId={selectedRunId}
+              selectedThreadId={selectedThreadId}
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
               onEntityChange={handleSelectedEntityChange}
@@ -278,6 +279,7 @@ export default function Observability() {
               onTypeChange={handleSpanTypeChange}
               onStatusChange={handleStatusChange}
               onRunIdChange={handleRunIdChange}
+              onThreadIdChange={handleThreadIdChange}
               onReset={handleReset}
               onLessFilters={handleLessFilters}
               entityOptions={entityOptions}
@@ -312,8 +314,7 @@ export default function Observability() {
         traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
-          navigate(`/observability`);
-          setDialogIsOpen(false);
+          navigate('/observability');
         }}
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}

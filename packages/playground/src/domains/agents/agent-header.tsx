@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import {
   Header,
@@ -14,7 +14,17 @@ import {
   AgentCombobox,
 } from '@mastra/playground-ui';
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({
+  agentId,
+  threadId,
+}: {
+  agentName: string;
+  agentId: string;
+  threadId?: string;
+}) {
+  const [searchParams] = useSearchParams();
+  const isNewThread = searchParams.get('new') === 'true';
+
   return (
     <Header>
       <Breadcrumb>
@@ -36,9 +46,18 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
 
         <DividerIcon />
 
-        <Button as={Link} to={`/observability?entity=${agentId}`}>
-          Traces
-        </Button>
+        <div className="flex items-center gap-1">
+          <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
+          <Button as={Link} to={`/observability?entity=${agentId}`}>
+            Agent
+          </Button>
+
+          {threadId && !isNewThread && (
+            <Button as={Link} to={`/observability?threadId=${threadId}`}>
+              Thread
+            </Button>
+          )}
+        </div>
       </HeaderGroup>
 
       <HeaderAction>
