@@ -839,7 +839,6 @@ export class JsonExporter extends BaseExporter {
    * - `{"__any__": "object"}` - matches any object value
    * - `{"__any__": "array"}` - matches any array value
    * - `{"__any__": true}` - matches any non-null/undefined value
-   * - `{"__placeholder__": "..."}` - marks expected spans that are not yet implemented
    *
    * Environment variables:
    * Use `{ updateSnapshot: true }` option to update the snapshot instead of comparing
@@ -962,7 +961,7 @@ export class JsonExporter extends BaseExporter {
   }
 
   /**
-   * Deep compare two values, supporting special markers like __or__, __any__, and __placeholder__.
+   * Deep compare two values, supporting special markers like __or__ and __any__.
    * Collects all mismatches into the provided array.
    */
   #deepCompareWithMarkers(
@@ -971,14 +970,6 @@ export class JsonExporter extends BaseExporter {
     path: string,
     mismatches: { path: string; expected: unknown; actual: unknown }[],
   ): void {
-    // Handle __placeholder__ marker - skip comparison for placeholder spans
-    // These represent expected spans that are not yet implemented
-    if (this.#isPlaceholderMarker(expected)) {
-      // Placeholder found in expected but we still need to compare what we have
-      // The placeholder is typically on a parent object, so we skip the placeholder field itself
-      return;
-    }
-
     // Handle __or__ marker
     if (this.#isOrMarker(expected)) {
       const allowedValues = (expected as { __or__: unknown[] }).__or__;
@@ -1111,14 +1102,7 @@ export class JsonExporter extends BaseExporter {
   }
 
   /**
-   * Check if a value is a __placeholder__ marker (string value)
-   */
-  #isPlaceholderMarker(value: unknown): boolean {
-    return typeof value === 'string' && value.startsWith('TODO:');
-  }
-
-  /**
-   * Check if a key should be skipped during comparison (metadata keys like __placeholder__, __structure__)
+   * Check if a key should be skipped during comparison (metadata keys like __structure__)
    */
   #isMetadataKey(key: string): boolean {
     return key.startsWith('__') && key.endsWith('__');

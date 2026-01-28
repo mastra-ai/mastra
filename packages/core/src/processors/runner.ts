@@ -365,9 +365,9 @@ export class ProcessorRunner {
             // Extract the processed part from the result if it exists
             if ('part' in result) {
               processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
-              // Track output chunk (after processor transformation)
-              state.addOutputPart(processedPart);
             }
+            // Track output chunk (after processor transformation or passthrough)
+            state.addOutputPart(processedPart);
           } catch (error) {
             if (error instanceof TripWire) {
               return {

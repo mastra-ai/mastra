@@ -273,7 +273,7 @@ describe('Agent Hub Integration Tests', () => {
     console.log('=== DEBUG: Parent ref spanID:', parentRef.spanID, 'vs agent spanID:', agentSpan.spanID);
     expect(parentRef.spanID).toBe(agentSpan.spanID);
 
-    // Verify OpenAI API call spans are nested under MODEL_GENERATION span
+    // Verify OpenAI API call spans are nested under MODEL_STEP span
     // These spans are created by OTEL auto-instrumentation for the HTTP client
     const openaiSpans = traceSpans.filter((s: any) => {
       const tags = s.tags || [];
@@ -298,7 +298,7 @@ describe('Agent Hub Integration Tests', () => {
     // Should have OpenAI-related spans (POST, dns.lookup, tls.connect, etc.)
     expect(openaiSpans.length).toBeGreaterThan(0);
 
-    // Verify these spans are children of the MODEL_GENERATION span, not demo-controller
+    // Verify these spans are children of the MODEL_STEP span, not demo-controller
     for (const openaiSpan of openaiSpans) {
       const refs = openaiSpan.references || [];
       const childOfRefs = refs.filter((r: any) => r.refType === 'CHILD_OF');

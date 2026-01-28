@@ -283,8 +283,9 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
     }
 
     // Handle JSON Schema objects - compress to a more readable format
+    // Pass the compressed result back through helper to apply size limits
     if (isJsonSchema(val)) {
-      return compressJsonSchema(val);
+      return helper(compressJsonSchema(val), depth);
     }
 
     // Handle objects - enforce key limit

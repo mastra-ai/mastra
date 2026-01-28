@@ -181,7 +181,7 @@
                     "isRootSpan": false,
                     "parentId": "<span-3>",
                     "entityType": "tool",
-                    "entityId": "workflow-agent",
+                    "entityId": "workflowExecutor",
                     "attributes": {
                       "toolDescription": "Executes a workflow",
                       "toolType": "tool",

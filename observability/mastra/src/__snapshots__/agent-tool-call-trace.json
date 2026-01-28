@@ -179,7 +179,7 @@
                     "isRootSpan": false,
                     "parentId": "<span-3>",
                     "entityType": "tool",
-                    "entityId": "test-agent",
+                    "entityId": "calculator",
                     "attributes": {
                       "toolDescription": "Performs calculations",
                       "toolType": "tool",

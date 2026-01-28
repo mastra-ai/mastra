@@ -177,7 +177,7 @@
                     "isRootSpan": false,
                     "parentId": "<span-3>",
                     "entityType": "tool",
-                    "entityId": "workflow-agent",
+                    "entityId": "workflow-simpleWorkflow",
                     "attributes": {
                       "toolDescription": "Workflow: simpleWorkflow",
                       "toolType": "tool",

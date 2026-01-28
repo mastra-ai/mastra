@@ -65,7 +65,6 @@
               "messageList": {
                 "messages": [
                   {
-                    "id": "<id-1>",
                     "role": "user",
                     "content": [
                       {
@@ -80,9 +79,7 @@
                     "role": "system",
                     "content": "You are a helpful assistant"
                   }
-                ],
-                "taggedSystemMessages": {},
-                "memoryInfo": null
+                ]
               },
               "systemMessages": [
                 {
@@ -401,7 +398,6 @@
               "messageList": {
                 "messages": [
                   {
-                    "id": "<id-1>",
                     "role": "user",
                     "content": [
                       {
@@ -411,7 +407,6 @@
                     ]
                   },
                   {
-                    "id": "<id-2>",
                     "role": "assistant",
                     "content": [
                       {
@@ -426,9 +421,7 @@
                     "role": "system",
                     "content": "You are a helpful assistant"
                   }
-                ],
-                "taggedSystemMessages": {},
-                "memoryInfo": null
+                ]
               },
               "retryCount": 0,
               "messages": [

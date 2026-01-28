@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan, TracingEvent } from '@mastra/core/observability';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -287,7 +289,7 @@ describe('JsonExporter', () => {
   });
 
   describe('file output', () => {
-    const testFilePath = '/tmp/json-exporter-test.json';
+    const testFilePath = join(tmpdir(), `json-exporter-test-${Date.now()}.json`);
 
     afterEach(async () => {
       if (existsSync(testFilePath)) {

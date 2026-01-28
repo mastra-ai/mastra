@@ -178,35 +178,24 @@ export class MessageList {
    * a MessageList instance appears in span input/output/attributes.
    */
   public serializeForSpan(): {
-    messages: Array<{ id: string; role: string; content: unknown }>;
-    systemMessages: Array<{ role: string; content: unknown }>;
-    taggedSystemMessages: Record<string, Array<{ role: string; content: unknown }>>;
-    memoryInfo: MemoryInfo | null;
+    messages: Array<{ role: string; content: unknown }>;
+    systemMessages: Array<{ role: string; content: unknown; tag?: string }>;
   } {
-    // Get the DB messages to access IDs, then map with core message content
-    const dbMessages = this.all.db();
     const coreMessages = this.all.aiV4.core();
 
     return {
-      messages: coreMessages.map((msg, idx) => ({
-        id: dbMessages[idx]?.id ?? '',
+      messages: coreMessages.map(msg => ({
         role: msg.role,
         content: msg.content,
       })),
-      systemMessages: this.systemMessages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      taggedSystemMessages: Object.fromEntries(
-        Object.entries(this.taggedSystemMessages).map(([tag, msgs]) => [
-          tag,
-          msgs.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        ]),
-      ),
-      memoryInfo: this.memoryInfo,
+      systemMessages: [
+        // Untagged first (base instructions)
+        ...this.systemMessages.map(m => ({ role: m.role, content: m.content })),
+        // Tagged after (contextual additions)
+        ...Object.entries(this.taggedSystemMessages).flatMap(([tag, msgs]) =>
+          msgs.map(m => ({ role: m.role, content: m.content, tag })),
+        ),
+      ],
     };
   }
 
