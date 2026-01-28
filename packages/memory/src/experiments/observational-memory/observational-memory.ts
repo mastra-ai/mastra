@@ -2190,30 +2190,47 @@ ${suggestedResponse}
         const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
 
         const lockKey = this.getLockKey(threadId, resourceId);
+        let observationSucceeded = false;
         await this.withLock(lockKey, async () => {
           const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
           const freshAllMessages = messageList.get.all.db();
           const freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
 
           if (freshUnobservedMessages.length > 0) {
-            if (this.scope === 'resource' && resourceId) {
-              await this.doResourceScopedObservation(
-                freshRecord,
-                threadId,
-                resourceId,
-                freshUnobservedMessages,
-                writer,
-              );
-            } else {
-              await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
+            try {
+              if (this.scope === 'resource' && resourceId) {
+                await this.doResourceScopedObservation(
+                  freshRecord,
+                  threadId,
+                  resourceId,
+                  freshUnobservedMessages,
+                  writer,
+                );
+              } else {
+                await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
+              }
+              // Only mark as succeeded if observation didn't throw
+              // (doSynchronousObservation/doResourceScopedObservation catch internally,
+              //  but we check the record to see if observations were actually updated)
+              const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+              observationSucceeded = (updatedRecord.lastObservedAt?.getTime() ?? 0) > (freshRecord.lastObservedAt?.getTime() ?? 0);
+            } catch {
+              // Observation failed - don't clear messages
+              observationSucceeded = false;
             }
           }
         });
 
+        // Only clear messages from context if observation actually succeeded
+        // If observation failed, keep messages so the agent can still respond
+        if (!observationSucceeded) {
+          omDebug(`[OM processInputStep] Observation did not succeed, keeping messages in context`);
+        }
+
         // Save messages with markers
         // Use .clear to remove observed messages from context - they're now in observations
-        const newInput = messageList.clear.input.db();
-        const newOutput = messageList.clear.response.db();
+        const newInput = observationSucceeded ? messageList.clear.input.db() : [];
+        const newOutput = observationSucceeded ? messageList.clear.response.db() : [];
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
@@ -2840,7 +2857,9 @@ ${formattedMessages}
 
         // Then seal the message (skipPush since writer.custom already added the part)
       }
-      throw error;
+      // Log the error but don't re-throw - observation failure should not crash the agent
+      omDebug(`[OM] Observation failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[OM] Observation failed:`, error instanceof Error ? error.message : String(error));
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }
@@ -3442,7 +3461,9 @@ ${formattedMessages}
           // Then seal the message (skipPush since writer.custom already added the part)
         }
       }
-      throw error;
+      // Log the error but don't re-throw - observation failure should not crash the agent
+      omDebug(`[OM] Resource-scoped observation failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[OM] Resource-scoped observation failed:`, error instanceof Error ? error.message : String(error));
     } finally {
       await this.storage.setObservingFlag(record.id, false);
     }
@@ -3607,7 +3628,9 @@ ${formattedMessages}
         });
         await writer.custom(failedMarker).catch(() => {});
       }
-      throw error;
+      // Log the error but don't re-throw - reflection failure should not crash the agent
+      omDebug(`[OM] Reflection failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[OM] Reflection failed:`, error instanceof Error ? error.message : String(error));
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }

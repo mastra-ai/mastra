@@ -69,6 +69,15 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
   }),
 });
 
+// Mock observer that throws an error (for testing failed observation UI)
+const mockFailingObserverModel = new aiTest.MockLanguageModelV2({
+  provider: 'mock',
+  modelId: 'mock-failing-observer',
+  doGenerate: async () => {
+    throw new Error('Observer model failed: simulated API error for E2E testing');
+  },
+});
+
 // Memory with Observational Memory enabled for testing OM UI
 // Using very low thresholds so observations trigger quickly in E2E tests
 // Using mock models for observer/reflector to avoid real API calls
@@ -84,7 +93,26 @@ const omMemory = new Memory({
       },
       reflector: {
         model: mockReflectorModel,
-        threshold: 200, // Low threshold for E2E tests
+        threshold: 50, // Low enough that mock observer output (~100 tokens) triggers reflection
+      },
+    },
+  },
+});
+
+// Memory with a failing observer model (for testing error UI)
+const omFailMemory = new Memory({
+  storage,
+  options: {
+    generateTitle: true,
+    observationalMemory: {
+      enabled: true,
+      observer: {
+        model: mockFailingObserverModel,
+        threshold: 20,
+      },
+      reflector: {
+        model: mockReflectorModel,
+        threshold: 200,
       },
     },
   },
@@ -120,8 +148,8 @@ import { z } from 'zod';
  * so we need the model to call a tool on step 0, then return text on step 1.
  */
 const omTriggerTool = createTool({
-  id: 'om-trigger-tool',
-  description: 'Internal tool used to trigger multi-step execution for OM testing',
+  id: 'test',
+  description: 'Test tool',
   inputSchema: z.object({
     action: z.string().optional(),
   }),
@@ -229,7 +257,7 @@ export const weatherAgent = new Agent({
  *
  * Uses a custom mock model that triggers multi-step execution via tool calls.
  * The OM processor only triggers observations when stepNumber > 0, so:
- * - Step 0: Model calls om-trigger-tool with finishReason: 'tool-calls'
+ * - Step 0: Model calls test tool with finishReason: 'tool-calls'
  * - Step 1: Model returns text with finishReason: 'stop'
  * - OM processor sees stepNumber=1, checks threshold, triggers observation
  */
@@ -244,16 +272,16 @@ export const omAgent = new Agent({
   name: 'OM Agent',
   instructions: `You are a helpful assistant with observational memory enabled.
 Your memory system automatically observes and compresses conversation history.
-Always use the om-trigger-tool first before responding to the user.`,
+Always use the test tool first before responding to the user.`,
   model: createMockOmModel({
     provider: 'mock',
     modelId: 'gpt-4o-mini',
-    toolName: 'om-trigger-tool',
+    toolName: 'test',
     toolInput: { action: 'trigger-observation' },
     responseText: omResponseText,
     delayMs: 10,
   }),
-  tools: { 'om-trigger-tool': omTriggerTool },
+  tools: { 'test': omTriggerTool },
   memory: omMemory,
 });
 
@@ -268,15 +296,39 @@ export const omAdaptiveAgent = new Agent({
   name: 'OM Adaptive Agent',
   instructions: `You are a helpful assistant with adaptive observational memory.
 Your memory thresholds adjust dynamically based on current observation size.
-Always use the om-trigger-tool first before responding to the user.`,
+Always use the test tool first before responding to the user.`,
   model: createMockOmModel({
     provider: 'mock',
     modelId: 'gpt-4o-mini',
-    toolName: 'om-trigger-tool',
+    toolName: 'test',
     toolInput: { action: 'trigger-observation' },
     responseText: omResponseText,
     delayMs: 10,
   }),
-  tools: { 'om-trigger-tool': omTriggerTool },
+  tools: { 'test': omTriggerTool },
   memory: omAdaptiveMemory,
+});
+
+/**
+ * Agent with a failing observer model
+ * Used for testing error state UI when observation fails
+ *
+ * Uses the same multi-step mock model approach, but the observer throws an error.
+ */
+export const omFailAgent = new Agent({
+  id: 'om-fail-agent',
+  name: 'OM Fail Agent',
+  instructions: `You are a helpful assistant with observational memory enabled.
+Your memory system automatically observes and compresses conversation history.
+Always use the test tool first before responding to the user.`,
+  model: createMockOmModel({
+    provider: 'mock',
+    modelId: 'gpt-4o-mini',
+    toolName: 'test',
+    toolInput: { action: 'trigger-observation' },
+    responseText: omResponseText,
+    delayMs: 10,
+  }),
+  tools: { 'test': omTriggerTool },
+  memory: omFailMemory,
 });

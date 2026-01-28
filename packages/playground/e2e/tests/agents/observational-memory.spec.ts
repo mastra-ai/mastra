@@ -166,39 +166,50 @@ test.describe('Observational Memory - Behavior Tests', () => {
     });
 
     /**
-     * SKIPPED: Same reason as above - requires multi-step execution.
-     * Failed observation markers only appear when observation is triggered,
-     * which requires stepNumber > 0.
+     * BEHAVIOR: Failed observation shows error state
+     * OUTCOME: User sees that observation failed (e.g., "Observation failed" or "interrupted")
+     *
+     * Uses om-fail-agent which has a mock observer that throws an error.
      */
+    // TODO: Fix - the mock tool call fails in workflow execution engine ("Tool test not found"),
+    // which disrupts the agent flow before OM can emit the failed marker.
+    // The observation failure IS detected (server logs show "[OM] Observation failed"),
+    // but the data-om-observation-failed marker doesn't render in the UI.
     test.skip('should show error state when observation fails', async ({ page }) => {
       // ARRANGE
-      await selectFixture(page, 'om-observation-failed');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await selectFixture(page, 'om-observation-success');
+      await page.goto('/agents/om-fail-agent/chat?new=true');
 
-      // ACT: Send a message
+      // Wait for page to load
+      await expect(page.locator('h2')).toContainText('OM Fail Agent');
+
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      await chatInput.fill('Process this message');
-      await chatInput.press('Enter');
+      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
 
-      // Wait for response
+      // ACT: Send first message to start conversation
+      await chatInput.fill('Hello, I need help with something important today.');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(2000);
+
+      // ACT: Send second message to accumulate tokens and trigger observation
+      await chatInput.fill('Can you also tell me about the weather forecast for tomorrow?');
+      await chatInput.press('Enter');
       await page.waitForTimeout(3000);
 
       // ASSERT: The thread wrapper should show the response
-      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
       await expect(threadWrapper).toBeVisible({ timeout: 15000 });
 
       // ASSERT: Failed observation marker should be visible
-      // The fixture emits: error: 'Observer model rate limited'
-      const failedMarker = threadWrapper.getByText(/Observation failed|failed/i);
-      await expect(failedMarker).toBeVisible({ timeout: 10000 });
+      // The mock observer throws an error, so we expect "Observation failed"
+      const failedMarker = threadWrapper.getByText(/Observation failed/i);
+      await expect(failedMarker).toBeVisible({ timeout: 15000 });
     });
   });
 
   test.describe('Observation Persistence', () => {
-    /**
-     * SKIPPED: Same reason - requires multi-step execution for observation markers.
-     * The persistence test depends on observation markers being created first.
-     */
+    // TODO: Fix - data-om-* markers are streamed to the UI but not persisted to storage.
+    // After page reload, the markers are lost because they were only in the in-memory messageList.
+    // The insertObservationMarker method was removed; need a new persistence strategy.
     test.skip('should persist observations after page reload', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
@@ -207,16 +218,20 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
 
-      // ACT: Send a message to create observations
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      await chatInput.fill('Remember this important information');
-      await chatInput.press('Enter');
+      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
 
-      // Wait for observation to complete
-      await page.waitForTimeout(4000);
+      // ACT: Send first message to start conversation
+      await chatInput.fill('Hello, I need help with something important today.');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(2000);
+
+      // ACT: Send second message to accumulate tokens and trigger observation
+      await chatInput.fill('Remember this important information for later.');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(3000);
 
       // Verify observation marker appeared before reload
-      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
       await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });
 
       // ACT: Reload the page
@@ -239,10 +254,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
   });
 
   test.describe('Reflection Behavior', () => {
-    /**
-     * SKIPPED: Same reason - requires multi-step execution for observation/reflection markers.
-     */
-    test.skip('should show reflection indicator when reflection occurs', async ({ page }) => {
+    test('should show reflection indicator when reflection occurs', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-reflection');
       await page.goto('/agents/om-agent/chat?new=true');
@@ -250,16 +262,18 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
 
-      // ACT: Send a message (fixture will trigger both observation and reflection)
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      await chatInput.fill('This will trigger reflection');
-      await chatInput.press('Enter');
-
-      // Wait for response
-      await page.waitForTimeout(4000);
-
-      // ASSERT: Both observation and reflection markers should appear
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
+
+      // ACT: Send first message to start conversation
+      await chatInput.fill('Hello, I need help with something important today.');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(2000);
+
+      // ACT: Send second message to trigger observation and reflection
+      await chatInput.fill('This will trigger reflection after observation.');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(3000);
 
       // Observation marker should show (fixture emits observation first)
       await expect(threadWrapper.getByText(/Observed.*→.*tokens/i)).toBeVisible({ timeout: 10000 });

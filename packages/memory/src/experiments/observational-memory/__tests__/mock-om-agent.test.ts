@@ -65,7 +65,7 @@ function createMockOmModel(responseText: string) {
             {
               type: 'tool-call' as const,
               toolCallId: `call-${Date.now()}`,
-              toolName: 'om-trigger-tool',
+              toolName: 'test',
               input: JSON.stringify({ action: 'trigger' }),
             },
           ],
@@ -93,7 +93,7 @@ function createMockOmModel(responseText: string) {
             {
               type: 'tool-call',
               toolCallId: `call-${Date.now()}`,
-              toolName: 'om-trigger-tool',
+              toolName: 'test',
               input: JSON.stringify({ action: 'trigger' }),
             },
             {
@@ -279,7 +279,7 @@ function createMockReflectorModel() {
 // =============================================================================
 
 const omTriggerTool = createTool({
-  id: 'om-trigger-tool',
+  id: 'test',
   description: 'Trigger tool for OM testing',
   inputSchema: z.object({
     action: z.string().optional(),
@@ -327,9 +327,9 @@ describe('Mock OM Agent Integration', () => {
     agent = new Agent({
       id: 'test-om-agent',
       name: 'Test OM Agent',
-      instructions: 'You are a helpful assistant. Always use the om-trigger-tool first.',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
       model: createMockOmModel(longResponseText) as any,
-      tools: { 'om-trigger-tool': omTriggerTool },
+      tools: { 'test': omTriggerTool },
       memory,
     });
   });
@@ -353,7 +353,7 @@ describe('Mock OM Agent Integration', () => {
     const step0 = result.steps[0];
     expect(step0?.toolCalls?.length).toBeGreaterThan(0);
     const toolCall = step0?.toolCalls?.[0] as any;
-    expect(toolCall?.payload?.toolName).toBe('om-trigger-tool');
+    expect(toolCall?.payload?.toolName).toBe('test');
 
     // Last step should have text
     const lastStep = result.steps[result.steps.length - 1];
