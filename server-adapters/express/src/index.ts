@@ -305,7 +305,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   async registerRoute(
     app: Application,
     route: ServerRoute,
-    { prefix: prefixParam }: { prefix?: string },
+    { prefix: prefixParam }: { prefix?: string } = {},
   ): Promise<void> {
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';

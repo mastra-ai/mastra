@@ -341,7 +341,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   async registerRoute(
     app: FastifyInstance,
     route: ServerRoute,
-    { prefix: prefixParam }: { prefix?: string },
+    { prefix: prefixParam }: { prefix?: string } = {},
   ): Promise<void> {
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';

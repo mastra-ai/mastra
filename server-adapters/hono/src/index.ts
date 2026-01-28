@@ -270,7 +270,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     }
   }
 
-  async registerRoute(app: HonoApp, route: ServerRoute, { prefix: prefixParam }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: HonoApp,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';
 
