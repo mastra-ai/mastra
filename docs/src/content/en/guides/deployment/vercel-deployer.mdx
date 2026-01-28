@@ -102,7 +102,7 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 
 ## Observability
 
-To enable observability on Vercel, you need to configure PostgreSQL storage (since Vercel's ephemeral filesystem doesn't support local file storage) and set up the CloudExporter.
+To enable observability on Vercel, configure external storage (since Vercel's ephemeral filesystem doesn't support local file storage) and set up your preferred exporter(s).
 
 ### Storage configuration
 
@@ -124,8 +124,12 @@ export const mastra = new Mastra({
       default: {
         serviceName: "my-mastra-app",
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(),   // Sends traces to Mastra Cloud
+          // Choose based on your observability platform:
+          new DefaultExporter(), // Your storage → Mastra Studio
+          new CloudExporter(),   // Mastra Cloud
+          // new LangfuseExporter(), // Langfuse
+          // new ArizeExporter(),    // Arize Phoenix / AX
+          // new BraintrustExporter(), // Braintrust
         ],
       },
     },
@@ -134,14 +138,17 @@ export const mastra = new Mastra({
 });
 ```
 
+See the [Tracing documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
+
 ### Environment variables
 
-Add these to your Vercel project settings:
+Add these to your Vercel project settings based on your configuration:
 
 | Variable | Description |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string (e.g., from Neon or Supabase) |
-| `MASTRA_CLOUD_ACCESS_TOKEN` | Access token from [Mastra Cloud](https://cloud.mastra.ai) for observability |
+| `DATABASE_URL` | PostgreSQL connection string (required for storage) |
+| `MASTRA_CLOUD_ACCESS_TOKEN` | Required if using CloudExporter |
+| `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY` | Required if using LangfuseExporter |
 | `OPENAI_API_KEY` | Your LLM provider API key |
 
 ### Flushing traces
