@@ -13,6 +13,9 @@ import type {
 } from '../types';
 import { isWorkspaceV1Supported } from '../compatibility';
 
+// Re-export for other hooks to use
+export { isWorkspaceV1Supported };
+
 // =============================================================================
 // Workspace Info Hook
 // =============================================================================
