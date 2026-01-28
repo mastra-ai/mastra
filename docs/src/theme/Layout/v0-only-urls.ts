@@ -184,4 +184,8 @@ export const v0Urls = [
   "/reference/v0/scorers/tool-call-accuracy",
   "/reference/v0/scorers/toxicity",
   "/reference/v0/workflows/run-methods/watch",
+  "/docs/v0/workflows-legacy/dynamic-workflows",
+  "/docs/v0/workflows-legacy/nested-workflows",
+  "/docs/v0/workflows-legacy/overview",
+  "/docs/v0/workflows-legacy/runtime-variables",
 ];
