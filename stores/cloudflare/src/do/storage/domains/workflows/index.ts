@@ -116,6 +116,7 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     const updateMap: Record<string, string> = {
       snapshot: 'excluded.snapshot',
       updatedAt: 'excluded.updatedAt',
+      resourceId: 'excluded.resourceId',
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
