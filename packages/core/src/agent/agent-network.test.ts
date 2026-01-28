@@ -5467,6 +5467,158 @@ describe('Agent - network - message history transfer to sub-agents', () => {
     expect(secondCallPrompt).not.toContain('isNetwork');
     expect(secondCallPrompt).not.toContain('selectionReason');
   });
+
+  it('should NOT include completion check feedback messages in sub-agent context (issue #12224)', async () => {
+    // When a completion check fails and feedback is saved to memory,
+    // that feedback should NOT appear in the conversation context passed to sub-agents.
+    // The feedback messages contain "#### Completion Check Results" and are saved with
+    // metadata.mode = 'network', but this metadata wasn't being checked by the filter.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Task completed.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Task completed.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-completion-test',
+      name: 'Sub Agent Completion Test',
+      description: 'A sub-agent for testing completion feedback filtering',
+      instructions: 'Complete the assigned task.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // First iteration: delegate to sub-agent, completion check FAILS
+    const routingResponse1 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the first part of the task',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    // Second iteration: delegate to sub-agent again, completion check PASSES
+    const routingResponse2 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the second part of the task',
+      selectionReason: 'Continuing with sub-agent',
+    });
+
+    // Use a custom scorer that fails first, then passes
+    let scorerCallCount = 0;
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else text = routingResponse2;
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else text = routingResponse2;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'completion-feedback-filter-test',
+      name: 'Completion Feedback Filter Test',
+      instructions: 'Execute tasks via sub-agent.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const mockScorer = {
+      id: 'fail-then-pass-scorer',
+      name: 'Fail Then Pass Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount === 1) {
+          // First check fails - this should trigger feedback to be saved to memory
+          return { score: 0, reason: 'Task not complete yet, needs more work' };
+        }
+        // Second check passes
+        return { score: 1, reason: 'Task is now complete' };
+      }),
+    };
+
+    const anStream = await networkAgent.network('Complete a multi-part task', {
+      maxSteps: 3,
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'test-thread-completion-feedback',
+        resource: 'test-resource-completion-feedback',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Verify that the scorer was called at least twice (fail then pass)
+    expect(scorerCallCount).toBeGreaterThanOrEqual(2);
+
+    // The sub-agent should have been called at least twice
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+
+    // The second sub-agent call should NOT see completion check feedback from the first iteration
+    const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
+
+    // This is the key assertion: completion feedback should NOT appear in sub-agent context
+    expect(secondCallPrompt).not.toContain('Completion Check Results');
+    expect(secondCallPrompt).not.toContain('NOT COMPLETE');
+    expect(secondCallPrompt).not.toContain('Will continue working on the task');
+
+    // Also verify the first call didn't somehow get feedback (it shouldn't exist yet)
+    const firstCallPrompt = JSON.stringify(subAgentReceivedPrompts[0]);
+    expect(firstCallPrompt).not.toContain('Completion Check Results');
+  });
 });
 
 describe('Agent - network - output processors', () => {
