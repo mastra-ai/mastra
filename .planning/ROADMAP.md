@@ -10,7 +10,7 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 - Integer phases (1, 2, 3, 4): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Transport Layer** - Build request/response foundation with Authorization header and envelope unwrapping
+- [x] **Phase 1: Transport Layer** - Build request/response foundation with Authorization header and envelope unwrapping
 - [ ] **Phase 2: API Paths + Methods** - Update all endpoints to `/api/v1/` and add token parameters
 - [ ] **Phase 3: Provider Integration** - Wire `MastraCloudAuth` to use updated client signatures
 - [ ] **Phase 4: Testing + Validation** - Verify TypeScript compiles and test against mocked API
@@ -33,7 +33,7 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 **Plans**: 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Transport layer types and request helper
+- [x] 01-01-PLAN.md — Transport layer types and request helper
 
 ### Phase 2: API Paths + Methods
 **Goal**: Update all endpoints to match Cloud spec paths and accept token parameters
@@ -97,7 +97,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transport Layer | 0/1 | Planned | - |
+| 1. Transport Layer | 1/1 | ✓ Complete | 2026-01-28 |
 | 2. API Paths + Methods | 0/1 | Not started | - |
 | 3. Provider Integration | 0/1 | Not started | - |
 | 4. Testing + Validation | 0/1 | Not started | - |
