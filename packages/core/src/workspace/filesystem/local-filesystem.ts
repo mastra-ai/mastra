@@ -218,21 +218,21 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
     }
 
-    if (options?.overwrite === false) {
-      try {
-        await fs.access(absolutePath);
-        throw new FileExistsError(inputPath);
-      } catch (error: unknown) {
-        if (error instanceof FileExistsError) throw error;
-      }
-    }
-
     if (options?.recursive !== false) {
       const dir = nodePath.dirname(absolutePath);
       await fs.mkdir(dir, { recursive: true });
     }
 
-    await fs.writeFile(absolutePath, this.toBuffer(content));
+    // Use 'wx' flag for atomic overwrite check (avoids TOCTOU race)
+    const writeFlag = options?.overwrite === false ? 'wx' : 'w';
+    try {
+      await fs.writeFile(absolutePath, this.toBuffer(content), { flag: writeFlag });
+    } catch (error: unknown) {
+      if (options?.overwrite === false && isEexistError(error)) {
+        throw new FileExistsError(inputPath);
+      }
+      throw error;
+    }
   }
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
@@ -318,15 +318,17 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       if (entry.isDirectory()) {
         await this.copyDirectory(srcEntry, destEntry, options);
       } else {
-        if (options?.overwrite === false) {
-          try {
-            await fs.access(destEntry);
+        // Use COPYFILE_EXCL for atomic overwrite check (avoids TOCTOU race)
+        const copyFlags = options?.overwrite === false ? fsConstants.COPYFILE_EXCL : 0;
+        try {
+          await fs.copyFile(srcEntry, destEntry, copyFlags);
+        } catch (error: unknown) {
+          if (options?.overwrite === false && isEexistError(error)) {
+            // Skip existing files when overwrite is false
             continue;
-          } catch {
-            // Continue
           }
+          throw error;
         }
-        await fs.copyFile(srcEntry, destEntry);
       }
     }
   }
