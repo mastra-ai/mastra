@@ -62,7 +62,7 @@ function AdmonitionIconType({ title, type }: Pick<Props, 'title' | 'type'>) {
 }
 
 function AdmonitionContent({ children }: Pick<Props, 'children'>) {
-  return children ? <div className="*:last:mb-0!">{children}</div> : null
+  return children ? <div className="text-sm *:last:mb-0!">{children}</div> : null
 }
 
 export default function AdmonitionLayout(props: Props): ReactNode {

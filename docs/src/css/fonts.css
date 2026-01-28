@@ -1,4 +1,32 @@
 @font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVF.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400 900;
+}
+
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('ArialMT');
+  ascent-override: 90.4365%;
+  descent-override: 22.518%;
+  line-gap-override: 0%;
+  size-adjust: 107.1194%;
+}
+
+/*
+'@font-face {\n' +
+    '  font-family: "Inter Fallback";\n' +
+    "  src: local('Arial'), local('ArialMT');\n" +
+    '  ascent-override: 90.4365%;\n' +
+    '  descent-override: 22.518%;\n' +
+    '  line-gap-override: 0%;\n' +
+    '  size-adjust: 107.1194%;\n' +
+    '}'
+*/
+
+/*
+@font-face {
   font-family: 'Greed';
   src: url('/fonts/GreedVF.woff2') format('woff2');
   font-display: swap;
@@ -13,6 +41,7 @@
   size-adjust: 93.5395%;
   line-gap-override: 0%;
 }
+*/
 
 @font-face {
   font-family: 'Geist Mono';
