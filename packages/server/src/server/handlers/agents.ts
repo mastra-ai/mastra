@@ -699,6 +699,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
+        requestContext,
       });
 
       return result;
@@ -949,6 +950,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
+        requestContext,
       });
 
       return streamResult.fullStream;
