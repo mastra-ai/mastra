@@ -125,30 +125,7 @@ await workspace.init();
 
 ## Tool Configuration
 
-The `tools` option controls which workspace tools are enabled and their safety settings.
-
-```typescript
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  tools: {
-    // Global defaults apply to all tools
-    enabled: true,
-    requireApproval: false,
-
-    // Per-tool overrides
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireApproval: true,
-      requireReadBeforeWrite: true,
-    },
-    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
-      enabled: false,
-    },
-  },
-});
-```
+The `tools` option controls which workspace tools are enabled and their safety settings. See [Workspace Overview](/docs/workspace/overview#tool-configuration) for usage examples.
 
 ### WorkspaceToolConfig
 

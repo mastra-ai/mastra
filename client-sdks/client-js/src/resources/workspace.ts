@@ -199,6 +199,9 @@ export class Workspace extends BaseResource {
     if (params.minScore !== undefined) {
       searchParams.set('minScore', String(params.minScore));
     }
+    if (params.workspaceId) {
+      searchParams.set('workspaceId', params.workspaceId);
+    }
     return this.request(`/workspace/search?${searchParams.toString()}`);
   }
 
@@ -258,6 +261,9 @@ export class Workspace extends BaseResource {
     }
     if (params.includeReferences !== undefined) {
       searchParams.set('includeReferences', String(params.includeReferences));
+    }
+    if (params.workspaceId) {
+      searchParams.set('workspaceId', params.workspaceId);
     }
     return this.request(`/workspace/skills/search?${searchParams.toString()}`);
   }

@@ -602,7 +602,13 @@ const sidebars = {
           id: 'workspace/filesystem',
           label: 'Filesystem Interface',
         },
+        {
+          type: 'doc',
+          id: 'workspace/local-filesystem',
+          label: 'LocalFilesystem',
+        },
         { type: 'doc', id: 'workspace/sandbox', label: 'Sandbox Interface' },
+        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
       ],
     },
     {

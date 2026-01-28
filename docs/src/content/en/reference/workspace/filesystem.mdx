@@ -1,100 +1,17 @@
 ---
-title: "Reference: Filesystem Interface | Workspace"
-description: "Documentation for the WorkspaceFilesystem interface and LocalFilesystem provider."
+title: "Reference: WorkspaceFilesystem Interface | Workspace"
+description: "Documentation for the WorkspaceFilesystem interface that defines file storage operations."
 packages:
   - "@mastra/core"
 ---
 
-# Filesystem Interface
+# WorkspaceFilesystem Interface
 
-The `WorkspaceFilesystem` interface defines how workspaces interact with file storage. Mastra includes `LocalFilesystem` for local disk storage.
+The `WorkspaceFilesystem` interface defines how workspaces interact with file storage.
 
-## LocalFilesystem
+## Methods
 
-Stores files in a directory on the local filesystem.
-
-### Usage
-
-```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
-
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
-});
-```
-
-### Constructor Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "basePath",
-      type: "string",
-      description: "Root directory for the filesystem. All paths are relative to this directory.",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this filesystem instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "sandbox",
-      type: "boolean",
-      description: "Restrict operations to basePath (prevents path traversal)",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "readOnly",
-      type: "boolean",
-      description: "Block all write operations. When true, write tools are not added to agents.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
-/>
-
-### Properties
-
-<PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Filesystem instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('LocalFilesystem')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('local')",
-    },
-    {
-      name: "basePath",
-      type: "string",
-      description: "The absolute base path on disk",
-    },
-    {
-      name: "readOnly",
-      type: "boolean | undefined",
-      description: "Whether the filesystem is in read-only mode",
-    },
-  ]}
-/>
-
-## WorkspaceFilesystem Interface
-
-All filesystem providers implement this interface.
-
-### Methods
-
-#### `readFile(path, options?)`
+### `readFile(path, options?)`
 
 Read file contents.
 
@@ -124,7 +41,7 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
 
 **Returns:** `Promise<string | Buffer>`
 
-#### `writeFile(path, content, options?)`
+### `writeFile(path, content, options?)`
 
 Write file contents.
 
@@ -164,7 +81,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
   ]}
 />
 
-#### `deleteFile(path, options?)`
+### `deleteFile(path, options?)`
 
 Delete a file.
 
@@ -192,7 +109,7 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw i
   ]}
 />
 
-#### `readdir(path, options?)`
+### `readdir(path, options?)`
 
 List directory contents.
 
@@ -212,7 +129,7 @@ interface FileEntry {
 }
 ```
 
-#### `mkdir(path, options?)`
+### `mkdir(path, options?)`
 
 Create a directory.
 
@@ -240,7 +157,7 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true });
   ]}
 />
 
-#### `rmdir(path, options?)`
+### `rmdir(path, options?)`
 
 Remove a directory.
 
@@ -275,7 +192,7 @@ await filesystem.rmdir('/docs/nested', { recursive: true });
   ]}
 />
 
-#### `exists(path)`
+### `exists(path)`
 
 Check if a path exists.
 
@@ -285,7 +202,7 @@ const exists = await filesystem.exists('/docs/guide.md');
 
 **Returns:** `Promise<boolean>`
 
-#### `stat(path)`
+### `stat(path)`
 
 Get file or directory metadata.
 
@@ -306,9 +223,9 @@ interface FileStat {
 }
 ```
 
-### Optional Methods
+## Optional Methods
 
-#### `init()`
+### `init()`
 
 Initialize the filesystem. Called by `workspace.init()`.
 
@@ -316,62 +233,12 @@ Initialize the filesystem. Called by `workspace.init()`.
 await filesystem.init?.();
 ```
 
-#### `destroy()`
+### `destroy()`
 
 Clean up resources. Called by `workspace.destroy()`.
 
 ```typescript
 await filesystem.destroy?.();
-```
-
-## Errors
-
-### FilesystemError
-
-Base error for filesystem operations.
-
-```typescript
-class FilesystemError extends Error {
-  code: string;
-  path?: string;
-}
-```
-
-Common error codes:
-- `ENOENT` - File or directory not found
-- `EEXIST` - File or directory already exists
-- `ENOTDIR` - Expected a directory
-- `EISDIR` - Expected a file
-- `EACCES` - Permission denied
-
-### FileNotFoundError
-
-Thrown when a file or directory does not exist.
-
-```typescript
-class FileNotFoundError extends FilesystemError {
-  code: 'ENOENT';
-}
-```
-
-### FileReadRequiredError
-
-Thrown when `requireReadBeforeWrite` is enabled on a tool and a write is attempted without reading first.
-
-```typescript
-class FileReadRequiredError extends FilesystemError {
-  code: 'EREAD_REQUIRED';
-}
-```
-
-### WorkspaceReadOnlyError
-
-Thrown when a write operation is attempted on a read-only filesystem.
-
-```typescript
-class WorkspaceReadOnlyError extends WorkspaceError {
-  code: 'READ_ONLY';
-}
 ```
 
 ## Related

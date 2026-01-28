@@ -306,8 +306,7 @@ export class Workspace {
 
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
-    const hasSkills = config.skills !== undefined && (typeof config.skills === 'function' || config.skills.length > 0);
-    if (!this._fs && !this._sandbox && !hasSkills) {
+    if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
 
@@ -324,6 +323,12 @@ export class Workspace {
 
   private generateId(): string {
     return `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private hasSkillsConfig(): boolean {
+    return (
+      this._config.skills !== undefined && (typeof this._config.skills === 'function' || this._config.skills.length > 0)
+    );
   }
 
   get status(): WorkspaceStatus {
@@ -382,10 +387,7 @@ export class Workspace {
    */
   get skills(): WorkspaceSkills | undefined {
     // Skills require skills config
-    const hasSkills =
-      this._config.skills !== undefined &&
-      (typeof this._config.skills === 'function' || this._config.skills.length > 0);
-    if (!hasSkills) {
+    if (!this.hasSkillsConfig()) {
       return undefined;
     }
 
@@ -593,8 +595,9 @@ export class Workspace {
 
   /**
    * Get workspace information.
+   * @param options.includeFileCount - Whether to count total files (can be slow for large workspaces)
    */
-  async getInfo(): Promise<WorkspaceInfo> {
+  async getInfo(options?: { includeFileCount?: boolean }): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -608,11 +611,13 @@ export class Workspace {
         provider: this._fs.provider,
       };
 
-      try {
-        const files = await this.getAllFiles('/');
-        info.filesystem.totalFiles = files.length;
-      } catch {
-        // Ignore
+      if (options?.includeFileCount) {
+        try {
+          const files = await this.getAllFiles('/');
+          info.filesystem.totalFiles = files.length;
+        } catch {
+          // Ignore errors - filesystem may not support listing
+        }
       }
     }
 

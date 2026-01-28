@@ -1,0 +1,276 @@
+---
+title: "Reference: LocalSandbox | Workspace"
+description: "Documentation for the LocalSandbox provider for local command execution."
+packages:
+  - "@mastra/core"
+---
+
+# LocalSandbox
+
+Executes commands on the local system.
+
+:::info
+
+For interface details, see [WorkspaceSandbox Interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+`LocalSandbox` is included in `@mastra/core`:
+
+```bash npm2yarn
+npm install @mastra/core@latest
+```
+
+## Usage
+
+```typescript
+import { LocalSandbox } from '@mastra/core/workspace';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: {
+    NODE_ENV: 'development',
+  },
+});
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this sandbox instance",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "Directory for command execution",
+      isOptional: true,
+      defaultValue: "process.cwd()",
+    },
+    {
+      name: "env",
+      type: "NodeJS.ProcessEnv",
+      description: "Environment variables to set. PATH is included by default unless overridden.",
+      isOptional: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Default timeout for operations in milliseconds",
+      isOptional: true,
+      defaultValue: "30000",
+    },
+    {
+      name: "isolation",
+      type: "'none' | 'seatbelt' | 'bwrap'",
+      description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
+      isOptional: true,
+      defaultValue: "'none'",
+    },
+    {
+      name: "nativeSandbox",
+      type: "NativeSandboxConfig",
+      description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## NativeSandboxConfig
+
+Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'` or `'bwrap'`).
+
+<PropertiesTable
+  content={[
+    {
+      name: "allowNetwork",
+      type: "boolean",
+      description: "Allow network access from sandboxed commands.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "readOnlyPaths",
+      type: "string[]",
+      description: "Additional paths to allow read-only access (system paths are always readable).",
+      isOptional: true,
+    },
+    {
+      name: "readWritePaths",
+      type: "string[]",
+      description: "Additional paths to allow read-write access beyond the workspace directory.",
+      isOptional: true,
+    },
+    {
+      name: "seatbeltProfile",
+      type: "string",
+      description: "Custom seatbelt profile content (macOS only). Overrides auto-generated profile.",
+      isOptional: true,
+    },
+    {
+      name: "bwrapArgs",
+      type: "string[]",
+      description: "Additional arguments to pass to bwrap (Linux only).",
+      isOptional: true,
+    },
+    {
+      name: "allowSystemBinaries",
+      type: "boolean",
+      description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Sandbox instance identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Provider name ('LocalSandbox')",
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "Provider identifier ('local')",
+    },
+    {
+      name: "status",
+      type: "ProviderStatus",
+      description: "'starting' | 'running' | 'stopped' | 'error'",
+    },
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "The configured working directory",
+    },
+  ]}
+/>
+
+## Path Resolution
+
+### Relative paths and execution context
+
+When you use a relative path for `workingDirectory`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
+
+| Context | Working directory | `./workspace` resolves to |
+|---------|------------------|---------------------------|
+| `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
+| `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
+| Direct script | Where you ran the command | Relative to that location |
+
+This can cause confusion when the same relative path resolves to different locations.
+
+### Recommended: Use getProjectRoot()
+
+For consistent paths across all execution contexts, use `getProjectRoot()` from `@mastra/core`:
+
+```typescript
+import { join } from 'node:path';
+import { getProjectRoot } from '@mastra/core/utils';
+import { LocalSandbox } from '@mastra/core/workspace';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: join(getProjectRoot(), 'workspace'),
+});
+```
+
+This ensures commands run from your project's `workspace/` directory, regardless of how you run your code.
+
+## Static Methods
+
+### `detectIsolation()`
+
+Detect the best available isolation backend for the current platform.
+
+```typescript
+const detection = LocalSandbox.detectIsolation();
+// { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
+```
+
+**Returns:** `SandboxDetectionResult`
+
+```typescript
+interface SandboxDetectionResult {
+  backend: IsolationBackend;
+  available: boolean;
+  message: string;
+}
+```
+
+## Environment Isolation
+
+By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
+
+```typescript
+// Default: only PATH is available (commands work, secrets protected)
+const secureSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+});
+
+// Explicit: pass specific variables
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: {
+    NODE_ENV: 'development',
+    API_URL: 'https://api.example.com',
+  },
+});
+
+// Full access (use with caution)
+const devSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: process.env,
+});
+```
+
+## Native OS Sandboxing
+
+`LocalSandbox` supports native OS-level sandboxing for additional security:
+
+- **macOS**: Uses Seatbelt (`sandbox-exec`) for filesystem and network isolation
+- **Linux**: Uses Bubblewrap (`bwrap`) for namespace isolation
+
+```typescript
+// Detect the best available backend for this platform
+const detection = LocalSandbox.detectIsolation();
+console.log(detection);
+// { backend: 'seatbelt', available: true, message: '...' }
+
+// Enable native sandboxing
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  isolation: 'seatbelt', // or 'bwrap' on Linux
+  nativeSandbox: {
+    allowNetwork: false, // Block network access (default)
+    readWritePaths: ['/tmp/extra'], // Additional writable paths
+  },
+});
+```
+
+When isolation is enabled:
+- File writes are restricted to the workspace directory (and configured paths)
+- File reads are allowed everywhere (needed for system binaries)
+- Network access is blocked by default
+- Process isolation prevents affecting the host system
+
+## Related
+
+- [WorkspaceSandbox Interface](/reference/workspace/sandbox)
+- [Workspace Class](/reference/workspace/workspace-class)
+- [Workspace Overview](/docs/workspace/overview)

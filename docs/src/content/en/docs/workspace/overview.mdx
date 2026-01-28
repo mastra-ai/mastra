@@ -133,30 +133,6 @@ const workspace = new Workspace({
 
 When skills are configured, agents receive a `SkillsProcessor` that injects available skills into the system message and allows agents to activate skills during conversation.
 
-## Agent Tools
-
-A workspace provides tools to agents based on what is configured:
-
-**Filesystem tools** (when filesystem is configured):
-- `mastra_workspace_read_file` - Read file contents
-- `mastra_workspace_write_file` - Write file contents
-- `mastra_workspace_edit_file` - Edit file by replacing text
-- `mastra_workspace_list_files` - List directory contents
-- `mastra_workspace_delete` - Delete files or directories
-- `mastra_workspace_file_stat` - Get file metadata
-- `mastra_workspace_mkdir` - Create directories
-
-**Sandbox tools** (when sandbox is configured):
-- `mastra_workspace_execute_command` - Execute shell commands
-
-**Search tools** (when BM25 or vector search is configured):
-- `mastra_workspace_search` - Search indexed content
-- `mastra_workspace_index` - Index content for search
-
-Only the relevant tools are added. A workspace with only a filesystem won't have command execution tools.
-
-See [Workspace Class Reference](/reference/workspace/workspace-class) for details.
-
 ## Tool Configuration
 
 Configure tool behavior through the `tools` option on the Workspace. This controls which tools are enabled and their safety settings.

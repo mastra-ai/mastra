@@ -1,185 +1,17 @@
 ---
-title: "Reference: Sandbox Interface | Workspace"
-description: "Documentation for the WorkspaceSandbox interface and LocalSandbox provider."
+title: "Reference: WorkspaceSandbox Interface | Workspace"
+description: "Documentation for the WorkspaceSandbox interface that defines command execution operations."
 packages:
   - "@mastra/core"
 ---
 
-# Sandbox Interface
+# WorkspaceSandbox Interface
 
-The `WorkspaceSandbox` interface defines how workspaces execute commands. Mastra includes `LocalSandbox` for local execution.
+The `WorkspaceSandbox` interface defines how workspaces execute commands.
 
-## LocalSandbox
+## Methods
 
-Executes commands on the local system.
-
-### Usage
-
-```typescript
-import { LocalSandbox } from '@mastra/core/workspace';
-
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  env: {
-    NODE_ENV: 'development',
-  },
-});
-```
-
-### Constructor Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this sandbox instance",
-      isOptional: true,
-      defaultValue: "Auto-generated",
-    },
-    {
-      name: "workingDirectory",
-      type: "string",
-      description: "Directory for command execution",
-      isOptional: true,
-      defaultValue: "process.cwd()",
-    },
-    {
-      name: "env",
-      type: "NodeJS.ProcessEnv",
-      description: "Environment variables to set. PATH is included by default unless overridden.",
-      isOptional: true,
-    },
-    {
-      name: "timeout",
-      type: "number",
-      description: "Default timeout for operations in milliseconds",
-      isOptional: true,
-      defaultValue: "30000",
-    },
-    {
-      name: "isolation",
-      type: "'none' | 'seatbelt' | 'bwrap'",
-      description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
-      isOptional: true,
-      defaultValue: "'none'",
-    },
-    {
-      name: "nativeSandbox",
-      type: "NativeSandboxConfig",
-      description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### NativeSandboxConfig
-
-Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'` or `'bwrap'`).
-
-<PropertiesTable
-  content={[
-    {
-      name: "allowNetwork",
-      type: "boolean",
-      description: "Allow network access from sandboxed commands.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "readOnlyPaths",
-      type: "string[]",
-      description: "Additional paths to allow read-only access (system paths are always readable).",
-      isOptional: true,
-    },
-    {
-      name: "readWritePaths",
-      type: "string[]",
-      description: "Additional paths to allow read-write access beyond the workspace directory.",
-      isOptional: true,
-    },
-    {
-      name: "seatbeltProfile",
-      type: "string",
-      description: "Custom seatbelt profile content (macOS only). Overrides auto-generated profile.",
-      isOptional: true,
-    },
-    {
-      name: "bwrapArgs",
-      type: "string[]",
-      description: "Additional arguments to pass to bwrap (Linux only).",
-      isOptional: true,
-    },
-    {
-      name: "allowSystemBinaries",
-      type: "boolean",
-      description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
-      isOptional: true,
-      defaultValue: "true",
-    },
-  ]}
-/>
-
-### Properties
-
-<PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Sandbox instance identifier",
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Provider name ('LocalSandbox')",
-    },
-    {
-      name: "provider",
-      type: "string",
-      description: "Provider identifier ('local')",
-    },
-    {
-      name: "status",
-      type: "ProviderStatus",
-      description: "'starting' | 'running' | 'stopped' | 'error'",
-    },
-    {
-      name: "workingDirectory",
-      type: "string",
-      description: "The configured working directory",
-    },
-  ]}
-/>
-
-### Static Methods
-
-#### `detectIsolation()`
-
-Detect the best available isolation backend for the current platform.
-
-```typescript
-const detection = LocalSandbox.detectIsolation();
-// { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
-```
-
-**Returns:** `SandboxDetectionResult`
-
-```typescript
-interface SandboxDetectionResult {
-  backend: IsolationBackend;
-  available: boolean;
-  message: string;
-}
-```
-
-## WorkspaceSandbox Interface
-
-All sandbox providers implement this interface.
-
-### Methods
-
-#### `start()`
+### `start()`
 
 Start the sandbox. Called by `workspace.init()`.
 
@@ -187,7 +19,7 @@ Start the sandbox. Called by `workspace.init()`.
 await sandbox.start();
 ```
 
-#### `stop()`
+### `stop()`
 
 Stop the sandbox.
 
@@ -195,7 +27,7 @@ Stop the sandbox.
 await sandbox.stop?.();
 ```
 
-#### `destroy()`
+### `destroy()`
 
 Clean up sandbox resources. Called by `workspace.destroy()`.
 
@@ -203,7 +35,7 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 await sandbox.destroy();
 ```
 
-#### `executeCommand(command, args?, options?)`
+### `executeCommand(command, args?, options?)`
 
 Execute a shell command.
 
@@ -272,7 +104,7 @@ interface CommandResult {
 }
 ```
 
-#### `getInfo()`
+### `getInfo()`
 
 Get sandbox status and resource information.
 
@@ -297,118 +129,7 @@ interface SandboxInfo {
 }
 ```
 
-## Environment Isolation
-
-By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
-
-```typescript
-// Default: only PATH is available (commands work, secrets protected)
-const secureSandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-});
-
-// Explicit: pass specific variables
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  env: {
-    NODE_ENV: 'development',
-    API_URL: 'https://api.example.com',
-  },
-});
-
-// Full access (use with caution)
-const devSandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  env: process.env,
-});
-```
-
-## Native OS Sandboxing
-
-`LocalSandbox` supports native OS-level sandboxing for additional security:
-
-- **macOS**: Uses Seatbelt (`sandbox-exec`) for filesystem and network isolation
-- **Linux**: Uses Bubblewrap (`bwrap`) for namespace isolation
-
-```typescript
-// Detect the best available backend for this platform
-const detection = LocalSandbox.detectIsolation();
-console.log(detection);
-// { backend: 'seatbelt', available: true, message: '...' }
-
-// Enable native sandboxing
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  isolation: 'seatbelt', // or 'bwrap' on Linux
-  nativeSandbox: {
-    allowNetwork: false, // Block network access (default)
-    readWritePaths: ['/tmp/extra'], // Additional writable paths
-  },
-});
-```
-
-When isolation is enabled:
-- File writes are restricted to the workspace directory (and configured paths)
-- File reads are allowed everywhere (needed for system binaries)
-- Network access is blocked by default
-- Process isolation prevents affecting the host system
-
-## Errors
-
-### SandboxError
-
-Base error for sandbox operations.
-
-```typescript
-class SandboxError extends Error {
-  code: string;
-}
-```
-
-### SandboxNotReadyError
-
-Thrown when attempting to execute commands before the sandbox is started.
-
-```typescript
-class SandboxNotReadyError extends SandboxError {
-  code: 'SANDBOX_NOT_READY';
-}
-```
-
-### SandboxExecutionError
-
-Thrown when a command fails to execute.
-
-```typescript
-class SandboxExecutionError extends SandboxError {
-  exitCode?: number;
-  stdout?: string;
-  stderr?: string;
-}
-```
-
-### SandboxTimeoutError
-
-Thrown when a command exceeds its timeout.
-
-```typescript
-class SandboxTimeoutError extends SandboxError {
-  code: 'TIMEOUT';
-}
-```
-
-### IsolationUnavailableError
-
-Thrown when the requested isolation backend is not available on the current platform.
-
-```typescript
-class IsolationUnavailableError extends SandboxError {
-  code: 'ISOLATION_UNAVAILABLE';
-}
-```
-
 ## Related
 
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Filesystem Interface](/reference/workspace/filesystem)
-- [Workspace Overview](/docs/workspace/overview)
