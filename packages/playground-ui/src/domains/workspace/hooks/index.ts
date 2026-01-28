@@ -1,19 +1,5 @@
 // Workspace hooks - filesystem and search
 export {
-  type WorkspaceCapabilities,
-  type WorkspaceSafety,
-  type WorkspaceInfo,
-  type WorkspaceItem,
-  type WorkspacesListResponse,
-  type FileEntry,
-  type FileReadResponse,
-  type FileListResponse,
-  type FileStatResponse,
-  type WriteFileParams,
-  type WriteFileFromFileParams,
-  type SearchWorkspaceParams,
-  type SearchResult,
-  type SearchResponse,
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
@@ -27,17 +13,8 @@ export {
   useIndexWorkspaceContent,
 } from './use-workspace';
 
-// Skills hooks and types
+// Skills hooks
 export {
-  type SkillSource,
-  type SkillMetadata,
-  type Skill,
-  type ListSkillsResponse,
-  type SkillSearchResult,
-  type SearchSkillsResponse,
-  type ListReferencesResponse,
-  type GetReferenceResponse,
-  type SearchSkillsParams,
   useWorkspaceSkills,
   useWorkspaceSkill,
   useWorkspaceSkillReferences,

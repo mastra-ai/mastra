@@ -3,7 +3,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
 import { Wand2, BookOpen, Package, Home, Server } from 'lucide-react';
-import type { SkillMetadata, SkillSource } from '../hooks/use-workspace-skills';
+import type { SkillMetadata, SkillSource } from '../types';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];

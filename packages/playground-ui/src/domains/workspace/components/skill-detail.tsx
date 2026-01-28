@@ -15,7 +15,7 @@ import {
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import type { Skill, SkillSource } from '../hooks/use-workspace-skills';
+import type { Skill, SkillSource } from '../types';
 
 export interface SkillDetailProps {
   skill: Skill;

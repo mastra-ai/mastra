@@ -809,6 +809,13 @@ export interface WorkspaceCapabilities {
 }
 
 /**
+ * Workspace safety configuration
+ */
+export interface WorkspaceSafety {
+  readOnly: boolean;
+}
+
+/**
  * Response for getting workspace info
  */
 export interface WorkspaceInfoResponse {
@@ -817,6 +824,28 @@ export interface WorkspaceInfoResponse {
   name?: string;
   status?: string;
   capabilities?: WorkspaceCapabilities;
+  safety?: WorkspaceSafety;
+}
+
+/**
+ * Workspace item in list response
+ */
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  status: string;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+  capabilities: WorkspaceCapabilities;
+  safety: WorkspaceSafety;
+}
+
+/**
+ * Response for listing all workspaces
+ */
+export interface ListWorkspacesResponse {
+  workspaces: WorkspaceItem[];
 }
 
 /**

@@ -57,6 +57,7 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  ListWorkspacesResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -825,10 +826,19 @@ export class MastraClient extends BaseResource {
   // ============================================================================
 
   /**
+   * Lists all workspaces from both Mastra instance and agents
+   * @returns Promise containing array of workspace items
+   */
+  public listWorkspaces(): Promise<ListWorkspacesResponse> {
+    return this.request('/workspaces');
+  }
+
+  /**
    * Gets the workspace resource for filesystem, search, and skills operations
+   * @param workspaceId - Optional workspace ID to target a specific workspace
    * @returns Workspace instance
    */
-  public getWorkspace(): Workspace {
-    return new Workspace(this.options);
+  public getWorkspace(workspaceId?: string): Workspace {
+    return new Workspace(this.options, workspaceId);
   }
 }

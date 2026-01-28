@@ -20,7 +20,7 @@ import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Button } from '@/ds/components/Button';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { CopyButton } from '@/ds/components/CopyButton';
-import type { FileEntry } from '../hooks/use-workspace';
+import type { FileEntry } from '../types';
 
 // =============================================================================
 // Type Definitions

@@ -153,7 +153,7 @@ describe('Workspace Resource', () => {
       };
       mockFetchResponse(mockResponse);
 
-      const result = await workspace.writeFile('/nested/path/file.txt', 'Content', true);
+      const result = await workspace.writeFile('/nested/path/file.txt', 'Content', { recursive: true });
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(

@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
 import { Search, Loader2, Sparkles, FileText, Zap, Wand2, FolderOpen } from 'lucide-react';
-import type { SearchResult, SearchResponse } from '../hooks/use-workspace';
-import type { SkillSearchResult, SearchSkillsResponse } from '../hooks/use-workspace-skills';
+import type { SearchResult, SearchResponse, SkillSearchResult, SearchSkillsResponse } from '../types';
 
 // =============================================================================
 // Workspace File Search Panel

@@ -29,8 +29,16 @@ export class WorkspaceSkillResource extends BaseResource {
   constructor(
     options: ClientOptions,
     private skillName: string,
+    private workspaceId?: string,
   ) {
     super(options);
+  }
+
+  private getQueryString(): string {
+    if (!this.workspaceId) return '';
+    const params = new URLSearchParams();
+    params.set('workspaceId', this.workspaceId);
+    return `?${params.toString()}`;
   }
 
   /**
@@ -38,7 +46,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing skill details
    */
   details(): Promise<Skill> {
-    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}`);
+    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}${this.getQueryString()}`);
   }
 
   /**
@@ -46,7 +54,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing list of reference paths
    */
   listReferences(): Promise<ListSkillReferencesResponse> {
-    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}/references`);
+    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}/references${this.getQueryString()}`);
   }
 
   /**
@@ -56,7 +64,7 @@ export class WorkspaceSkillResource extends BaseResource {
    */
   getReference(referencePath: string): Promise<GetSkillReferenceResponse> {
     return this.request(
-      `/workspace/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}`,
+      `/workspace/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}${this.getQueryString()}`,
     );
   }
 }
@@ -70,8 +78,20 @@ export class WorkspaceSkillResource extends BaseResource {
  * - Skills operations (list, get, search, references)
  */
 export class Workspace extends BaseResource {
-  constructor(options: ClientOptions) {
+  private workspaceId?: string;
+
+  constructor(options: ClientOptions, workspaceId?: string) {
     super(options);
+    this.workspaceId = workspaceId;
+  }
+
+  /**
+   * Helper to append workspaceId to query params
+   */
+  private appendWorkspaceId(searchParams: URLSearchParams): void {
+    if (this.workspaceId) {
+      searchParams.set('workspaceId', this.workspaceId);
+    }
   }
 
   // ==========================================================================
@@ -102,6 +122,7 @@ export class Workspace extends BaseResource {
     if (encoding) {
       searchParams.set('encoding', encoding);
     }
+    this.appendWorkspaceId(searchParams);
     return this.request(`/workspace/fs/read?${searchParams.toString()}`);
   }
 
@@ -109,13 +130,23 @@ export class Workspace extends BaseResource {
    * Writes content to a file in the workspace filesystem
    * @param path - Path to write to
    * @param content - Content to write
-   * @param recursive - Whether to create parent directories if needed
+   * @param options - Write options including encoding and recursive directory creation
    * @returns Promise containing success status
    */
-  writeFile(path: string, content: string, recursive?: boolean): Promise<WorkspaceFsWriteResponse> {
+  writeFile(
+    path: string,
+    content: string,
+    options?: { encoding?: 'utf-8' | 'base64'; recursive?: boolean },
+  ): Promise<WorkspaceFsWriteResponse> {
     return this.request('/workspace/fs/write', {
       method: 'POST',
-      body: { path, content, recursive },
+      body: {
+        path,
+        content,
+        encoding: options?.encoding,
+        recursive: options?.recursive,
+        workspaceId: this.workspaceId,
+      },
     });
   }
 
@@ -131,6 +162,7 @@ export class Workspace extends BaseResource {
     if (recursive !== undefined) {
       searchParams.set('recursive', String(recursive));
     }
+    this.appendWorkspaceId(searchParams);
     return this.request(`/workspace/fs/list?${searchParams.toString()}`);
   }
 
@@ -149,6 +181,7 @@ export class Workspace extends BaseResource {
     if (options?.force !== undefined) {
       searchParams.set('force', String(options.force));
     }
+    this.appendWorkspaceId(searchParams);
     return this.request(`/workspace/fs/delete?${searchParams.toString()}`, {
       method: 'DELETE',
     });
@@ -163,7 +196,7 @@ export class Workspace extends BaseResource {
   mkdir(path: string, recursive?: boolean): Promise<WorkspaceFsMkdirResponse> {
     return this.request('/workspace/fs/mkdir', {
       method: 'POST',
-      body: { path, recursive },
+      body: { path, recursive, workspaceId: this.workspaceId },
     });
   }
 
@@ -175,6 +208,7 @@ export class Workspace extends BaseResource {
   stat(path: string): Promise<WorkspaceFsStatResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('path', path);
+    this.appendWorkspaceId(searchParams);
     return this.request(`/workspace/fs/stat?${searchParams.toString()}`);
   }
 
@@ -239,6 +273,9 @@ export class Workspace extends BaseResource {
    * @returns Promise containing list of skills with metadata
    */
   listSkills(): Promise<ListSkillsResponse> {
+    if (this.workspaceId) {
+      return this.request(`/workspace/skills?workspaceId=${encodeURIComponent(this.workspaceId)}`);
+    }
     return this.request('/workspace/skills');
   }
 
@@ -262,8 +299,10 @@ export class Workspace extends BaseResource {
     if (params.includeReferences !== undefined) {
       searchParams.set('includeReferences', String(params.includeReferences));
     }
-    if (params.workspaceId) {
-      searchParams.set('workspaceId', params.workspaceId);
+    // Use workspace's workspaceId if not explicitly provided in params
+    const workspaceIdToUse = params.workspaceId ?? this.workspaceId;
+    if (workspaceIdToUse) {
+      searchParams.set('workspaceId', workspaceIdToUse);
     }
     return this.request(`/workspace/skills/search?${searchParams.toString()}`);
   }
@@ -274,6 +313,6 @@ export class Workspace extends BaseResource {
    * @returns WorkspaceSkillResource instance
    */
   getSkill(skillName: string): WorkspaceSkillResource {
-    return new WorkspaceSkillResource(this.options, skillName);
+    return new WorkspaceSkillResource(this.options, skillName, this.workspaceId);
   }
 }
