@@ -7,6 +7,7 @@
  * - Skills operations (list, get, search, references)
  */
 
+import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
 import { HTTPException } from '../http-exception';
 import {
@@ -51,10 +52,22 @@ import { handleError } from './error';
 // =============================================================================
 
 /**
+ * Throws if workspace v1 is not supported by the current version of @mastra/core.
+ */
+function requireWorkspaceV1Support(): void {
+  if (!coreFeatures.has('workspaces-v1')) {
+    throw new HTTPException(501, {
+      message: 'Workspace v1 not supported by this version of @mastra/core. Please upgrade to a newer version.',
+    });
+  }
+}
+
+/**
  * Get a workspace by ID from Mastra or agents.
  * If no workspaceId is provided, returns the global workspace.
  */
 async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Workspace | undefined> {
+  requireWorkspaceV1Support();
   const globalWorkspace = mastra.getWorkspace?.();
 
   // If no workspaceId specified, return global workspace
@@ -85,12 +98,14 @@ async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Work
  * Get the workspace from Mastra (legacy helper for backwards compatibility).
  */
 function getWorkspace(mastra: any): Workspace | undefined {
+  requireWorkspaceV1Support();
   return mastra.getWorkspace?.();
 }
 
 /**
  * Get skills from a specific workspace by ID.
  * If no workspaceId is provided, returns skills from the global workspace.
+ * Note: getWorkspaceById already checks for workspace v1 support.
  */
 async function getSkillsById(mastra: any, workspaceId?: string): Promise<WorkspaceSkills | undefined> {
   const workspace = await getWorkspaceById(mastra, workspaceId);
@@ -111,6 +126,8 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
   tags: ['Workspace'],
   handler: async ({ mastra }) => {
     try {
+      requireWorkspaceV1Support();
+
       const workspaces: Array<{
         id: string;
         name: string;
