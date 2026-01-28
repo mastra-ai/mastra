@@ -436,8 +436,8 @@ describe('LocalSandbox', () => {
 
       await seatbeltSandbox.start();
 
-      // Check that profile file was created
-      const profilePath = path.join(tempDir, '.sandbox.sb');
+      // Check that profile file was created (uses unique ID-based filename)
+      const profilePath = path.join(tempDir, `.sandbox-${seatbeltSandbox.id}.sb`);
       const profileExists = await fs
         .access(profilePath)
         .then(() => true)
@@ -590,7 +590,8 @@ describe('LocalSandbox', () => {
       });
 
       await seatbeltSandbox.start();
-      const profilePath = path.join(tempDir, '.sandbox.sb');
+      // Profile uses unique ID-based filename
+      const profilePath = path.join(tempDir, `.sandbox-${seatbeltSandbox.id}.sb`);
 
       // Profile should exist
       expect(
