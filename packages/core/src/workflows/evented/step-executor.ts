@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import type { TracingContext } from '../../observability';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, Step } from '../step';
@@ -43,6 +44,8 @@ export class StepExecutor extends MastraBase {
     validateInputs?: boolean;
     abortController?: AbortController;
     perStep?: boolean;
+    /** Tracing context for span nesting */
+    tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
@@ -132,8 +135,7 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            // TODO
-            tracingContext: {},
+            tracingContext: params.tracingContext ?? {},
           },
           {
             paramName: 'runCount',
