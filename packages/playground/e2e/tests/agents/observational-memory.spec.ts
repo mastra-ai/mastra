@@ -172,10 +172,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
      *
      * Uses om-fail-agent which has a mock observer that throws an error.
      */
-    // TODO: The failing observer causes PROCESSOR_WORKFLOW_FAILED in the workflow engine,
-    // which disrupts the stream before the data-om-observation-failed marker can render.
-    // The OM processor catches the error and emits the marker, but the workflow engine
-    // propagates the error independently. Need to investigate workflow error isolation.
+    // TODO: Observer failure emits data-om-observation-failed but the workflow engine
+    // also propagates the error as PROCESSOR_WORKFLOW_FAILED, disrupting the stream.
     test.skip('should show error state when observation fails', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');

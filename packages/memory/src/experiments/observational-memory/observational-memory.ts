@@ -2231,9 +2231,10 @@ ${suggestedResponse}
         }
 
         // Save messages with markers
-        // Use .clear to remove observed messages from context - they're now in observations
-        const newInput = observationSucceeded ? messageList.clear.input.db() : [];
-        const newOutput = observationSucceeded ? messageList.clear.response.db() : [];
+        // When observation succeeded: use .clear to remove observed messages from context
+        // When observation failed: use .get to save messages but keep them in context
+        const newInput = observationSucceeded ? messageList.clear.input.db() : messageList.get.input.db();
+        const newOutput = observationSucceeded ? messageList.clear.response.db() : messageList.get.response.db();
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {

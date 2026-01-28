@@ -382,6 +382,45 @@ describe('OM Error State', () => {
     expect(failedPart.data).toBeTruthy();
     expect(failedPart.data.error).toBeTruthy();
   });
+
+  it('should persist data-om-observation-failed parts to storage', async () => {
+    const threadId = 'test-error-persist';
+    const resourceId = 'test-resource';
+
+    // Stream a conversation that triggers observation (which will fail)
+    const response = await agent.stream('Hello, I need help with something important.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the full stream
+    const reader = response.fullStream.getReader();
+    try {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Check storage - messages should contain data-om-observation-failed parts
+    const memoryStore = await store.getStore('memory');
+    const result = await memoryStore!.listMessages({ threadId });
+
+    const assistantMessages = result.messages.filter((m: any) => m.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    // Check if any message has data-om-observation-failed parts
+    const hasFailedParts = assistantMessages.some((msg: any) => {
+      const parts = msg.content?.parts || [];
+      return parts.some((p: any) => p.type === 'data-om-observation-failed');
+    });
+
+    expect(hasFailedParts).toBe(true);
+  });
 });
 
 // =============================================================================
