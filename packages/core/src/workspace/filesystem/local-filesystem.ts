@@ -16,7 +16,7 @@ import {
   DirectoryNotEmptyError,
   PermissionError,
   WorkspaceReadOnlyError,
-} from './errors';
+} from '../errors';
 import type {
   WorkspaceFilesystem,
   FileContent,

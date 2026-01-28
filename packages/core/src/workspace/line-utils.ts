@@ -4,16 +4,18 @@
  * Utility functions for working with line-based content:
  * - Extract lines by range
  * - Convert character positions to line numbers
- * - Find line ranges containing specific terms
  * - Format content with line number prefixes
  */
 
-import type { LineRange } from '../artifacts';
-import { tokenize } from './bm25';
-import type { TokenizeOptions } from './bm25';
-
-// Re-export LineRange for convenience
-export type { LineRange };
+/**
+ * Line range where content was found
+ */
+export interface LineRange {
+  /** Starting line number (1-indexed) */
+  start: number;
+  /** Ending line number (1-indexed, inclusive) */
+  end: number;
+}
 
 /**
  * Extract lines from content by line range.
@@ -135,57 +137,6 @@ export function charRangeToLineRange(content: string, startCharIdx: number, endC
   }
 
   return { start: startLine, end: endLine };
-}
-
-/**
- * Find the line range where query terms appear in content.
- * Returns the range spanning from the first to the last line containing any query term.
- *
- * @param content - The document content
- * @param queryTerms - Tokenized query terms to find
- * @param options - Tokenization options (should match indexing options)
- * @returns LineRange if terms found, undefined otherwise
- */
-export function findLineRange(
-  content: string,
-  queryTerms: string[],
-  options: TokenizeOptions = {},
-): LineRange | undefined {
-  if (queryTerms.length === 0) return undefined;
-
-  const lines = content.split('\n');
-
-  // Default tokenize options for matching
-  const defaultOpts = { lowercase: true, removePunctuation: true, minLength: 2 };
-  const opts = { ...defaultOpts, ...options };
-
-  // Normalize query terms for matching
-  const normalizedTerms = new Set(queryTerms.map(t => (opts.lowercase ? t.toLowerCase() : t)));
-
-  let firstMatchLine: number | undefined;
-  let lastMatchLine: number | undefined;
-
-  for (let i = 0; i < lines.length; i++) {
-    const lineTokens = tokenize(lines[i]!, options);
-
-    // Check if any query term appears in this line
-    for (const token of lineTokens) {
-      if (normalizedTerms.has(token)) {
-        const lineNum = i + 1; // 1-indexed
-        if (firstMatchLine === undefined) {
-          firstMatchLine = lineNum;
-        }
-        lastMatchLine = lineNum;
-        break; // Found a match on this line, move to next line
-      }
-    }
-  }
-
-  if (firstMatchLine !== undefined && lastMatchLine !== undefined) {
-    return { start: firstMatchLine, end: lastMatchLine };
-  }
-
-  return undefined;
 }
 
 /**

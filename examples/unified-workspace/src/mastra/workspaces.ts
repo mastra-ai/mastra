@@ -160,9 +160,7 @@ export const readonlyWorkspace = new Workspace({
   name: 'Readonly Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
-    safety: {
-      readOnly: true,
-    },
+    readOnly: true,
   }),
   bm25: true,
   skills: ['/skills'],
@@ -251,7 +249,7 @@ export const fsWriteApprovalWorkspace = new Workspace({
   tools: {
     [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: true },
     [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireApproval: true },
-    [WORKSPACE_TOOLS.FILESYSTEM.DELETE_FILE]: { requireApproval: true },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { requireApproval: true },
     [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { requireApproval: true },
     [WORKSPACE_TOOLS.SEARCH.INDEX]: { requireApproval: true },
   },

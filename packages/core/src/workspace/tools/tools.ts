@@ -6,21 +6,22 @@
  */
 
 import { z } from 'zod';
-import { createTool } from '../tools';
-import { WORKSPACE_TOOLS } from './constants';
-import type { WorkspaceToolName, WorkspaceToolsConfig } from './constants';
-import { FileNotFoundError, FileReadRequiredError } from './errors';
-import { InMemoryFileReadTracker } from './file-read-tracker';
-import type { FileReadTracker } from './file-read-tracker';
+import { createTool } from '../../tools';
+import { FileNotFoundError, FileReadRequiredError } from '../errors';
+import { InMemoryFileReadTracker } from '../filesystem';
+import type { FileReadTracker } from '../filesystem';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
   replaceString,
   StringNotFoundError,
   StringNotUniqueError,
-} from './line-utils';
+} from '../line-utils';
+import type { Workspace } from '../workspace';
+import type { WorkspaceToolName } from './constants';
+import { WORKSPACE_TOOLS } from './constants';
 import { formatAsTree } from './tree-formatter';
-import type { Workspace } from './workspace';
+import type { WorkspaceToolsConfig } from './types';
 
 /**
  * Resolves the effective configuration for a specific tool.

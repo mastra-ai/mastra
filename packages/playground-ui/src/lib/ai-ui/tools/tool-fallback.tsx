@@ -1,6 +1,6 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useEffect } from 'react';
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 import { ToolBadge } from './badges/tool-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';

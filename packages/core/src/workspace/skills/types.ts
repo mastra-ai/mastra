@@ -5,8 +5,101 @@
  * @see https://github.com/anthropics/skills
  */
 
-import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../../artifacts';
 import type { RequestContext } from '../../request-context';
+import type { LineRange } from '../line-utils';
+
+// =============================================================================
+// Content Source Types
+// =============================================================================
+
+/**
+ * Source type identifier for content origin
+ */
+export type ContentSourceType = 'external' | 'local' | 'managed';
+
+/**
+ * Content source indicating where a skill comes from and its access level.
+ *
+ * - external: From node_modules packages (read-only)
+ * - local: From project source directory (read-write)
+ * - managed: From .mastra directory, typically Studio-managed (read-write)
+ */
+export type ContentSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Check if a source is writable (not external/read-only)
+ */
+export function isWritableContentSource(source: ContentSource): boolean {
+  return source.type !== 'external';
+}
+
+/**
+ * Determine the source type for a given path.
+ */
+export function getSourceForPath(path: string): ContentSource {
+  if (path.includes('node_modules')) {
+    return { type: 'external', packagePath: path };
+  } else if (path.includes('.mastra')) {
+    return { type: 'managed', mastraPath: path };
+  } else {
+    return { type: 'local', projectPath: path };
+  }
+}
+
+// =============================================================================
+// Search Types
+// =============================================================================
+
+/**
+ * Search mode options
+ */
+export type SearchMode = 'vector' | 'bm25' | 'hybrid';
+
+/**
+ * Score breakdown for hybrid search
+ */
+export interface ScoreDetails {
+  /** Vector similarity score (0-1) */
+  vector?: number;
+  /** BM25 relevance score */
+  bm25?: number;
+}
+
+/**
+ * Base search result with common fields.
+ */
+export interface BaseSearchResult {
+  /** Content that was matched */
+  content: string;
+  /** Relevance score (higher is more relevant) */
+  score: number;
+  /** Line range where query terms were found (if available) */
+  lineRange?: LineRange;
+  /** Score breakdown for hybrid search */
+  scoreDetails?: ScoreDetails;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Base search options with common fields.
+ */
+export interface BaseSearchOptions {
+  /** Maximum number of results to return (default: 5) */
+  topK?: number;
+  /** Minimum score threshold */
+  minScore?: number;
+  /** Search mode */
+  mode?: SearchMode;
+  /** Hybrid search configuration */
+  hybrid?: {
+    /** Weight for vector similarity score (0-1) */
+    vectorWeight?: number;
+  };
+}
 
 // =============================================================================
 // Skills Types
@@ -50,12 +143,6 @@ export interface SkillsContext {
 export type SkillsResolver = string[] | ((context: SkillsContext) => string[] | Promise<string[]>);
 
 /**
- * Skill source types indicating where the skill comes from and its access level.
- * Alias for the shared ContentSource type.
- */
-export type SkillSource = ContentSource;
-
-/**
  * Supported skill format types for system message injection
  */
 export type SkillFormat = 'xml' | 'json' | 'markdown';
@@ -85,7 +172,7 @@ export interface Skill extends SkillMetadata {
   /** Markdown body from SKILL.md */
   instructions: string;
   /** Source of the skill (external package, local project, or managed) */
-  source: SkillSource;
+  source: ContentSource;
   /** List of reference file paths (relative to references/ directory) */
   references: string[];
   /** List of script file paths (relative to scripts/ directory) */

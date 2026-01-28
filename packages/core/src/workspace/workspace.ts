@@ -32,15 +32,14 @@
 
 import type { MastraVector } from '../vector';
 
-import type { BM25Config } from './bm25';
-import type { WorkspaceToolsConfig } from './constants';
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import type { WorkspaceFilesystem } from './filesystem';
 import type { WorkspaceSandbox } from './sandbox';
-import { SearchEngine } from './search-engine';
-import type { Embedder, SearchOptions, SearchResult, IndexDocument } from './search-engine';
+import { SearchEngine } from './search';
+import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import type { WorkspaceSkills, SkillsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
+import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
 // =============================================================================
