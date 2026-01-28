@@ -155,9 +155,8 @@ export function tokenize(text: string, options: TokenizeOptions = {}): string[] 
   return tokens;
 }
 
-// Re-export line utilities from line-utils.ts
+// Re-export line utilities from line-utils.ts (except findLineRange which is defined here)
 export {
-  findLineRange,
   extractLines,
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -165,6 +164,57 @@ export {
   StringNotFoundError,
   StringNotUniqueError,
 } from '../line-utils';
+
+/**
+ * Find the line range where query terms appear in content.
+ * Returns the range spanning from the first to the last line containing any query term.
+ *
+ * @param content - The document content
+ * @param queryTerms - Tokenized query terms to find
+ * @param options - Tokenization options (should match indexing options)
+ * @returns LineRange if terms found, undefined otherwise
+ */
+export function findLineRange(
+  content: string,
+  queryTerms: string[],
+  options: TokenizeOptions = {},
+): LineRange | undefined {
+  if (queryTerms.length === 0) return undefined;
+
+  const lines = content.split('\n');
+
+  // Default tokenize options for matching
+  const defaultOpts = { lowercase: true, removePunctuation: true, minLength: 2 };
+  const opts = { ...defaultOpts, ...options };
+
+  // Normalize query terms for matching
+  const normalizedTerms = new Set(queryTerms.map(t => (opts.lowercase ? t.toLowerCase() : t)));
+
+  let firstMatchLine: number | undefined;
+  let lastMatchLine: number | undefined;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineTokens = tokenize(lines[i]!, options);
+
+    // Check if any query term appears in this line
+    for (const token of lineTokens) {
+      if (normalizedTerms.has(token)) {
+        const lineNum = i + 1; // 1-indexed
+        if (firstMatchLine === undefined) {
+          firstMatchLine = lineNum;
+        }
+        lastMatchLine = lineNum;
+        break; // Found a match on this line, move to next line
+      }
+    }
+  }
+
+  if (firstMatchLine !== undefined && lastMatchLine !== undefined) {
+    return { start: firstMatchLine, end: lastMatchLine };
+  }
+
+  return undefined;
+}
 
 /**
  * Compute term frequencies for a list of tokens
