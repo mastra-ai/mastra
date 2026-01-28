@@ -531,7 +531,8 @@ export class Workspace {
       const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
-      } else if (entry.type === 'directory') {
+      } else if (entry.type === 'directory' && !entry.isSymlink) {
+        // Skip symlink directories to prevent infinite recursion from cycles
         files.push(...(await this.getAllFiles(fullPath)));
       }
     }

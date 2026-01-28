@@ -887,6 +887,7 @@ export interface WorkspaceFsStatResponse {
  * Workspace search result
  */
 export interface WorkspaceSearchResult {
+  /** Document identifier (typically the indexed file path) */
   id: string;
   content: string;
   score: number;

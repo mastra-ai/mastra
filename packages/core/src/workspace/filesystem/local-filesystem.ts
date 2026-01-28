@@ -308,8 +308,9 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       const srcEntry = nodePath.join(src, entry.name);
       const destEntry = nodePath.join(dest, entry.name);
 
-      // Verify entry doesn't escape sandbox via symlink
+      // Verify entries don't escape sandbox via symlink
       await this.assertPathContained(srcEntry);
+      await this.assertPathContained(destEntry);
 
       if (entry.isDirectory()) {
         await this.copyDirectory(srcEntry, destEntry, options);
