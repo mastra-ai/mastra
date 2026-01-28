@@ -21,6 +21,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
+    'kimi-k2.5',
   ];
   readonly firmware: readonly [
     'cerebras-gpt-oss-120b',
@@ -50,6 +51,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
+    'kimi-k2.5',
   ];
   readonly 'zai-coding-plan': readonly [
     'glm-4.5',
@@ -77,6 +79,7 @@ export type ProviderModelsMap = {
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
+    'kimi-k2.5',
     'kimi-k2:1t',
     'minimax-m2',
     'minimax-m2.1',
@@ -211,6 +214,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'moonshotai/kimi-k2-thinking',
+    'moonshotai/kimi-k2.5',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-51b-instruct',
     'nvidia/llama-3.1-nemotron-70b-instruct',
@@ -233,6 +237,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
+    'z-ai/glm-4.7',
     'z-ai/glm4.7',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
@@ -441,6 +446,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
     'moonshotai/kimi-k2-turbo',
+    'moonshotai/kimi-k2.5',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
@@ -795,10 +801,10 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3.2-Speciale-TEE',
     'deepseek-ai/DeepSeek-V3.2-TEE',
     'miromind-ai/MiroThinker-v1.5-235B',
-    'mistralai/Devstral-2-123B-Instruct-2512',
     'mistralai/Devstral-2-123B-Instruct-2512-TEE',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking-TEE',
+    'moonshotai/Kimi-K2.5-TEE',
     'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16',
     'openai/gpt-oss-120b-TEE',
     'openai/gpt-oss-20b',
@@ -806,18 +812,24 @@ export type ProviderModelsMap = {
     'tngtech/DeepSeek-R1T-Chimera',
     'tngtech/DeepSeek-TNG-R1T2-Chimera',
     'tngtech/TNG-R1T-Chimera-TEE',
+    'tngtech/TNG-R1T-Chimera-Turbo',
+    'unsloth/Llama-3.2-1B-Instruct',
     'unsloth/Mistral-Nemo-Instruct-2407',
     'unsloth/Mistral-Small-24B-Instruct-2501',
     'unsloth/gemma-3-12b-it',
     'unsloth/gemma-3-27b-it',
     'unsloth/gemma-3-4b-it',
     'zai-org/GLM-4.5-Air',
+    'zai-org/GLM-4.5-FP8',
     'zai-org/GLM-4.5-TEE',
+    'zai-org/GLM-4.6-FP8',
     'zai-org/GLM-4.6-TEE',
     'zai-org/GLM-4.6V',
+    'zai-org/GLM-4.7-FP8',
+    'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-4.7-TEE',
   ];
-  readonly 'kimi-for-coding': readonly ['kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
     'claude-sonnet-4',
@@ -1097,6 +1109,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
+    'moonshotai/Kimi-K2.5',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
   ];
@@ -1123,6 +1136,8 @@ export type ProviderModelsMap = {
     'gpt-5.2-codex',
     'kimi-k2',
     'kimi-k2-thinking',
+    'kimi-k2.5',
+    'minimax-m2.1',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -1371,6 +1386,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-0905:exacto',
     'moonshotai/kimi-k2-thinking',
+    'moonshotai/kimi-k2.5',
     'moonshotai/kimi-k2:free',
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
@@ -1734,6 +1750,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
     'accounts/fireworks/models/kimi-k2-thinking',
+    'accounts/fireworks/models/kimi-k2p5',
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/minimax-m2p1',
     'accounts/fireworks/models/qwen3-235b-a22b',
@@ -1932,7 +1949,6 @@ export type ProviderModelsMap = {
     'gemini/gemini-2.5-flash-image-preview',
     'gemini/gemini-2.5-flash-lite',
     'gemini/gemini-2.5-flash-lite-preview-09-2025',
-    'gemini/gemini-2.5-flash-preview-09-2025',
     'gemini/gemini-2.5-pro',
     'gemini/gemini-3-flash-preview',
     'gemini/gemini-3-pro-image-preview',

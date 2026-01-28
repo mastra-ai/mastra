@@ -1,20 +1,22 @@
 - tabpanel "Overview":
     - heading "Model" [level=3]
-    - img "mock-provider logo"
-    - textbox "Search providers":
-        - /placeholder: Search providers...
-    - textbox "Search models":
-        - /placeholder: Enter model name or select from suggestions...
-        - text: mock-model-id
+    - combobox:
+        - text: Select provider...
+        - img
+    - combobox:
+        - text: Select model...
+        - img
     - button "Reset to original model":
         - img
     - heading "Memory" [level=3]:
+        - text: ''
         - link:
             - /url: https://mastra.ai/en/docs/agents/agent-memory
             - img
     - img
     - text: Memory is enabled
     - heading "Agents" [level=3]:
+        - text: ''
         - link:
             - /url: https://mastra.ai/en/docs/agents/overview
             - img
@@ -23,7 +25,9 @@
             - link "Sub Agent":
                 - /url: /agents/subAgent
                 - img
+                - text: ''
     - heading "Tools" [level=3]:
+        - text: ''
         - link:
             - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
             - img
@@ -32,11 +36,14 @@
             - link "weatherInfo":
                 - /url: /agents/weatherAgent/tools/weatherInfo
                 - img
+                - text: ''
         - listitem:
             - link "simpleMcpTool":
                 - /url: /agents/weatherAgent/tools/simpleMcpTool
                 - img
+                - text: ''
     - heading "Workflows" [level=3]:
+        - text: ''
         - link:
             - /url: https://mastra.ai/en/docs/workflows/overview
             - img
@@ -45,10 +52,13 @@
             - link "lessComplexWorkflow":
                 - /url: /workflows/lessComplexWorkflow
                 - img
+                - text: ''
     - heading "Scorers" [level=3]
     - paragraph: No Scorers
     - heading "System Prompt" [level=3]
     - textbox
-    - textbox "Enter your comment here..."
-    - button "Enhance prompt":
+    - textbox "Enter your comment here..." [disabled]
+    - text: No model with a configured API key found.
+    - button "Enhance prompt" [disabled]:
         - img
+        - text: ''
