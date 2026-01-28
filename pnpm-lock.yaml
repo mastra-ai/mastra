@@ -1345,8 +1345,8 @@ importers:
         version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
     optionalDependencies:
       '@grpc/grpc-js':
-        specifier: ^1.14.1
-        version: 1.14.1
+        specifier: ^1.14.3
+        version: 1.14.3
       '@opentelemetry/exporter-trace-otlp-grpc':
         specifier: ^0.205.0
         version: 0.205.0(@opentelemetry/api@1.9.0)
@@ -8015,8 +8015,8 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@grpc/grpc-js@1.14.1':
-    resolution: {integrity: sha512-sPxgEWtPUR3EnRJCEtbGZG2iX8LQDUls2wUS3o27jg07KqJFMq6YDeWvMo1wfpmy3rqRdS0rivpLwhqQtEyCuQ==}
+  '@grpc/grpc-js@1.14.3':
+    resolution: {integrity: sha512-Iq8QQQ/7X3Sac15oB6p0FmUg/klxQvXLeileoqrTRGJYLV+/9tubbr9ipz0GKHjmXVsgFPo/+W+2cA8eNcR+XA==}
     engines: {node: '>=12.10.0'}
 
   '@grpc/proto-loader@0.7.15':
@@ -21726,7 +21726,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@grpc/grpc-js@1.14.1':
+  '@grpc/grpc-js@1.14.3':
     dependencies:
       '@grpc/proto-loader': 0.8.0
       '@js-sdsl/ordered-map': 4.4.2
@@ -22723,7 +22723,7 @@ snapshots:
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.208.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.0)
@@ -22733,7 +22733,7 @@ snapshots:
 
   '@opentelemetry/exporter-logs-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -22783,7 +22783,7 @@ snapshots:
 
   '@opentelemetry/exporter-metrics-otlp-grpc@0.208.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-metrics-otlp-http': 0.208.0(@opentelemetry/api@1.9.0)
@@ -22795,7 +22795,7 @@ snapshots:
 
   '@opentelemetry/exporter-metrics-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-metrics-otlp-http': 0.57.2(@opentelemetry/api@1.9.0)
@@ -22859,7 +22859,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.205.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.205.0(@opentelemetry/api@1.9.0)
@@ -22871,7 +22871,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.208.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.0)
@@ -22882,7 +22882,7 @@ snapshots:
 
   '@opentelemetry/exporter-trace-otlp-grpc@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -23523,7 +23523,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.205.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.205.0(@opentelemetry/api@1.9.0)
@@ -23532,7 +23532,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.208.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.0)
@@ -23540,7 +23540,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-exporter-base': 0.57.2(@opentelemetry/api@1.9.0)
@@ -28937,7 +28937,7 @@ snapshots:
 
   google-gax@4.6.1(encoding@0.1.13):
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@grpc/proto-loader': 0.7.15
       '@types/long': 4.0.2
       abort-controller: 3.0.0
@@ -28955,7 +28955,7 @@ snapshots:
 
   google-gax@5.0.6:
     dependencies:
-      '@grpc/grpc-js': 1.14.1
+      '@grpc/grpc-js': 1.14.3
       '@grpc/proto-loader': 0.8.0
       duplexify: 4.1.3
       google-auth-library: 10.5.0
