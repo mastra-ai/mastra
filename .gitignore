@@ -51,3 +51,5 @@ storybook-static
 test-output.log
 
 .playwright-mcp
+# GSD planning docs (local only)
+.planning/

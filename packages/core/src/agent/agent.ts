@@ -290,7 +290,7 @@ export class Agent<
    * console.log(Object.keys(agents)); // ['agent1', 'agent2']
    * ```
    */
-  public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}) {
+  public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext })
@@ -485,14 +485,14 @@ export class Agent<
   /**
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
-  public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+  public async listInputProcessors(requestContext?: RequestContext<any>): Promise<InputProcessorOrWorkflow[]> {
     return this.listResolvedInputProcessors(requestContext);
   }
 
   /**
    * Returns the output processors for this agent, resolving function-based processors if necessary.
    */
-  public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+  public async listOutputProcessors(requestContext?: RequestContext<any>): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
   }
 
@@ -503,7 +503,9 @@ export class Agent<
    * Unlike `listInputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `inputProcessors` option.
    */
-  public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+  public async listConfiguredInputProcessors(
+    requestContext?: RequestContext<any>,
+  ): Promise<InputProcessorOrWorkflow[]> {
     if (!this.#inputProcessors) return [];
 
     const configuredProcessors =
@@ -521,7 +523,9 @@ export class Agent<
    * Unlike `listOutputProcessors()` which includes both memory and configured processors,
    * this method returns only what was explicitly configured via the `outputProcessors` option.
    */
-  public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
+  public async listConfiguredOutputProcessors(
+    requestContext?: RequestContext<any>,
+  ): Promise<OutputProcessorOrWorkflow[]> {
     if (!this.#outputProcessors) return [];
 
     const configuredProcessors =
@@ -599,9 +603,9 @@ export class Agent<
    * }
    * ```
    */
-  public async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
-    MastraMemory | undefined
-  > {
+  public async getMemory({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext<any> } = {}): Promise<MastraMemory | undefined> {
     if (!this.#memory) {
       return undefined;
     }
@@ -675,7 +679,9 @@ export class Agent<
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext<any> } = {}): Promise<
+    Record<string, Workflow<any, any, any, any, any, any, any>>
+  > {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -694,7 +700,7 @@ export class Agent<
 
   async listScorers({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
+  }: { requestContext?: RequestContext<any> } = {}): Promise<MastraScorers> {
     if (typeof this.#scorers !== 'function') {
       return this.#scorers;
     }
@@ -730,7 +736,7 @@ export class Agent<
    * const audioStream = await voice.speak('Hello world');
    * ```
    */
-  public async getVoice({ requestContext }: { requestContext?: RequestContext } = {}) {
+  public async getVoice({ requestContext }: { requestContext?: RequestContext<any> } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.listTools({ requestContext }));
@@ -752,7 +758,7 @@ export class Agent<
    * console.log(instructions); // 'You are a helpful assistant'
    * ```
    */
-  public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+  public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}):
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
@@ -945,7 +951,7 @@ export class Agent<
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+  public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}):
     | AgentExecutionOptions<TOutput>
     | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
@@ -987,9 +993,9 @@ export class Agent<
    * console.log(options.completion?.scorers); // [testsScorer, buildScorer]
    * ```
    */
-  public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+  public getDefaultNetworkOptions({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext<any> } = {}): NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -1026,7 +1032,7 @@ export class Agent<
    * console.log(Object.keys(tools)); // ['calculator', 'weather']
    * ```
    */
-  public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+  public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext<any> } = {}):
     | TTools
     | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
@@ -3317,6 +3323,7 @@ export class Agent<
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
+      requestContext?: RequestContext<any>;
     },
   ): Promise<FullOutput<any>> {
     const defaultOptions = await this.getDefaultOptions({
@@ -3398,16 +3405,20 @@ export class Agent<
       structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
+  // Catch-all for generics
   async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
+  // Default (backward compatible)
   async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT> & {
+      requestContext?: RequestContext<any>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,

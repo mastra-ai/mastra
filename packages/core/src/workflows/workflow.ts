@@ -1888,7 +1888,7 @@ export class Workflow<
 
   async listScorers({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
+  }: { requestContext?: RequestContext<any> } = {}): Promise<MastraScorers> {
     const steps = this.steps;
 
     if (!steps || Object.keys(steps).length === 0) {
@@ -1959,7 +1959,7 @@ export class Workflow<
     };
     [PUBSUB_SYMBOL]: PubSub;
     mastra: Mastra;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     engine: DefaultEngineType;
     abortSignal: AbortSignal;
     bail: (result: any) => any;
@@ -2631,7 +2631,7 @@ export class Run<
       : {
           initialState: TState;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<any>;
       outputWriter?: OutputWriter;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
@@ -2712,7 +2712,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<any>;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
         tracingOptions?: TracingOptions;
@@ -2748,7 +2748,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<any>;
         tracingOptions?: TracingOptions;
         outputOptions?: {
           includeState?: boolean;
@@ -2783,7 +2783,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2794,7 +2794,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2956,7 +2956,7 @@ export class Run<
       : {
           initialState: TState;
         }) & {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
@@ -3086,7 +3086,7 @@ export class Run<
         ]
       | string
       | string[];
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
@@ -3249,7 +3249,7 @@ export class Run<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3270,7 +3270,7 @@ export class Run<
    */
   async restart(
     args: {
-      requestContext?: RequestContext;
+      requestContext?: RequestContext<any>;
       outputWriter?: OutputWriter;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
@@ -3290,7 +3290,7 @@ export class Run<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3471,7 +3471,7 @@ export class Run<
     tracingContext,
     tracingOptions,
   }: {
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3601,7 +3601,7 @@ export class Run<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3719,7 +3719,7 @@ export class Run<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     outputWriter?: OutputWriter;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -3755,7 +3755,7 @@ export class Run<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<any>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {

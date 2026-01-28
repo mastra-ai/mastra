@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
+import { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
+import { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
 
