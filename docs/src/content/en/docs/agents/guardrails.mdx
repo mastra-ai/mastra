@@ -70,7 +70,7 @@ export const normalizedAgent = new Agent({
 
 :::info
 
-Visit [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a full list of configuration options.
+Visit [UnicodeNormalizer](/reference/processors/unicode-normalizer) for a full list of configuration options.
 
 :::
 
@@ -97,7 +97,7 @@ export const secureAgent = new Agent({
 
 :::info
 
-Visit [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
+Visit [PromptInjectionDetector](/reference/processors/prompt-injection-detector) for a full list of configuration options.
 
 :::
 
@@ -124,7 +124,7 @@ export const multilingualAgent = new Agent({
 
 :::info
 
-Visit [LanguageDetector](/reference/v1/processors/language-detector) for a full list of configuration options.
+Visit [LanguageDetector](/reference/processors/language-detector) for a full list of configuration options.
 
 :::
 
@@ -154,7 +154,7 @@ export const batchedAgent = new Agent({
 
 :::info
 
-Visit [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for a full list of configuration options.
+Visit [BatchPartsProcessor](/reference/processors/batch-parts-processor) for a full list of configuration options.
 
 :::
 
@@ -180,7 +180,7 @@ export const limitedAgent = new Agent({
 
 :::info
 
-Visit [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) for a full list of configuration options.
+Visit [TokenLimiterProcessor](/reference/processors/token-limiter-processor) for a full list of configuration options.
 
 :::
 
@@ -211,12 +211,12 @@ const scrubbedAgent = new Agent({
 
 :::info
 
-Visit [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
+Visit [SystemPromptScrubber](/reference/processors/system-prompt-scrubber) for a full list of configuration options.
 
 :::
 
 :::note
-When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server/mastra-server#stream-data-redaction) for details.
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/server/mastra-server#stream-data-redaction) for details.
 :::
 
 ## Hybrid processors
@@ -249,7 +249,7 @@ export const moderatedAgent = new Agent({
 
 :::info
 
-Visit [ModerationProcessor](/reference/v1/processors/moderation-processor) for a full list of configuration options.
+Visit [ModerationProcessor](/reference/processors/moderation-processor) for a full list of configuration options.
 
 :::
 
@@ -281,7 +281,7 @@ export const privateAgent = new Agent({
 
 :::info
 
-Visit [PIIDetector](/reference/v1/processors/pii-detector) for a full list of configuration options.
+Visit [PIIDetector](/reference/processors/pii-detector) for a full list of configuration options.
 
 :::
 

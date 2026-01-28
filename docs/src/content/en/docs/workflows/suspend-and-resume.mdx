@@ -7,7 +7,7 @@ packages:
 
 # Suspend & Resume
 
-Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle costly operations, or request [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) input. When a workflow is suspended, its current execution state is saved as a snapshot. You can later resume the workflow from a [specific step ID](/docs/v1/workflows/snapshots#retrieving-snapshots), restoring the exact state captured in that snapshot. [Snapshots](/docs/v1/workflows/snapshots) are stored in your configured storage provider and across deployments and application restarts.
+Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle costly operations, or request [human-in-the-loop](/docs/workflows/human-in-the-loop) input. When a workflow is suspended, its current execution state is saved as a snapshot. You can later resume the workflow from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots), restoring the exact state captured in that snapshot. [Snapshots](/docs/workflows/snapshots) are stored in your configured storage provider and across deployments and application restarts.
 ## Pausing a workflow with `suspend()`
 
 Use `suspend()` to pause workflow execution at a specific step. You can define a suspend condition in the step’s `execute` block using values from `resumeData`.
@@ -104,7 +104,7 @@ const stream = run.resume({
 });
 ```
 
-You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/v1/workflows/human-in-the-loop), or timers.
+You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/workflows/human-in-the-loop), or timers.
 
 ```typescript
 const midnight = new Date();
@@ -164,7 +164,7 @@ The `suspendData` parameter is automatically populated when a step is resumed an
 
 ## Identifying suspended executions
 
-When a workflow is suspended, it restarts from the step where it paused. You can check the workflow's `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/v1/workflows/overview#workflows-as-steps).
+When a workflow is suspended, it restarts from the step where it paused. You can check the workflow's `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/workflows/overview#workflows-as-steps).
 
 ```typescript {11}
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -199,12 +199,12 @@ Sleep methods can be used to pause execution at the workflow level, which sets t
 
 **Available methods:**
 
-- [`.sleep()`](/reference/v1/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
-- [`.sleepUntil()`](/reference/v1/workflows/workflow-methods/sleepUntil): Pause until a specific date
+- [`.sleep()`](/reference/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
+- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil): Pause until a specific date
 
 ## Related
 
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
-- [Snapshots](/docs/v1/workflows/snapshots)
-- [Time Travel](/docs/v1/workflows/time-travel)
+- [Control Flow](/docs/workflows/control-flow)
+- [Human-in-the-loop](/docs/workflows/human-in-the-loop)
+- [Snapshots](/docs/workflows/snapshots)
+- [Time Travel](/docs/workflows/time-travel)

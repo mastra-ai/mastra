@@ -87,7 +87,7 @@ describe('CloudDeployer', () => {
 
     deployer = new CloudDeployer();
 
-    // @ts-ignore - accessing protected method for testing
+    // @ts-expect-error - accessing protected method for testing
     deployer._bundle = mockBundle;
 
     vi.mocked(installDeps).mockResolvedValue(undefined);
@@ -111,25 +111,25 @@ describe('CloudDeployer', () => {
 
     it('should default studio to false when not provided', () => {
       const d = new CloudDeployer();
-      // @ts-ignore - accessing private property for testing
+      // @ts-expect-error - accessing private property for testing
       expect(d.studio).toBe(false);
     });
 
     it('should default studio to false when empty options provided', () => {
       const d = new CloudDeployer({});
-      // @ts-ignore - accessing private property for testing
+      // @ts-expect-error - accessing private property for testing
       expect(d.studio).toBe(false);
     });
 
     it('should set studio to true when provided', () => {
       const d = new CloudDeployer({ studio: true });
-      // @ts-ignore - accessing private property for testing
+      // @ts-expect-error - accessing private property for testing
       expect(d.studio).toBe(true);
     });
 
     it('should set studio to false when explicitly provided', () => {
       const d = new CloudDeployer({ studio: false });
-      // @ts-ignore - accessing private property for testing
+      // @ts-expect-error - accessing private property for testing
       expect(d.studio).toBe(false);
     });
   });
@@ -182,7 +182,7 @@ describe('CloudDeployer', () => {
       const outputDirectory = '/test/output';
       const rootDir = '/test/root';
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await deployer.installDependencies(outputDirectory, rootDir);
 
       expect(installDeps).toHaveBeenCalledWith({
@@ -194,7 +194,7 @@ describe('CloudDeployer', () => {
     it('should use process.cwd() as default rootDir', async () => {
       const outputDirectory = '/test/output';
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await deployer.installDependencies(outputDirectory);
 
       expect(installDeps).toHaveBeenCalledWith({
@@ -248,7 +248,7 @@ describe('CloudDeployer', () => {
 
   describe('getEntry', () => {
     it('should generate correct server entry code', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check for essential imports
@@ -290,7 +290,7 @@ describe('CloudDeployer', () => {
     });
 
     it('should include readiness logs', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('Server starting');
@@ -301,7 +301,7 @@ describe('CloudDeployer', () => {
 
     it('should include studio: true when studio is enabled', () => {
       const studioDeployer = new CloudDeployer({ studio: true });
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
       expect(entry).toContain('studio: true');
@@ -310,7 +310,7 @@ describe('CloudDeployer', () => {
 
     it('should include studio: false when studio is disabled', () => {
       const studioDeployer = new CloudDeployer({ studio: false });
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
       expect(entry).toContain('studio: false');
@@ -334,7 +334,7 @@ describe('CloudDeployer', () => {
 
       vi.mocked(installDeps).mockRejectedValue(new Error('Install failed'));
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await expect(deployer.installDependencies(outputDirectory)).rejects.toThrow('Install failed');
     });
   });

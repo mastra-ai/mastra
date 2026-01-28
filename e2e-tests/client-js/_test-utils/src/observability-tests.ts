@@ -56,12 +56,11 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
       // This will create observability data we can query
       try {
         const agent = client.getAgent(agentName);
-        await agent.generate({
-          messages: [{ role: 'user', content: 'Hello, just testing!' }],
-        });
+        await agent.generate([{ role: 'user', content: 'Hello, just testing!' }]);
 
         // Wait a bit for the trace to be persisted
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // The batch-with-updates strategy has a 5 second flush interval
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } catch (e) {
         console.warn('Could not generate agent trace, some tests may fail:', e);
       }

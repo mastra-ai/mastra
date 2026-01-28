@@ -18,7 +18,7 @@ This template demonstrates how to build an AI coding assistant that can work wit
 
 ## Prerequisites
 
-- Node.js 20 or higher
+- Node.js 22.13.0 or later
 - API key for your chosen sandbox provider ([Daytona](https://www.daytona.io/) or [E2B](https://e2b.dev))
 - API key for your chosen model provider
 

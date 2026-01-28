@@ -14,7 +14,7 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later
 
 ## Create a new React + Vite app (optional)
@@ -25,61 +25,25 @@ If you already have a React + Vite app using Tailwind, skip to the next step.
 
 Run the following command to [create a new React + Vite app](https://vite.dev/guide/#scaffolding-your-first-vite-project):
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-```bash
+```bash npm2yarn
 npm create vite@latest mastra-react -- --template react-ts
-cd mastra-react
 ```
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-```bash
-pnpm create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-<TabItem value="yarn" label="yarn">
-```bash
-yarn create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-<TabItem value="bun" label="bun">
-```bash
-bun create vite mastra-react --template react-ts
-cd mastra-react
-```
-</TabItem>
-</Tabs>
 
 This creates a project called `mastra-react`, but you can replace it with any name you want.
 
+Navigate to your project directory:
+
+```bash
+cd mastra-react
+```
+
 ### Tailwind
 
-Next, install Tailwind: 
+Next, install Tailwind:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-```bash
+```bash npm2yarn
 npm install tailwindcss @tailwindcss/vite
 ```
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-```bash
-pnpm add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-<TabItem value="yarn" label="yarn">
-```bash
-yarn add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-<TabItem value="bun" label="bun">
-```bash
-bun add tailwindcss @tailwindcss/vite
-```
-</TabItem>
-</Tabs>
 
 Configure the Vite plugins:
 
@@ -138,42 +102,11 @@ Edit `tsconfig.app.json` to resolve paths:
 
 ## Initialize Mastra
 
-Run [`mastra init`](/reference/v1/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
-cd mastra-react
-npx mastra@beta init
+```bash npm2yarn
+npx mastra@latest init
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-cd mastra-react
-pnpm dlx mastra@beta init
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-cd mastra-react
-yarn dlx mastra@beta init
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-cd mastra-react
-bunx mastra@beta init
-```
-
-</TabItem>
-</Tabs>
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
@@ -187,75 +120,21 @@ You'll call `weather-agent.ts` from your chat UI in the next steps.
 
 Install AI SDK UI along with the Mastra adapter:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
-npm install @mastra/ai-sdk@beta @ai-sdk/react ai
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-</Tabs>
 
 Next, initialize AI Elements. When prompted, choose the default options:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx ai-elements@latest
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bunx ai-elements@latest
-```
-
-</TabItem>
-</Tabs>
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
 ## Create a chat route
 
-Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](https://github.com/reference/v1/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
+Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](/reference/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra';
@@ -398,12 +277,12 @@ In order to test your agent with the chat interface, you need to run both the Ma
 
 1. Start the Mastra development server:
 
-    ```bash copy
+    ```bash
     npx mastra dev
     ```
 1. In a separate terminal window, start the Vite development server:
 
-    ```bash copy
+    ```bash
     npm run dev
     ```
 1. Open your application at http://localhost:5173
@@ -415,11 +294,11 @@ Congratulations on building your Mastra agent with React! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
-- Learn more about [agents](/docs/v1/agents/overview)
-- Give your agent its own [tools](/docs/v1/agents/using-tools)
-- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
 
 When you're ready, read more about how Mastra integrates with AI SDK UI and React, and how to deploy your agent anywhere:
 
-- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/deployment/overview)

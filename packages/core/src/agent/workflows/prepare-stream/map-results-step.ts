@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -112,7 +113,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         messageList: memoryData.messageList,
       });
 
-      // @ts-ignore - TODO: types are wrong here, maybe wrong in general?
+      // @ts-expect-error - TODO: types are wrong here, maybe wrong in general?
       return bail(modelOutput);
     }
 
@@ -171,10 +172,27 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
           if (payload.finishReason === 'error') {
-            capabilities.logger.error('Error in agent stream', {
-              error: payload.error,
-              runId,
-            });
+            const provider = payload.model?.provider;
+            const modelId = payload.model?.modelId;
+            const isUpstreamError = APICallError.isInstance(payload.error);
+
+            if (isUpstreamError) {
+              const providerInfo = provider ? ` from ${provider}` : '';
+              const modelInfo = modelId ? ` (model: ${modelId})` : '';
+              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            } else {
+              capabilities.logger.error('Error in agent stream', {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            }
             return;
           }
 

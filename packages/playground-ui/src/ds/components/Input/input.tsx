@@ -7,16 +7,22 @@ import { formElementSizes, formElementFocus, formElementRadius } from '@/ds/prim
 
 const inputVariants = cva(
   cn(
-    'flex w-full text-neutral6 border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+    // Base styles with enhanced transitions
+    'flex w-full text-neutral6 border bg-transparent',
+    'transition-all duration-normal ease-out-custom',
+    'disabled:cursor-not-allowed disabled:opacity-50',
+    // Better placeholder styling
+    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70',
     formElementRadius,
     formElementFocus,
   ),
   {
     variants: {
       variant: {
-        default: 'border border-border1 placeholder:text-neutral3',
-        filled: 'border bg-inputFill border-border1 placeholder:text-neutral3',
-        unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
+        default: 'border border-border1 hover:border-border2',
+        filled: 'border bg-surface2 border-border1 hover:border-border2',
+        unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
       },
       size: {
         sm: `${formElementSizes.sm} px-2 text-ui-sm`,
@@ -34,16 +40,23 @@ const inputVariants = cva(
 export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
   VariantProps<typeof inputVariants> & {
     testId?: string;
+    error?: boolean;
   };
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, size, testId, variant, type, ...props }, ref) => {
+  ({ className, size, testId, variant, type, error, ...props }, ref) => {
     return (
       <input
         type={type}
-        className={cn(className, inputVariants({ variant, size, className }))}
+        className={cn(
+          inputVariants({ variant, size }),
+          // Error state styling
+          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
+          className,
+        )}
         data-testid={testId}
         ref={ref}
+        aria-invalid={error}
         {...props}
       />
     );

@@ -93,6 +93,7 @@ export async function executeParallel(
         branchCount: entry.steps.length,
         parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -199,7 +200,6 @@ export async function executeParallel(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[entry.steps[index]!.step.id] = result.output;
         }
 
@@ -290,6 +290,7 @@ export async function executeConditional(
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -308,6 +309,7 @@ export async function executeConditional(
             attributes: {
               conditionIndex: index,
             },
+            tracingPolicy: engine.options?.tracingPolicy,
           },
           executionContext,
         });
@@ -498,7 +500,6 @@ export async function executeConditional(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          // @ts-ignore
           acc[stepsToRun[index]!.step.id] = result.output;
         }
 
@@ -593,6 +594,7 @@ export async function executeLoop(
       attributes: {
         loopType: entry.loopType,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -668,6 +670,7 @@ export async function executeLoop(
         attributes: {
           conditionIndex: iteration,
         },
+        tracingPolicy: engine.options?.tracingPolicy,
       },
       executionContext,
     });
@@ -821,6 +824,7 @@ export async function executeForeach(
         loopType: 'foreach',
         concurrency,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -1027,7 +1031,6 @@ export async function executeForeach(
     ...stepInfo,
     status: 'success',
     output: results,
-    //@ts-ignore
     endedAt: Date.now(),
   } as StepSuccess<any, any, any, any>;
 }

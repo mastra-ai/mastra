@@ -4,7 +4,7 @@ A simple example showing how to do metadata filtering with RAG using Mastra, Ope
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 - Postgres connection string

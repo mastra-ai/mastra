@@ -9,7 +9,7 @@ It includes everything you need to go from early prototypes to production-ready 
 ## Usage
 
 > [!IMPORTANT]
-> Make sure that you have Node.js 20 or later installed on your system.
+> Make sure that you have Node.js 22.13.0 or later installed on your system.
 
 Using npm:
 

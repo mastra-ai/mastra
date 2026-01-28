@@ -22,15 +22,15 @@ Mastra can run against any of these runtime environments:
 
 ### Mastra Server
 
-Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
+Mastra provides a [server](/docs/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
 
-Use this option when you need full control over your infrastructure, long-running processes, or WebSocket connections. The [Mastra server deployment guide](/docs/v1/deployment/mastra-server) provides more details.
+Use this option when you need full control over your infrastructure, long-running processes, or WebSocket connections. The [Mastra server deployment guide](/docs/deployment/mastra-server) provides more details.
 
 ### Monorepo
 
 Deploy a Mastra server as part of a monorepo setup, following the same approach as standalone deployment.
 
-Read about [monorepo deployment](/docs/v1/deployment/monorepo).
+Read about [monorepo deployment](/docs/deployment/monorepo).
 
 ### Cloud Providers
 
@@ -38,13 +38,13 @@ Mastra applications can be deployed to cloud providers and serverless platforms.
 
 Use this option for auto-scaling, minimal infrastructure management, or when you're already using one of these platforms.
 
-- [Amazon EC2](/guides/v1/deployment/amazon-ec2)
-- [AWS Lambda](/guides/v1/deployment/aws-lambda)
-- [Azure App Services](/guides/v1/deployment/azure-app-services)
-- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
-- [Digital Ocean](/guides/v1/deployment/digital-ocean)
-- [Netlify](/guides/v1/deployment/netlify-deployer)
-- [Vercel](/guides/v1/deployment/vercel-deployer)
+- [Amazon EC2](/guides/deployment/amazon-ec2)
+- [AWS Lambda](/guides/deployment/aws-lambda)
+- [Azure App Services](/guides/deployment/azure-app-services)
+- [Cloudflare](/guides/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/deployment/digital-ocean)
+- [Netlify](/guides/deployment/netlify-deployer)
+- [Vercel](/guides/deployment/vercel-deployer)
 
 ### Web Framework
 
@@ -52,18 +52,18 @@ When Mastra is integrated with a web framework, it deploys alongside your applic
 
 Use these guides when adding Mastra to an existing Next.js or Astro application.
 
-- [With Next.js on Vercel](/docs/v1/deployment/web-framework#with-nextjs-on-vercel)
-- [With Astro on Vercel](/docs/v1/deployment/web-framework#with-astro-on-vercel)
-- [With Astro on Netlify](/docs/v1/deployment/web-framework#with-astro-on-netlify)
+- [With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
+- [With Astro on Vercel](/docs/deployment/web-framework#with-astro-on-vercel)
+- [With Astro on Netlify](/docs/deployment/web-framework#with-astro-on-netlify)
 
 ### Mastra Cloud
 
 We're building Mastra Cloud to be the easiest place to deploy and observe your Mastra agents. It's currently in beta.
 
-Learn more in the [Mastra Cloud docs](/docs/v1/mastra-cloud/overview).
+Learn more in the [Mastra Cloud docs](/docs/mastra-cloud/overview).
 
 ## Workflow Runners
 
 Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
-Visit the [Workflow Runners guide](/docs/v1/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/v1/deployment/inngest) for setup instructions.
+Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/deployment/inngest) for setup instructions.

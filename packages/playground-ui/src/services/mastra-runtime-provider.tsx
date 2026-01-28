@@ -14,7 +14,7 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
 
@@ -189,6 +189,8 @@ export function MastraRuntimeProvider({
     setMessages,
     approveToolCall,
     declineToolCall,
+    approveToolCallGenerate,
+    declineToolCallGenerate,
     toolCallApprovals,
     approveNetworkToolCall,
     declineNetworkToolCall,
@@ -218,11 +220,6 @@ export function MastraRuntimeProvider({
     requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
-
-  const requestContextInstance = new RequestContext();
-  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
-    requestContextInstance.set(key, value);
-  });
 
   const modelSettingsArgs = {
     frequencyPenalty,
@@ -264,6 +261,11 @@ export function MastraRuntimeProvider({
     });
 
     const agent = clientWithAbort.getAgent(agentId);
+
+    const requestContextInstance = new RequestContext();
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      requestContextInstance.set(key, value);
+    });
 
     try {
       if (isSupportedModel) {
@@ -350,7 +352,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -468,7 +469,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -744,6 +744,8 @@ export function MastraRuntimeProvider({
       <ToolCallProvider
         approveToolcall={approveToolCall}
         declineToolcall={declineToolCall}
+        approveToolcallGenerate={approveToolCallGenerate}
+        declineToolcallGenerate={declineToolCallGenerate}
         isRunning={isRunningStream}
         toolCallApprovals={toolCallApprovals}
         approveNetworkToolcall={approveNetworkToolCall}

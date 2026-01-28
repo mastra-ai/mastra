@@ -293,7 +293,7 @@ export class AgentLegacyHandler {
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
+          // @ts-expect-error Flag for agent network messages
           _agentNetworkAppend: this.capabilities._agentNetworkAppend,
         })
           .addSystem(instructions || (await this.capabilities.getInstructions({ requestContext })))
@@ -455,7 +455,7 @@ export class AgentLegacyHandler {
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
+          // @ts-expect-error Flag for agent network messages
           _agentNetworkAppend: this.capabilities._agentNetworkAppend,
         })
           .add(result.response.messages, 'response')

@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  Cpu,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -42,6 +43,12 @@ const mainNavigation: NavSection[] = [
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Processors',
+        url: '/processors',
+        icon: <Cpu />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'MCP Servers',
@@ -115,7 +122,7 @@ const secondNavigation: NavSection = {
   links: [
     {
       name: 'Mastra APIs',
-      url: 'http://localhost:4111/swagger-ui',
+      url: '/swagger-ui',
       icon: <EarthIcon />,
       isOnMastraPlatform: false,
     },
@@ -189,10 +196,7 @@ export function AppSidebar() {
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const [_, pagePath] = pathname.split('/');
-                  const lowercasedPagePath = link.name.toLowerCase();
-                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
-
+                  const isActive = pathname.startsWith(link.url);
                   return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>

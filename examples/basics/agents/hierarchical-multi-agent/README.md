@@ -4,7 +4,7 @@ A simple supervisor planning agent that orchestrates calls to other agents using
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Anthropic API key
 

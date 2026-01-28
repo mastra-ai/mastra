@@ -21,7 +21,7 @@ A Mastra vector store implementation for Couchbase, enabling powerful vector sim
   - Connect to the cluster.
   - Read/write documents in the specified Collection (`kv` role usually covers this).
   - Manage Search Indexes (`search_admin` role on the relevant bucket/scope).
-- Node.js (v18+ recommended).
+- Node.js 22.13.0 or later.
 
 ## Installation
 

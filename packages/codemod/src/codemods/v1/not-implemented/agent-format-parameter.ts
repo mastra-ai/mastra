@@ -11,7 +11,7 @@ import { createTransformer } from '../../lib/create-transformer';
  *
  * After:
  * agent.generate('prompt', {
- *   /* FIXME(mastra): The format parameter has been removed. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/agent#format-parameter-from-stream-and-generate *\/
+ *   /* FIXME(mastra): The format parameter has been removed. See: https://mastra.ai/guides/migrations/upgrade-to-v1/agent#format-parameter-from-stream-and-generate *\/
  *   format: 'aisdk'
  * })
  */
@@ -19,7 +19,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
   const COMMENT_MESSAGE =
-    'FIXME(mastra): The format parameter has been removed. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/agent#format-parameter-from-stream-and-generate';
+    'FIXME(mastra): The format parameter has been removed. See: https://mastra.ai/guides/migrations/upgrade-to-v1/agent#format-parameter-from-stream-and-generate';
 
   // Track Agent instances
   const agentInstances = new Set<string>();

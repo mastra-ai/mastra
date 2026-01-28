@@ -46,7 +46,7 @@ describe('CloudDeployer Server Runtime', () => {
 
   describe('Server Entry Code Generation', () => {
     it('should generate valid server initialization code', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Validate it's valid JavaScript/TypeScript
@@ -63,7 +63,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should handle environment variables correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check environment variable handling
@@ -77,7 +77,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should setup logging correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Verify logger setup
@@ -90,7 +90,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should configure HTTP transport when endpoint is provided', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('new HttpTransport({');
@@ -99,7 +99,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should setup storage and vector stores correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check storage initialization
@@ -120,7 +120,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should create node server with correct configuration', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Default: studio disabled
@@ -131,7 +131,7 @@ describe('CloudDeployer Server Runtime', () => {
 
     it('should create node server with studio enabled when studio is true', () => {
       const studioDeployer = new CloudDeployer({ studio: true });
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
       expect(entry).toContain('studio: true');
@@ -140,14 +140,14 @@ describe('CloudDeployer Server Runtime', () => {
 
     it('should create node server with studio disabled when studio is false', () => {
       const studioDeployer = new CloudDeployer({ studio: false });
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = studioDeployer.getEntry();
 
       expect(entry).toContain('studio: false');
     });
 
     it('should include readiness logging with correct metadata', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check server starting log
@@ -171,14 +171,14 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should include auth entrypoint', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('// Mock auth entrypoint');
     });
 
     it('should handle success entrypoint', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // The successEntrypoint should be included but we don't have its content mocked
@@ -189,7 +189,7 @@ describe('CloudDeployer Server Runtime', () => {
 
   describe('Runtime Error Scenarios', () => {
     it('should handle missing mastra instance gracefully', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check optional chaining for mastra
@@ -199,7 +199,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should skip HTTP transport in CI environment', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain("if (process.env.CI !== 'true') {");
@@ -207,7 +207,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should only setup cloud storage when credentials are present', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {');

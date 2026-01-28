@@ -14,7 +14,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraModelOutput } from '@mastra/core/stream';
+import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
@@ -123,7 +123,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing the audio data
    */
   async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
-    return this.request<Response>(`/api/agents/${this.agentId}/voice/speak`, {
+    return this.request<Response>(`/agents/${this.agentId}/voice/speak`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -147,7 +147,7 @@ export class AgentVoice extends BaseResource {
       formData.append('options', JSON.stringify(options));
     }
 
-    return this.request(`/api/agents/${this.agentId}/voice/listen`, {
+    return this.request(`/agents/${this.agentId}/voice/listen`, {
       method: 'POST',
       body: formData,
     });
@@ -162,7 +162,7 @@ export class AgentVoice extends BaseResource {
   getSpeakers(
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    return this.request(`/api/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -172,7 +172,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing a check if the agent has listening capabilities
    */
   getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    return this.request(`/api/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
   }
 }
 
@@ -193,11 +193,11 @@ export class Agent extends BaseResource {
    * @returns Promise containing agent details including model and instructions
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
-    return this.request(`/api/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
   }
 
   enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
-    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+    return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
     });
@@ -232,7 +232,7 @@ export class Agent extends BaseResource {
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/api/agents/${this.agentId}/generate-legacy`,
+      `/agents/${this.agentId}/generate-legacy`,
       {
         method: 'POST',
         body: processedParams,
@@ -283,7 +283,7 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-ignore
+          // @ts-expect-error - tool-result message type differs from generate() overload signatures
           return this.generate({
             ...params,
             messages: updatedMessages,
@@ -295,27 +295,17 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate(
-    messages: MessageListInput,
-    options?: StreamParamsBaseWithoutMessages,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: StreamParamsBaseWithoutMessages<OUTPUT> & {
       structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
     },
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  // Catch-all overload to handle conditional types when OUTPUT is generic
+  ): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT>(
     messages: MessageListInput,
-    options?: StreamParamsBaseWithoutMessages<any> & {
-      structuredOutput?: SerializableStructuredOutputOptions<any>;
-    },
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-  async generate<OUTPUT = any>(
-    messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
+  ): Promise<FullOutput<OUTPUT>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
       ...options,
@@ -339,7 +329,7 @@ export class Agent extends BaseResource {
     const threadId = typeof thread === 'string' ? thread : thread?.id;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
-      `/api/agents/${this.agentId}/generate`,
+      `/agents/${this.agentId}/generate`,
       {
         method: 'POST',
         body: processedParams,
@@ -1113,7 +1103,7 @@ export class Agent extends BaseResource {
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
   ) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/${route}`, {
+    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1224,7 +1214,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
                 }
 
@@ -1292,7 +1282,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/network`, {
+    const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
       body: {
         messages,
@@ -1340,7 +1330,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/approve-network-tool-call`, {
+    const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
       method: 'POST',
       body: params,
       stream: true,
@@ -1385,7 +1375,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/decline-network-tool-call`, {
+    const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
       method: 'POST',
       body: params,
       stream: true,
@@ -1423,7 +1413,7 @@ export class Agent extends BaseResource {
 
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
-    streamOptions: Omit<StreamParams<OUTPUT>, 'messages' | 'structuredOutput'> & {
+    streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
       structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<
@@ -1451,7 +1441,7 @@ export class Agent extends BaseResource {
   // >;
   async stream(
     messages: MessageListInput,
-    streamOptions?: Omit<StreamParams, 'messages'>,
+    streamOptions?: StreamParamsBaseWithoutMessages,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1461,7 +1451,7 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async stream<OUTPUT = undefined>(
+  async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
@@ -1627,12 +1617,34 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Approves a pending tool call and returns the complete response (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
+   */
+  async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+    return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Declines a pending tool call and returns the complete response (non-streaming).
+   * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
+   */
+  async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+    return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
    * Processes the stream response and handles tool calls
    */
   private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/api/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1716,7 +1728,7 @@ export class Agent extends BaseResource {
 
                 if (toolInvocation) {
                   toolInvocation.state = 'result';
-                  // @ts-ignore
+                  // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
                 }
 
@@ -1775,7 +1787,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing tool details
    */
   getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -1792,7 +1804,7 @@ export class Agent extends BaseResource {
       data: params.data,
       requestContext: parseClientRequestContext(params.requestContext),
     };
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
+    return this.request(`/agents/${this.agentId}/tools/${toolId}/execute`, {
       method: 'POST',
       body,
     });
@@ -1804,7 +1816,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the updated model
    */
   updateModel(params: UpdateModelParams): Promise<{ message: string }> {
-    return this.request(`/api/agents/${this.agentId}/model`, {
+    return this.request(`/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
     });
@@ -1815,7 +1827,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing a success message
    */
   resetModel(): Promise<{ message: string }> {
-    return this.request(`/api/agents/${this.agentId}/model/reset`, {
+    return this.request(`/agents/${this.agentId}/model/reset`, {
       method: 'POST',
       body: {},
     });
@@ -1827,7 +1839,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the updated model
    */
   updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
-    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+    return this.request(`/agents/${this.agentId}/models/${modelConfigId}`, {
       method: 'POST',
       body: params,
     });
@@ -1839,7 +1851,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the updated model list
    */
   reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
-    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
+    return this.request(`/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,
     });

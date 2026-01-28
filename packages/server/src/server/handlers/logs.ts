@@ -10,12 +10,13 @@ import { parseFilters, validateBody } from './utils';
 
 export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs/transports',
+  path: '/logs/transports',
   responseType: 'json',
   responseSchema: listLogTransportsResponseSchema,
   summary: 'List log transports',
   description: 'Returns a list of all available log transports',
   tags: ['Logs'],
+  requiresAuth: true,
   handler: async ({ mastra }) => {
     try {
       const logger = mastra.getLogger();
@@ -32,7 +33,7 @@ export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
 
 export const LIST_LOGS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs',
+  path: '/logs',
   responseType: 'json',
   queryParamSchema: listLogsQuerySchema,
   responseSchema: listLogsResponseSchema,
@@ -40,6 +41,7 @@ export const LIST_LOGS_ROUTE = createRoute({
   description:
     'Returns logs from a specific transport with optional filtering by date range, log level, and custom filters',
   tags: ['Logs'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
@@ -66,7 +68,7 @@ export const LIST_LOGS_ROUTE = createRoute({
 
 export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/logs/:runId',
+  path: '/logs/:runId',
   responseType: 'json',
   pathParamSchema: runIdSchema,
   queryParamSchema: listLogsQuerySchema,
@@ -74,6 +76,7 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   summary: 'List logs by run ID',
   description: 'Returns all logs for a specific execution run from a transport',
   tags: ['Logs'],
+  requiresAuth: true,
   handler: async ({ mastra, runId, ...params }) => {
     try {
       const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;

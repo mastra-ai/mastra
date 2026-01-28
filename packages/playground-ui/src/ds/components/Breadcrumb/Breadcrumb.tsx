@@ -3,6 +3,7 @@ import React from 'react';
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
 import { cn } from '@/lib/utils';
+import { transitions } from '@/ds/primitives/transitions';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;
@@ -37,7 +38,8 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
             'text-ui-md leading-ui-md flex items-center gap-2',
-            isCurrent ? 'text-white' : 'text-neutral3',
+            transitions.colors,
+            isCurrent ? 'text-white' : 'text-neutral3 hover:text-neutral5',
             className,
           )}
           {...props}
@@ -46,7 +48,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className="text-neutral3">
+          <Icon className={cn('text-neutral2', transitions.colors)}>
             <SlashIcon />
           </Icon>
         </li>

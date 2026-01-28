@@ -88,7 +88,7 @@ const result = await run.startAsync({
 });
 ```
 
-The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/workflows/workflow-state) for more details.
 
 To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 
@@ -160,7 +160,7 @@ const result = await run.cancel();
 
 This method stops any running steps and prevents subsequent steps from executing. Steps that check the `abortSignal` parameter can respond to cancellation by cleaning up resources (timeouts, network requests, etc.).
 
-See the [Run.cancel()](/reference/v1/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
+See the [Run.cancel()](/reference/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
 
 ### stream()
 
