@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-27)
 
 ## Current Position
 
-Phase: 7 of 9 (Screencast API)
-Plan: 1 of 1 complete
-Status: Phase complete
-Last activity: 2026-01-27 — Completed 07-01-PLAN.md
+Phase: 8 of 9 (Transport Layer)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-01-27 — Completed 08-01-PLAN.md
 
-Progress: [############        ] 66% (6/10 v1.0 phases + 1/3 v1.1 phases)
+Progress: [#############       ] 72% (6/10 v1.0 phases + 2/3 v1.1 phases)
 
 ## Performance Metrics
 
@@ -37,11 +37,12 @@ Progress: [############        ] 66% (6/10 v1.0 phases + 1/3 v1.1 phases)
 
 **v1.1 Milestone:**
 - Phases: 3 (7, 8, 9)
-- Plans completed: 1
+- Plans completed: 2
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-screencast-api | 1 | 3 min | 3 min |
+| 08-transport-layer | 1 | 5 min | 5 min |
 
 ## Accumulated Context
 
@@ -58,23 +59,28 @@ From Phase 7:
 - typed-emitter for type-safe event emitter pattern
 - Index signature added to ScreencastEvents for TypedEmitter compatibility
 
+From Phase 8:
+- @hono/node-ws for WebSocket support in Hono
+- Fire-and-forget async with void operator in WebSocket handlers
+- ViewerRegistry pattern: start on first viewer, stop on last viewer
+
 ### Pending Todos
 
 None.
 
 ### Blockers/Concerns
 
-- Hono WebSocket adapter: Need to verify runtime-specific configuration (Bun vs Node) during Phase 8 planning
+None.
 
 ## Session Continuity
 
-Last session: 2026-01-27T22:54:50Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-01-28T00:26:41Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
 
 ## Milestone History
 
 - v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans)
-- v1.1: IN PROGRESS (3 phases planned, 1 plan complete)
+- v1.1: IN PROGRESS (3 phases planned, 2 plans complete)
 
-Next: `/gsd:plan-phase 8`
+Next: `/gsd:execute-plan 08-02`
