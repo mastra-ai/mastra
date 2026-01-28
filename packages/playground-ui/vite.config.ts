@@ -32,6 +32,7 @@ export default defineConfig({
         index: resolve(__dirname, 'src/index.ts'),
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
         'tailwind.preset': resolve(__dirname, 'tailwind.preset.ts'),
+        'tokens.css': resolve(__dirname, 'src/tokens.css'),
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {
