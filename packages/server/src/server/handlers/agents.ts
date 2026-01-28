@@ -11,6 +11,9 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { resolveToolConfig } from '@mastra/core/workspace';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
+import type { WorkspaceToolName } from '@mastra/core/workspace/constants';
 import { stringify } from 'superjson';
 import { z } from 'zod';
 
@@ -233,7 +236,8 @@ export async function getSerializedSkillsFromAgent(
 
 /**
  * Get the list of available workspace tools for an agent.
- * Returns tool names based on workspace configuration (filesystem, sandbox, search).
+ * Returns tool names based on workspace configuration (filesystem, sandbox, search)
+ * and respects per-tool enabled settings.
  */
 export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
   try {
@@ -244,35 +248,57 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
 
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
+    const toolsConfig = workspace.getToolsConfig();
+
+    // Helper to check if a tool is enabled
+    const isEnabled = (toolName: WorkspaceToolName) => {
+      return resolveToolConfig(toolsConfig, toolName).enabled;
+    };
 
     // Filesystem tools
     if (workspace.filesystem) {
-      // Read tools are always available
-      tools.push('workspace_read_file');
-      tools.push('workspace_list_files');
-      tools.push('workspace_file_stat');
+      // Read tools
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+      }
 
       // Write tools only if not readonly
       if (!isReadOnly) {
-        tools.push('workspace_write_file');
-        tools.push('workspace_edit_file');
-        tools.push('workspace_delete');
-        tools.push('workspace_mkdir');
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+        }
       }
     }
 
     // Search tools (available if BM25 or vector search is enabled)
     if (workspace.canBM25 || workspace.canVector) {
-      tools.push('workspace_search');
-      if (!isReadOnly) {
-        tools.push('workspace_index');
+      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      }
+      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
       }
     }
 
     // Sandbox tools
     if (workspace.sandbox) {
-      if (workspace.sandbox.executeCommand) {
-        tools.push('workspace_execute_command');
+      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+        tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
       }
     }
 

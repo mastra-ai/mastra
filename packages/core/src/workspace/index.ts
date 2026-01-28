@@ -17,7 +17,7 @@ export {
 } from './sandbox';
 
 // Tools
-export { createWorkspaceTools, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
+export { createWorkspaceTools, resolveToolConfig, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
 
 // Lifecycle
 export * from './lifecycle';

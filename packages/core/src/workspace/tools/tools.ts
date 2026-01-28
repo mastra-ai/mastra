@@ -35,7 +35,7 @@ import type { WorkspaceToolsConfig } from './types';
  * @param toolName - The tool name to resolve config for
  * @returns Resolved enabled and requireApproval values
  */
-function resolveToolConfig(
+export function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
 ): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean } {
