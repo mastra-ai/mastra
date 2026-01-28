@@ -365,6 +365,15 @@ export class LangfuseExporter extends TrackingExporter<
     }
   }
 
+  /**
+   * Force flush any buffered data to Langfuse without shutting down.
+   */
+  protected override async _flush(): Promise<void> {
+    if (this.#client) {
+      await this.#client.flushAsync();
+    }
+  }
+
   override async _postShutdown(): Promise<void> {
     if (this.#client) {
       await this.#client.shutdownAsync();

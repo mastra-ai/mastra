@@ -1,0 +1,295 @@
+[
+  {
+    "type": "stream-start",
+    "warnings": []
+  },
+  {
+    "type": "response-metadata",
+    "id": "resp_07a73e995c6d647200696e384a3aec8195a2747ca2830f8ded",
+    "timestamp": "2026-01-19T13:57:30.000Z",
+    "modelId": "gpt-4o-mini-2024-07-18"
+  },
+  {
+    "type": "text-start",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "providerMetadata": {
+      "openai": {
+        "itemId": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f"
+      }
+    }
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": "I"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " can't"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " check"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " the"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " weather"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " for"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " you"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " right"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " now"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": "."
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " However"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": ","
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " you"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " can"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " easily"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " find"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " the"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " current"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " weather"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " in"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " Austin"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " by"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " checking"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " a"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " weather"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " website"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " or"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " app"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": "."
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " If"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " you"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " need"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " help"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " with"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " anything"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " else"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": ","
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " feel"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " free"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " to"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": " ask"
+  },
+  {
+    "type": "text-delta",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f",
+    "delta": "!"
+  },
+  {
+    "type": "text-end",
+    "id": "msg_07a73e995c6d647200696e384aa4808195a5ad099aebb2cf7f"
+  },
+  {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+      "inputTokens": 1210,
+      "outputTokens": 44,
+      "totalTokens": 1254,
+      "reasoningTokens": 0,
+      "cachedInputTokens": 0
+    },
+    "providerMetadata": {
+      "openai": {
+        "responseId": "resp_07a73e995c6d647200696e384a3aec8195a2747ca2830f8ded",
+        "logprobs": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      }
+    }
+  }
+]

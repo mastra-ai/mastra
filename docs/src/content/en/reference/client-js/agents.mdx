@@ -133,7 +133,7 @@ import { createUIMessageStream } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
 import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
 
-const response = await agent.stream({ messages: "Tell me a story" });
+const response = await agent.stream("Tell me a story");
 
 const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
   start(controller) {
@@ -184,14 +184,7 @@ const result = await agent.executeTool("tool-id", {
 Stream responses from an agent network for multi-agent interactions:
 
 ```typescript
-const response = await agent.network({
-  messages: [
-    {
-      role: "user",
-      content: "Research this topic and write a summary",
-    },
-  ],
-});
+const response = await agent.network("Research this topic and write a summary");
 
 response.processDataStream({
   onChunk: async (chunk) => {
@@ -232,6 +225,44 @@ response.processDataStream({
     console.log(chunk);
   },
 });
+```
+
+### approveToolCallGenerate()
+
+Approve a pending tool call when using `generate()` (non-streaming). Returns the complete response:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
+```
+
+### declineToolCallGenerate()
+
+Decline a pending tool call when using `generate()` (non-streaming). Returns the complete response:
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
 ```
 
 ## Client Tools

@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router';
+import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
@@ -9,15 +9,19 @@ declare global {
     MASTRA_STUDIO_BASE_PATH?: string;
     MASTRA_SERVER_HOST: string;
     MASTRA_SERVER_PORT: string;
+    MASTRA_API_PREFIX?: string;
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_EXPERIMENTAL_FEATURES?: string;
   }
 }
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import Tools from '@/pages/tools';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
@@ -41,7 +45,6 @@ import {
   StudioConfigProvider,
   useStudioConfig,
 } from '@mastra/playground-ui';
-import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
@@ -65,27 +68,102 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  processorsLink: () => `/processors`,
+  processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
 };
 
-const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
+const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => {
-    navigate(path);
-  };
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      {children}
+      <Layout>
+        <Outlet />
+      </Layout>
     </LinkComponentProvider>
   );
 };
 
+// Determine platform status at module level for route configuration
+const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+
+const routes = [
+  {
+    element: <RootLayout />,
+    children: [
+      // Conditional routes (non-platform only)
+      ...(isMastraPlatform
+        ? []
+        : [
+            { path: '/settings', element: <StudioSettingsPage /> },
+            { path: '/templates', element: <Templates /> },
+            { path: '/templates/:templateSlug', element: <Template /> },
+          ]),
+
+      { path: '/scorers', element: <Scorers /> },
+      { path: '/scorers/:scorerId', element: <Scorer /> },
+      { path: '/observability', element: <Observability /> },
+      { path: '/agents', element: <Agents /> },
+      { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
+      {
+        path: '/agents/:agentId',
+        element: (
+          <AgentLayout>
+            <Outlet />
+          </AgentLayout>
+        ),
+        children: [
+          {
+            index: true,
+            loader: ({ params }: { params: { agentId: string } }) => redirect(`/agents/${params.agentId}/chat`),
+          },
+          { path: 'chat', element: <Agent /> },
+          { path: 'chat/:threadId', element: <Agent /> },
+        ],
+      },
+
+      { path: '/tools', element: <Tools /> },
+      { path: '/tools/:toolId', element: <Tool /> },
+
+      { path: '/processors', element: <Processors /> },
+      { path: '/processors/:processorId', element: <Processor /> },
+
+      { path: '/mcps', element: <MCPs /> },
+      { path: '/mcps/:serverId', element: <McpServerPage /> },
+      { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
+
+      { path: '/workflows', element: <Workflows /> },
+      {
+        path: '/workflows/:workflowId',
+        element: (
+          <WorkflowLayout>
+            <Outlet />
+          </WorkflowLayout>
+        ),
+        children: [
+          {
+            index: true,
+            loader: ({ params }: { params: { workflowId: string } }) =>
+              redirect(`/workflows/${params.workflowId}/graph`),
+          },
+          { path: 'graph', element: <Workflow /> },
+          { path: 'graph/:runId', element: <Workflow /> },
+        ],
+      },
+
+      { index: true, loader: () => redirect('/agents') },
+      { path: '/request-context', element: <RequestContext /> },
+    ],
+  },
+];
+
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -97,100 +175,12 @@ function App() {
     return <PlaygroundConfigGuard />;
   }
 
+  const router = createBrowserRouter(routes, { basename: studioBasePath });
+
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
       <PostHogProvider>
-        <BrowserRouter basename={studioBasePath}>
-          <LinkComponentWrapper>
-            <Routes>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/settings" element={<StudioSettingsPage />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/templates" element={<Templates />} />
-                <Route path="/templates/:templateSlug" element={<Template />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/scorers" element={<Scorers />} />
-                <Route path="/scorers/:scorerId" element={<Scorer />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/observability" element={<Observability />} />
-              </Route>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/agents" element={<Agents />} />
-                <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
-                <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />
-                <Route
-                  path="/agents/:agentId"
-                  element={
-                    <AgentLayout>
-                      <Outlet />
-                    </AgentLayout>
-                  }
-                >
-                  <Route path="chat" element={<Agent />} />
-                  <Route path="chat/:threadId" element={<Agent />} />
-                </Route>
-                <Route path="/tools" element={<Tools />} />
-
-                <Route path="/tools/:toolId" element={<Tool />} />
-                <Route path="/mcps" element={<MCPs />} />
-
-                <Route path="/mcps/:serverId" element={<McpServerPage />} />
-                <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                <Route path="/workflows" element={<Workflows />} />
-                <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
-
-                <Route
-                  path="/workflows/:workflowId"
-                  element={
-                    <WorkflowLayout>
-                      <Outlet />
-                    </WorkflowLayout>
-                  }
-                >
-                  <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                  <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
-                </Route>
-
-                <Route path="/" element={<NavigateTo to="/agents" />} />
-                <Route path="/request-context" element={<RequestContext />} />
-              </Route>
-            </Routes>
-          </LinkComponentWrapper>
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </PostHogProvider>
     </MastraReactProvider>
   );
@@ -200,12 +190,13 @@ export default function AppWrapper() {
   const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
   const host = window.MASTRA_SERVER_HOST || 'localhost';
   const port = window.MASTRA_SERVER_PORT || 4111;
+  const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

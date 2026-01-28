@@ -99,6 +99,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Laminar.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to Laminar without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript

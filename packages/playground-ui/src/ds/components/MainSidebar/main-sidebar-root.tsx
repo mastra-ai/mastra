@@ -32,6 +32,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     <div
       className={cn(
         'flex flex-col h-full px-4 relative overflow-y-auto',
+        // Smooth width transition for collapse/expand
+        'transition-all duration-slow ease-out-custom',
         {
           'lg:min-w-52 xl:min-w-56 2xl:min-w-60 3xl:min-w-64 4xl:min-w-72': !isCollapsed,
         },
@@ -48,8 +50,10 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
               onClick={toggleSidebar}
               className={cn(
                 'inline-flex w-auto items-center text-neutral3 h-8 px-3 rounded-md ml-auto',
-                'hover:bg-surface4',
-                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3',
+                'hover:bg-surface4 hover:text-neutral5',
+                'transition-all duration-normal ease-out-custom',
+                'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+                '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
                 {
                   'ml-auto': !isCollapsed,
                 },

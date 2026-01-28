@@ -55,7 +55,7 @@ describe('Agent.stream', () => {
       age: z.number(),
     });
     const jsonSchema = zodToJsonSchema(outputSchema);
-    const params: StreamParams<typeof outputSchema> = {
+    const params: Omit<StreamParams<z.infer<typeof outputSchema>>, 'messages'> = {
       structuredOutput: { schema: outputSchema },
     };
     await agent.stream([], params);
@@ -75,7 +75,7 @@ describe('Agent.stream', () => {
     // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
     Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
-    const params: StreamParams<undefined> = {
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       requestContext,
     };
 
@@ -107,7 +107,7 @@ describe('Agent.stream', () => {
       },
     };
 
-    const params: StreamParams<undefined> = {
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       clientTools,
     };
 
@@ -139,12 +139,10 @@ describe('Agent.stream', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
+    const params: Omit<StreamParams<undefined>, 'messages'> = {};
 
     // Act: Process the stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([], params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution

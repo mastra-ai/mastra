@@ -7,8 +7,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
@@ -710,37 +710,97 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
 
     const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
-      const queryParams: InValue[] = [resourceId];
+      const whereClauses: string[] = [];
+      const queryParams: InValue[] = [];
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        whereClauses.push('resourceId = ?');
+        queryParams.push(filter.resourceId);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          // Handle null values specially: json_extract returns SQL NULL for JSON null,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            whereClauses.push(`json_extract(metadata, '$.${key}') IS NULL`);
+          } else if (typeof value === 'boolean') {
+            // json_extract returns 1 for true, 0 for false (integers, not strings)
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value ? 1 : 0);
+          } else if (typeof value === 'number') {
+            // Numbers are returned as-is by json_extract
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else if (typeof value === 'string') {
+            // Strings are returned unquoted by json_extract
+            whereClauses.push(`json_extract(metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            // Objects and arrays are not supported for filtering
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${typeof value}`,
+              details: { key, valueType: typeof value },
+            });
+          }
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
 
       const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
         id: row.id as string,
         resourceId: row.resourceId as string,
         title: row.title as string,
-        createdAt: new Date(row.createdAt as string), // Convert string to Date
-        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        createdAt: new Date(row.createdAt as string),
+        updatedAt: new Date(row.updatedAt as string),
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
@@ -776,12 +836,19 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );

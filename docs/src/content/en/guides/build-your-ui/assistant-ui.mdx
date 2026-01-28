@@ -32,7 +32,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
 
 Set up your directory structure. A possible directory structure could look like this:
 
-```shell
+```bash
 project-root
 ├── mastra-server
 │   ├── src
@@ -45,7 +45,7 @@ project-root
 Bootstrap your Mastra server:
 
 ```bash
-npx create-mastra@beta
+npx create-mastra@latest
 ```
 
 This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
@@ -58,7 +58,7 @@ cd mastra-server # Replace with the actual directory name you provided
 
 You now have a basic Mastra server project ready. You should have the following files and folders:
 
-```shell
+```bash
 src
 └── mastra
     ├── agents
@@ -84,8 +84,8 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 Create a chat route for the Assistant UI frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
 
-```bash
-npm install @mastra/ai-sdk@beta
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest
 ```
 
 In your `src/mastra/index.ts` file, register the chat route:

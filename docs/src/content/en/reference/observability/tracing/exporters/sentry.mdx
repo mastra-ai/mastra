@@ -79,6 +79,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Sentry. Handles SPAN_STARTED, SPAN_UPDATED, and SPAN_ENDED events.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any pending spans to Sentry without shutting down the exporter. Waits up to 2 seconds for pending data to be sent. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript

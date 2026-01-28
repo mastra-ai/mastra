@@ -89,7 +89,7 @@ Also, when the tool is resumed, the `resumeData` gets validated against the `res
 To skip the `suspendSchema` or `resumeSchema` validation, do not define `suspendSchema` or `resumeSchema` in the tool creation.
 
 :::note
-For MCP-specific tool context changes, see the [MCP migration guide](/guides/v1/migrations/upgrade-to-v1/mcp).
+For MCP-specific tool context changes, see the [MCP migration guide](/guides/migrations/upgrade-to-v1/mcp).
 :::
 
 ### `RuntimeContext` to `RequestContext`
@@ -113,8 +113,8 @@ To migrate, update references from `runtimeContext` to `requestContext` in tool 
 
 You can use Mastra's codemod CLI to update your imports automatically:
 
-```shell
-npx @mastra/codemod@beta v1/runtime-context .
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::

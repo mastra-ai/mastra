@@ -68,9 +68,9 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
 
   afterEach(async () => {
     try {
-      // @ts-ignore - accessing internal client for cleanup
+      // @ts-expect-error - accessing internal client for cleanup
       await storage.client?.close();
-      // @ts-ignore - accessing internal client for cleanup
+      // @ts-expect-error - accessing internal client for cleanup
       await vector.turso?.close();
     } catch {
       // Ignore cleanup errors
@@ -104,7 +104,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     expect(vectorIdBefore).toBeDefined();
 
     // Verify original content has HIGH score for physics query
-    // @ts-ignore - accessing protected method
+    // @ts-expect-error - accessing protected method
     const { embeddings: physicsEmbeddings } = await memory.embedMessageContent(
       'quantum physics subatomic particles wave functions',
     );
@@ -151,7 +151,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     expect(physicsScoreAfter).toBeLessThan(0.6); // Low similarity - fix is working!
 
     // Step 6: Verify "cooking" query has HIGH score (matches pasta content)
-    // @ts-ignore - accessing protected method
+    // @ts-expect-error - accessing protected method
     const { embeddings: cookingEmbeddings } = await memory.embedMessageContent(
       'Italian pasta recipes carbonara bolognese cooking',
     );
@@ -283,9 +283,9 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     expect(messageIds).toContain(message2.id);
 
     // Verify message1 now matches "space" query better than "marine" query
-    // @ts-ignore - accessing protected method
+    // @ts-expect-error - accessing protected method
     const { embeddings: spaceEmbeddings } = await memory.embedMessageContent('space exploration rockets');
-    // @ts-ignore - accessing protected method
+    // @ts-expect-error - accessing protected method
     const { embeddings: marineEmbeddings } = await memory.embedMessageContent('marine biology ocean underwater');
 
     const spaceResults = await vector.query({

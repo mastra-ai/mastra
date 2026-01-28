@@ -109,6 +109,7 @@ export const ToolBadge = ({
           toolApprovalMetadata={toolApprovalMetadata}
           toolName={toolName}
           isNetwork={isNetwork}
+          isGenerateMode={metadata?.mode === 'generate'}
         />
       </div>
     </BadgeWrapper>

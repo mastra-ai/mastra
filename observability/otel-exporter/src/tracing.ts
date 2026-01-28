@@ -102,7 +102,6 @@ export class OtelExporter extends BaseExporter {
         // Dynamically import @grpc/grpc-js to create metadata
         let metadata: any;
         try {
-          // @ts-ignore - Dynamic import for optional dependency
           const grpcModule = await import('@grpc/grpc-js');
           metadata = new grpcModule.Metadata();
           Object.entries(headers).forEach(([key, value]) => {
@@ -208,6 +207,17 @@ export class OtelExporter extends BaseExporter {
       );
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
+    }
+  }
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * Delegates to the BatchSpanProcessor's forceFlush() method.
+   */
+  async flush(): Promise<void> {
+    if (this.processor) {
+      await this.processor.forceFlush();
+      this.logger.debug('[OtelExporter] Flushed pending spans');
     }
   }
 

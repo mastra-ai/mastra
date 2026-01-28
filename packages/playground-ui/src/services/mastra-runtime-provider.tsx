@@ -189,6 +189,8 @@ export function MastraRuntimeProvider({
     setMessages,
     approveToolCall,
     declineToolCall,
+    approveToolCallGenerate,
+    declineToolCallGenerate,
     toolCallApprovals,
     approveNetworkToolCall,
     declineNetworkToolCall,
@@ -350,7 +352,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -468,7 +469,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -744,6 +744,8 @@ export function MastraRuntimeProvider({
       <ToolCallProvider
         approveToolcall={approveToolCall}
         declineToolcall={declineToolCall}
+        approveToolcallGenerate={approveToolCallGenerate}
+        declineToolcallGenerate={declineToolCallGenerate}
         isRunning={isRunningStream}
         toolCallApprovals={toolCallApprovals}
         approveNetworkToolcall={approveNetworkToolCall}
