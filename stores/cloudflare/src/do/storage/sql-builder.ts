@@ -226,7 +226,17 @@ export class SqlBuilder {
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
-    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName}(${parsedColumnName})`;
+
+    // Validate indexType against allowed values
+    const allowedIndexTypes = ['', 'UNIQUE'];
+    const normalizedIndexType = indexType.toUpperCase().trim();
+    if (!allowedIndexTypes.includes(normalizedIndexType)) {
+      throw new Error(
+        `Invalid index type: ${indexType}. Allowed values: ${allowedIndexTypes.filter(t => t).join(', ')}`,
+      );
+    }
+
+    this.sql = `CREATE ${normalizedIndexType ? normalizedIndexType + ' ' : ''}INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName}(${parsedColumnName})`;
     return this;
   }
 
