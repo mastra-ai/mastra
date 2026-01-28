@@ -91,11 +91,17 @@ export type ServerConfig = {
    */
   host?: string;
   /**
-   * Base path for Mastra Studio
+   * Base path for Mastra Studio UI
    * @default '/'
    * @example '/my-mastra-studio'
    */
   studioBase?: string;
+  /**
+   * Prefix for API routes
+   * @default '/api'
+   * @example '/mastra'
+   */
+  apiPrefix?: string;
   /**
    * Timeout for the server
    */

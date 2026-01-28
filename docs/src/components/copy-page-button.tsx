@@ -70,7 +70,7 @@ export const CopyPageButton = () => {
         )}
       >
         <CopyPageIcon className="size-3" />
-        <span>{copied ? 'Copied' : 'Copy page'}</span>
+        <span>{copied ? 'Copied' : 'Copy markdown'}</span>
       </Button>
 
       <DropdownMenu.Root open={open} onOpenChange={setOpen}>
@@ -81,6 +81,7 @@ export const CopyPageButton = () => {
               'inline-flex h-8 items-center justify-center rounded-xl rounded-tl-none rounded-bl-none p-1.5 px-2.5',
               'border border-(--border)/50 hover:bg-(--mastra-surface-2) dark:border-(--border)/50',
             )}
+            aria-label="Show more options"
           >
             <ChevronDownIcon
               className={cn('size-3 transition-transform duration-200', open && 'rotate-180 transform')}
@@ -91,7 +92,7 @@ export const CopyPageButton = () => {
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             className={cn(
-              'min-w-[280px] rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-3)',
+              'min-w-70 rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-3)',
               'border border-(--border)/50 dark:border-(--border)',
               'z-50 p-1',
               'animate-in fade-in-0 zoom-in-95',
@@ -99,28 +100,6 @@ export const CopyPageButton = () => {
             sideOffset={5}
             align="end"
           >
-            <DropdownMenu.Item
-              className={cn(
-                'group flex items-center gap-3 px-2 py-2 text-sm',
-                'text-(--mastra-text-secondary) dark:text-white',
-                'cursor-pointer rounded-lg outline-none',
-                'hover:bg-(--mastra-surface-2) dark:hover:bg-(--mastra-surface-5)/50',
-                'focus:bg-(--mastra-surface-2)',
-                'transition-colors duration-150',
-              )}
-              onClick={handleCopyPage}
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-(--border)/50 bg-(--mastra-surface-2) dark:border-(--border) dark:bg-(--mastra-surface-5)">
-                <CopyPageIcon className="h-4 w-4" />
-              </div>
-              <div className="flex flex-1 flex-col gap-0.5">
-                <div className="font-medium">Copy page</div>
-                <div className="text-xs text-(--mastra-text-primary) dark:text-(--mastra-text-tertiary)">
-                  Copy page as Markdown for LLMs
-                </div>
-              </div>
-            </DropdownMenu.Item>
-
             <DropdownMenu.Item
               className={cn(
                 'flex items-center gap-3 p-2 text-sm',
