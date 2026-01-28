@@ -269,6 +269,8 @@ export class MastraLLMV1 extends MastraBase {
         },
         attributes: {
           finishReason: result.finishReason,
+          responseId: result.response?.id,
+          responseModel: result.response?.modelId,
           usage: convertV4Usage(result.usage),
         },
       });
@@ -370,6 +372,8 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
+            responseId: result.response?.id,
+            responseModel: result.response?.modelId,
             usage: convertV4Usage(result.usage),
           },
         });

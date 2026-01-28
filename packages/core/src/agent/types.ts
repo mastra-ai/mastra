@@ -32,7 +32,7 @@ import type { OutputSchema } from '../stream';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
@@ -273,7 +273,7 @@ export interface AgentConfig<
   /**
    * Voice settings for speech input and output.
    */
-  voice?: CompositeVoice;
+  voice?: MastraVoice;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
