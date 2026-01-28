@@ -119,7 +119,11 @@ export class ScoresStorageDO extends ScoresStorage {
       const columns = Object.keys(serializedRecord);
       const values = Object.values(serializedRecord);
 
-      const query = createSqlBuilder().insert(fullTableName, columns, values as (string | number | boolean | null | undefined)[]);
+      const query = createSqlBuilder().insert(
+        fullTableName,
+        columns,
+        values as (string | number | boolean | null | undefined)[],
+      );
       const { sql, params } = query.build();
 
       await this.#db.executeQuery({ sql, params });
@@ -170,7 +174,9 @@ export class ScoresStorageDO extends ScoresStorage {
         countQuery.andWhere('source = ?', source as string);
       }
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -244,7 +250,9 @@ export class ScoresStorageDO extends ScoresStorage {
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('runId = ?', runId);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -318,7 +326,9 @@ export class ScoresStorageDO extends ScoresStorage {
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -393,7 +403,9 @@ export class ScoresStorageDO extends ScoresStorage {
         .where('traceId = ?', traceId)
         .andWhere('spanId = ?', spanId);
       const countResult = await this.#db.executeQuery(countQuery.build());
-      const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number((countResult as Record<string, unknown>)?.count ?? 0);
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
 
       if (total === 0) {
         return {

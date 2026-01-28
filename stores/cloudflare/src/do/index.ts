@@ -3,19 +3,19 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 
-import { MemoryStorageDO } from './domains/memory';
-import { ScoresStorageDO } from './domains/scores';
-import { WorkflowsStorageDO } from './domains/workflows';
+import { MemoryStorageDO } from './storage/domains/memory';
+import { ScoresStorageDO } from './storage/domains/scores';
+import { WorkflowsStorageDO } from './storage/domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export { MemoryStorageDO, ScoresStorageDO, WorkflowsStorageDO };
-export type { DODomainConfig } from './db';
-export { DODB } from './db';
+export type { DODomainConfig } from './storage/db';
+export { DODB } from './storage/db';
 
 /**
- * Configuration for DOStore using Durable Objects SqlStorage
+ * Configuration for CloudflareDOStorage using Durable Objects SqlStorage
  */
-export interface DOStoreConfig {
+export interface CloudflareDOStorageConfig {
   /** SqlStorage instance from Durable Objects ctx.storage.sql */
   sql: SqlStorage;
   /** Optional prefix for table names */
@@ -32,11 +32,11 @@ export interface DOStoreConfig {
    *
    * @example
    * // In CI/CD script:
-   * const storage = new DOStore({ ...config, disableInit: false });
+   * const storage = new CloudflareDOStorage({ ...config, disableInit: false });
    * await storage.init(); // Explicitly run migrations
    *
    * // In runtime application:
-   * const storage = new DOStore({ ...config, disableInit: true });
+   * const storage = new CloudflareDOStorage({ ...config, disableInit: true });
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
@@ -53,14 +53,14 @@ export interface DOStoreConfig {
  * @example
  * ```typescript
  * import { DurableObject } from "cloudflare:workers";
- * import { DOStore } from "@mastra/cloudflare-do";
+ * import { CloudflareDOStorage } from "@mastra/cloudflare/do";
  *
  * class AgentDurableObject extends DurableObject<Env> {
- *   private storage: DOStore;
+ *   private storage: CloudflareDOStorage;
  *
  *   constructor(ctx: DurableObjectState, env: Env) {
  *     super(ctx, env);
- *     this.storage = new DOStore({
+ *     this.storage = new CloudflareDOStorage({
  *       sql: ctx.storage.sql,
  *       tablePrefix: 'mastra_'
  *     });
@@ -73,14 +73,14 @@ export interface DOStoreConfig {
  * }
  * ```
  */
-export class DOStore extends MastraCompositeStore {
+export class CloudflareDOStorage extends MastraCompositeStore {
   stores: StorageDomains;
 
   /**
-   * Creates a new DOStore instance
+   * Creates a new CloudflareDOStorage instance
    * @param config Configuration for Durable Objects SqlStorage access
    */
-  constructor(config: DOStoreConfig) {
+  constructor(config: CloudflareDOStorageConfig) {
     try {
       super({ id: 'do-store', name: 'DO', disableInit: config.disableInit });
 
@@ -103,7 +103,7 @@ export class DOStore extends MastraCompositeStore {
           id: createStorageErrorId('CLOUDFLARE_DO', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.SYSTEM,
-          text: 'Error initializing DOStore',
+          text: 'Error initializing CloudflareDOStorage',
         },
         error,
       );
@@ -119,3 +119,13 @@ export class DOStore extends MastraCompositeStore {
     // No explicit cleanup needed for DO storage
   }
 }
+
+/**
+ * @deprecated Use CloudflareDOStorage instead
+ */
+export const DOStore = CloudflareDOStorage;
+
+/**
+ * @deprecated Use CloudflareDOStorageConfig instead
+ */
+export type DOStoreConfig = CloudflareDOStorageConfig;

@@ -405,7 +405,13 @@ export class DODB extends MastraBase {
               {} as Record<string, string>,
             );
 
-            const query = createSqlBuilder().insert(fullTableName, columns, values as SqlParam[], ['id'], recordToUpsert);
+            const query = createSqlBuilder().insert(
+              fullTableName,
+              columns,
+              values as SqlParam[],
+              ['id'],
+              recordToUpsert,
+            );
 
             const { sql, params } = query.build();
             await this.executeQuery({ sql, params });

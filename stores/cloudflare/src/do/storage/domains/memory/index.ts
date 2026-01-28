@@ -115,7 +115,13 @@ export class MemoryStorageDO extends MemoryStorage {
     };
 
     // Use the new insert method with ON CONFLICT
-    const query = createSqlBuilder().insert(fullTableName, columns, values as (string | number | boolean | null | undefined)[], ['id'], updateMap);
+    const query = createSqlBuilder().insert(
+      fullTableName,
+      columns,
+      values as (string | number | boolean | null | undefined)[],
+      ['id'],
+      updateMap,
+    );
 
     const { sql, params } = query.build();
 
@@ -343,7 +349,13 @@ export class MemoryStorageDO extends MemoryStorage {
     };
 
     // Use the new insert method with ON CONFLICT
-    const query = createSqlBuilder().insert(fullTableName, columns, values as (string | number | boolean | null | undefined)[], ['id'], updateMap);
+    const query = createSqlBuilder().insert(
+      fullTableName,
+      columns,
+      values as (string | number | boolean | null | undefined)[],
+      ['id'],
+      updateMap,
+    );
 
     const { sql, params } = query.build();
 
@@ -571,7 +583,10 @@ export class MemoryStorageDO extends MemoryStorage {
     }
 
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
-    const messages = await this.#db.executeQuery({ sql: finalQuery, params: params as (string | number | boolean | null | undefined)[] });
+    const messages = await this.#db.executeQuery({
+      sql: finalQuery,
+      params: params as (string | number | boolean | null | undefined)[],
+    });
 
     if (!Array.isArray(messages)) {
       return [];
@@ -718,7 +733,10 @@ export class MemoryStorageDO extends MemoryStorage {
         queryParams.push(perPage, offset);
       }
 
-      const results = await this.#db.executeQuery({ sql: query, params: queryParams as (string | number | boolean | null | undefined)[] });
+      const results = await this.#db.executeQuery({
+        sql: query,
+        params: queryParams as (string | number | boolean | null | undefined)[],
+      });
 
       // Parse message content
       const paginatedMessages = (isArrayOfRecords(results) ? results : []).map((message: Record<string, unknown>) => {
@@ -757,7 +775,10 @@ export class MemoryStorageDO extends MemoryStorage {
         countParams.push(endDate);
       }
 
-      const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams as (string | number | boolean | null | undefined)[] })) as {
+      const countResult = (await this.#db.executeQuery({
+        sql: countQuery,
+        params: countParams as (string | number | boolean | null | undefined)[],
+      })) as {
         count: number;
       }[];
       const total = Number(countResult[0]?.count ?? 0);
@@ -800,8 +821,12 @@ export class MemoryStorageDO extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = finalMessages.sort((a, b) => {
         const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as Record<string, unknown>)[field] as string | Date).getTime() : (a as Record<string, unknown>)[field];
-        const bValue = isDateField ? new Date((b as Record<string, unknown>)[field] as string | Date).getTime() : (b as Record<string, unknown>)[field];
+        const aValue = isDateField
+          ? new Date((a as Record<string, unknown>)[field] as string | Date).getTime()
+          : (a as Record<string, unknown>)[field];
+        const bValue = isDateField
+          ? new Date((b as Record<string, unknown>)[field] as string | Date).getTime()
+          : (b as Record<string, unknown>)[field];
 
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
