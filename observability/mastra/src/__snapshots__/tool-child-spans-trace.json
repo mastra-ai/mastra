@@ -1,0 +1,303 @@
+{
+  "__structure__": [
+    "agent_run: \"agent run: 'child-span-agent'\"",
+    "└── model_generation: \"llm: 'mock-model-id'\"",
+    "    ├── model_step: \"step: 0\"",
+    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   ├── tool_call: \"tool: 'childSpanTool'\"",
+    "    │   │   └── generic: \"tool-child-operation\"",
+    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
+    "    └── model_step: \"step: 1\"",
+    "        └── model_chunk: \"chunk: 'text'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "agent run: 'child-span-agent'",
+        "type": "agent_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "agent",
+        "entityId": "child-span-agent",
+        "attributes": {
+          "instructions": "You use tools that create child spans"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": "Use child span tool to process test-data",
+        "output": {
+          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "files": []
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "llm: 'mock-model-id'",
+            "type": "model_generation",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "child-span-agent",
+            "attributes": {
+              "model": "mock-model-id",
+              "provider": "mock-provider",
+              "streaming": true,
+              "parameters": {
+                "temperature": 0
+              },
+              "finishReason": "stop",
+              "responseId": "<responseId-1>",
+              "responseModel": "mock-model-id",
+              "completionStartTime": "<date>",
+              "usage": {
+                "inputTokens": 30,
+                "outputTokens": 35
+              }
+            },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
+            "input": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You use tools that create child spans"
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Use child span tool to process test-data"
+                    }
+                  ]
+                }
+              ]
+            },
+            "output": {
+              "files": [],
+              "reasoning": [],
+              "sources": [],
+              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "warnings": []
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "step: 0",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "child-span-agent",
+                "attributes": {
+                  "stepIndex": 0,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 10
+                  },
+                  "isContinued": true,
+                  "finishReason": "tool-calls"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": "",
+                  "toolCalls": [
+                    {
+                      "toolCallId": "call-child-span-1",
+                      "toolName": "childSpanTool",
+                      "args": {
+                        "input": "test-data"
+                      }
+                    }
+                  ]
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-call'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "tool-call",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "toolName": "childSpanTool",
+                      "toolCallId": "call-child-span-1",
+                      "toolInput": {
+                        "input": "test-data"
+                      }
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "tool: 'childSpanTool'",
+                    "type": "tool_call",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "tool",
+                    "entityId": "childSpanTool",
+                    "attributes": {
+                      "toolDescription": "A tool that creates child spans",
+                      "toolType": "tool",
+                      "success": true
+                    },
+                    "input": {
+                      "input": "test-data"
+                    },
+                    "output": {
+                      "output": "Tool processed: test-data"
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "tool-child-operation",
+                        "type": "generic",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-5>",
+                        "entityType": "tool",
+                        "entityId": "childSpanTool",
+                        "metadata": {
+                          "childOperation": "data-processing",
+                          "inputValue": "test-data",
+                          "processedValue": "processed-test-data"
+                        },
+                        "input": "test-data",
+                        "output": "child-result-test-data"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "span": {
+                    "id": "<span-7>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-result'",
+                    "type": "model_chunk",
+                    "completed": false,
+                    "isEvent": true,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "tool-result",
+                      "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "toolCallId": "call-child-span-1",
+                      "toolName": "childSpanTool"
+                    },
+                    "output": {
+                      "output": "Tool processed: test-data"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "span": {
+                "id": "<span-8>",
+                "traceId": "<trace-1>",
+                "name": "step: 1",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "child-span-agent",
+                "attributes": {
+                  "stepIndex": 1,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25
+                  },
+                  "isContinued": false,
+                  "finishReason": "stop"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "toolCalls": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-9>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-8>",
+                    "entityType": "agent",
+                    "entityId": "child-span-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
