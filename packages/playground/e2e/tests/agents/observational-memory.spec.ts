@@ -170,11 +170,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
      * BEHAVIOR: Failed observation shows error state
      * OUTCOME: User sees that observation failed (e.g., "Observation failed" or "interrupted")
      *
-     * Uses om-fail-agent which has a mock observer that throws an error.
+     * Uses om-fail-agent which has a mock observer that returns an error stream
+     * (mimicking the router's behavior when API key is missing).
      */
-    // TODO: Observer failure emits data-om-observation-failed but the workflow engine
-    // also propagates the error as PROCESSOR_WORKFLOW_FAILED, disrupting the stream.
-    test.skip('should show error state when observation fails', async ({ page }) => {
+    test('should show error state when observation fails', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
       await page.goto('/agents/om-fail-agent/chat?new=true');

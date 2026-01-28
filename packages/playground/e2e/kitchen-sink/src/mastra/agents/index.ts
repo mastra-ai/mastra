@@ -69,14 +69,45 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
   }),
 });
 
-// Mock observer that throws an error (for testing failed observation UI)
-const mockFailingObserverModel = new aiTest.MockLanguageModelV2({
+// Mock observer that returns an error stream (for testing failed observation UI)
+// Mimics how the router handles missing API keys - returns { stream: error } from doGenerate
+// instead of throwing, which is the real-world failure path.
+const mockFailingObserverModel = {
+  specificationVersion: 'v2' as const,
   provider: 'mock',
   modelId: 'mock-failing-observer',
-  doGenerate: async () => {
-    throw new Error('Observer model failed: simulated API error for E2E testing');
+  defaultObjectGenerationMode: undefined,
+  supportsImageUrls: false,
+  supportedUrls: {},
+  async doGenerate() {
+    return {
+      stream: new ReadableStream({
+        start(controller: any) {
+          controller.enqueue({
+            type: 'error',
+            error: new Error('Observer model failed: simulated API error for E2E testing'),
+          });
+          controller.close();
+        },
+      }),
+    };
   },
-});
+  async doStream() {
+    return {
+      stream: new ReadableStream({
+        start(controller: any) {
+          controller.enqueue({
+            type: 'error',
+            error: new Error('Observer model failed: simulated API error for E2E testing'),
+          });
+          controller.close();
+        },
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    };
+  },
+} as any;
 
 // Memory with Observational Memory enabled for testing OM UI
 // Using very low thresholds so observations trigger quickly in E2E tests

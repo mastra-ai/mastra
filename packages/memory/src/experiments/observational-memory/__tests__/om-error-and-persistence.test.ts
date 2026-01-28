@@ -198,6 +198,8 @@ function createMockObserverModel() {
 }
 
 function createFailingObserverModel() {
+  // Mimics how the router handles missing API keys - returns { stream: error }
+  // from doGenerate instead of throwing, which is the real-world failure path.
   return {
     specificationVersion: 'v2' as const,
     provider: 'mock-failing-observer',
@@ -207,11 +209,33 @@ function createFailingObserverModel() {
     supportedUrls: {},
 
     async doGenerate() {
-      throw new Error('Observer model failed: simulated error');
+      return {
+        stream: new ReadableStream({
+          start(controller: any) {
+            controller.enqueue({
+              type: 'error',
+              error: new Error('Observer model failed: simulated error'),
+            });
+            controller.close();
+          },
+        }),
+      };
     },
 
     async doStream() {
-      throw new Error('Observer model failed: simulated error');
+      return {
+        stream: new ReadableStream({
+          start(controller: any) {
+            controller.enqueue({
+              type: 'error',
+              error: new Error('Observer model failed: simulated error'),
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
     },
   };
 }
