@@ -37,7 +37,18 @@
         "types": "./dist/tailwind.preset.d.ts",
         "default": "./dist/tailwind.preset.cjs.js"
       }
-    }
+    },
+    "./utils": {
+      "import": {
+        "types": "./dist/utils.d.ts",
+        "default": "./dist/utils.es.js"
+      },
+      "require": {
+        "types": "./dist/utils.d.ts",
+        "default": "./dist/utils.cjs.js"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc && vite build",
