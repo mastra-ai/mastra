@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-27)
 
 **Core value:** Users can watch browser agents work in real-time from within Mastra Studio
-**Current focus:** v1.1 Browser Live View - Phase 8 (Transport Layer)
+**Current focus:** v1.1 Browser Live View - Phase 9 (Studio UI)
 
 ## Current Position
 
 Phase: 8 of 9 (Transport Layer)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-01-27 — Completed 08-01-PLAN.md
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-01-27 — Completed Phase 8 (Transport Layer)
 
-Progress: [#############       ] 72% (6/10 v1.0 phases + 2/3 v1.1 phases)
+Progress: [################    ] 83% (6/10 v1.0 phases + 2/3 v1.1 phases)
 
 ## Performance Metrics
 
@@ -37,12 +37,12 @@ Progress: [#############       ] 72% (6/10 v1.0 phases + 2/3 v1.1 phases)
 
 **v1.1 Milestone:**
 - Phases: 3 (7, 8, 9)
-- Plans completed: 2
+- Plans completed: 3
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 07-screencast-api | 1 | 3 min | 3 min |
-| 08-transport-layer | 1 | 5 min | 5 min |
+| 08-transport-layer | 2 | 10 min | 5 min |
 
 ## Accumulated Context
 
@@ -63,6 +63,8 @@ From Phase 8:
 - @hono/node-ws for WebSocket support in Hono
 - Fire-and-forget async with void operator in WebSocket handlers
 - ViewerRegistry pattern: start on first viewer, stop on last viewer
+- setupBrowserStream called BEFORE CORS middleware (avoid header conflicts)
+- injectWebSocket called AFTER serve() returns
 
 ### Pending Todos
 
@@ -74,13 +76,13 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-28T00:26:41Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-01-27T16:40:00Z
+Stopped at: Completed Phase 8 (Transport Layer)
 Resume file: None
 
 ## Milestone History
 
 - v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans)
-- v1.1: IN PROGRESS (3 phases planned, 2 plans complete)
+- v1.1: IN PROGRESS (3 phases planned, 3 plans complete)
 
-Next: `/gsd:execute-plan 08-02`
+Next: `/gsd:discuss-phase 9`

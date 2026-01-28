@@ -63,7 +63,7 @@ Plans:
 **Milestone Goal:** Users can watch browser agents work in real-time from within Mastra Studio
 
 - [x] **Phase 7: Screencast API** - Extend BrowserToolset with CDP screencast controls
-- [ ] **Phase 8: Transport Layer** - WebSocket endpoint for frame delivery to Studio
+- [x] **Phase 8: Transport Layer** - WebSocket endpoint for frame delivery to Studio
 - [ ] **Phase 9: Studio UI** - Browser view panel rendering inline with agent chat
 
 ## Phase Details
@@ -94,8 +94,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Browser-stream module with types, ViewerRegistry, and WebSocket route setup
-- [ ] 08-02-PLAN.md — Server integration with deployer createNodeServer
+- [x] 08-01-PLAN.md — Browser-stream module with types, ViewerRegistry, and WebSocket route setup
+- [x] 08-02-PLAN.md — Server integration with deployer createNodeServer
 
 ### Phase 9: Studio UI
 **Goal**: BrowserViewPanel component renders live screencast inline with agent chat
@@ -127,9 +127,9 @@ Plans:
 | 5. Schema Consolidation | v1.0 | 2/2 | Complete | 2026-01-27 |
 | 6. Lifecycle Locking | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 7. Screencast API | v1.1 | 1/1 | Complete | 2026-01-27 |
-| 8. Transport Layer | v1.1 | 0/2 | Planned | - |
+| 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 9. Studio UI | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 8 planning*
+*Last updated: 2026-01-27 after Phase 8 completion*

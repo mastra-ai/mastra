@@ -17,10 +17,10 @@ Requirements for Browser Live View milestone. Each maps to roadmap phases.
 
 ### Transport Layer
 
-- [ ] **XPORT-01**: WebSocket endpoint exists at `/browser/:agentId/stream` for frame delivery
-- [ ] **XPORT-02**: WebSocket handler relays CDP frames to connected clients
-- [ ] **XPORT-03**: WebSocket connections are properly cleaned up on disconnect
-- [ ] **XPORT-04**: Screencast only runs when at least one viewer is connected
+- [x] **XPORT-01**: WebSocket endpoint exists at `/browser/:agentId/stream` for frame delivery
+- [x] **XPORT-02**: WebSocket handler relays CDP frames to connected clients
+- [x] **XPORT-03**: WebSocket connections are properly cleaned up on disconnect
+- [x] **XPORT-04**: Screencast only runs when at least one viewer is connected
 
 ### Studio UI
 
@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAST-03 | Phase 7 | Complete |
 | CAST-04 | Phase 7 | Complete |
 | CAST-05 | Phase 7 | Complete |
-| XPORT-01 | Phase 8 | Pending |
-| XPORT-02 | Phase 8 | Pending |
-| XPORT-03 | Phase 8 | Pending |
-| XPORT-04 | Phase 8 | Pending |
+| XPORT-01 | Phase 8 | Complete |
+| XPORT-02 | Phase 8 | Complete |
+| XPORT-03 | Phase 8 | Complete |
+| XPORT-04 | Phase 8 | Complete |
 | UI-01 | Phase 9 | Pending |
 | UI-02 | Phase 9 | Pending |
 | UI-03 | Phase 9 | Pending |
@@ -93,4 +93,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 7 completion*
+*Last updated: 2026-01-27 after Phase 8 completion*
