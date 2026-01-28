@@ -44,7 +44,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
         border: '1px solid hsl(0 0% 20.4%)',
         borderBottom: 'none',
       }}
-      className="flex items-center justify-between gap-4 px-4 py-2 text-sm font-semibold text-white"
+      className="flex items-center justify-between gap-4 px-4 py-2 text-sm font-semibold text-neutral6"
     >
       <span className="lowercase [&>span]:text-xs">{language}</span>
       <IconButton variant="light" size="md" tooltip="Copy" onClick={onCopy}>
@@ -242,7 +242,7 @@ const defaultComponents = memoizeMarkdownComponents({
         marginBottom: '0.5rem',
         border: '1px solid hsl(0 0% 20.4%)',
       }}
-      className={cn('overflow-x-auto p-4 text-white', className)}
+      className={cn('overflow-x-auto p-4 text-neutral6', className)}
     />
   ),
   code: function Code({ className, ...props }) {

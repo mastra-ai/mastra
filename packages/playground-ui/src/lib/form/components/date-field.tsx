@@ -47,7 +47,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
         <Button id={id} variant="light" size="lg" className={cn('w-full', error ? 'border-accent2' : '')}>
           <CalendarIcon className="h-4 w-4" />
           {value ? (
-            <span className="text-white">{format(value, 'PPP')}</span>
+            <span className="text-neutral6">{format(value, 'PPP')}</span>
           ) : (
             <span className="text-gray">Pick a date</span>
           )}

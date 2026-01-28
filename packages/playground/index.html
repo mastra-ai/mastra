@@ -5,6 +5,14 @@
     <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
     <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var theme = localStorage.getItem('theme');
+        if (theme === 'light') {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
     <title>Mastra Studio</title>
     <script>
       window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
@@ -42,7 +50,7 @@
   </head>
 
   <body class="overflow-hidden">
-    <div id="root" class="dark"></div>
+    <div id="root"></div>
     <script type="module">
       // Use relative import to work with any base path
       // Vite transforms this during build to reference compiled output with correct paths

@@ -22,7 +22,7 @@ export const Header = ({ children, border = true }: HeaderProps) => {
 
 export const HeaderTitle = ({ children }: HeaderProps) => {
   return (
-    <Txt as="h1" variant="ui-md" className="text-white flex items-center gap-2">
+    <Txt as="h1" variant="ui-md" className="text-neutral6 flex items-center gap-2">
       {children}
     </Txt>
   );

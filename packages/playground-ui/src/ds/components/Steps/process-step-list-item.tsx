@@ -49,7 +49,7 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
           transitions.all,
           {
             'border border-neutral2 border-dashed': step.status === 'pending',
-            '[&>svg]:text-white [&>svg]:w-[1rem] [&>svg]:h-[1rem]': step.status !== 'running',
+            '[&>svg]:text-neutral6 [&>svg]:w-[1rem] [&>svg]:h-[1rem]': step.status !== 'running',
             'w-[1.75rem] h-[1.75rem]': step.status === 'running',
             'bg-accent1Dark shadow-glow-accent1': step.status === 'success',
             'bg-accent2Dark shadow-glow-accent2': step.status === 'failed',

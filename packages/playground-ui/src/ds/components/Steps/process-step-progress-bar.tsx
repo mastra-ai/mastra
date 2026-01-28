@@ -29,8 +29,8 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
                   {
                     'border border-neutral2 border-dashed': step.status === 'pending',
                     '[&>svg]:text-surface1 [&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem]': step.status !== 'running',
-                    'bg-accent1Dark text-white shadow-glow-accent1 scale-110': step.status === 'success',
-                    'bg-accent2Dark text-white shadow-glow-accent2 scale-110': step.status === 'failed',
+                    'bg-accent1Dark text-neutral6 shadow-glow-accent1 scale-110': step.status === 'success',
+                    'bg-accent2Dark text-neutral6 shadow-glow-accent2 scale-110': step.status === 'failed',
                   },
                 )}
               >

@@ -56,7 +56,7 @@ export function TimelineNameCol({
       <button
         onClick={() => onSpanClick?.(span.id)}
         className={cn(
-          'text-ui-md flex items-center text-left break-all gap-2 text-white w-full rounded-lg  h-full px-3 py-2 transition-colors',
+          'text-ui-md flex items-center text-left break-all gap-2 text-neutral6 w-full rounded-lg  h-full px-3 py-2 transition-colors',
           '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
           'hover:bg-surface4 [&:hover>svg]:opacity-60',
         )}

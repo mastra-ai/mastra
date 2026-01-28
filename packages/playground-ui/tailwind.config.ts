@@ -17,7 +17,6 @@ import assistantUi from '@assistant-ui/react-ui/tailwindcss';
 import containerQueries from '@tailwindcss/container-queries';
 
 export default {
-  darkMode: ['class'],
   content: ['./src/**/*.{html,js,tsx,ts,jsx}'],
   theme: {
     container: {

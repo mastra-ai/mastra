@@ -39,7 +39,7 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
           className={cn(
             'text-ui-md leading-ui-md flex items-center gap-2',
             transitions.colors,
-            isCurrent ? 'text-white' : 'text-neutral3 hover:text-neutral5',
+            isCurrent ? 'text-neutral6' : 'text-neutral3 hover:text-neutral5',
             className,
           )}
           {...props}
