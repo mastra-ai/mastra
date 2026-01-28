@@ -4,6 +4,7 @@ import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
@@ -27,9 +28,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+  processZodType(value: ZodType): ZodType {
     if (isOptional(z)(value)) {
       // For OpenAI strict mode, convert .optional() to .nullable() with transform
       // This ensures all fields are in the required array but can accept null values

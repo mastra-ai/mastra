@@ -3,6 +3,7 @@ import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
 import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
 
@@ -36,9 +37,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+  processZodType(value: ZodType): ZodType {
     if (isOptional(z)(value)) {
       // For OpenAI reasoning models strict mode, convert .optional() to .nullable() with transform
       // The transform converts null -> undefined to match original .optional() semantics
@@ -92,7 +91,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       }
 
       const description = this.mergeParameterDescription(value.description, constraints);
-      let result = this.processZodType(innerType);
+      let result = this.processZodType(innerType as ZodTypeV3 | ZodTypeV4);
       if (description) {
         result = result.describe(description);
       }

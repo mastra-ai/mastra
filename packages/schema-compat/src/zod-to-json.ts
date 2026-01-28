@@ -1,5 +1,4 @@
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -7,6 +6,21 @@ import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
 // Symbol to mark schemas as already patched (for idempotency)
 const PATCHED = Symbol('__mastra_patched__');
+
+// Lazy-loaded Zod v4 'z' export (only loaded when needed)
+let _zv4Cache: typeof import('zod/v4').z | undefined;
+
+/**
+ * Get the Zod v4 'z' export, loading it lazily on first use.
+ * This avoids breaking in v3-only environments where 'zod/v4' doesn't exist.
+ */
+function getZodV4(): typeof import('zod/v4').z {
+  if (!_zv4Cache) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _zv4Cache = require('zod/v4').z;
+  }
+  return _zv4Cache!;
+}
 
 /**
  * Recursively patch Zod v4 record schemas that are missing valueType.
@@ -28,7 +42,7 @@ function patchRecordSchemas(schema: any): any {
     // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
     // Fix: move it to valueType and set keyType to string (the default)
     def.valueType = def.keyType;
-    def.keyType = (z as any).string();
+    def.keyType = getZodV4().string();
   }
 
   // Recursively patch nested schemas
@@ -164,32 +178,52 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+/**
+ * Detect if a schema is a Zod v4 schema by checking its internal structure.
+ * Zod v4 schemas have a `_zod` property with a nested `def` object.
+ * Zod v3 schemas have a `_def` property with a `typeName` string.
+ */
+function isZodV4Schema(schema: unknown): boolean {
+  if (!schema || typeof schema !== 'object') return false;
+  // Zod v4 schemas have _zod.def.type structure
+  const maybeV4 = schema as { _zod?: { def?: { type?: string } } };
+  return typeof maybeV4._zod?.def?.type === 'string';
+}
+
 export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
 ): JSONSchema7 {
-  const fn = 'toJSONSchema';
-
-  if (fn in z) {
+  // Detect Zod version by schema structure, not by import
+  if (isZodV4Schema(zodSchema)) {
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    const jsonSchema = (z as any)[fn](zodSchema, {
-      unrepresentable: 'any',
-      override: (ctx: any) => {
-        // Handle both Zod v4 structures: _def directly or nested in _zod
-        const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
-        // Check for date type using both possible property names
-        if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
-          ctx.jsonSchema.type = 'string';
-          ctx.jsonSchema.format = 'date-time';
-        }
-      },
-    }) satisfies JSONSchema7;
+    // Try v4 converter first, fall back to v3 if it fails (e.g., mixed v3/v4 schemas)
+    try {
+      const jsonSchema = getZodV4().toJSONSchema(zodSchema as ZodSchemaV4, {
+        unrepresentable: 'any',
+        override: (ctx: any) => {
+          // Handle both Zod v4 structures: _def directly or nested in _zod
+          const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
+          // Check for date type using both possible property names
+          if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
+            ctx.jsonSchema.type = 'string';
+            ctx.jsonSchema.format = 'date-time';
+          }
+        },
+      }) as JSONSchema7;
 
-    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
-    return fixAnyOfNullable(jsonSchema);
+      // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
+      return fixAnyOfNullable(jsonSchema);
+    } catch {
+      // Fall back to v3 converter for mixed v3/v4 schemas
+      return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+        $refStrategy: strategy,
+        target,
+      }) as JSONSchema7;
+    }
   } else {
     // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {

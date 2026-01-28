@@ -12,11 +12,7 @@ import {
   ZodNullable,
 } from 'zod/v4';
 import type { ZodAny, ZodType } from 'zod/v4';
-import type { Targets } from 'zod-to-json-schema';
-import type { JSONSchema7, Schema } from './json-schema';
-import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
-import { convertZodSchemaToAISDKSchema } from './utils';
 
 /**
  * All supported string validation check types that can be processed or converted to descriptions.
@@ -74,6 +70,19 @@ export const SUPPORTED_ZOD_TYPES = [
  */
 export const ALL_ZOD_TYPES = [...SUPPORTED_ZOD_TYPES, ...UNSUPPORTED_ZOD_TYPES] as const;
 
+// Type guards using instanceof
+export const isOptional = (v: ZodType | ZodOptional<any>): v is ZodOptional<any> => v instanceof ZodOptional;
+export const isObj = (v: ZodType | ZodObject<any, any>): v is ZodObject<any, any> => v instanceof ZodObject;
+export const isNull = (v: ZodType | ZodNull): v is ZodNull => v instanceof ZodNull;
+export const isNullable = (v: ZodType | ZodNullable<any>): v is ZodNullable<any> => v instanceof ZodNullable;
+export const isArr = (v: ZodType | ZodArray<any>): v is ZodArray<any> => v instanceof ZodArray;
+export const isUnion = (v: ZodType | ZodUnion<[ZodAny, ...ZodAny[]]>): v is ZodUnion<[ZodAny, ...ZodAny[]]> =>
+  v instanceof ZodUnion;
+export const isString = (v: ZodType | ZodString): v is ZodString => v instanceof ZodString;
+export const isNumber = (v: ZodType | ZodNumber): v is ZodNumber => v instanceof ZodNumber;
+export const isDate = (v: ZodType | ZodDate): v is ZodDate => v instanceof ZodDate;
+export const isDefault = (v: ZodType | ZodDefault<any>): v is ZodDefault<any> => v instanceof ZodDefault;
+
 /**
  * Type representing string validation checks.
  */
@@ -122,546 +131,341 @@ export type ShapeValue<T extends z.ZodObject<any, any>> = ZodShape<T>[ShapeKey<T
 type ConstraintHelperText = string[];
 
 /**
- * Abstract base class for creating schema compatibility layers for different AI model providers.
- *
- * This class provides a framework for transforming Zod schemas to work with specific AI model
- * provider requirements and limitations. Each provider may have different support levels for
- * JSON Schema features, validation constraints, and data types.
- *
- *
- * @example
- * ```typescript
- * import { SchemaCompatLayer } from '@mastra/schema-compat';
- * import type { LanguageModelV1 } from 'ai';
- *
- * class CustomProviderCompat extends SchemaCompatLayer {
- *   constructor(model: LanguageModelV1) {
- *     super(model);
- *   }
- *
- *   shouldApply(): boolean {
- *     return this.getModel().provider === 'custom-provider';
- *   }
- *
- *   getSchemaTarget() {
- *     return 'jsonSchema7';
- *   }
- *
- *   processZodType<T extends z.AnyZodObject>(value: z.ZodAny): ShapeValue<T> {
- *     // Custom processing logic for this provider
- *     switch (value._def.typeName) {
- *       case 'ZodString':
- *         return this.defaultZodStringHandler(value, ['email', 'url']);
- *       default:
- *         return this.defaultUnsupportedZodTypeHandler(value);
- *     }
- *   }
- * }
- * ```
+ * Context for schema compatibility handler functions.
  */
-export class SchemaCompatLayer {
-  private model: ModelInformation;
-  private parent: ParentSchemaCompatLayer;
+export interface HandlerContext {
+  model: ModelInformation;
+  processZodType: (value: ZodType) => ZodType;
+}
 
-  /**
-   * Creates a new schema compatibility instance.
-   *
-   * @param model - The language model this compatibility layer applies to
-   */
-  constructor(model: ModelInformation, parent: ParentSchemaCompatLayer) {
-    this.model = model;
-    this.parent = parent;
+/**
+ * Returns the list of unsupported Zod types.
+ */
+export function getUnsupportedZodTypes(): readonly string[] {
+  return UNSUPPORTED_ZOD_TYPES;
+}
+
+/**
+ * Merges validation constraints into a parameter description.
+ */
+export function mergeParameterDescription(
+  description: string | undefined,
+  constraints: ConstraintHelperText,
+): string | undefined {
+  if (constraints.length > 0) {
+    return (description ? description + '\n' : '') + `constraints: ${constraints.join(`, `)}`;
+  } else {
+    return description;
   }
+}
 
-  /**
-   * Gets the language model associated with this compatibility layer.
-   *
-   * @returns The language model instance
-   */
-  getModel(): ModelInformation {
-    return this.model;
-  }
+/**
+ * Default handler for Zod object types. Recursively processes all properties in the object.
+ */
+export function defaultZodObjectHandler(
+  ctx: HandlerContext,
+  value: ZodObject<any, any>,
+  options: { passthrough?: boolean } = { passthrough: true },
+): ZodObject<any, any> {
+  const processedShape = Object.entries(value.shape).reduce<Record<string, ZodType>>((acc, [key, propValue]) => {
+    acc[key] = ctx.processZodType(propValue as ZodAny);
+    return acc;
+  }, {});
 
-  getUnsupportedZodTypes(): readonly string[] {
-    return UNSUPPORTED_ZOD_TYPES;
-  }
+  let result: ZodObject<any, any> = z.object(processedShape);
 
-  /**
-   * Type guard for optional Zod types
-   */
-  isOptional(v: ZodAny | ZodOptional<any>): v is ZodOptional<any> {
-    return v instanceof ZodOptional;
-  }
-
-  /**
-   * Type guard for object Zod types
-   */
-  isObj(v: ZodAny | ZodObject<any, any>): v is ZodObject<any, any> {
-    return v instanceof ZodObject;
-  }
-
-  /**
-   * Type guard for null Zod types
-   */
-  isNull(v: ZodAny | ZodNull): v is ZodNull {
-    return v instanceof ZodNull;
-  }
-
-  /**
-   * Type guard for nullable Zod types
-   */
-  isNullable(v: ZodAny | ZodNullable<any>): v is ZodNullable<any> {
-    return v instanceof ZodNullable;
-  }
-
-  /**
-   * Type guard for array Zod types
-   */
-  isArr(v: ZodAny | ZodArray<any>): v is ZodArray<any> {
-    return v instanceof ZodArray;
-  }
-
-  /**
-   * Type guard for union Zod types
-   */
-  isUnion(v: ZodAny | ZodUnion<[ZodAny, ...ZodAny[]]>): v is ZodUnion<[ZodAny, ...ZodAny[]]> {
-    return v instanceof ZodUnion;
-  }
-
-  /**
-   * Type guard for string Zod types
-   */
-  isString(v: ZodAny | ZodString): v is ZodString {
-    return v instanceof ZodString;
-  }
-
-  /**
-   * Type guard for number Zod types
-   */
-  isNumber(v: ZodAny | ZodNumber): v is ZodNumber {
-    return v instanceof ZodNumber;
-  }
-
-  /**
-   * Type guard for date Zod types
-   */
-  isDate(v: ZodAny | ZodDate): v is ZodDate {
-    return v instanceof ZodDate;
-  }
-
-  /**
-   * Type guard for default Zod types
-   */
-  isDefault(v: ZodAny | ZodDefault<any>): v is ZodDefault<any> {
-    return v instanceof ZodDefault;
-  }
-
-  /**
-   * Determines whether this compatibility layer should be applied for the current model.
-   *
-   * @returns True if this compatibility layer should be used, false otherwise
-   * @abstract
-   */
-  shouldApply(): boolean {
-    return this.parent.shouldApply();
-  }
-
-  /**
-   * Returns the JSON Schema target format for this provider.
-   *
-   * @returns The schema target format, or undefined to use the default 'jsonSchema7'
-   * @abstract
-   */
-  getSchemaTarget(): Targets | undefined {
-    return this.parent.getSchemaTarget();
-  }
-
-  /**
-   * Processes a specific Zod type according to the provider's requirements.
-   *
-   * @param value - The Zod type to process
-   * @returns The processed Zod type
-   * @abstract
-   */
-  processZodType(value: ZodType): ZodType {
-    return this.parent.processZodType(value);
-  }
-
-  /**
-   * Default handler for Zod object types. Recursively processes all properties in the object.
-   *
-   * @param value - The Zod object to process
-   * @returns The processed Zod object
-   */
-  public defaultZodObjectHandler(
-    value: ZodObject<any, any>,
-    options: { passthrough?: boolean } = { passthrough: true },
-  ): ZodObject<any, any> {
-    const processedShape = Object.entries(value.shape).reduce<Record<string, ZodType>>((acc, [key, propValue]) => {
-      acc[key] = this.processZodType(propValue as ZodAny);
-      return acc;
-    }, {});
-
-    let result: ZodObject<any, any> = z.object(processedShape);
-
-    if (value._zod.def.catchall instanceof z.ZodNever) {
-      result = z.strictObject(processedShape);
-    }
-    if (value._zod.def.catchall && !(value._zod.def.catchall instanceof z.ZodNever)) {
-      result = result.catchall(value._zod.def.catchall);
-    }
-
-    if (value.description) {
-      result = result.describe(value.description);
-    }
-
-    if (options.passthrough && value._zod.def.catchall instanceof z.ZodUnknown) {
+  const catchallType = (value._zod.def.catchall as any)?._zod?.def?.type;
+  if (catchallType === 'never') {
+    result = z.strictObject(processedShape);
+  } else if (catchallType === 'unknown') {
+    // ZodUnknown catchall means passthrough - only keep if passthrough option is true
+    if (options.passthrough) {
       result = z.looseObject(processedShape);
     }
-
-    return result;
+    // When passthrough: false, we use the default z.object (strips unknown keys)
+  } else if (value._zod.def.catchall) {
+    // Explicit catchall (not never/unknown) - always copy
+    result = result.catchall(value._zod.def.catchall);
   }
 
-  /**
-   * Merges validation constraints into a parameter description.
-   *
-   * This helper method converts validation constraints that may not be supported
-   * by a provider into human-readable descriptions.
-   *
-   * @param description - The existing parameter description
-   * @param constraints - The validation constraints to merge
-   * @returns The updated description with constraints, or undefined if no constraints
-   */
-  public mergeParameterDescription(
-    description: string | undefined,
-    constraints: ConstraintHelperText,
-  ): string | undefined {
-    if (constraints.length > 0) {
-      return (description ? description + '\n' : '') + `constraints: ${constraints.join(`, `)}`;
-    } else {
-      return description;
+  if (value.description) {
+    result = result.describe(value.description);
+  }
+
+  return result;
+}
+
+/**
+ * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
+ */
+export function defaultUnsupportedZodTypeHandler<T extends z.ZodObject<any, any>>(
+  ctx: HandlerContext,
+  value: z.ZodType,
+  throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES,
+): ShapeValue<T> {
+  if (throwOnTypes.includes(value.constructor.name as UnsupportedZodType)) {
+    throw new Error(`${ctx.model.modelId} does not support zod type: ${value.constructor.name}`);
+  }
+  return value as ShapeValue<T>;
+}
+
+/**
+ * Default handler for Zod array types. Processes array constraints according to provider support.
+ */
+export function defaultZodArrayHandler(
+  ctx: HandlerContext,
+  value: ZodArray<any>,
+  handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
+): ZodArray<any> {
+  const zodArrayDef = value._zod.def;
+  const processedType = ctx.processZodType(zodArrayDef.element);
+
+  let result = z.array(processedType);
+
+  const constraints: ConstraintHelperText = [];
+  if (zodArrayDef.checks) {
+    for (const check of zodArrayDef.checks) {
+      if (check._zod.def.check === 'min_length') {
+        if (handleChecks.includes('min')) {
+          // @ts-expect-error - fix later
+          constraints.push(`minimum length ${check._zod.def.minimum}`);
+        } else {
+          // @ts-expect-error - fix later
+          result = result.min(check._zod.def.minimum);
+        }
+      }
+      if (check._zod.def.check === 'max_length') {
+        if (handleChecks.includes('max')) {
+          // @ts-expect-error - fix later
+          constraints.push(`maximum length ${check._zod.def.maximum}`);
+        } else {
+          // @ts-expect-error - fix later
+          result = result.max(check._zod.def.maximum);
+        }
+      }
+      if (check._zod.def.check === 'length_equals') {
+        if (handleChecks.includes('length')) {
+          // @ts-expect-error - fix later
+          constraints.push(`exact length ${check._zod.def.length}`);
+        } else {
+          // @ts-expect-error - fix later
+          result = result.length(check._zod.def.length);
+        }
+      }
     }
   }
 
-  /**
-   * Default handler for unsupported Zod types. Throws an error for specified unsupported types.
-   *
-   * @param value - The Zod type to check
-   * @param throwOnTypes - Array of type names to throw errors for
-   * @returns The original value if not in the throw list
-   * @throws Error if the type is in the unsupported list
-   */
-  public defaultUnsupportedZodTypeHandler<T extends z.ZodObject<any, any>>(
-    value: z.ZodAny,
-    throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES,
-  ): ShapeValue<T> {
-    if (throwOnTypes.includes(value.constructor.name as UnsupportedZodType)) {
-      throw new Error(`${this.model.modelId} does not support zod type: ${value.constructor.name}`);
-    }
-    return value as ShapeValue<T>;
+  const metaDescription = value.meta()?.description;
+  const legacyDescription = value.description;
+
+  const description = mergeParameterDescription(metaDescription || legacyDescription, constraints);
+  if (description) {
+    result = result.describe(description);
   }
+  return result;
+}
 
-  /**
-   * Default handler for Zod array types. Processes array constraints according to provider support.
-   *
-   * @param value - The Zod array to process
-   * @param handleChecks - Array constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod array
-   */
-  public defaultZodArrayHandler(
-    value: ZodArray<any>,
-    handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
-  ): ZodArray<any> {
-    const zodArrayDef = value._zod.def;
-    const processedType = this.processZodType(zodArrayDef.element);
+/**
+ * Default handler for Zod union types. Processes all union options.
+ */
+export function defaultZodUnionHandler(ctx: HandlerContext, value: ZodUnion<[ZodAny, ...ZodAny[]]>): ZodAny {
+  const processedOptions = value._zod.def.options.map((option: ZodAny) => ctx.processZodType(option));
+  if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
+  let result = z.union(processedOptions as [ZodAny, ZodAny, ...ZodAny[]]);
+  if (value.description) {
+    result = result.describe(value.description);
+  }
+  // @ts-expect-error - fix later
+  return result;
+}
 
-    let result = z.array(processedType);
+/**
+ * Default handler for Zod string types. Processes string validation constraints.
+ */
+export function defaultZodStringHandler(
+  value: ZodString,
+  handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
+): ZodString {
+  const constraints: ConstraintHelperText = [];
+  const checks = value._zod.def.checks || [];
+  type ZodStringCheck = (typeof checks)[number];
+  const newChecks: ZodStringCheck[] = [];
 
-    const constraints: ConstraintHelperText = [];
-    if (zodArrayDef.checks) {
-      for (const check of zodArrayDef.checks) {
-        if (check._zod.def.check === 'min_length') {
-          if (handleChecks.includes('min')) {
+  if (checks) {
+    for (const check of checks) {
+      if (handleChecks.includes(check._zod.def.check as StringCheckType)) {
+        switch (check._zod.def.check) {
+          case 'min_length':
             // @ts-expect-error - fix later
             constraints.push(`minimum length ${check._zod.def.minimum}`);
-          } else {
-            // @ts-expect-error - fix later
-            result = result.min(check._zod.def.minimum);
-          }
-        }
-        if (check._zod.def.check === 'max_length') {
-          if (handleChecks.includes('max')) {
+            break;
+          case 'max_length':
             // @ts-expect-error - fix later
             constraints.push(`maximum length ${check._zod.def.maximum}`);
-          } else {
-            // @ts-expect-error - fix later
-            result = result.max(check._zod.def.maximum);
-          }
-        }
-        if (check._zod.def.check === 'length_equals') {
-          if (handleChecks.includes('length')) {
-            // @ts-expect-error - fix later
-            constraints.push(`exact length ${check._zod.def.length}`);
-          } else {
-            // @ts-expect-error - fix later
-            result = result.length(check._zod.def.length);
-          }
-        }
-      }
-    }
-
-    const metaDescription = value.meta()?.description;
-    const legacyDescription = value.description;
-
-    const description = this.mergeParameterDescription(metaDescription || legacyDescription, constraints);
-    if (description) {
-      result = result.describe(description);
-    }
-    return result;
-  }
-
-  /**
-   * Default handler for Zod union types. Processes all union options.
-   *
-   * @param value - The Zod union to process
-   * @returns The processed Zod union
-   * @throws Error if union has fewer than 2 options
-   */
-  public defaultZodUnionHandler(value: ZodUnion<[ZodAny, ...ZodAny[]]>): ZodAny {
-    const processedOptions = value._zod.def.options.map((option: ZodAny) => this.processZodType(option));
-    if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
-    let result = z.union(processedOptions as [ZodAny, ZodAny, ...ZodAny[]]);
-    if (value.description) {
-      result = result.describe(value.description);
-    }
-    // @ts-expect-error - fix later
-    return result;
-  }
-
-  /**
-   * Default handler for Zod string types. Processes string validation constraints.
-   *
-   * @param value - The Zod string to process
-   * @param handleChecks - String constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod string
-   */
-  public defaultZodStringHandler(
-    value: ZodString,
-    handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
-  ): ZodString {
-    const constraints: ConstraintHelperText = [];
-    const checks = value._zod.def.checks || [];
-    type ZodStringCheck = (typeof checks)[number];
-    const newChecks: ZodStringCheck[] = [];
-
-    if (checks) {
-      for (const check of checks) {
-        if (handleChecks.includes(check._zod.def.check as StringCheckType)) {
-          switch (check._zod.def.check) {
-            case 'min_length':
+            break;
+          case 'string_format':
+            {
               // @ts-expect-error - fix later
-              constraints.push(`minimum length ${check._zod.def.minimum}`);
-              break;
-            case 'max_length':
-              // @ts-expect-error - fix later
-              constraints.push(`maximum length ${check._zod.def.maximum}`);
-              break;
-            case 'string_format':
-              {
-                // @ts-expect-error - fix later
-                switch (check._zod.def.format) {
-                  case 'email':
-                  case 'url':
-                  case 'emoji':
-                  case 'uuid':
-                  case 'cuid':
-                    // @ts-expect-error - fix later
-                    constraints.push(`a valid ${check._zod.def.format}`);
-                    break;
-                  case 'regex':
-                    // @ts-expect-error - fix later
-                    constraints.push(`input must match this regex ${check._zod.def.pattern}`);
-                    break;
-                }
+              switch (check._zod.def.format) {
+                case 'email':
+                case 'url':
+                case 'emoji':
+                case 'uuid':
+                case 'cuid':
+                  // @ts-expect-error - fix later
+                  constraints.push(`a valid ${check._zod.def.format}`);
+                  break;
+                case 'regex':
+                  // @ts-expect-error - fix later
+                  constraints.push(`input must match this regex ${check._zod.def.pattern}`);
+                  break;
               }
-              break;
-          }
-        } else {
-          newChecks.push(check);
-        }
-      }
-    }
-
-    let result = z.string();
-    for (const check of newChecks) {
-      result = result.check(check);
-    }
-
-    const metaDescription = value.meta()?.description;
-    const legacyDescription = value.description;
-
-    const description = this.mergeParameterDescription(metaDescription || legacyDescription, constraints);
-    if (description) {
-      result = result.describe(description);
-    }
-    return result;
-  }
-
-  /**
-   * Default handler for Zod number types. Processes number validation constraints.
-   *
-   * @param value - The Zod number to process
-   * @param handleChecks - Number constraints to convert to descriptions vs keep as validation
-   * @returns The processed Zod number
-   */
-  public defaultZodNumberHandler(
-    value: ZodNumber,
-    handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
-  ): ZodNumber {
-    const constraints: ConstraintHelperText = [];
-    const checks = value._zod.def.checks || [];
-    type ZodNumberCheck = (typeof checks)[number];
-    const newChecks: ZodNumberCheck[] = [];
-
-    if (checks) {
-      for (const check of checks) {
-        if (handleChecks.includes(check._zod.def.check as NumberCheckType)) {
-          switch (check._zod.def.check) {
-            case 'greater_than':
-              // @ts-expect-error - fix later
-              if (check._zod.def.inclusive) {
-                // @ts-expect-error - fix later
-                constraints.push(`greater than or equal to ${check._zod.def.value}`);
-              } else {
-                // @ts-expect-error - fix later
-                constraints.push(`greater than ${check._zod.def.value}`);
-              }
-              break;
-            case 'less_than':
-              // @ts-expect-error - fix later
-              if (check._zod.def.inclusive) {
-                // @ts-expect-error - fix later
-                constraints.push(`lower than or equal to ${check._zod.def.value}`);
-              } else {
-                // @ts-expect-error - fix later
-                constraints.push(`lower than ${check._zod.def.value}`);
-              }
-              break;
-            case 'multiple_of': {
-              // @ts-expect-error - fix later
-              constraints.push(`multiple of ${check._zod.def.value}`);
-              break;
-            }
-          }
-        } else {
-          newChecks.push(check);
-        }
-      }
-    }
-    let result = z.number();
-
-    for (const check of newChecks) {
-      switch (check._zod.def.check) {
-        case 'number_format': {
-          // @ts-expect-error - fix later
-          switch (check._zod.def.format) {
-            case 'safeint':
-              result = result.int();
-              break;
-          }
-          break;
-        }
-        default:
-          // @ts-expect-error - fix later
-          result = result.check(check);
-      }
-    }
-    const description = this.mergeParameterDescription(value.description, constraints);
-    if (description) {
-      result = result.describe(description);
-    }
-    return result;
-  }
-
-  /**
-   * Default handler for Zod date types. Converts dates to ISO strings with constraint descriptions.
-   *
-   * @param value - The Zod date to process
-   * @returns A Zod string schema representing the date in ISO format
-   */
-  public defaultZodDateHandler(value: ZodDate): ZodString {
-    const constraints: ConstraintHelperText = [];
-    const checks = value._zod.def.checks || [];
-    type ZodDateCheck = (typeof checks)[number];
-    const newChecks: ZodDateCheck[] = [];
-    if (checks) {
-      for (const check of checks) {
-        switch (check._zod.def.check) {
-          case 'less_than':
-            // @ts-expect-error - fix later
-            const minDate = new Date(check._zod.def.value);
-            if (!isNaN(minDate.getTime())) {
-              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
             }
             break;
+        }
+      } else {
+        newChecks.push(check);
+      }
+    }
+  }
+
+  let result = z.string();
+  for (const check of newChecks) {
+    result = result.check(check);
+  }
+
+  const metaDescription = value.meta()?.description;
+  const legacyDescription = value.description;
+
+  const description = mergeParameterDescription(metaDescription || legacyDescription, constraints);
+  if (description) {
+    result = result.describe(description);
+  }
+  return result;
+}
+
+/**
+ * Default handler for Zod number types. Processes number validation constraints.
+ */
+export function defaultZodNumberHandler(
+  value: ZodNumber,
+  handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
+): ZodNumber {
+  const constraints: ConstraintHelperText = [];
+  const checks = value._zod.def.checks || [];
+  type ZodNumberCheck = (typeof checks)[number];
+  const newChecks: ZodNumberCheck[] = [];
+
+  if (checks) {
+    for (const check of checks) {
+      if (handleChecks.includes(check._zod.def.check as NumberCheckType)) {
+        switch (check._zod.def.check) {
           case 'greater_than':
             // @ts-expect-error - fix later
-            const maxDate = new Date(check._zod.def.value);
-            if (!isNaN(maxDate.getTime())) {
-              constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
+            if (check._zod.def.inclusive) {
+              // @ts-expect-error - fix later
+              constraints.push(`greater than or equal to ${check._zod.def.value}`);
+            } else {
+              // @ts-expect-error - fix later
+              constraints.push(`greater than ${check._zod.def.value}`);
             }
             break;
-          default:
-            newChecks.push(check);
+          case 'less_than':
+            // @ts-expect-error - fix later
+            if (check._zod.def.inclusive) {
+              // @ts-expect-error - fix later
+              constraints.push(`lower than or equal to ${check._zod.def.value}`);
+            } else {
+              // @ts-expect-error - fix later
+              constraints.push(`lower than ${check._zod.def.value}`);
+            }
+            break;
+          case 'multiple_of': {
+            // @ts-expect-error - fix later
+            constraints.push(`multiple of ${check._zod.def.value}`);
+            break;
+          }
         }
+      } else {
+        newChecks.push(check);
       }
     }
-    constraints.push(`Date format is date-time`);
-    let result = z.string().describe('date-time');
-    const description = this.mergeParameterDescription(value.description, constraints);
-    if (description) {
-      result = result.describe(description);
-    }
-    return result;
   }
+  let result = z.number();
 
-  /**
-   * Default handler for Zod optional types. Processes the inner type and maintains optionality.
-   *
-   * @param value - The Zod optional to process
-   * @param handleTypes - Types that should be processed vs passed through
-   * @returns The processed Zod optional
-   */
-  public defaultZodOptionalHandler(
-    value: ZodOptional<any>,
-    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
-  ): ZodType {
-    if (handleTypes.includes(value.constructor.name as AllZodType)) {
-      return this.processZodType(value._zod.def.innerType).optional();
-    } else {
-      return value;
+  for (const check of newChecks) {
+    switch (check._zod.def.check) {
+      case 'number_format': {
+        // @ts-expect-error - fix later
+        switch (check._zod.def.format) {
+          case 'safeint':
+            result = result.int();
+            break;
+        }
+        break;
+      }
+      default:
+        // @ts-expect-error - fix later
+        result = result.check(check);
     }
   }
-
-  /**
-   * Processes a Zod object schema and converts it to an AI SDK Schema.
-   *
-   * @param zodSchema - The Zod object schema to process
-   * @returns An AI SDK Schema with provider-specific compatibility applied
-   */
-  public processToAISDKSchema(zodSchema: ZodType): Schema {
-    const processedSchema = this.processZodType(zodSchema);
-
-    return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
+  const description = mergeParameterDescription(value.description, constraints);
+  if (description) {
+    result = result.describe(description);
   }
+  return result;
+}
 
-  /**
-   * Processes a Zod object schema and converts it to a JSON Schema.
-   *
-   * @param zodSchema - The Zod object schema to process
-   * @returns A JSONSchema7 object with provider-specific compatibility applied
-   */
-  public processToJSONSchema(zodSchema: ZodType): JSONSchema7 {
-    return this.processToAISDKSchema(zodSchema).jsonSchema;
+/**
+ * Default handler for Zod date types. Converts dates to ISO strings with constraint descriptions.
+ */
+export function defaultZodDateHandler(value: ZodDate): ZodString {
+  const constraints: ConstraintHelperText = [];
+  const checks = value._zod.def.checks || [];
+  type ZodDateCheck = (typeof checks)[number];
+  const newChecks: ZodDateCheck[] = [];
+  if (checks) {
+    for (const check of checks) {
+      switch (check._zod.def.check) {
+        case 'less_than':
+          // @ts-expect-error - fix later
+          const minDate = new Date(check._zod.def.value);
+          if (!isNaN(minDate.getTime())) {
+            constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
+          }
+          break;
+        case 'greater_than':
+          // @ts-expect-error - fix later
+          const maxDate = new Date(check._zod.def.value);
+          if (!isNaN(maxDate.getTime())) {
+            constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
+          }
+          break;
+        default:
+          newChecks.push(check);
+      }
+    }
+  }
+  constraints.push(`Date format is date-time`);
+  let result = z.string().describe('date-time');
+  const description = mergeParameterDescription(value.description, constraints);
+  if (description) {
+    result = result.describe(description);
+  }
+  return result;
+}
+
+/**
+ * Default handler for Zod optional types. Processes the inner type and maintains optionality.
+ */
+export function defaultZodOptionalHandler(
+  ctx: HandlerContext,
+  value: ZodOptional<any>,
+  handleTypes: readonly string[] = SUPPORTED_ZOD_TYPES,
+): ZodType {
+  if (handleTypes.includes(value.constructor.name as AllZodType)) {
+    return ctx.processZodType(value._zod.def.innerType).optional();
+  } else {
+    return value;
   }
 }

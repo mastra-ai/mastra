@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
 import { zodToJsonSchema } from './zod-to-json';
 
 /**
  * Shared test suite for zodToJsonSchema that runs with both Zod v3 and v4.
- * The importing test file should mock 'zod' to either v3 or v4 before calling this.
+ * The caller passes the zod instance to use for the tests.
+ *
+ * @param z - The zod instance (either v3 or v4)
  */
-export function runZodToJsonTestSuite() {
+export function runZodToJsonTestSuite(z: any) {
   describe('zodToJsonSchema', () => {
     describe('z.record() compatibility', () => {
       it('should convert schema with z.record() fields', () => {
@@ -418,7 +419,7 @@ export function runZodToJsonTestSuite() {
           children: Record<string, Node>;
         };
 
-        const nodeSchema: z.ZodType<Node> = z.lazy(() =>
+        const nodeSchema: any = z.lazy(() =>
           z.object({
             value: z.string(),
             children: z.record(nodeSchema),

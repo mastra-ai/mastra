@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
@@ -11,7 +11,7 @@ import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer, is
 
 type ZodType = ZodTypeV3 | ZodTypeV4;
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV3({
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
 });
@@ -33,20 +33,23 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 
   processZodType(value: ZodType): any {
-    if (value.constructor.name === 'ZodString') {
+    // Use _def.typeName checks to work across package boundaries
+    // (zod-from-json-schema creates schemas with its own Zod instance)
+    const typeName = (value as any)._def?.typeName ?? (value as any)._zod?.def?.type;
+    if (typeName === 'ZodString' || typeName === 'string') {
       return z.string().describe('processed string');
     }
-    if (value instanceof z.ZodObject) {
-      return this.defaultZodObjectHandler(value);
+    if (typeName === 'ZodObject' || typeName === 'object') {
+      return this.defaultZodObjectHandler(value as any);
     }
-    if (value instanceof z.ZodArray) {
-      return this.defaultZodArrayHandler(value);
+    if (typeName === 'ZodArray' || typeName === 'array') {
+      return this.defaultZodArrayHandler(value as any);
     }
     return value;
   }
 }
 
-export function runTestSuite() {
+export function runTestSuite(z: any) {
   describe('Builder Functions', () => {
     describe('convertZodSchemaToAISDKSchema', () => {
       it('should convert simple Zod schema to AI SDK schema', () => {

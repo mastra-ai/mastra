@@ -1,170 +1,10 @@
 import { describe, test, expect } from 'vitest';
-import { z } from 'zod';
+import type { ZodType } from './schema.types';
 import { zodToJsonSchema } from './zod-to-json';
 
-type Extension = {
-  url: string;
-  valueString?: string;
-  valueBoolean?: boolean;
-  valueInteger?: number;
-  valueDecimal?: number;
-  valueDateTime?: string;
-  valueCode?: string;
-  valueCoding?: Coding;
-  valueQuantity?: Quantity;
-  valueReference?: Reference;
-  extension?: Extension[]; // Deep recursion like FHIR
-};
-
-type Coding = {
-  system?: string;
-  version?: string;
-  code?: string;
-  display?: string;
-  userSelected?: boolean;
-  extension?: Extension[];
-};
-
-type Quantity = {
-  value?: number;
-  comparator?: string;
-  unit?: string;
-  system?: string;
-  code?: string;
-  extension?: Extension[];
-};
-
-type Reference = {
-  reference?: string;
-  type?: string;
-  identifier?: Identifier;
-  display?: string;
-  extension?: Extension[];
-};
-
-type Identifier = {
-  use?: string;
-  type?: CodeableConcept;
-  system?: string;
-  value?: string;
-  period?: Period;
-  assigner?: Reference; // Circular reference!
-  extension?: Extension[];
-};
-
-type CodeableConcept = {
-  coding?: Coding[];
-  text?: string;
-  extension?: Extension[];
-};
-
-type Period = {
-  start?: string;
-  end?: string;
-  extension?: Extension[];
-};
-
-type Meta = {
-  versionId?: string;
-  lastUpdated?: string;
-  source?: string;
-  profile?: string[];
-  security?: Coding[];
-  tag?: Coding[];
-  extension?: Extension[];
-};
-
-type Resource = {
-  resourceType: string;
-  id?: string;
-  meta?: Meta;
-  implicitRules?: string;
-  language?: string;
-  text?: Narrative;
-  contained?: Resource[]; // Self-reference!
-  extension?: Extension[];
-  modifierExtension?: Extension[];
-};
-
-type Narrative = {
-  status: string;
-  div: string;
-  extension?: Extension[];
-};
-
-type BundleLink = {
-  relation: string;
-  url: string;
-  extension?: Extension[];
-};
-
-type BundleEntry = {
-  id?: string;
-  extension?: Extension[];
-  modifierExtension?: Extension[];
-  link?: BundleLink[];
-  fullUrl?: string;
-  resource?: Resource;
-  search?: BundleEntrySearch;
-  request?: BundleEntryRequest;
-  response?: BundleEntryResponse;
-};
-
-type BundleEntrySearch = {
-  mode?: string;
-  score?: number;
-  extension?: Extension[];
-};
-
-type BundleEntryRequest = {
-  method: string;
-  url: string;
-  ifNoneMatch?: string;
-  ifModifiedSince?: string;
-  ifMatch?: string;
-  ifNoneExist?: string;
-  extension?: Extension[];
-};
-
-type BundleEntryResponse = {
-  status: string;
-  location?: string;
-  etag?: string;
-  lastModified?: string;
-  outcome?: Resource;
-  extension?: Extension[];
-};
-
-type Bundle = {
-  resourceType: 'Bundle';
-  id?: string;
-  meta?: Meta;
-  implicitRules?: string;
-  language?: string;
-  identifier?: Identifier;
-  type: string;
-  timestamp?: string;
-  total?: number;
-  link?: BundleLink[];
-  entry?: BundleEntry[];
-  signature?: Signature;
-  extension?: Extension[];
-  modifierExtension?: Extension[];
-};
-
-type Signature = {
-  type: Coding[];
-  when: string;
-  who: Reference;
-  onBehalfOf?: Reference;
-  targetFormat?: string;
-  sigFormat?: string;
-  data?: string;
-  extension?: Extension[];
-};
-
+export function runTestSuite(z: any) {
 // Create the interconnected Zod schemas (like the user's 676 files)
-const ExtensionSchema: z.ZodType<Extension> = z.lazy(() =>
+const ExtensionSchema = z.lazy(() =>
   z.object({
     url: z.string(),
     valueString: z.string().optional(),
@@ -180,7 +20,7 @@ const ExtensionSchema: z.ZodType<Extension> = z.lazy(() =>
   }),
 );
 
-const CodingSchema: z.ZodType<Coding> = z.lazy(() =>
+const CodingSchema = z.lazy(() =>
   z.object({
     system: z.string().optional(),
     version: z.string().optional(),
@@ -191,7 +31,7 @@ const CodingSchema: z.ZodType<Coding> = z.lazy(() =>
   }),
 );
 
-const QuantitySchema: z.ZodType<Quantity> = z.lazy(() =>
+const QuantitySchema = z.lazy(() =>
   z.object({
     value: z.number().optional(),
     comparator: z.string().optional(),
@@ -202,7 +42,7 @@ const QuantitySchema: z.ZodType<Quantity> = z.lazy(() =>
   }),
 );
 
-const ReferenceSchema: z.ZodType<Reference> = z.lazy(() =>
+const ReferenceSchema = z.lazy(() =>
   z.object({
     reference: z.string().optional(),
     type: z.string().optional(),
@@ -212,7 +52,7 @@ const ReferenceSchema: z.ZodType<Reference> = z.lazy(() =>
   }),
 );
 
-const CodeableConceptSchema: z.ZodType<CodeableConcept> = z.lazy(() =>
+const CodeableConceptSchema = z.lazy(() =>
   z.object({
     coding: z.array(CodingSchema).optional(),
     text: z.string().optional(),
@@ -220,7 +60,7 @@ const CodeableConceptSchema: z.ZodType<CodeableConcept> = z.lazy(() =>
   }),
 );
 
-const PeriodSchema: z.ZodType<Period> = z.lazy(() =>
+const PeriodSchema = z.lazy(() =>
   z.object({
     start: z.string().optional(),
     end: z.string().optional(),
@@ -228,7 +68,7 @@ const PeriodSchema: z.ZodType<Period> = z.lazy(() =>
   }),
 );
 
-const IdentifierSchema: z.ZodType<Identifier> = z.lazy(() =>
+const IdentifierSchema = z.lazy(() =>
   z.object({
     use: z.string().optional(),
     type: CodeableConceptSchema.optional(),
@@ -240,7 +80,7 @@ const IdentifierSchema: z.ZodType<Identifier> = z.lazy(() =>
   }),
 );
 
-const MetaSchema: z.ZodType<Meta> = z.lazy(() =>
+const MetaSchema = z.lazy(() =>
   z.object({
     versionId: z.string().optional(),
     lastUpdated: z.string().optional(),
@@ -252,7 +92,7 @@ const MetaSchema: z.ZodType<Meta> = z.lazy(() =>
   }),
 );
 
-const NarrativeSchema: z.ZodType<Narrative> = z.lazy(() =>
+const NarrativeSchema = z.lazy(() =>
   z.object({
     status: z.string(),
     div: z.string(),
@@ -260,7 +100,7 @@ const NarrativeSchema: z.ZodType<Narrative> = z.lazy(() =>
   }),
 );
 
-const ResourceSchema: z.ZodType<Resource> = z.lazy(() =>
+const ResourceSchema = z.lazy(() =>
   z.object({
     resourceType: z.string(),
     id: z.string().optional(),
@@ -274,7 +114,7 @@ const ResourceSchema: z.ZodType<Resource> = z.lazy(() =>
   }),
 );
 
-const BundleLinkSchema: z.ZodType<BundleLink> = z.lazy(() =>
+const BundleLinkSchema = z.lazy(() =>
   z.object({
     relation: z.string(),
     url: z.string(),
@@ -282,7 +122,7 @@ const BundleLinkSchema: z.ZodType<BundleLink> = z.lazy(() =>
   }),
 );
 
-const BundleEntrySearchSchema: z.ZodType<BundleEntrySearch> = z.lazy(() =>
+const BundleEntrySearchSchema = z.lazy(() =>
   z.object({
     mode: z.string().optional(),
     score: z.number().optional(),
@@ -290,7 +130,7 @@ const BundleEntrySearchSchema: z.ZodType<BundleEntrySearch> = z.lazy(() =>
   }),
 );
 
-const BundleEntryRequestSchema: z.ZodType<BundleEntryRequest> = z.lazy(() =>
+const BundleEntryRequestSchema = z.lazy(() =>
   z.object({
     method: z.string(),
     url: z.string(),
@@ -302,7 +142,7 @@ const BundleEntryRequestSchema: z.ZodType<BundleEntryRequest> = z.lazy(() =>
   }),
 );
 
-const BundleEntryResponseSchema: z.ZodType<BundleEntryResponse> = z.lazy(() =>
+const BundleEntryResponseSchema = z.lazy(() =>
   z.object({
     status: z.string(),
     location: z.string().optional(),
@@ -313,7 +153,7 @@ const BundleEntryResponseSchema: z.ZodType<BundleEntryResponse> = z.lazy(() =>
   }),
 );
 
-const SignatureSchema: z.ZodType<Signature> = z.lazy(() =>
+const SignatureSchema = z.lazy(() =>
   z.object({
     type: z.array(CodingSchema),
     when: z.string(),
@@ -326,7 +166,7 @@ const SignatureSchema: z.ZodType<Signature> = z.lazy(() =>
   }),
 );
 
-const BundleEntrySchema: z.ZodType<BundleEntry> = z.lazy(() =>
+const BundleEntrySchema = z.lazy(() =>
   z.object({
     id: z.string().optional(),
     extension: z.array(ExtensionSchema).optional(),
@@ -341,7 +181,7 @@ const BundleEntrySchema: z.ZodType<BundleEntry> = z.lazy(() =>
 );
 
 // This is the main schema that should reproduce the user's issue
-const RealisticBundleSchema: z.ZodType<Bundle> = z.lazy(() =>
+const RealisticBundleSchema = z.lazy(() =>
   z.object({
     resourceType: z.literal('Bundle'),
     id: z.string().optional(),
@@ -375,7 +215,7 @@ function getMemoryUsage() {
 }
 
 function testSchemaConversionWithTimeout(
-  schema: z.ZodSchema,
+  schema: ZodType,
   strategy: 'none' | 'seen' | 'root' | 'relative',
   timeoutMs: number = 30000, // 30 second timeout
 ) {
@@ -387,7 +227,7 @@ function testSchemaConversionWithTimeout(
     const startTime = Date.now();
     const startMemory = getMemoryUsage();
 
-    let warnings: string[] = [];
+    let warnings = [] as string[];
     const originalConsoleWarn = console.warn;
     console.warn = (...args) => {
       const message = args.join(' ');
@@ -456,10 +296,10 @@ function testSchemaConversionWithTimeout(
 // ============================================================================
 
 describe('Recursive Schema Performance Analysis', () => {
-  const TIME_LIMIT_MS = 30000; // 30 seconds
+  const TIME_LIMIT_MS = 30000;
 
   test(
-    'should reproduce user issue with current approach (refStrategy: none)',
+    'should handle recursive schemas without warnings (refStrategy: none)',
     async () => {
       console.log('🧪 Testing current Mastra approach (refStrategy: none)...');
 
@@ -475,8 +315,8 @@ describe('Recursive Schema Performance Analysis', () => {
         console.log(`❌ Error: ${result.error}`);
       }
 
-      // This should reproduce the user's issue
-      expect(result.warnings).toBeGreaterThan(0);
+      // After fix: recursive schemas should be handled without warnings
+      expect(result.warnings).toBe(0);
       expect(result.time).toBeLessThan(TIME_LIMIT_MS);
     },
     TIME_LIMIT_MS + 5000,
@@ -549,15 +389,15 @@ describe('Recursive Schema Performance Analysis', () => {
   test('should compare all strategies', async () => {
     console.log('🏆 FINAL COMPARISON:');
 
-    const strategies: Array<'none' | 'seen' | 'root' | 'relative'> = ['none', 'seen', 'root', 'relative'];
-    const results: Array<{
+    const strategies = ['none', 'seen', 'root', 'relative'] as const;
+    const results = [] as {
       strategy: 'none' | 'seen' | 'root' | 'relative';
       success: boolean;
       time: number;
       warnings: number;
       hasRefs: boolean;
       size: number;
-    }> = [];
+    }[];
 
     for (const strategy of strategies) {
       const result = (await testSchemaConversionWithTimeout(
@@ -607,9 +447,9 @@ describe('Recursive Schema Performance Analysis', () => {
       extension: z.array(ExtensionSchema).optional(),
     });
 
-    const strategies: Array<{ name: string; strategy: 'root' | 'relative' }> = [
-      { name: 'root', strategy: 'root' },
-      { name: 'relative', strategy: 'relative' },
+    const strategies = [
+      { name: 'root', strategy: 'root' as const },
+      { name: 'relative', strategy: 'relative' as const },
     ];
 
     for (const { name, strategy } of strategies) {
@@ -628,7 +468,7 @@ describe('Recursive Schema Performance Analysis', () => {
       console.log(`   📝 Structure preview:\n${snippet}${resultStr.length > 300 ? '...' : ''}`);
 
       // Check for potential issues
-      const issues: string[] = [];
+      const issues = [] as string[];
 
       // Check for relative path complexity
       if (strategy === 'relative' && resultStr.includes('../')) {
@@ -657,7 +497,7 @@ describe('Recursive Schema Performance Analysis', () => {
   test('should use default strategy and have no warnings', async () => {
     console.log('🔒 REGRESSION TEST: Default strategy should eliminate warnings');
 
-    const warnings: string[] = [];
+    const warnings = [] as string[];
     const originalConsoleWarn = console.warn;
     console.warn = (message: string) => {
       warnings.push(message);
@@ -690,3 +530,4 @@ describe('Recursive Schema Performance Analysis', () => {
     }
   });
 });
+}

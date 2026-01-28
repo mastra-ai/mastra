@@ -1,6 +1,6 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import type { ZodType } from './schema.types';
 import {
   AnthropicSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -10,33 +10,34 @@ import {
   MetaSchemaCompatLayer,
 } from './index';
 
+export function runTestSuite(z: ZodType) {
 describe('Provider Compatibility Classes', () => {
   const mockModels = {
-    anthropic: new MockLanguageModelV1({
+    anthropic: new MockLanguageModelV3({
       modelId: 'claude-3-sonnet-20240229',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-    openai: new MockLanguageModelV1({
+    openai: new MockLanguageModelV3({
       modelId: 'openai/gpt-4',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-    openaiReasoning: new MockLanguageModelV1({
+    openaiReasoning: new MockLanguageModelV3({
       modelId: 'openai/o3-mini',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-    google: new MockLanguageModelV1({
+    google: new MockLanguageModelV3({
       modelId: 'gemini-pro',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-    deepseek: new MockLanguageModelV1({
+    deepseek: new MockLanguageModelV3({
       modelId: 'deepseek-chat',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-    meta: new MockLanguageModelV1({
+    meta: new MockLanguageModelV3({
       modelId: 'llama-3.1-405b-instruct',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
-  };
+  } as const;
 
   describe('AnthropicSchemaCompatLayer', () => {
     it('should apply for Anthropic models', () => {
@@ -405,3 +406,4 @@ describe('Provider Compatibility Classes', () => {
     });
   });
 });
+}

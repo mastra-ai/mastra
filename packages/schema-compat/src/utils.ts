@@ -1,3 +1,4 @@
+import type { StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3, ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4, ZodType as ZodTypeV4 } from 'zod/v4';
@@ -7,6 +8,7 @@ import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import { jsonSchema } from './json-schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
+import { toStandardSchema, standardSchemaToJSONSchema } from './standard-schema/standard-schema';
 import { zodToJsonSchema } from './zod-to-json';
 
 type ZodSchema = ZodSchemaV3 | ZodSchemaV4;
@@ -36,9 +38,20 @@ type ZodType = ZodTypeV3 | ZodTypeV4;
  * ```
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7'): Schema<any> {
-  const jsonSchemaToUse = zodToJsonSchema(zodSchema, target) as JSONSchema7;
+export function convertZodSchemaToAISDKSchema<T = any>(zodSchema: ZodSchema, target: Targets = 'jsonSchema7'): Schema<T> {
+  const standardSchema = toStandardSchema(zodSchema);
 
+  let newTarget: StandardJSONSchemaV1.Target = target as StandardJSONSchemaV1.Target;
+  if (target === 'jsonSchema7') {
+    newTarget = 'draft-07';
+  }
+  if (target === 'openApi3') {
+    newTarget = 'openapi-3.0';
+  }
+
+  const jsonSchemaToUse = standardSchemaToJSONSchema(standardSchema, {
+    target: newTarget,
+  })
   return jsonSchema(jsonSchemaToUse, {
     validate: value => {
       const result = zodSchema.safeParse(value);

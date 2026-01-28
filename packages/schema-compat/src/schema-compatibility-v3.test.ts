@@ -1,7 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
+import type { ZodType } from './schema.types';
 import type { ModelInformation } from './types';
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
@@ -17,7 +18,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
     return 'jsonSchema7' as const;
   }
 
-  processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+  processZodType(value: ZodType): ZodType {
     if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (this.isArr(value)) {
@@ -36,7 +37,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 }
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV3({
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
 });
@@ -436,6 +437,7 @@ describe('SchemaCompatLayer', () => {
       expect(result.validate!(undefined).success).toBe(true);
 
       const jsonSchema = result.jsonSchema;
+      console.log(jsonSchema);
       const objectDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'object');
       expect(objectDef.properties.name.description).toBe('string:processed');
     });

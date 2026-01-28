@@ -1,16 +1,9 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
+import type { ZodType } from './schema.types';
 import type { ModelInformation } from './types';
-
-// Mock zod to use zod/v4 - Vitest 4 requires the mock to be at the top level
-vi.mock('zod', async () => {
-  const zodV4 = await import('zod/v4');
-  return {
-    z: zodV4.z,
-  };
-});
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -25,7 +18,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
     return 'jsonSchema7' as const;
   }
 
-  processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+  processZodType(value: ZodType): ZodType {
     if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (this.isArr(value)) {
@@ -44,7 +37,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 }
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV3({
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
 });
@@ -498,7 +491,7 @@ describe('SchemaCompatLayer', () => {
     });
 
     // TODO: figure out how to handle this, with z.toJSONSchema, optional schemas are represented as-is
-    it.skip('should handle optional object schemas', () => {
+    it.only('should handle optional object schemas', () => {
       const optionalSchema = z
         .object({
           name: z.string(),
@@ -511,6 +504,7 @@ describe('SchemaCompatLayer', () => {
 
       const jsonSchema = result.jsonSchema;
       const objectDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'object');
+      console.log(jsonSchema);
       expect(objectDef.properties.name.description).toBe('string:processed');
     });
 

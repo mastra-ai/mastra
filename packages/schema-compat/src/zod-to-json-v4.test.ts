@@ -1,16 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z as zV4 } from 'zod/v4';
 import { zodToJsonSchema } from './zod-to-json';
 import { runZodToJsonTestSuite } from './zod-to-json-test-suite';
 
-// Mock 'zod' to use v4
-vi.mock('zod', async () => {
-  const { z } = await import('zod/v4');
-  return { z };
-});
-
 // Run the shared test suite with Zod v4
-runZodToJsonTestSuite();
+runZodToJsonTestSuite(zV4);
 
 // Zod v4 specific tests for patched record behavior
 describe('zodToJsonSchema - Zod v4 specific', () => {
