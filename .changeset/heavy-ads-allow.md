@@ -1,5 +1,5 @@
 ---
-'@mastra/elasticsearch': major
+'@mastra/elasticsearch': minor
 ---
 
 **Added** API key, basic, and bearer authentication options for Elasticsearch connections.
