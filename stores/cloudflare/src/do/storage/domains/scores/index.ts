@@ -75,17 +75,21 @@ export class ScoresStorageDO extends ScoresStorage {
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
+      // Guard against null/primitives when accessing score properties
+      const safeScore = score && typeof score === 'object' ? (score as Record<string, unknown>) : {};
+      const safeScorer =
+        safeScore.scorer && typeof safeScore.scorer === 'object' ? (safeScore.scorer as Record<string, unknown>) : {};
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
-            entityId: score.entityId ?? 'unknown',
-            entityType: score.entityType ?? 'unknown',
-            traceId: score.traceId ?? '',
-            spanId: score.spanId ?? '',
+            scorer: typeof safeScorer.id === 'string' ? safeScorer.id : String(safeScorer.id ?? 'unknown'),
+            entityId: (safeScore.entityId as string) ?? 'unknown',
+            entityType: (safeScore.entityType as string) ?? 'unknown',
+            traceId: (safeScore.traceId as string) ?? '',
+            spanId: (safeScore.spanId as string) ?? '',
           },
         },
         error,
