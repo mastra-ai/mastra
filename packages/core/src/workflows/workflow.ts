@@ -2697,7 +2697,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async start<TRequestContext extends Record<string, any> | unknown = unknown>(
+  async start(
     args: (TInput extends unknown
       ? {
           inputData?: TInput;
@@ -2712,7 +2712,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext<TRequestContext>;
+        requestContext?: RequestContext<any>;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
         tracingOptions?: TracingOptions;
@@ -2733,7 +2733,7 @@ export class Run<
    * @param args The input data and configuration for the workflow
    * @returns A promise that resolves immediately with the runId
    */
-  async startAsync<TRequestContext extends Record<string, any> | unknown = unknown>(
+  async startAsync(
     args: (TInput extends unknown
       ? {
           inputData?: TInput;
@@ -2748,7 +2748,7 @@ export class Run<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext<TRequestContext>;
+        requestContext?: RequestContext<any>;
         tracingOptions?: TracingOptions;
         outputOptions?: {
           includeState?: boolean;
@@ -2769,7 +2769,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamLegacy<TRequestContext extends Record<string, any> | unknown = unknown>(
+  streamLegacy(
     {
       inputData,
       requestContext,
@@ -2783,7 +2783,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext<TRequestContext>;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2794,7 +2794,7 @@ export class Run<
       : {
           inputData: TInput;
         }) & {
-      requestContext?: RequestContext<TRequestContext>;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -2933,7 +2933,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream<TRequestContext extends Record<string, any> | unknown = unknown>({
+  stream({
     inputData,
     requestContext,
     tracingContext,
@@ -2956,7 +2956,7 @@ export class Run<
       : {
           initialState: TState;
         }) & {
-      requestContext?: RequestContext<TRequestContext>;
+      requestContext?: RequestContext<any>;
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
