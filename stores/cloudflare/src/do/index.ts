@@ -84,8 +84,10 @@ export class CloudflareDOStorage extends MastraCompositeStore {
     try {
       super({ id: 'do-store', name: 'DO', disableInit: config.disableInit });
 
-      if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
-        throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
+      if (config.tablePrefix && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(config.tablePrefix)) {
+        throw new Error(
+          'Invalid tablePrefix: must start with a letter or underscore and contain only letters, numbers, and underscores.',
+        );
       }
 
       const domainConfig = { sql: config.sql, tablePrefix: config.tablePrefix };

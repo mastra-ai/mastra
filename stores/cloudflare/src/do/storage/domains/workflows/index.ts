@@ -113,10 +113,11 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     const values = Object.values(processedRecord);
 
     // Specify which columns to update on conflict (all except PKs)
+    // Use COALESCE for resourceId to preserve existing value when new value is null
     const updateMap: Record<string, string> = {
       snapshot: 'excluded.snapshot',
       updatedAt: 'excluded.updatedAt',
-      resourceId: 'excluded.resourceId',
+      resourceId: `COALESCE(excluded.resourceId, ${fullTableName}.resourceId)`,
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
