@@ -17,7 +17,7 @@ import type {
 } from '@mastra/core/ee';
 import { MastraCloudClient, type CloudUser, type CloudSession } from './client';
 
-export { MastraCloudClient, type CloudUser, type CloudSession } from './client';
+export { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession } from './client';
 
 /**
  * Configuration for MastraCloudAuth.
