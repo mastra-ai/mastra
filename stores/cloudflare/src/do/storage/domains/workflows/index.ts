@@ -212,7 +212,10 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
 
-      if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (workflowName) {
+        builder.whereAnd('workflow_name = ?', workflowName);
+        countBuilder.whereAnd('workflow_name = ?', workflowName);
+      }
       if (status) {
         builder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
         countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
