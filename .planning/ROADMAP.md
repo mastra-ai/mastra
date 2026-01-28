@@ -107,12 +107,11 @@ Plans:
   3. Connection status indicator shows connected/connecting/disconnected states
   4. Empty state displays when no browser is active for the agent
   5. Loading state displays during browser initialization
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD (BrowserViewPanel component)
-- [ ] 09-02: TBD (connection status and states)
-- [ ] 09-03: TBD (agent layout integration)
+- [ ] 09-01-PLAN.md — useBrowserStream hook with BrowserViewFrame and BrowserViewHeader components
+- [ ] 09-02-PLAN.md — BrowserViewPanel assembly and AgentLayout browserSlot integration
 
 ## Progress
 
@@ -128,8 +127,8 @@ Plans:
 | 6. Lifecycle Locking | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 7. Screencast API | v1.1 | 1/1 | Complete | 2026-01-27 |
 | 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
-| 9. Studio UI | v1.1 | 0/TBD | Not started | - |
+| 9. Studio UI | v1.1 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 8 completion*
+*Last updated: 2026-01-27 after Phase 9 planning*
