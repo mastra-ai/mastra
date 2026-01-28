@@ -1,5 +1,5 @@
 import { createNodeWebSocket } from '@hono/node-ws';
-import type { Hono } from 'hono';
+import type { Env, Hono, Schema } from 'hono';
 
 import type { BrowserStreamConfig } from './types.js';
 import { ViewerRegistry } from './viewer-registry.js';
@@ -28,7 +28,11 @@ import { ViewerRegistry } from './viewer-registry.js';
  * injectWebSocket(server);
  * ```
  */
-export function setupBrowserStream(app: Hono, config: BrowserStreamConfig) {
+
+export function setupBrowserStream<E extends Env, S extends Schema, B extends string>(
+  app: Hono<E, S, B>,
+  config: BrowserStreamConfig,
+) {
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
   const registry = new ViewerRegistry();
 
