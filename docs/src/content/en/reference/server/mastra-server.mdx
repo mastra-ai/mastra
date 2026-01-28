@@ -97,6 +97,12 @@ constructor(options: MastraServerOptions<TApp>)
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
+    {
+      name: "mcpOptions",
+      type: "MCPOptions",
+      description: "MCP transport options for serverless environments",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -284,6 +290,20 @@ interface StreamOptions {
   redact?: boolean;
 }
 ```
+
+### MCPOptions
+
+```typescript
+interface MCPOptions {
+  serverless?: boolean;
+  sessionIdGenerator?: () => string;
+}
+```
+
+| Property | Description |
+|----------|-------------|
+| `serverless` | When `true`, runs MCP in stateless mode without session management. Use for serverless environments like Cloudflare Workers or Vercel Edge. |
+| `sessionIdGenerator` | Custom function to generate session IDs. |
 
 ## Example
 

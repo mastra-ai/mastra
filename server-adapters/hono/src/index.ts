@@ -212,7 +212,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return result;
   }
 
-  async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {
+  async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -222,15 +224,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return fetchResponse;
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
       try {
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(response.req.url),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         return await toFetchResponse(res);
       } catch {
@@ -254,8 +260,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           context: response,
         });
       } catch {
@@ -266,7 +272,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     }
   }
 
-  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: HonoApp,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -351,12 +364,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
-          routePrefix: this.prefix,
+          routePrefix: prefix,
         };
 
         try {
           const result = await route.handler(handlerParams);
-          return this.sendResponse(route, c, result);
+          return this.sendResponse(route, c, result, prefix);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code

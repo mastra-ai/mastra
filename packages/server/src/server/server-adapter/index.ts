@@ -2,9 +2,11 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
+
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
+import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
@@ -12,7 +14,7 @@ import type { ServerRoute } from './routes';
 export * from './routes';
 export { redactStreamChunk } from './redact';
 
-export { WorkflowRegistry } from '../utils';
+export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
 export interface OpenAPIConfig {
   title?: string;
@@ -37,6 +39,24 @@ export interface StreamOptions {
    * @default true
    */
   redact?: boolean;
+}
+
+/**
+ * MCP transport options for configuring MCP HTTP and SSE transports.
+ */
+export interface MCPOptions {
+  /**
+   * When true, runs in stateless mode without session management.
+   * Ideal for serverless environments (Cloudflare Workers, Vercel Edge, etc.)
+   * where you can't maintain persistent connections across requests.
+   *
+   * @default false
+   */
+  serverless?: boolean;
+  /**
+   * Custom session ID generator function.
+   */
+  sessionIdGenerator?: () => string;
 }
 
 /**
@@ -100,6 +120,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected taskStore?: InMemoryTaskStore;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
+  protected mcpOptions?: MCPOptions;
 
   constructor({
     app,
@@ -111,6 +132,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     taskStore,
     customRouteAuthConfig,
     streamOptions,
+    mcpOptions,
   }: {
     app: TApp;
     mastra: Mastra;
@@ -121,16 +143,22 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     taskStore?: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
+    /**
+     * MCP transport options applied to all MCP HTTP and SSE routes.
+     * Individual routes can override these via MCPHttpTransportResult.mcpOptions.
+     */
+    mcpOptions?: MCPOptions;
   }) {
     super({ app, name: 'MastraServer' });
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
-    this.prefix = prefix;
+    this.prefix = normalizeRoutePath(prefix);
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
+    this.mcpOptions = mcpOptions;
 
     // Automatically register this adapter with Mastra so getServerApp() works
     mastra.setMastraServer(this);
