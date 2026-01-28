@@ -8,7 +8,7 @@ Understanding your billing cycle:
 - Invoices are sent via email 3 days before billing
 - You can download past invoices from the billing portal
 
-To change your billing date, contact support at billing@example.com.
+To change your billing date, contact support at <billing@example.com>.
 
 ## Plan Upgrade
 
@@ -29,6 +29,6 @@ Refund Policy:
 - Monthly plans: cancel anytime, no refund for current period
 
 To request a refund:
-1. Contact support@example.com
+1. Contact <support@example.com>
 2. Include your account email and reason for refund
 3. Refunds are processed within 5-7 business days
