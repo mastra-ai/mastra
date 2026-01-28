@@ -906,6 +906,7 @@ export interface WorkspaceSearchParams {
   topK?: number;
   mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
+  workspaceId?: string;
 }
 
 /**
@@ -1012,6 +1013,7 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
+  workspaceId?: string;
 }
 
 /**

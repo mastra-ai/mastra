@@ -160,6 +160,12 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
    */
   readonly readOnly?: boolean;
 
+  /**
+   * Base path on disk where files are stored (if applicable).
+   * Not all filesystem implementations have a base path (e.g., in-memory filesystems).
+   */
+  readonly basePath?: string;
+
   // ---------------------------------------------------------------------------
   // File Operations
   // ---------------------------------------------------------------------------

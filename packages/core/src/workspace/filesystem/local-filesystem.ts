@@ -199,6 +199,23 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
+    // When recursive is explicitly false, verify parent directory exists
+    if (options?.recursive === false) {
+      const dir = nodePath.dirname(absolutePath);
+      try {
+        const stat = await fs.stat(dir);
+        if (!stat.isDirectory()) {
+          throw new DirectoryNotFoundError(dir);
+        }
+      } catch (error: unknown) {
+        if (error instanceof DirectoryNotFoundError) throw error;
+        if (isEnoentError(error)) {
+          throw new DirectoryNotFoundError(dir);
+        }
+        throw error;
+      }
+    }
+
     if (options?.overwrite === false) {
       try {
         await fs.access(absolutePath);

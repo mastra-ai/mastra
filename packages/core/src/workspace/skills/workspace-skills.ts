@@ -440,7 +440,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     };
     this.#skills.set(name, updatedSkill);
 
-    // Re-index the skill
+    // Re-index the skill (uses stable document IDs, so this overwrites existing entries)
     await this.#indexSkill(updatedSkill);
 
     // Return without internal indexableContent field
@@ -581,13 +581,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Start initialization and store the promise
     this.#initPromise = (async () => {
-      // Resolve paths on first initialization (uses empty context)
-      if (this.#resolvedPaths.length === 0) {
-        this.#resolvedPaths = await this.#resolvePaths();
+      try {
+        // Resolve paths on first initialization (uses empty context)
+        if (this.#resolvedPaths.length === 0) {
+          this.#resolvedPaths = await this.#resolvePaths();
+        }
+        await this.#discoverSkills();
+        this.#initialized = true;
+      } finally {
+        this.#initPromise = null;
       }
-      await this.#discoverSkills();
-      this.#initialized = true;
-      this.#initPromise = null;
     })();
 
     await this.#initPromise;
@@ -918,10 +921,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Determine the source type based on the path
    */
   #determineSource(skillsPath: string): ContentSource {
-    if (skillsPath.includes('node_modules')) {
+    // Use path segment matching to avoid false positives (e.g., my-node_modules)
+    const segments = skillsPath.split('/');
+    if (segments.includes('node_modules')) {
       return { type: 'external', packagePath: skillsPath };
     }
-    if (skillsPath.includes('.mastra/skills')) {
+    if (skillsPath.includes('/.mastra/skills') || skillsPath.startsWith('.mastra/skills')) {
       return { type: 'managed', mastraPath: skillsPath };
     }
     return { type: 'local', projectPath: skillsPath };

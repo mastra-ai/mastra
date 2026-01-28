@@ -109,6 +109,12 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
   /** Current status */
   readonly status: ProviderStatus;
 
+  /**
+   * Working directory for command execution (if applicable).
+   * Not all sandbox implementations have a fixed working directory.
+   */
+  readonly workingDirectory?: string;
+
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
