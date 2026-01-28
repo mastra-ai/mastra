@@ -158,9 +158,6 @@ export interface WorkspaceConfig {
   // Lifecycle Options
   // ---------------------------------------------------------------------------
 
-  /** Auto-initialize on construction (default: false) */
-  autoInit?: boolean;
-
   /** Auto-sync between fs and sandbox (default: false) */
   autoSync?: boolean;
 
@@ -308,16 +305,6 @@ export class Workspace {
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
     if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
-    }
-
-    // Auto-initialize if requested
-    if (config.autoInit) {
-      // Use void to indicate we intentionally don't await
-      // This allows construction to complete while init runs in background
-      void this.init().catch(error => {
-        this._status = 'error';
-        console.error('[Workspace] autoInit failed:', error);
-      });
     }
   }
 

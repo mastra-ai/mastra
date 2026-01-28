@@ -25,6 +25,9 @@ const workspace = new Workspace({
   bm25: true,
 });
 
+// Initialize the workspace before use
+await workspace.init();
+
 const agent = new Agent({
   workspace,
   // Agent automatically receives workspace tools

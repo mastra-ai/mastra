@@ -79,23 +79,6 @@ describe('Workspace', () => {
     it('should throw when neither filesystem nor sandbox nor skills provided', () => {
       expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem, sandbox, or skills');
     });
-
-    it('should auto-initialize when autoInit is true', async () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        filesystem,
-        autoInit: true,
-      });
-
-      // Wait for auto-init to complete (polling instead of fixed timeout)
-      const maxWait = 5000;
-      const start = Date.now();
-      while (workspace.status !== 'ready' && Date.now() - start < maxWait) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-
-      expect(workspace.status).toBe('ready');
-    });
   });
 
   // ===========================================================================

@@ -79,8 +79,6 @@ export const globalWorkspace = new Workspace({
   autoIndexPaths: ['/content'],
   // Discover skills from these paths (global skills only)
   skills: ['/skills'],
-  // Auto-initialize on construction (needed for mastra dev)
-  autoInit: true,
 });
 
 /**
@@ -113,8 +111,6 @@ export const docsAgentWorkspace = new Workspace({
   bm25: true,
   // Inherit global skills + add agent-specific skills
   skills: ['/skills', '/docs-skills'],
-  // Auto-initialize on construction
-  autoInit: true,
 });
 
 /**
@@ -144,8 +140,6 @@ export const isolatedDocsWorkspace = new Workspace({
   autoIndexPaths: ['/content'],
   // Only agent-specific skills, no global skills
   skills: ['/docs-skills'],
-  // Auto-initialize on construction
-  autoInit: true,
 });
 
 /**
@@ -164,7 +158,6 @@ export const readonlyWorkspace = new Workspace({
   }),
   bm25: true,
   skills: ['/skills'],
-  autoInit: true,
 });
 
 /**
@@ -196,7 +189,6 @@ export const safeWriteWorkspace = new Workspace({
   },
   bm25: true,
   skills: ['/skills'],
-  autoInit: true,
 });
 
 /**
@@ -223,7 +215,6 @@ export const supervisedSandboxWorkspace = new Workspace({
   },
   bm25: true,
   skills: ['/skills'],
-  autoInit: true,
 });
 
 /**
@@ -252,7 +243,6 @@ export const fsWriteApprovalWorkspace = new Workspace({
   },
   bm25: true,
   skills: ['/skills'],
-  autoInit: true,
 });
 
 /**
@@ -280,7 +270,6 @@ export const fsAllApprovalWorkspace = new Workspace({
   },
   bm25: true,
   skills: ['/skills'],
-  autoInit: true,
 });
 
 /**
@@ -295,7 +284,6 @@ export const testAgentWorkspace = new Workspace({
   }),
   bm25: true,
   autoIndexPaths: ['/'],
-  autoInit: true,
 });
 
 /**
@@ -322,5 +310,28 @@ export const skillsOnlyWorkspace = new Workspace({
   skills: [join(PROJECT_ROOT, 'skills'), join(PROJECT_ROOT, 'docs-skills')],
   // Note: BM25/vector search not available without filesystem
   // Skills are still searchable via workspace.skills.search() using simple text matching
-  autoInit: true,
 });
+
+/**
+ * All workspaces in this example.
+ */
+export const allWorkspaces = [
+  globalWorkspace,
+  docsAgentWorkspace,
+  isolatedDocsWorkspace,
+  readonlyWorkspace,
+  safeWriteWorkspace,
+  supervisedSandboxWorkspace,
+  fsWriteApprovalWorkspace,
+  fsAllApprovalWorkspace,
+  testAgentWorkspace,
+  skillsOnlyWorkspace,
+];
+
+/**
+ * Initialize all workspaces.
+ * Call this at application startup before using any workspace.
+ */
+export async function initializeWorkspaces(): Promise<void> {
+  await Promise.all(allWorkspaces.map(ws => ws.init()));
+}

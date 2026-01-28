@@ -690,10 +690,9 @@ Follow these instructions for the test skill.
     filesystem,
     skills: ['/skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
-    autoInit: true,
   });
 
-  // Wait for initialization to complete
+  // Initialize the workspace
   await workspace.init();
 
   return workspace;
