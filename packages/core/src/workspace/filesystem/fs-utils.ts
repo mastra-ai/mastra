@@ -89,6 +89,12 @@ const MIME_TYPES: Record<string, string> = {
   toml: 'text/toml',
   ini: 'text/plain',
   env: 'text/plain',
+  // Database/Query
+  sql: 'text/x-sql',
+  graphql: 'application/graphql',
+  gql: 'application/graphql',
+  // Frameworks
+  vue: 'text/x-vue',
   // Images
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -143,6 +149,11 @@ const TEXT_EXTENSIONS = new Set([
   '.ini',
   '.env',
   '.csv',
+  '.sql',
+  '.graphql',
+  '.gql',
+  '.vue',
+  '.svg',
 ]);
 
 /**

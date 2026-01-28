@@ -87,8 +87,12 @@ describe('Workspace', () => {
         autoInit: true,
       });
 
-      // Give time for async init
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for auto-init to complete (polling instead of fixed timeout)
+      const maxWait = 5000;
+      const start = Date.now();
+      while (workspace.status !== 'ready' && Date.now() - start < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
 
       expect(workspace.status).toBe('ready');
     });

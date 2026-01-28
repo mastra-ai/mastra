@@ -35,7 +35,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, customSize, testId, variant, ...props }, ref) => {
     return (
       <textarea
-        className={clsx(className, textareaVariants({ variant, customSize, className }))}
+        className={textareaVariants({ variant, customSize, className })}
         data-testid={testId}
         ref={ref}
         {...props}

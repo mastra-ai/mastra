@@ -131,14 +131,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       return '';
     }
 
-    // Get full skill objects to include source info
-    const fullSkills: Skill[] = [];
-    for (const meta of skillsList) {
-      const skill = await this.skills?.get(meta.name);
-      if (skill) {
-        fullSkills.push(skill);
-      }
-    }
+    // Get full skill objects to include source info (parallel fetch)
+    const skillPromises = skillsList.map(meta => this.skills?.get(meta.name));
+    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
 
     switch (this._format) {
       case 'xml': {

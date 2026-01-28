@@ -49,7 +49,7 @@ export interface Lifecycle<TInfo = unknown> {
    * - Provisioning cloud resources
    * - Installing dependencies
    */
-  init?(): Promise<void>;
+  init?(): void | Promise<void>;
 
   /**
    * Begin active operation.
@@ -61,7 +61,7 @@ export interface Lifecycle<TInfo = unknown> {
    * - Starting background processes
    * - Warming up caches
    */
-  start?(): Promise<void>;
+  start?(): void | Promise<void>;
 
   /**
    * Pause operation, keeping state for potential restart.
@@ -72,7 +72,7 @@ export interface Lifecycle<TInfo = unknown> {
    * - Pausing cloud instances
    * - Flushing buffers
    */
-  stop?(): Promise<void>;
+  stop?(): void | Promise<void>;
 
   /**
    * Clean up all resources.
@@ -83,7 +83,7 @@ export interface Lifecycle<TInfo = unknown> {
    * - Closing all connections
    * - Cleaning up temporary files
    */
-  destroy?(): Promise<void>;
+  destroy?(): void | Promise<void>;
 
   /**
    * Check if ready for operations.
@@ -94,14 +94,14 @@ export interface Lifecycle<TInfo = unknown> {
    * - Instance status
    * - Resource availability
    */
-  isReady?(): Promise<boolean>;
+  isReady?(): boolean | Promise<boolean>;
 
   /**
    * Get status and metadata.
    *
    * Returns information about the current state of the provider.
    */
-  getInfo?(): Promise<TInfo>;
+  getInfo?(): TInfo | Promise<TInfo>;
 }
 
 // =============================================================================
