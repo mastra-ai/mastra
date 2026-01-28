@@ -278,25 +278,42 @@ const config = workspace.getToolsConfig();
 
 ## Agent Tools
 
-A workspace provides tools to agents based on what is configured:
+A workspace provides tools to agents based on what is configured.
 
-**Filesystem tools** (when filesystem is configured):
-- `mastra_workspace_read_file` - Read file contents with optional line range
-- `mastra_workspace_write_file` - Write content to a file
-- `mastra_workspace_edit_file` - Edit file by replacing text
-- `mastra_workspace_list_files` - List directory contents as a tree
-- `mastra_workspace_delete` - Delete files or directories
-- `mastra_workspace_file_stat` - Get file/directory metadata
-- `mastra_workspace_mkdir` - Create directories
+### Filesystem tools
 
-**Sandbox tools** (when sandbox is configured):
-- `mastra_workspace_execute_command` - Execute shell commands
+Added when a filesystem is configured:
 
-**Search tools** (when BM25 or vector search is configured):
-- `mastra_workspace_search` - Search indexed content
-- `mastra_workspace_index` - Index content for search
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_read_file` | Read file contents. Supports optional line range for reading specific portions of large files. |
+| `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
+| `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
+| `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits. |
+| `mastra_workspace_delete` | Delete a file or directory. Supports recursive deletion for directories. |
+| `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
+| `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 
-Write tools (`write_file`, `edit_file`, `delete`, `mkdir`, `index`) are excluded when the filesystem is in read-only mode.
+Write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode.
+
+### Sandbox tools
+
+Added when a sandbox is configured:
+
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_execute_command` | Execute a shell command with arguments. Returns stdout, stderr, and exit code. Supports timeouts and streaming output. |
+
+### Search tools
+
+Added when BM25 or vector search is configured:
+
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_search` | Search indexed content using keyword (BM25), semantic (vector), or hybrid search. Returns ranked results with scores. |
+| `mastra_workspace_index` | Index content for search. Associates content with a path for later retrieval. |
+
+The `index` tool is excluded when the filesystem is in read-only mode.
 
 ## Related
 

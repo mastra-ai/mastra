@@ -91,6 +91,8 @@ const workspace = new Workspace({
 ## Documentation
 
 - [Workspace Overview](https://mastra.ai/docs/workspace/overview)
-- [Workspace Safety](https://mastra.ai/docs/workspace/safety)
+- [Filesystem](https://mastra.ai/docs/workspace/filesystem)
+- [Sandbox](https://mastra.ai/docs/workspace/sandbox)
 - [Search and Indexing](https://mastra.ai/docs/workspace/search)
+- [Skills](https://mastra.ai/docs/workspace/skills)
 - [API Reference](https://mastra.ai/reference/workspace/workspace-class)

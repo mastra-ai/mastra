@@ -193,7 +193,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       <AgentMetadataSection
         title="Skills"
         hint={{
-          link: 'https://mastra.ai/en/docs/workspace/overview#skills',
+          link: 'https://mastra.ai/en/docs/workspace/skills',
           title: 'Skills documentation',
         }}
       >
@@ -204,7 +204,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataSection
           title="Workspace Tools"
           hint={{
-            link: 'https://mastra.ai/en/docs/workspace/overview#workspace-tools',
+            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
             title: 'Workspace tools documentation',
           }}
         >

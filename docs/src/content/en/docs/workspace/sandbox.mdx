@@ -1,0 +1,100 @@
+---
+title: "Sandbox | Workspace"
+description: Configure sandbox providers to give agents command execution capabilities.
+packages:
+  - "@mastra/core"
+---
+
+# Sandbox
+
+Sandbox providers give agents the ability to execute shell commands. When you configure a sandbox on a workspace, agents can run commands as part of their tasks.
+
+## How it works
+
+A sandbox provider executes commands in a controlled environment:
+
+- **Command execution** - Run shell commands with arguments
+- **Working directory** - Commands run from a specific directory
+- **Environment variables** - Control what variables are available
+- **Timeouts** - Prevent long-running commands from hanging
+- **Isolation** - Optional OS-level sandboxing for security
+
+When you assign a workspace with a sandbox to an agent, Mastra automatically includes the `execute_command` tool in the agent's toolset.
+
+## Supported providers
+
+Each provider page includes configuration options and usage examples:
+
+- [LocalSandbox](/reference/workspace/local-sandbox) - Executes commands on the local machine
+
+## Basic usage
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+});
+
+await workspace.init();
+```
+
+## Environment isolation
+
+By default, LocalSandbox only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets from the host environment.
+
+```typescript
+// Default: only PATH is available
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+});
+
+// Explicit: pass specific variables
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: {
+    NODE_ENV: 'development',
+    API_URL: 'https://api.example.com',
+  },
+});
+```
+
+## Native OS sandboxing
+
+LocalSandbox supports OS-level sandboxing for additional security:
+
+- **macOS** - Uses Seatbelt (`sandbox-exec`) for filesystem and network isolation
+- **Linux** - Uses Bubblewrap (`bwrap`) for namespace isolation
+
+```typescript
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  isolation: 'seatbelt', // or 'bwrap' on Linux
+  nativeSandbox: {
+    allowNetwork: false,
+    readWritePaths: ['/tmp/extra'],
+  },
+});
+```
+
+When isolation is enabled:
+- File writes are restricted to the workspace directory
+- Network access is blocked by default
+- Process isolation prevents affecting the host system
+
+See [LocalSandbox Reference](/reference/workspace/local-sandbox) for all isolation options.
+
+## Agent tools
+
+When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [Workspace Class Reference](/reference/workspace/workspace-class#sandbox-tools) for details.
+
+## Related
+
+- [LocalSandbox Reference](/reference/workspace/local-sandbox)
+- [Workspace Overview](/docs/workspace/overview)
+- [Filesystem](/docs/workspace/filesystem)

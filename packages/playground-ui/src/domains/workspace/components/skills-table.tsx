@@ -144,7 +144,7 @@ function SkillsNotConfigured() {
           size="lg"
           variant="default"
           as="a"
-          href="https://mastra.ai/en/docs/workspace/overview#skills"
+          href="https://mastra.ai/en/docs/workspace/skills"
           target="_blank"
         >
           <Icon>

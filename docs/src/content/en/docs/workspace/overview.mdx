@@ -11,56 +11,17 @@ A workspace gives agents a persistent environment for storing files and executin
 
 ## How Workspaces Work
 
-A workspace combines two components:
+A workspace combines up to three components:
 
-- **Filesystem provider** - Handles file storage (read, write, list, delete)
-- **Sandbox provider** - Handles command execution (shell commands)
+- **[Filesystem provider](/docs/workspace/filesystem)** - Handles file storage (read, write, list, delete)
+- **[Sandbox provider](/docs/workspace/sandbox)** - Handles command execution (shell commands)
+- **[Skills](/docs/workspace/skills)** - Reusable instructions for agents
 
-When you assign a workspace to an agent, Mastra includes the corresponding workspace tools in the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
+When you assign a workspace to an agent, Mastra includes the corresponding tools in the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
 
-You can create a workspace with just a filesystem (file storage only), just a sandbox (command execution only), or both. The agent receives only the tools relevant to the configured providers.
-
-## Filesystem Providers
-
-Filesystem providers determine where files are stored. All file operations go through the provider, which handles the actual storage.
-
-**LocalFilesystem** stores files in a directory on disk:
-
-```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
-
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
-});
-```
-
-All file paths are relative to `basePath`. A path like `/docs/guide.md` maps to `./workspace/docs/guide.md` on disk.
-
-See [Filesystem Reference](/reference/workspace/filesystem) for the full API.
-
-## Sandbox Providers
-
-Sandbox providers execute shell commands.
-
-**LocalSandbox** runs commands locally:
-
-```typescript
-import { LocalSandbox } from '@mastra/core/workspace';
-
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-});
-```
-
-- `workingDirectory` - Where shell commands run from
-- `env` - Environment variables to pass (PATH is included by default unless overridden)
-- `isolation` - Native OS sandboxing: `'seatbelt'` (macOS) or `'bwrap'` (Linux)
-
-See [Sandbox Reference](/reference/workspace/sandbox) for the full API.
+You can create a workspace with any combination of these components. The agent receives only the tools relevant to what's configured.
 
 ## Creating a Workspace
-
-Combine providers into a workspace:
 
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
@@ -72,6 +33,7 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
   }),
+  skills: ['/skills'],
 });
 
 await workspace.init();
@@ -105,33 +67,6 @@ export const myAgent = new Agent({
   workspace,
 });
 ```
-
-## Skills
-
-Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
-
-A skill is a folder containing a `SKILL.md` file with metadata and instructions, plus optional reference files, scripts, and assets:
-
-```
-/skills
-  /code-review
-    SKILL.md          # Instructions for code review
-    /references
-      style-guide.md  # Supporting documentation
-    /scripts
-      lint.ts         # Executable scripts
-```
-
-Configure `skills` to enable skill discovery:
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['/skills'],
-});
-```
-
-When skills are configured, agents receive a `SkillsProcessor` that injects available skills into the system message and allows agents to activate skills during conversation.
 
 ## Tool Configuration
 
@@ -179,34 +114,10 @@ When `requireReadBeforeWrite` is enabled on write tools, agents must read a file
 - **Existing files** - Must be read first
 - **Externally modified files** - If a file changed since the agent read it, the write fails
 
-### Read-only Mode
-
-To make a filesystem read-only, set `readOnly: true` on the LocalFilesystem:
-
-```typescript
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
-  readOnly: true,
-});
-```
-
-When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset.
-
-## Search
-
-Enable search to let agents find content in workspace files. See [Search and Indexing](/docs/workspace/search) for details.
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: true,
-  autoIndexPaths: ['/docs'],
-});
-```
-
 ## Related
 
+- [Filesystem](/docs/workspace/filesystem)
+- [Sandbox](/docs/workspace/sandbox)
+- [Skills](/docs/workspace/skills)
 - [Search and Indexing](/docs/workspace/search)
 - [Workspace Class Reference](/reference/workspace/workspace-class)
-- [Filesystem Reference](/reference/workspace/filesystem)
-- [Sandbox Reference](/reference/workspace/sandbox)

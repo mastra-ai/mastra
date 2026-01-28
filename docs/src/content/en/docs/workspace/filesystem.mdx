@@ -1,0 +1,71 @@
+---
+title: "Filesystem | Workspace"
+description: Configure filesystem providers to give agents persistent file storage.
+packages:
+  - "@mastra/core"
+---
+
+# Filesystem
+
+Filesystem providers give agents the ability to read, write, and manage files. When you configure a filesystem on a workspace, agents receive tools for file operations.
+
+## How it works
+
+A filesystem provider handles all file operations for a workspace:
+
+- **Read** - Read file contents
+- **Write** - Create and update files
+- **List** - Browse directories
+- **Delete** - Remove files and directories
+- **Stat** - Get file metadata
+
+When you assign a workspace with a filesystem to an agent, Mastra automatically includes the corresponding tools in the agent's toolset.
+
+## Supported providers
+
+Each provider page includes configuration options and usage examples:
+
+- [LocalFilesystem](/reference/workspace/local-filesystem) - Stores files in a directory on disk
+
+:::tip
+LocalFilesystem is the simplest way to get started - it requires no external services.
+:::
+
+## Basic usage
+
+```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+await workspace.init();
+```
+
+## Read-only mode
+
+To prevent agents from modifying files, enable read-only mode:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    readOnly: true,
+  }),
+});
+```
+
+When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
+
+## Agent tools
+
+When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [Workspace Class Reference](/reference/workspace/workspace-class#filesystem-tools) for details.
+
+## Related
+
+- [LocalFilesystem Reference](/reference/workspace/local-filesystem)
+- [Workspace Overview](/docs/workspace/overview)
+- [Sandbox](/docs/workspace/sandbox)
