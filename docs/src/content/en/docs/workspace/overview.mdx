@@ -16,7 +16,7 @@ A workspace combines two components:
 - **Filesystem provider** - Handles file storage (read, write, list, delete)
 - **Sandbox provider** - Handles command execution (shell commands)
 
-When you assign a workspace to an agent, Mastra automatically adds workspace tools to the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
+When you assign a workspace to an agent, Mastra includes the corresponding workspace tools in the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
 
 You can create a workspace with just a filesystem (file storage only), just a sandbox (command execution only), or both. The agent receives only the tools relevant to the configured providers.
 

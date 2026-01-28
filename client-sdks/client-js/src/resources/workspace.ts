@@ -38,7 +38,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing skill details
    */
   details(): Promise<Skill> {
-    return this.request(`/api/workspace/skills/${encodeURIComponent(this.skillName)}`);
+    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}`);
   }
 
   /**
@@ -46,7 +46,7 @@ export class WorkspaceSkillResource extends BaseResource {
    * @returns Promise containing list of reference paths
    */
   listReferences(): Promise<ListSkillReferencesResponse> {
-    return this.request(`/api/workspace/skills/${encodeURIComponent(this.skillName)}/references`);
+    return this.request(`/workspace/skills/${encodeURIComponent(this.skillName)}/references`);
   }
 
   /**
@@ -56,7 +56,7 @@ export class WorkspaceSkillResource extends BaseResource {
    */
   getReference(referencePath: string): Promise<GetSkillReferenceResponse> {
     return this.request(
-      `/api/workspace/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}`,
+      `/workspace/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}`,
     );
   }
 }
@@ -83,7 +83,7 @@ export class Workspace extends BaseResource {
    * @returns Promise containing workspace info
    */
   info(): Promise<WorkspaceInfoResponse> {
-    return this.request('/api/workspace');
+    return this.request('/workspace');
   }
 
   // ==========================================================================
@@ -93,7 +93,7 @@ export class Workspace extends BaseResource {
   /**
    * Reads a file from the workspace filesystem
    * @param path - Path to the file to read
-   * @param encoding - Optional encoding (default: utf-8)
+   * @param encoding - Optional encoding. Server defaults to utf-8 if not specified.
    * @returns Promise containing file content and metadata
    */
   readFile(path: string, encoding?: string): Promise<WorkspaceFsReadResponse> {
@@ -102,7 +102,7 @@ export class Workspace extends BaseResource {
     if (encoding) {
       searchParams.set('encoding', encoding);
     }
-    return this.request(`/api/workspace/fs/read?${searchParams.toString()}`);
+    return this.request(`/workspace/fs/read?${searchParams.toString()}`);
   }
 
   /**
@@ -113,7 +113,7 @@ export class Workspace extends BaseResource {
    * @returns Promise containing success status
    */
   writeFile(path: string, content: string, recursive?: boolean): Promise<WorkspaceFsWriteResponse> {
-    return this.request('/api/workspace/fs/write', {
+    return this.request('/workspace/fs/write', {
       method: 'POST',
       body: { path, content, recursive },
     });
@@ -131,7 +131,7 @@ export class Workspace extends BaseResource {
     if (recursive !== undefined) {
       searchParams.set('recursive', String(recursive));
     }
-    return this.request(`/api/workspace/fs/list?${searchParams.toString()}`);
+    return this.request(`/workspace/fs/list?${searchParams.toString()}`);
   }
 
   /**
@@ -149,7 +149,7 @@ export class Workspace extends BaseResource {
     if (options?.force !== undefined) {
       searchParams.set('force', String(options.force));
     }
-    return this.request(`/api/workspace/fs/delete?${searchParams.toString()}`, {
+    return this.request(`/workspace/fs/delete?${searchParams.toString()}`, {
       method: 'DELETE',
     });
   }
@@ -161,7 +161,7 @@ export class Workspace extends BaseResource {
    * @returns Promise containing success status
    */
   mkdir(path: string, recursive?: boolean): Promise<WorkspaceFsMkdirResponse> {
-    return this.request('/api/workspace/fs/mkdir', {
+    return this.request('/workspace/fs/mkdir', {
       method: 'POST',
       body: { path, recursive },
     });
@@ -175,7 +175,7 @@ export class Workspace extends BaseResource {
   stat(path: string): Promise<WorkspaceFsStatResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('path', path);
-    return this.request(`/api/workspace/fs/stat?${searchParams.toString()}`);
+    return this.request(`/workspace/fs/stat?${searchParams.toString()}`);
   }
 
   // ==========================================================================
@@ -199,7 +199,7 @@ export class Workspace extends BaseResource {
     if (params.minScore !== undefined) {
       searchParams.set('minScore', String(params.minScore));
     }
-    return this.request(`/api/workspace/search?${searchParams.toString()}`);
+    return this.request(`/workspace/search?${searchParams.toString()}`);
   }
 
   /**
@@ -208,7 +208,7 @@ export class Workspace extends BaseResource {
    * @returns Promise containing success status
    */
   index(params: WorkspaceIndexParams): Promise<WorkspaceIndexResponse> {
-    return this.request('/api/workspace/index', {
+    return this.request('/workspace/index', {
       method: 'POST',
       body: params,
     });
@@ -222,7 +222,7 @@ export class Workspace extends BaseResource {
   unindex(path: string): Promise<WorkspaceUnindexResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('path', path);
-    return this.request(`/api/workspace/unindex?${searchParams.toString()}`, {
+    return this.request(`/workspace/unindex?${searchParams.toString()}`, {
       method: 'DELETE',
     });
   }
@@ -236,7 +236,7 @@ export class Workspace extends BaseResource {
    * @returns Promise containing list of skills with metadata
    */
   listSkills(): Promise<ListSkillsResponse> {
-    return this.request('/api/workspace/skills');
+    return this.request('/workspace/skills');
   }
 
   /**
@@ -259,7 +259,7 @@ export class Workspace extends BaseResource {
     if (params.includeReferences !== undefined) {
       searchParams.set('includeReferences', String(params.includeReferences));
     }
-    return this.request(`/api/workspace/skills/search?${searchParams.toString()}`);
+    return this.request(`/workspace/skills/search?${searchParams.toString()}`);
   }
 
   /**

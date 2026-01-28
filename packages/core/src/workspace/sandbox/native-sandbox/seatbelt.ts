@@ -54,6 +54,14 @@ function escapePath(pathStr: string): string {
  * @returns The generated SBPL profile content
  */
 export function generateSeatbeltProfile(workspacePath: string, config: NativeSandboxConfig): string {
+  // Fail-closed: seatbelt cannot restrict process-exec, so reject unsupported config
+  if (config.allowSystemBinaries === false) {
+    throw new Error(
+      'allowSystemBinaries: false is not supported by seatbelt (macOS). ' +
+        'Use bubblewrap on Linux or remove this restriction.',
+    );
+  }
+
   const lines: string[] = [];
 
   // Version and default deny

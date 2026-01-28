@@ -727,7 +727,7 @@ export const removeUndefinedValues = (obj: Record<string, any>) => {
 export function getProjectRoot(): string {
   const cwd = process.cwd();
 
-  if (process.env.MASTRA_DEV) {
+  if (process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1') {
     return resolve(cwd, '../../..');
   }
 

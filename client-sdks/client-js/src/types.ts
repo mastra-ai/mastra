@@ -40,6 +40,8 @@ import type { ZodSchema } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
@@ -88,6 +90,8 @@ export interface GetAgentResponse {
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
   provider: string;
   modelId: string;
   modelVersion: string;
@@ -883,6 +887,7 @@ export interface WorkspaceFsStatResponse {
  * Workspace search result
  */
 export interface WorkspaceSearchResult {
+  /** Document identifier (typically the indexed file path) */
   id: string;
   content: string;
   score: number;
@@ -904,6 +909,7 @@ export interface WorkspaceSearchParams {
   topK?: number;
   mode?: 'bm25' | 'vector' | 'hybrid';
   minScore?: number;
+  workspaceId?: string;
 }
 
 /**
@@ -1010,6 +1016,7 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
+  workspaceId?: string;
 }
 
 /**

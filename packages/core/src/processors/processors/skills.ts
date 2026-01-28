@@ -131,14 +131,9 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       return '';
     }
 
-    // Get full skill objects to include source info
-    const fullSkills: Skill[] = [];
-    for (const meta of skillsList) {
-      const skill = await this.skills?.get(meta.name);
-      if (skill) {
-        fullSkills.push(skill);
-      }
-    }
+    // Get full skill objects to include source info (parallel fetch)
+    const skillPromises = skillsList.map(meta => this.skills?.get(meta.name));
+    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
 
     switch (this._format) {
       case 'xml': {
@@ -184,6 +179,11 @@ ${JSON.stringify(
 
 ${skillsMd}`;
       }
+
+      default: {
+        const _exhaustive: never = this._format;
+        return _exhaustive;
+      }
     }
   }
 
@@ -191,14 +191,8 @@ ${skillsMd}`;
    * Format activated skills based on configured format
    */
   private async formatActivatedSkills(): Promise<string> {
-    const activatedSkillsList: Skill[] = [];
-
-    for (const name of this._activatedSkills) {
-      const skill = await this.skills?.get(name);
-      if (skill) {
-        activatedSkillsList.push(skill);
-      }
-    }
+    const skillPromises = Array.from(this._activatedSkills).map(name => this.skills?.get(name));
+    const activatedSkillsList = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
 
     if (activatedSkillsList.length === 0) {
       return '';
@@ -229,6 +223,11 @@ ${skillInstructions}
         return `# Activated Skills
 
 ${skillInstructions}`;
+      }
+
+      default: {
+        const _exhaustive: never = this._format;
+        return _exhaustive;
       }
     }
   }
@@ -510,9 +509,8 @@ ${skillInstructions}`;
       execute: async ({ query, skillNames, topK }) => {
         if (!skills) {
           return {
-            success: true,
+            success: false,
             message: 'No skills configured',
-            results: [],
           };
         }
 

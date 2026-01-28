@@ -82,11 +82,20 @@ function createMockWorkspace(
     readOnly?: boolean;
   } = {},
 ) {
+  // If readOnly is set, add it to the filesystem mock
+  const filesystem = options.fs
+    ? {
+        ...options.fs,
+        readOnly: options.readOnly ?? false,
+      }
+    : undefined;
+
   return {
     id: 'test-workspace',
     name: 'Test Workspace',
     status: 'ready',
-    fs: options.fs,
+    fs: filesystem,
+    filesystem, // Alias used by server handlers for readOnly check
     sandbox: null,
     skills: options.skills,
     canBM25: options.canBM25 ?? false,

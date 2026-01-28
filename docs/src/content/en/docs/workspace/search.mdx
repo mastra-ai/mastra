@@ -39,6 +39,7 @@ const workspace = new Workspace({
 Vector search uses embeddings to find semantically similar content. It requires a vector store and embedder function.
 
 ```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { PineconeVector } from '@mastra/pinecone';
 import { embed } from 'ai';
 import { openai } from '@ai-sdk/openai';

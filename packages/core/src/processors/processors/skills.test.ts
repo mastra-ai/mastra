@@ -24,8 +24,11 @@ const mockSkill1: Skill = {
   description: 'A skill for code review assistance',
   instructions: '# Code Review\n\nHelp the user review code effectively.',
   path: '/skills/code-review',
-  source: { type: 'local', path: '/skills/code-review' },
+  source: { type: 'local', projectPath: '/skills/code-review' },
   license: 'MIT',
+  references: [],
+  scripts: [],
+  assets: [],
 };
 
 const mockSkill2: Skill = {
@@ -33,7 +36,10 @@ const mockSkill2: Skill = {
   description: 'A skill for writing tests',
   instructions: '# Testing\n\nHelp write comprehensive tests.',
   path: '/skills/testing',
-  source: { type: 'external', url: 'https://example.com/testing' },
+  source: { type: 'external', packagePath: '/node_modules/@example/testing' },
+  references: [],
+  scripts: [],
+  assets: [],
 };
 
 const mockSkillMetadata1: SkillMetadata = {

@@ -12,6 +12,7 @@ type WritableSkillSource = SkillSource & {
   mkdir(path: string): Promise<void>;
   rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   deleteFile(path: string, options?: { force?: boolean }): Promise<void>;
+  stat(path: string): Promise<{ modifiedAt: Date; path?: string; type?: 'file' | 'directory' }>;
 };
 
 // =============================================================================

@@ -439,9 +439,9 @@ describe('LocalFilesystem', () => {
   });
 
   // ===========================================================================
-  // Sandbox Mode (path restrictions)
+  // Contained Mode (path restrictions)
   // ===========================================================================
-  describe('sandbox mode', () => {
+  describe('contained mode', () => {
     it('should block path traversal by default', async () => {
       await expect(localFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
     });
@@ -457,20 +457,20 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('content');
     });
 
-    it('should allow access when sandbox is disabled', async () => {
-      // Create a file outside the sandbox
+    it('should allow access when containment is disabled', async () => {
+      // Create a file in os.tmpdir() (parent of tempDir since tempDir is created via mkdtemp in tmpdir)
       const outsideFile = path.join(os.tmpdir(), 'outside-test.txt');
       await fs.writeFile(outsideFile, 'outside content');
 
       try {
-        const unsandboxedFs = new LocalFilesystem({
+        const uncontainedFs = new LocalFilesystem({
           basePath: tempDir,
-          sandbox: false,
+          contained: false,
         });
 
-        // This would be blocked in sandbox mode, but allowed when sandbox: false
+        // This would be blocked in contained mode, but allowed when contained: false
         // Note: We use a relative path that goes outside the base
-        const content = await unsandboxedFs.readFile(`/../${path.basename(outsideFile)}`, { encoding: 'utf-8' });
+        const content = await uncontainedFs.readFile(`/../${path.basename(outsideFile)}`, { encoding: 'utf-8' });
         expect(content).toBe('outside content');
       } finally {
         await fs.unlink(outsideFile);

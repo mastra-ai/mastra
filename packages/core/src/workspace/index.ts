@@ -13,6 +13,7 @@ export {
   SandboxTimeoutError,
   SandboxNotReadyError,
   IsolationUnavailableError,
+  type SandboxOperation,
 } from './sandbox';
 
 // Tools

@@ -137,8 +137,10 @@ export function createWorkspaceTools(workspace: Workspace) {
           totalLines: z.number().optional().describe('Total number of lines in the file'),
         }),
         execute: async ({ path, encoding, offset, limit, showLineNumbers }) => {
+          // Default to utf-8 for text files
+          const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
           const fullContent = await workspace.filesystem!.readFile(path, {
-            encoding: (encoding as BufferEncoding) ?? 'utf-8',
+            encoding: effectiveEncoding,
           });
           const stat = await workspace.filesystem!.stat(path);
 
@@ -147,7 +149,20 @@ export function createWorkspaceTools(workspace: Workspace) {
             readTracker.recordRead(path, stat.modifiedAt);
           }
 
-          // If content is binary (Buffer), return as base64 without line processing
+          // Determine if this is a text encoding that should be line-processed
+          // Non-text encodings (base64, hex, binary, etc.) should not be line-processed
+          const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
+
+          // If non-text encoding, return without line processing to avoid corrupting data
+          if (!isTextEncoding) {
+            return {
+              content: fullContent,
+              size: stat.size,
+              path: stat.path,
+            };
+          }
+
+          // If content is somehow a Buffer (shouldn't happen with encoding), return as base64
           if (typeof fullContent !== 'string') {
             return {
               content: fullContent.toString('base64'),
@@ -651,42 +666,55 @@ Examples:
             },
           });
 
-          const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
-            timeout: timeout ?? 30000,
-            cwd: cwd ?? undefined,
-            // Stream stdout/stderr as tool-output chunks for proper UI integration
-            onStdout: async (data: string) => {
-              await context?.writer?.write({
-                type: 'sandbox-stdout',
-                data,
-                timestamp: Date.now(),
-                metadata: getExecutionMetadata(),
-              });
-            },
-            onStderr: async (data: string) => {
-              await context?.writer?.write({
-                type: 'sandbox-stderr',
-                data,
-                timestamp: Date.now(),
-                metadata: getExecutionMetadata(),
-              });
-            },
-          });
-          // Emit exit chunk so UI knows streaming is complete
-          await context?.writer?.write({
-            type: 'sandbox-exit',
-            exitCode: result.exitCode,
-            success: result.success,
-            executionTimeMs: result.executionTimeMs,
-            metadata: getExecutionMetadata(),
-          });
-          return {
-            success: result.success,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-            executionTimeMs: result.executionTimeMs,
-          };
+          const startedAt = Date.now();
+          try {
+            const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
+              timeout: timeout ?? 30000,
+              cwd: cwd ?? undefined,
+              // Stream stdout/stderr as tool-output chunks for proper UI integration
+              onStdout: async (data: string) => {
+                await context?.writer?.write({
+                  type: 'sandbox-stdout',
+                  data,
+                  timestamp: Date.now(),
+                  metadata: getExecutionMetadata(),
+                });
+              },
+              onStderr: async (data: string) => {
+                await context?.writer?.write({
+                  type: 'sandbox-stderr',
+                  data,
+                  timestamp: Date.now(),
+                  metadata: getExecutionMetadata(),
+                });
+              },
+            });
+            // Emit exit chunk so UI knows streaming is complete
+            await context?.writer?.write({
+              type: 'sandbox-exit',
+              exitCode: result.exitCode,
+              success: result.success,
+              executionTimeMs: result.executionTimeMs,
+              metadata: getExecutionMetadata(),
+            });
+            return {
+              success: result.success,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              exitCode: result.exitCode,
+              executionTimeMs: result.executionTimeMs,
+            };
+          } catch (error) {
+            // Always emit exit chunk on error so UI knows streaming is complete
+            await context?.writer?.write({
+              type: 'sandbox-exit',
+              exitCode: -1,
+              success: false,
+              executionTimeMs: Date.now() - startedAt,
+              metadata: getExecutionMetadata(),
+            });
+            throw error;
+          }
         },
       });
     }

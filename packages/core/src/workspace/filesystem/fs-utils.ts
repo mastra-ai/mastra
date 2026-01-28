@@ -39,15 +39,19 @@ export interface FsStatResult {
 /**
  * Check if an error is an ENOENT (file not found) error.
  */
-export function isEnoentError(error: unknown): boolean {
-  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+export function isEnoentError(error: unknown): error is NodeJS.ErrnoException & { code: 'ENOENT' } {
+  return (
+    error !== null && typeof error === 'object' && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT'
+  );
 }
 
 /**
  * Check if an error is an EEXIST (file exists) error.
  */
-export function isEexistError(error: unknown): boolean {
-  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'EEXIST';
+export function isEexistError(error: unknown): error is NodeJS.ErrnoException & { code: 'EEXIST' } {
+  return (
+    error !== null && typeof error === 'object' && 'code' in error && (error as NodeJS.ErrnoException).code === 'EEXIST'
+  );
 }
 
 // =============================================================================
@@ -89,6 +93,12 @@ const MIME_TYPES: Record<string, string> = {
   toml: 'text/toml',
   ini: 'text/plain',
   env: 'text/plain',
+  // Database/Query
+  sql: 'text/x-sql',
+  graphql: 'application/graphql',
+  gql: 'application/graphql',
+  // Frameworks
+  vue: 'text/x-vue',
   // Images
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -143,6 +153,11 @@ const TEXT_EXTENSIONS = new Set([
   '.ini',
   '.env',
   '.csv',
+  '.sql',
+  '.graphql',
+  '.gql',
+  '.vue',
+  '.svg',
 ]);
 
 /**

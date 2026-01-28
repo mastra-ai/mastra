@@ -171,7 +171,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skills.clear();
     this.#searchEngine?.clear();
     this.#initialized = false;
+    this.#initPromise = null;
     await this.#discoverSkills();
+    this.#initialized = true;
   }
 
   async maybeRefresh(context?: SkillsContext): Promise<void> {
@@ -330,10 +332,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const refsDir = this.#joinPath(skillDir, 'references');
       await fs.mkdir(refsDir);
       for (const ref of references) {
-        const refPath = this.#joinPath(refsDir, ref.path);
+        const safeRefPath = this.#assertRelativePath(ref.path, 'reference');
+        const refPath = this.#joinPath(refsDir, safeRefPath);
         await this.#ensureParentDir(refPath);
         await fs.writeFile(refPath, ref.content);
-        refPaths.push(ref.path);
+        refPaths.push(safeRefPath);
       }
     }
 
@@ -343,10 +346,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const scriptsDir = this.#joinPath(skillDir, 'scripts');
       await fs.mkdir(scriptsDir);
       for (const script of scripts) {
-        const scriptPath = this.#joinPath(scriptsDir, script.path);
+        const safeScriptPath = this.#assertRelativePath(script.path, 'script');
+        const scriptPath = this.#joinPath(scriptsDir, safeScriptPath);
         await this.#ensureParentDir(scriptPath);
         await fs.writeFile(scriptPath, script.content);
-        scriptPaths.push(script.path);
+        scriptPaths.push(safeScriptPath);
       }
     }
 
@@ -356,10 +360,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const assetsDir = this.#joinPath(skillDir, 'assets');
       await fs.mkdir(assetsDir);
       for (const asset of assets) {
-        const assetPath = this.#joinPath(assetsDir, asset.path);
+        const safeAssetPath = this.#assertRelativePath(asset.path, 'asset');
+        const assetPath = this.#joinPath(assetsDir, safeAssetPath);
         await this.#ensureParentDir(assetPath);
         await fs.writeFile(assetPath, asset.content);
-        assetPaths.push(asset.path);
+        assetPaths.push(safeAssetPath);
       }
     }
 
@@ -435,7 +440,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     };
     this.#skills.set(name, updatedSkill);
 
-    // Re-index the skill
+    // Re-index the skill (uses stable document IDs, so this overwrites existing entries)
     await this.#indexSkill(updatedSkill);
 
     // Return without internal indexableContent field
@@ -476,7 +481,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const refFilePath = this.#joinPath(skill.path, 'references', referencePath);
+    const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
+    const refFilePath = this.#joinPath(skill.path, 'references', safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
       return null;
@@ -496,7 +502,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const scriptFilePath = this.#joinPath(skill.path, 'scripts', scriptPath);
+    const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
+    const scriptFilePath = this.#joinPath(skill.path, 'scripts', safeScriptPath);
 
     if (!(await this.#source.exists(scriptFilePath))) {
       return null;
@@ -516,7 +523,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = this.#skills.get(skillName);
     if (!skill) return null;
 
-    const assetFilePath = this.#joinPath(skill.path, 'assets', assetPath);
+    const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
+    const assetFilePath = this.#joinPath(skill.path, 'assets', safeAssetPath);
 
     if (!(await this.#source.exists(assetFilePath))) {
       return null;
@@ -573,13 +581,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Start initialization and store the promise
     this.#initPromise = (async () => {
-      // Resolve paths on first initialization (uses empty context)
-      if (this.#resolvedPaths.length === 0) {
-        this.#resolvedPaths = await this.#resolvePaths();
+      try {
+        // Resolve paths on first initialization (uses empty context)
+        if (this.#resolvedPaths.length === 0) {
+          this.#resolvedPaths = await this.#resolvePaths();
+        }
+        await this.#discoverSkills();
+        this.#initialized = true;
+      } finally {
+        this.#initPromise = null;
       }
-      await this.#discoverSkills();
-      this.#initialized = true;
-      this.#initPromise = null;
     })();
 
     await this.#initPromise;
@@ -775,16 +786,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Walk a directory recursively and call callback for each file
+   * Walk a directory recursively and call callback for each file.
+   * Limited to maxDepth (default 20) to prevent stack overflow on deep hierarchies.
    */
-  async #walkDirectory(basePath: string, dirPath: string, callback: (relativePath: string) => void): Promise<void> {
+  async #walkDirectory(
+    basePath: string,
+    dirPath: string,
+    callback: (relativePath: string) => void,
+    depth: number = 0,
+    maxDepth: number = 20,
+  ): Promise<void> {
+    if (depth >= maxDepth) {
+      return;
+    }
+
     const entries = await this.#source.readdir(dirPath);
 
     for (const entry of entries) {
       const entryPath = this.#joinPath(dirPath, entry.name);
 
       if (entry.type === 'directory') {
-        await this.#walkDirectory(basePath, entryPath, callback);
+        await this.#walkDirectory(basePath, entryPath, callback, depth + 1, maxDepth);
       } else {
         // Get relative path from base
         const relativePath = entryPath.substring(basePath.length + 1);
@@ -876,6 +898,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       // Search in references if included
       if (includeReferences) {
         for (const refPath of skill.references) {
+          if (results.length >= topK) break;
           const content = await this.getReference(skill.name, refPath);
           if (content && content.toLowerCase().includes(queryLower)) {
             results.push({
@@ -898,10 +921,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Determine the source type based on the path
    */
   #determineSource(skillsPath: string): ContentSource {
-    if (skillsPath.includes('node_modules')) {
+    // Use path segment matching to avoid false positives (e.g., my-node_modules)
+    const segments = skillsPath.split('/');
+    if (segments.includes('node_modules')) {
       return { type: 'external', packagePath: skillsPath };
     }
-    if (skillsPath.includes('.mastra/skills')) {
+    if (skillsPath.includes('/.mastra/skills') || skillsPath.startsWith('.mastra/skills')) {
       return { type: 'managed', mastraPath: skillsPath };
     }
     return { type: 'local', projectPath: skillsPath };
@@ -943,6 +968,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
+   * Validate and normalize a relative path to prevent directory traversal.
+   * Throws if the path contains traversal segments (..) or is absolute.
+   */
+  #assertRelativePath(input: string, label: string): string {
+    const normalized = input.replace(/\\/g, '/');
+    const segments = normalized.split('/').filter(Boolean);
+    if (normalized.startsWith('/') || segments.some(seg => seg === '.' || seg === '..')) {
+      throw new Error(`Invalid ${label} path: ${input}`);
+    }
+    return segments.join('/');
+  }
+
+  /**
    * Get parent path
    */
   #getParentPath(path: string): string {
@@ -952,12 +990,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   /**
    * Ensure parent directory exists for a file path.
+   * Recursively creates parent directories if they don't exist.
    * Only called from write operations that already checked #isWritable.
    */
   async #ensureParentDir(filePath: string): Promise<void> {
     const parentPath = this.#getParentPath(filePath);
-    if (parentPath && parentPath !== '/' && !(await this.#source.exists(parentPath))) {
-      await this.#getWritableSource().mkdir(parentPath);
+    if (parentPath && parentPath !== '/') {
+      await this.#mkdirRecursive(parentPath);
     }
+  }
+
+  /**
+   * Recursively create directories if they don't exist.
+   */
+  async #mkdirRecursive(dirPath: string): Promise<void> {
+    if (await this.#source.exists(dirPath)) {
+      return;
+    }
+    const parentPath = this.#getParentPath(dirPath);
+    if (parentPath && parentPath !== '/') {
+      await this.#mkdirRecursive(parentPath);
+    }
+    await this.#getWritableSource().mkdir(dirPath);
   }
 }

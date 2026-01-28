@@ -47,7 +47,7 @@ import { Agent } from '@mastra/core/agent';
 const agent = new Agent({
   id: 'my-agent',
   workspace: workspace,
-  // Agent automatically receives workspace tools
+  // Agent receives workspace tools when a workspace is provided
 });
 ```
 

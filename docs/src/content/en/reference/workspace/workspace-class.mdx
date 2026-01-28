@@ -12,7 +12,8 @@ The `Workspace` class combines a filesystem and sandbox to provide agents with f
 ## Usage Example
 
 ```typescript
-import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
 
 const workspace = new Workspace({
   id: 'my-workspace',
@@ -97,7 +98,7 @@ await workspace.init();
     {
       name: "skills",
       type: "string[] | ((context) => string[])",
-      description: "Paths where SKILL.md files are located. Can be static array or dynamic function.",
+      description: "Paths where SKILL.md files are located. Can be a static array or a dynamic function.",
       isOptional: true,
     },
     {
@@ -127,7 +128,8 @@ await workspace.init();
 The `tools` option controls which workspace tools are enabled and their safety settings.
 
 ```typescript
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace/constants';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),

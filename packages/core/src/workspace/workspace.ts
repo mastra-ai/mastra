@@ -280,6 +280,11 @@ export class Workspace {
     this._fs = config.filesystem;
     this._sandbox = config.sandbox;
 
+    // Validate vector search config - embedder is required with vectorStore
+    if (config.vectorStore && !config.embedder) {
+      throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
+    }
+
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
       this._searchEngine = new SearchEngine({
@@ -310,7 +315,10 @@ export class Workspace {
     if (config.autoInit) {
       // Use void to indicate we intentionally don't await
       // This allows construction to complete while init runs in background
-      void this.init();
+      void this.init().catch(error => {
+        this._status = 'error';
+        console.error('[Workspace] autoInit failed:', error);
+      });
     }
   }
 
@@ -523,7 +531,8 @@ export class Workspace {
       const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
-      } else if (entry.type === 'directory') {
+      } else if (entry.type === 'directory' && !entry.isSymlink) {
+        // Skip symlink directories to prevent infinite recursion from cycles
         files.push(...(await this.getAllFiles(fullPath)));
       }
     }
@@ -635,7 +644,7 @@ export class Workspace {
         type: 'filesystem-only',
         filesystem: {
           provider: this._fs!.provider,
-          basePath: (this._fs as any).basePath,
+          basePath: this._fs!.basePath,
         },
         requiresSync: false,
         instructions: 'No sandbox configured. Files can only be accessed via workspace filesystem tools.',
@@ -648,7 +657,7 @@ export class Workspace {
         type: 'sandbox-only',
         sandbox: {
           provider: this._sandbox!.provider,
-          workingDirectory: (this._sandbox as any).workingDirectory,
+          workingDirectory: this._sandbox!.workingDirectory,
         },
         requiresSync: false,
         instructions: 'No filesystem configured. Command execution is available but files are ephemeral.',
@@ -664,8 +673,8 @@ export class Workspace {
       (fsProvider === 'local' && sandboxProvider === 'local') || (fsProvider === 'e2b' && sandboxProvider === 'e2b');
 
     if (isSameContext) {
-      const basePath = (this._fs as any).basePath as string | undefined;
-      const workingDirectory = (this._sandbox as any).workingDirectory as string | undefined;
+      const basePath = this._fs!.basePath;
+      const workingDirectory = this._sandbox!.workingDirectory;
 
       let instructions: string;
       if (basePath) {
@@ -695,11 +704,11 @@ export class Workspace {
       type: 'cross-context',
       filesystem: {
         provider: fsProvider,
-        basePath: (this._fs as any).basePath,
+        basePath: this._fs!.basePath,
       },
       sandbox: {
         provider: sandboxProvider,
-        workingDirectory: (this._sandbox as any).workingDirectory,
+        workingDirectory: this._sandbox!.workingDirectory,
       },
       requiresSync: true,
       instructions:

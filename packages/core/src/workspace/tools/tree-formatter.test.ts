@@ -646,16 +646,17 @@ describe('tree-formatter', () => {
   // ===========================================================================
   describe('comparison with native tree command', () => {
     /**
-     * Check if the `tree` command is available on this system
+     * Check if the `tree` command is available on this system.
+     * Cached at describe-time for use with it.skipIf.
      */
-    function isTreeAvailable(): boolean {
+    const treeAvailable = (() => {
       try {
         execSync('which tree', { encoding: 'utf-8' });
         return true;
       } catch {
         return false;
       }
-    }
+    })();
 
     /**
      * Normalize tree output for comparison.
@@ -686,12 +687,7 @@ describe('tree-formatter', () => {
       return normalizeTreeOutput(lines.join('\n'));
     }
 
-    it('should match native tree output for simple structure', async function () {
-      if (!isTreeAvailable()) {
-        console.log('Skipping: native tree command not available');
-        return;
-      }
-
+    it.skipIf(!treeAvailable)('should match native tree output for simple structure', async function () {
       // Create a simple structure
       await fs.mkdir(path.join(tempDir, 'src'));
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
@@ -704,12 +700,7 @@ describe('tree-formatter', () => {
       expect(ourResult.tree).toBe(nativeResult);
     });
 
-    it('should match native tree output for nested structure', async function () {
-      if (!isTreeAvailable()) {
-        console.log('Skipping: native tree command not available');
-        return;
-      }
-
+    it.skipIf(!treeAvailable)('should match native tree output for nested structure', async function () {
       // Create nested structure
       await fs.mkdir(path.join(tempDir, 'src'));
       await fs.mkdir(path.join(tempDir, 'src', 'utils'));
@@ -724,12 +715,7 @@ describe('tree-formatter', () => {
       expect(ourResult.tree).toBe(nativeResult);
     });
 
-    it('should match native tree output for deeply nested structure', async function () {
-      if (!isTreeAvailable()) {
-        console.log('Skipping: native tree command not available');
-        return;
-      }
-
+    it.skipIf(!treeAvailable)('should match native tree output for deeply nested structure', async function () {
       // Create deep structure
       let currentPath = tempDir;
       for (let i = 1; i <= 4; i++) {
@@ -744,12 +730,7 @@ describe('tree-formatter', () => {
       expect(ourResult.tree).toBe(nativeResult);
     });
 
-    it('should match native tree output for multiple branches', async function () {
-      if (!isTreeAvailable()) {
-        console.log('Skipping: native tree command not available');
-        return;
-      }
-
+    it.skipIf(!treeAvailable)('should match native tree output for multiple branches', async function () {
       // Create structure with multiple branches at same level
       await fs.mkdir(path.join(tempDir, 'alpha'));
       await fs.mkdir(path.join(tempDir, 'beta'));
@@ -765,12 +746,7 @@ describe('tree-formatter', () => {
       expect(ourResult.tree).toBe(nativeResult);
     });
 
-    it('should match native tree output for symlinks', async function () {
-      if (!isTreeAvailable()) {
-        console.log('Skipping: native tree command not available');
-        return;
-      }
-
+    it.skipIf(!treeAvailable)('should match native tree output for symlinks', async function () {
       // Create structure with symlinks
       await fs.mkdir(path.join(tempDir, 'packages'));
       await fs.mkdir(path.join(tempDir, 'packages', 'core'));

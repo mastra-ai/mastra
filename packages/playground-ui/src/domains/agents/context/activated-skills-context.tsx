@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, ReactNode } from 'rea
 
 export interface ActivatedSkillsContextValue {
   /** Set of currently activated skill names */
-  activatedSkills: Set<string>;
+  activatedSkills: ReadonlySet<string>;
   /** Add a skill to the activated set */
   activateSkill: (skillName: string) => void;
   /** Remove a skill from the activated set */

@@ -109,6 +109,12 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
   /** Current status */
   readonly status: ProviderStatus;
 
+  /**
+   * Working directory for command execution (if applicable).
+   * Not all sandbox implementations have a fixed working directory.
+   */
+  readonly workingDirectory?: string;
+
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
@@ -177,10 +183,13 @@ export class SandboxExecutionError extends SandboxError {
   }
 }
 
+/** Sandbox operation types for timeout errors */
+export type SandboxOperation = 'command' | 'sync' | 'install';
+
 export class SandboxTimeoutError extends SandboxError {
   constructor(
     public readonly timeoutMs: number,
-    public readonly operation: 'command',
+    public readonly operation: SandboxOperation,
   ) {
     super(`Execution timed out after ${timeoutMs}ms`, 'TIMEOUT', { timeoutMs, operation });
     this.name = 'SandboxTimeoutError';
