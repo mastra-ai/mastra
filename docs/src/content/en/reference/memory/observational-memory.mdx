@@ -1,0 +1,356 @@
+---
+title: "Reference: Observational Memory | Memory"
+description: "API reference for Observational Memory in Mastra — a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Observational Memory
+
+Observational Memory is a memory processor that maintains long-term memory across conversations. It uses two background agents — an Observer that watches conversations and makes observations, and a Reflector that restructures observations by combining related items, reflecting on overarching patterns, and condensing where possible.
+
+This keeps the agent's context window small while preserving what matters across long conversations.
+
+## Usage
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: true,
+    },
+  }),
+});
+```
+
+## Configuration
+
+The `observationalMemory` option accepts `true`, `false`, or a configuration object.
+
+Setting `observationalMemory: true` enables it with all defaults. Setting `observationalMemory: false` or omitting it disables it.
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description:
+        "Enable or disable Observational Memory. When omitted from a config object, defaults to `true`. Only `enabled: false` explicitly disables it.",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set.",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "scope",
+      type: "'resource' | 'thread'",
+      description:
+        "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` shares observations across all threads for a resource, enabling cross-conversation memory.",
+      isOptional: true,
+      defaultValue: "'thread'",
+    },
+    {
+      name: "shareTokenBudget",
+      type: "boolean",
+      description:
+        "Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "observation",
+      type: "ObservationalMemoryObservationConfig",
+      description:
+        "Configuration for the observation step. Controls when the Observer agent runs and how it behaves.",
+      isOptional: true,
+    },
+    {
+      name: "reflection",
+      type: "ObservationalMemoryReflectionConfig",
+      description:
+        "Configuration for the reflection step. Controls when the Reflector agent runs and how it behaves.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Observation config
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "Model for the Observer agent. Cannot be set if a top-level `model` is also provided.",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "messageTokens",
+      type: "number",
+      description:
+        "Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called.",
+      isOptional: true,
+      defaultValue: "30000",
+    },
+    {
+      name: "maxTokensPerBatch",
+      type: "number",
+      description:
+        "Maximum tokens per batch when observing multiple threads in resource scope. Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.",
+      isOptional: true,
+      defaultValue: "10000",
+    },
+    {
+      name: "modelSettings",
+      type: "ObservationalMemoryModelSettings",
+      description:
+        "Model settings for the Observer agent.",
+      isOptional: true,
+      defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+    },
+  ]}
+/>
+
+### Reflection config
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "Model for the Reflector agent. Cannot be set if a top-level `model` is also provided.",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "observationTokens",
+      type: "number",
+      description:
+        "Token count of observations that triggers reflection. When observation tokens exceed this threshold, the Reflector agent is called to condense them.",
+      isOptional: true,
+      defaultValue: "40000",
+    },
+    {
+      name: "modelSettings",
+      type: "ObservationalMemoryModelSettings",
+      description:
+        "Model settings for the Reflector agent.",
+      isOptional: true,
+      defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+    },
+  ]}
+/>
+
+### Model settings
+
+<PropertiesTable
+  content={[
+    {
+      name: "temperature",
+      type: "number",
+      description:
+        "Temperature for generation. Lower values produce more consistent output.",
+      isOptional: true,
+      defaultValue: "0.3",
+    },
+    {
+      name: "maxOutputTokens",
+      type: "number",
+      description:
+        "Maximum output tokens. Set high to prevent truncation of observations.",
+      isOptional: true,
+      defaultValue: "100000",
+    },
+  ]}
+/>
+
+## Examples
+
+### Resource scope with custom thresholds
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        scope: "resource",
+        observation: {
+          messageTokens: 20_000,
+        },
+        reflection: {
+          observationTokens: 60_000,
+        },
+      },
+    },
+  }),
+});
+```
+
+### Shared token budget
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        shareTokenBudget: true,
+        observation: {
+          messageTokens: 20_000,
+        },
+        reflection: {
+          observationTokens: 80_000,
+        },
+      },
+    },
+  }),
+});
+```
+
+When `shareTokenBudget` is enabled, the total budget is `messageTokens + observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
+
+### Custom model
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: "openai/gpt-4o-mini",
+      },
+    },
+  }),
+});
+```
+
+### Different models per agent
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          model: "google/gemini-2.5-flash",
+        },
+        reflection: {
+          model: "openai/gpt-4o-mini",
+        },
+      },
+    },
+  }),
+});
+```
+
+## Standalone usage
+
+Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/docs/agents/guardrails)).
+
+```typescript title="src/mastra/agents/agent.ts"
+import { ObservationalMemory } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: "my-storage",
+  url: "file:./memory.db",
+});
+
+const om = new ObservationalMemory({
+  storage: storage.stores.memory,
+  model: "google/gemini-2.5-flash",
+  scope: "resource",
+  observation: {
+    messageTokens: 20_000,
+  },
+  reflection: {
+    observationTokens: 60_000,
+  },
+});
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  inputProcessors: [om],
+  outputProcessors: [om],
+});
+```
+
+### Standalone config
+
+The standalone `ObservationalMemory` class accepts all the same options as the `observationalMemory` config object above, plus the following:
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description:
+        "Storage adapter for persisting observations. Must be a MemoryStorage instance (from `MastraStorage.stores.memory`).",
+      isOptional: false,
+    },
+    {
+      name: "onDebugEvent",
+      type: "(event: ObservationDebugEvent) => void",
+      description:
+        "Debug callback for observation events. Called whenever observation-related events occur. Useful for debugging and understanding the observation flow.",
+      isOptional: true,
+    },
+    {
+      name: "obscureThreadIds",
+      type: "boolean",
+      description:
+        "When enabled, thread IDs are hashed before being included in observation context. This prevents the LLM from recognizing patterns in thread identifiers. Automatically enabled when using resource scope through the Memory class.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### Related
+
+- [Observational Memory](/docs/memory/observational-memory)
+- [Memory Overview](/docs/memory/overview)
+- [Memory Class](/reference/memory/memory-class)
+- [Memory Processors](/docs/memory/memory-processors)
+- [Processors](/docs/agents/processors)
