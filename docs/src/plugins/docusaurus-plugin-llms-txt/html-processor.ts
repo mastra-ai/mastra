@@ -10,10 +10,10 @@ import remarkGfm from 'remark-gfm'
 import type { Root as HastRoot, Element } from 'hast'
 import type { Root as MdastRoot } from 'mdast'
 
-import { handleCodeBlock } from './code-block-handler.js'
-import { createLinkHandler } from './link-handler.js'
-import { extractMetadata, selectContent, removeUnwantedElements, type PageMetadata } from './content-extractor.js'
-import type { ResolvedOptions } from './options.js'
+import { handleCodeBlock } from './code-block-handler'
+import { createLinkHandler } from './link-handler'
+import { extractMetadata, selectContent, removeUnwantedElements, type PageMetadata } from './content-extractor'
+import type { ResolvedOptions } from './options'
 
 export interface ProcessedPage {
   metadata: PageMetadata
@@ -38,7 +38,7 @@ export async function processHtml(html: string, route: string, options: Resolved
     return {
       metadata,
       markdown: '',
-      llmsTxt: formatLlmsTxt(metadata, route, '', options),
+      llmsTxt: '',
     }
   }
 
@@ -49,7 +49,7 @@ export async function processHtml(html: string, route: string, options: Resolved
   removeUnwantedElements(contentClone)
 
   // Create the link handler with options
-  const linkHandler = createLinkHandler({ siteUrl: options.siteUrl })
+  const linkHandler = createLinkHandler({ siteUrl: options.siteUrl, excludeRoutes: options.excludeRoutes })
 
   // Convert to Markdown
   const processor = unified()
@@ -82,20 +82,13 @@ export async function processHtml(html: string, route: string, options: Resolved
   markdown = cleanupMarkdown(markdown)
 
   // Format as llms.txt
-  const llmsTxt = formatLlmsTxt(metadata, route, markdown, options)
+  const llmsTxt = markdown.trim()
 
   return {
     metadata,
     markdown,
     llmsTxt,
   }
-}
-
-/**
- * Format the final llms.txt content - just the markdown content
- */
-function formatLlmsTxt(_metadata: PageMetadata, _route: string, content: string, _options: ResolvedOptions): string {
-  return content.trim()
 }
 
 /**

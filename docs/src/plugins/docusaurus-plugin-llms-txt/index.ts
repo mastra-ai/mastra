@@ -7,13 +7,12 @@
 import type { LoadContext, Plugin } from '@docusaurus/types'
 import path from 'path'
 import fs from 'fs-extra'
-import { glob } from 'glob'
-import pMap from 'p-map'
+import { glob } from 'tinyglobby'
 
-import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './options.js'
-import { CacheManager, computeHash } from './cache-manager.js'
-import { processHtml } from './html-processor.js'
-import { generateRootLlmsTxt, writeLlmsTxt, type RouteEntry } from './output-generator.js'
+import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './options'
+import { CacheManager, computeHash } from './cache-manager'
+import { processHtml } from './html-processor'
+import { generateRootLlmsTxt, writeLlmsTxt, type RouteEntry } from './output-generator'
 
 const PLUGIN_NAME = 'docusaurus-plugin-llms-txt'
 const CONCURRENCY = 10
@@ -49,66 +48,62 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
       let cachedCount = 0
       let skippedCount = 0
 
-      const results = await pMap(
-        htmlFiles,
-        async (htmlFile): Promise<RouteEntry | null> => {
-          // Get route from file path
-          // e.g., "docs/agents/overview/index.html" -> "/docs/agents/overview"
-          const dirPath = path.dirname(htmlFile)
-          const route = dirPath === '.' ? '/' : '/' + dirPath
+      const results = await mapConcurrent(htmlFiles, CONCURRENCY, async (htmlFile): Promise<RouteEntry | null> => {
+        // Get route from file path
+        // e.g., "docs/agents/overview/index.html" -> "/docs/agents/overview"
+        const dirPath = path.dirname(htmlFile)
+        const route = dirPath === '.' ? '/' : '/' + dirPath
 
-          // Check exclusions
-          if (shouldExclude(route, options.excludeRoutes)) {
-            skippedCount++
-            return null
-          }
+        // Check exclusions
+        if (shouldExclude(route, options.excludeRoutes)) {
+          skippedCount++
+          return null
+        }
 
-          const htmlPath = path.join(outDir, htmlFile)
+        const htmlPath = path.join(outDir, htmlFile)
 
-          try {
-            // Read HTML content
-            const html = await fs.readFile(htmlPath, 'utf-8')
-            const contentHash = computeHash(html)
+        try {
+          // Read HTML content
+          const html = await fs.readFile(htmlPath, 'utf-8')
+          const contentHash = computeHash(html)
 
-            const llmsTxtPath = path.join(path.dirname(htmlPath), 'llms.txt')
+          const llmsTxtPath = path.join(path.dirname(htmlPath), 'llms.txt')
 
-            // Check cache
-            if (cache.isValid(route, contentHash)) {
-              const cachedContent = cache.getContent(route)
-              const cachedTitle = cache.getTitle(route)
+          // Check cache
+          if (cache.isValid(route, contentHash)) {
+            const cachedContent = cache.getContent(route)
+            const cachedTitle = cache.getTitle(route)
 
-              if (cachedContent) {
-                // Write cached content to file (build dir is cleared each time)
-                await writeLlmsTxt(llmsTxtPath, cachedContent)
-                cachedCount++
-                return { route, title: cachedTitle, cached: true }
-              }
+            if (cachedContent) {
+              // Write cached content to file (build dir is cleared each time)
+              await writeLlmsTxt(llmsTxtPath, cachedContent)
+              cachedCount++
+              return { route, title: cachedTitle, cached: true }
             }
-
-            // Process HTML to markdown
-            const { llmsTxt, metadata } = await processHtml(html, route, options)
-
-            // Write individual llms.txt file
-            await writeLlmsTxt(llmsTxtPath, llmsTxt)
-
-            // Update cache with title and content
-            cache.set(route, contentHash, metadata.title, llmsTxt)
-            processedCount++
-
-            return { route, title: metadata.title, cached: false }
-          } catch (error) {
-            console.error(`[${PLUGIN_NAME}] Error processing ${route}:`, error)
-            return null
           }
-        },
-        { concurrency: CONCURRENCY },
-      )
+
+          // Process HTML to markdown
+          const { llmsTxt, metadata } = await processHtml(html, route, options)
+
+          // Write individual llms.txt file
+          await writeLlmsTxt(llmsTxtPath, llmsTxt)
+
+          // Update cache with title and content
+          cache.set(route, contentHash, metadata.title, llmsTxt)
+          processedCount++
+
+          return { route, title: metadata.title, cached: false }
+        } catch (error) {
+          console.error(`[${PLUGIN_NAME}] Error processing ${route}:`, error)
+          return null
+        }
+      })
 
       // Filter out null results
       const validRoutes = results.filter((r): r is RouteEntry => r !== null)
 
       // Generate root llms.txt
-      await generateRootLlmsTxt(outDir, validRoutes, options)
+      await generateRootLlmsTxt(outDir, siteDir, options)
 
       // Save cache
       await cache.save()
@@ -133,6 +128,26 @@ function shouldExclude(route: string, excludePatterns: string[]): boolean {
     }
   }
   return false
+}
+
+/**
+ * Map over items with limited concurrency (replacement for p-map)
+ */
+async function mapConcurrent<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = []
+  let index = 0
+
+  async function worker(): Promise<void> {
+    while (index < items.length) {
+      const currentIndex = index++
+      results[currentIndex] = await fn(items[currentIndex])
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  await Promise.all(workers)
+
+  return results
 }
 
 // Export types for external use

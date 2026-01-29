@@ -4,7 +4,8 @@
 
 import fs from 'fs-extra'
 import path from 'path'
-import type { ResolvedOptions } from './options.js'
+import type { ResolvedOptions } from './options'
+import { generateMarkdownList, getBaseUrl, getSidebarLocations, parseSidebarFile } from './sidebars-handler'
 
 export interface RouteEntry {
   route: string
@@ -15,122 +16,24 @@ export interface RouteEntry {
 /**
  * Generate the root llms.txt file with links to all individual files
  */
-export async function generateRootLlmsTxt(
-  outDir: string,
-  routes: RouteEntry[],
-  options: ResolvedOptions,
-): Promise<void> {
-  // Group routes by section
-  const sections = groupRoutesBySection(routes)
+export async function generateRootLlmsTxt(outDir: string, siteDir: string, options: ResolvedOptions): Promise<void> {
+  let output = ROOT_LLMS_PREFIX_BLOCK + '\n\n'
 
-  const content = buildRootContent(sections, options)
+  for (const sidebar of getSidebarLocations(siteDir)) {
+    try {
+      const items = await parseSidebarFile(sidebar.path)
+      const baseUrl = getBaseUrl(sidebar.id)
+      const condensedCategories = sidebar.condensedCategories || []
 
-  await fs.writeFile(path.join(outDir, 'llms.txt'), content, 'utf-8')
-}
-
-/**
- * Group routes by documentation section
- */
-function groupRoutesBySection(routes: RouteEntry[]): Record<string, RouteEntry[]> {
-  const sections: Record<string, RouteEntry[]> = {
-    Docs: [],
-    Models: [],
-    Guides: [],
-    Reference: [],
-    Other: [],
-  }
-
-  for (const entry of routes) {
-    if (entry.route.startsWith('/docs')) {
-      sections.Docs.push(entry)
-    } else if (entry.route.startsWith('/models')) {
-      sections.Models.push(entry)
-    } else if (entry.route.startsWith('/guides')) {
-      sections.Guides.push(entry)
-    } else if (entry.route.startsWith('/reference')) {
-      sections.Reference.push(entry)
-    } else if (entry.route !== '/') {
-      sections.Other.push(entry)
+      output += `## ${sidebar.id}\n\n`
+      output += generateMarkdownList(items, baseUrl, 0, condensedCategories)
+      output += '\n'
+    } catch (error) {
+      console.error(`Error processing ${sidebar.id}:`, error)
     }
   }
 
-  // Remove empty sections
-  for (const key of Object.keys(sections)) {
-    if (sections[key].length === 0) {
-      delete sections[key]
-    }
-  }
-
-  // Sort routes within each section
-  for (const key of Object.keys(sections)) {
-    sections[key].sort((a, b) => a.route.localeCompare(b.route))
-  }
-
-  return sections
-}
-
-/**
- * Build the root llms.txt content
- */
-function buildRootContent(sections: Record<string, RouteEntry[]>, options: ResolvedOptions): string {
-  const lines: string[] = []
-
-  // Header
-  lines.push(`# ${options.siteTitle}`)
-  lines.push('')
-  lines.push(options.siteDescription)
-  lines.push('')
-
-  // Quick links to section indexes
-  lines.push('## Documentation Sections')
-  lines.push('')
-  lines.push(
-    `- [**Docs**](${options.siteUrl}/docs): Core documentation covering concepts, features, and implementation details`,
-  )
-  lines.push(
-    `- [**Models**](${options.siteUrl}/models): Mastra provides a unified interface for working with LLMs across multiple providers`,
-  )
-  lines.push(`- [**Guides**](${options.siteUrl}/guides): Step-by-step tutorials for building specific applications`)
-  lines.push(`- [**Reference**](${options.siteUrl}/reference): API reference documentation`)
-  lines.push('')
-
-  // Popular starting points
-  lines.push('## Popular Starting Points')
-  lines.push('')
-  lines.push(
-    `- [Getting Started](${options.siteUrl}/docs/getting-started/start/llms.txt): Create a new project with the \`create mastra\` CLI`,
-  )
-  lines.push(
-    `- [Agent Overview](${options.siteUrl}/docs/agents/overview/llms.txt): Learn about agents and their capabilities`,
-  )
-  lines.push(
-    `- [Workflows Overview](${options.siteUrl}/docs/workflows/overview/llms.txt): Define complex sequences of tasks`,
-  )
-  lines.push(
-    `- [Memory Overview](${options.siteUrl}/docs/memory/overview/llms.txt): Give your agent coherence across interactions`,
-  )
-  lines.push('')
-
-  // All pages by section
-  lines.push('## All Pages')
-  lines.push('')
-  lines.push('Each page has its own llms.txt file for granular access:')
-  lines.push('')
-
-  for (const [sectionName, sectionRoutes] of Object.entries(sections)) {
-    lines.push(`### ${sectionName}`)
-    lines.push('')
-
-    for (const entry of sectionRoutes) {
-      const llmsTxtUrl = `${options.siteUrl}${entry.route}/llms.txt`
-      const linkText = entry.title || entry.route
-      lines.push(`- [${linkText}](${llmsTxtUrl})`)
-    }
-
-    lines.push('')
-  }
-
-  return lines.join('\n')
+  await fs.writeFile(path.join(outDir, 'llms.txt'), output, 'utf-8')
 }
 
 /**
@@ -140,3 +43,25 @@ export async function writeLlmsTxt(outputPath: string, content: string): Promise
   await fs.ensureDir(path.dirname(outputPath))
   await fs.writeFile(outputPath, content, 'utf-8')
 }
+
+const ROOT_LLMS_PREFIX_BLOCK = `# Mastra
+
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
+
+Some of its highlights include: Model routing, agents, workflows, human-in-the-loop, context management, and MCP.
+
+The documentation is organized into key sections:
+
+- **Docs**: Core documentation covering concepts, features, and implementation details
+- **Models**: Mastra provides a unified interface for working with LLMs across multiple providers
+- **Guides**: Step-by-step tutorials for building specific applications
+- **Reference**: API reference documentation
+
+Each section contains detailed docs that provide comprehensive information about Mastra's features and how to use them effectively.
+
+These are the most popular starting points:
+
+- [Getting Started](https://mastra.ai/docs/getting-started/start/llms.txt): Create a new project with the \`create mastra\` CLI or use one of the framework quickstart guides
+- [Agent Overview](https://mastra.ai/docs/agents/overview/llms.txt): Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met.
+- [Workflows Overview](https://mastra.ai/docs/workflows/overview/llms.txt): Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent.
+- [Memory Overview](https://mastra.ai/docs/memory/overview/llms.txt): Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.`

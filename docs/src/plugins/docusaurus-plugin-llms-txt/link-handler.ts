@@ -8,6 +8,7 @@ import type { State } from 'hast-util-to-mdast'
 
 export interface LinkHandlerOptions {
   siteUrl: string
+  excludeRoutes?: string[]
 }
 
 /**
@@ -32,6 +33,15 @@ function isInternalLink(href: string | undefined): boolean {
   }
 
   return true
+}
+
+function isExcludedRoute(href: string, excludePatterns: string[]): boolean {
+  for (const pattern of excludePatterns) {
+    if (href === pattern || href.startsWith(pattern + '/')) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -80,7 +90,7 @@ export function createLinkHandler(options: LinkHandlerOptions) {
 
     // Convert internal links to llms.txt URLs
     let finalHref = href || ''
-    if (isInternalLink(href)) {
+    if (isInternalLink(href) && !(options.excludeRoutes && isExcludedRoute(href, options.excludeRoutes))) {
       const route = normalizeRoute(href!)
       finalHref = `${options.siteUrl}${route}/llms.txt`
     }
