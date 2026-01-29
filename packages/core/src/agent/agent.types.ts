@@ -55,7 +55,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
   runId?: string;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
 
   /** Maximum number of iterations to run */
   maxSteps?: number;
@@ -168,7 +168,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
   /** Maximum number of steps to run */
   maxSteps?: number;
