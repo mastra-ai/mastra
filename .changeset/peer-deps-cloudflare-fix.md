@@ -5,6 +5,7 @@
 '@mastra/libsql': patch
 '@mastra/mongodb': patch
 '@mastra/clickhouse': patch
+'@mastra/mssql': patch
 '@mastra/server': patch
 ---
 
@@ -14,7 +15,7 @@ Fix peer dependency compatibility issues and standardize on `fast-deep-equal`:
 
 - Add `getSchemas()`, `getSchema(tableName)`, and `hasSchema(tableName)` methods to `StorageDomain` base class. These provide a way to access table schemas dynamically.
 
-- Storage adapters now use dynamic access for `TABLE_AGENT_VERSIONS` and `toTraceSpans` with fallback for backwards compatibility with older core versions.
+- Storage adapters now import `TABLE_AGENT_VERSIONS` and `toTraceSpans` directly from core. Peer dependency requirements (>=1.1.0-0) ensure these exports are available.
 
 - Update server handlers to check if new Mastra methods exist before calling them:
   - `mastra.getStoredAgentById()` - check before calling in agent lookup

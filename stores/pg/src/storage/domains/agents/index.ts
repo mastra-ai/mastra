@@ -1,16 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import * as coreStorage from '@mastra/core/storage';
 import {
   AgentsStorage,
   createStorageErrorId,
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
-
-// Use core's constant if available, otherwise fall back to local value for backwards compatibility
-const TABLE_AGENT_VERSIONS = ((coreStorage as Record<string, unknown>).TABLE_AGENT_VERSIONS ??
-  'mastra_agent_versions') as 'mastra_agent_versions';
 import type {
   StorageAgentType,
   StorageCreateAgentInput,

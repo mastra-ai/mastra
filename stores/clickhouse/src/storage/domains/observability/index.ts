@@ -1,12 +1,12 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import * as coreStorage from '@mastra/core/storage';
 import {
   createStorageErrorId,
   listTracesArgsSchema,
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -29,14 +29,6 @@ import type {
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
 import { TABLE_ENGINES, transformRows } from '../../db/utils';
-
-// Use core's toTraceSpans if available, otherwise provide fallback for backwards compatibility
-const toTraceSpans = ((coreStorage as Record<string, unknown>).toTraceSpans ??
-  ((spans: SpanRecord[]) =>
-    spans.map(span => ({
-      ...span,
-      status: span.error != null ? TraceStatus.ERROR : span.endedAt == null ? TraceStatus.RUNNING : TraceStatus.SUCCESS,
-    })))) as (spans: SpanRecord[]) => (SpanRecord & { status: TraceStatus })[];
 
 export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   protected client: ClickHouseClient;

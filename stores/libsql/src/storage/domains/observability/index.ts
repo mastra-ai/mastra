@@ -1,11 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import * as coreStorage from '@mastra/core/storage';
 import {
   createStorageErrorId,
   listTracesArgsSchema,
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -26,14 +26,6 @@ import type {
   GetTraceResponse,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-
-// Use core's toTraceSpans if available, otherwise provide fallback for backwards compatibility
-const toTraceSpans = ((coreStorage as Record<string, unknown>).toTraceSpans ??
-  ((spans: SpanRecord[]) =>
-    spans.map(span => ({
-      ...span,
-      status: span.error != null ? TraceStatus.ERROR : span.endedAt == null ? TraceStatus.RUNNING : TraceStatus.SUCCESS,
-    })))) as (spans: SpanRecord[]) => (SpanRecord & { status: TraceStatus })[];
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { transformFromSqlRow } from '../../db/utils';
