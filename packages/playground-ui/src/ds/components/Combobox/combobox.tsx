@@ -59,7 +59,9 @@ export function Combobox({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <BaseCombobox.Trigger className={cn(buttonVariants({ variant, size }), 'w-full min-w-32 justify-between', className)}>
+      <BaseCombobox.Trigger
+        className={cn(buttonVariants({ variant, size }), 'w-full min-w-32 justify-between', className)}
+      >
         <span className="truncate flex items-center gap-2">
           {selectedOption?.start}
           <BaseCombobox.Value placeholder={placeholder} />
