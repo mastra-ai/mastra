@@ -103,7 +103,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
       const validRoutes = results.filter((r): r is RouteEntry => r !== null)
 
       // Generate root llms.txt
-      await generateRootLlmsTxt(outDir, siteDir, options)
+      await generateRootLlmsTxt(outDir, siteDir)
 
       // Save cache
       await cache.save()

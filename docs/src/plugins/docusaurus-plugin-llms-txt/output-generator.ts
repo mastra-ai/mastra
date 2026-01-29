@@ -16,7 +16,7 @@ export interface RouteEntry {
 /**
  * Generate the root llms.txt file with links to all individual files
  */
-export async function generateRootLlmsTxt(outDir: string, siteDir: string, options: ResolvedOptions): Promise<void> {
+export async function generateRootLlmsTxt(outDir: string, siteDir: string): Promise<void> {
   let output = ROOT_LLMS_PREFIX_BLOCK + '\n\n'
 
   for (const sidebar of getSidebarLocations(siteDir)) {

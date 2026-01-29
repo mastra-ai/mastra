@@ -183,9 +183,9 @@ function ViewOptions({ url }: { url: string }) {
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   aria-hidden="true"
                 >
                   <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path>
@@ -234,7 +234,7 @@ function ViewOptions({ url }: { url: string }) {
                 className="hover:text-(--mastra-text-primary)! hover:no-underline!"
                 rel="noopener noreferrer"
               >
-                <div className="h4 w-4">{item.icon}</div>
+                <div className="h-4 w-4">{item.icon}</div>
                 <div className="flex grow items-center justify-between gap-1.5">
                   {item.title}
                   <ExternalLinkIcon className="h-4 w-4 text-(--mastra-text-tertiary)" />

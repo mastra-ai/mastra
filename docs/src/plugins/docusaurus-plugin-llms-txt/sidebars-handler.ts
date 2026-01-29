@@ -163,5 +163,8 @@ export async function parseSidebarFile(filePath: string): Promise<SidebarItem[]>
   const sidebars = module.default as SidebarsConfig
 
   const sidebarKey = Object.keys(sidebars)[0]
+  if (!sidebarKey) {
+    return []
+  }
   return sidebars[sidebarKey]
 }
