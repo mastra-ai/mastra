@@ -1986,6 +1986,9 @@ importers:
       prettier:
         specifier: ^3.7.4
         version: 3.7.4
+      semver:
+        specifier: ^7.7.0
+        version: 7.7.3
       serve:
         specifier: ^14.2.5
         version: 14.2.5
@@ -2026,6 +2029,9 @@ importers:
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       '@types/serve-handler':
         specifier: ^6.1.4
         version: 6.1.4
@@ -2147,6 +2153,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      fast-deep-equal:
+        specifier: ^3.1.3
+        version: 3.1.3
       hono:
         specifier: ^4.11.3
         version: 4.11.3
@@ -2268,9 +2277,6 @@ importers:
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
-      fast-deep-equal:
-        specifier: ^3.1.3
-        version: 3.1.3
       globby:
         specifier: ^14.1.0
         version: 14.1.0
@@ -3418,6 +3424,9 @@ importers:
 
   packages/server:
     dependencies:
+      fast-deep-equal:
+        specifier: ^3.1.3
+        version: 3.1.3
       hono:
         specifier: ^4.11.3
         version: 4.11.3

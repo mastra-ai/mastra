@@ -8,6 +8,7 @@ import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
+import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
@@ -384,6 +385,10 @@ export async function dev({
 
   // Extract mastra packages from the project's package.json
   const mastraPackages = await getMastraPackages(rootDir);
+
+  // Check for peer dependency version mismatches
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
+  logPeerDepWarnings(peerDepMismatches);
 
   const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
 
