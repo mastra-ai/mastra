@@ -1,0 +1,527 @@
+# Technology Stack: Browser Input Injection
+
+**Project:** Mastra Browser Tools -- Input Injection from Studio UI
+**Researched:** 2026-01-28
+**Overall confidence:** HIGH
+
+## Executive Summary
+
+Input injection from the Studio UI to the Chrome browser requires **zero new library dependencies**. Every piece of infrastructure already exists in the codebase. The work is purely integration: capturing DOM events in the React `BrowserViewFrame` component, serializing them as JSON over the existing bidirectional WebSocket, deserializing them on the server in the existing `onMessage` handler, computing coordinate transforms, and calling the existing `BrowserToolset.injectMouseEvent()` / `injectKeyboardEvent()` methods which already wrap CDP `Input.dispatchMouseEvent` and `Input.dispatchKeyEvent`.
+
+The single non-trivial technical problem is **coordinate mapping**: the `<img>` element displays a scaled JPEG frame, and user clicks on that scaled image must be converted to CSS-pixel coordinates in the browser's actual viewport. This requires the server to send viewport metadata alongside frames, which it currently does not do (it strips it).
+
+---
+
+## What Exists (Do Not Rebuild)
+
+| Layer | Component | Location | Status |
+|-------|-----------|----------|--------|
+| CDP injection | `BrowserManager.injectMouseEvent()` | `agent-browser/dist/browser.js:1249-1268` | Working, calls `Input.dispatchMouseEvent` |
+| CDP injection | `BrowserManager.injectKeyboardEvent()` | `agent-browser/dist/browser.js:1272-1281` | Working, calls `Input.dispatchKeyEvent` |
+| CDP injection | `BrowserManager.injectTouchEvent()` | `agent-browser/dist/browser.js:1285-1296` | Working, calls `Input.dispatchTouchEvent` |
+| Toolset passthrough | `BrowserToolset.injectMouseEvent()` | `integrations/agent-browser/src/toolset.ts:273-285` | Working, awaits getBrowser() then delegates |
+| Toolset passthrough | `BrowserToolset.injectKeyboardEvent()` | `integrations/agent-browser/src/toolset.ts:293-302` | Working, awaits getBrowser() then delegates |
+| WebSocket (server) | `setupBrowserStream()` | `packages/deployer/src/server/browser-stream/browser-stream.ts` | Has `onMessage` handler (currently no-op, marked for Phase 10+) |
+| WebSocket (client) | `useBrowserStream()` | `packages/playground-ui/src/domains/agents/hooks/use-browser-stream.ts` | Has `wsRef` available, can call `ws.send()` |
+| Frame rendering | `BrowserViewFrame` | `packages/playground-ui/src/domains/agents/components/browser-view/browser-view-frame.tsx` | Has `imgRef` with `useRef<HTMLImageElement>` |
+| Viewer lifecycle | `ViewerRegistry` | `packages/deployer/src/server/browser-stream/viewer-registry.ts` | Full ref-counted lifecycle management |
+| Frame broadcast | `ViewerRegistry.broadcastFrame()` | Same file, line 109 | Broadcasts base64 data (NOT viewport metadata -- this is a gap) |
+
+---
+
+## CDP Input Domain Methods Required
+
+**Confidence: HIGH** -- Verified against official Chrome DevTools Protocol documentation (https://chromedevtools.github.io/devtools-protocol/tot/Input/).
+
+### Input.dispatchMouseEvent (already implemented)
+
+Used for click, move, and scroll injection. Already called by `BrowserManager.injectMouseEvent()`.
+
+```typescript
+// CDP wire format
+cdpSession.send('Input.dispatchMouseEvent', {
+  type: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel',
+  x: number,           // CSS pixels relative to main frame viewport
+  y: number,           // CSS pixels relative to main frame viewport
+  button?: 'none' | 'left' | 'middle' | 'right' | 'back' | 'forward',  // default: 'none'
+  clickCount?: number, // default: 0
+  deltaX?: number,     // CSS pixels, for mouseWheel only
+  deltaY?: number,     // CSS pixels, for mouseWheel only
+  modifiers?: number,  // bitmask: Alt=1, Ctrl=2, Meta/Cmd=4, Shift=8
+  pointerType?: 'mouse' | 'pen', // default: 'mouse'
+});
+```
+
+**Critical coordinate note:** x and y are in **CSS pixels relative to the main frame's viewport**, NOT device pixels. This matches the ScreencastFrameMetadata dimensions which are in DIP (device-independent pixels), which for standard desktop displays equal CSS pixels.
+
+**For a click**, you must send TWO events in sequence:
+1. `mousePressed` with `button: 'left'`, `clickCount: 1`
+2. `mouseReleased` with `button: 'left'`, `clickCount: 1`
+
+**For a scroll**, send ONE `mouseWheel` event with `deltaX`/`deltaY` values. Positive `deltaY` scrolls down. CDP expects the coordinates of the mouse position during the scroll.
+
+### Input.dispatchKeyEvent (already implemented)
+
+Used for keyboard input. Already called by `BrowserManager.injectKeyboardEvent()`.
+
+```typescript
+cdpSession.send('Input.dispatchKeyEvent', {
+  type: 'keyDown' | 'keyUp' | 'rawKeyDown' | 'char',
+  key?: string,        // DOM key value (e.g., 'a', 'Enter', 'ArrowDown')
+  code?: string,       // DOM code value (e.g., 'KeyA', 'Enter', 'ArrowDown')
+  text?: string,       // Text generated by the keystroke (for printable chars)
+  modifiers?: number,  // Same bitmask as mouse: Alt=1, Ctrl=2, Meta=4, Shift=8
+  windowsVirtualKeyCode?: number,
+  autoRepeat?: boolean,
+  isKeypad?: boolean,
+  location?: number,   // 0=Standard, 1=Left, 2=Right
+});
+```
+
+**For a printable character**, send THREE events:
+1. `keyDown` with `key`, `code`, `text`
+2. `char` with `text` (the actual character)
+3. `keyUp` with `key`, `code`
+
+**For a non-printable key** (Enter, Escape, arrows, function keys), send TWO events:
+1. `keyDown` with `key`, `code` (no `text`)
+2. `keyUp` with `key`, `code`
+
+### Input.dispatchTouchEvent (exists but not needed for v1)
+
+Already implemented in `BrowserManager.injectTouchEvent()`. Not needed for desktop Studio UI interaction. Could be added later for mobile emulation testing.
+
+---
+
+## Coordinate Mapping: Scaled Frame to Viewport
+
+**This is the core technical problem.** The `<img>` element in `BrowserViewFrame` renders a scaled JPEG. User clicks on the `<img>` are in the element's CSS coordinate space. CDP expects coordinates in the browser viewport's CSS pixel space.
+
+### The Math
+
+```
+viewportX = (clickX / imgDisplayWidth)  * viewportWidth
+viewportY = (clickY / imgDisplayHeight) * viewportHeight
+```
+
+Where:
+- `clickX`, `clickY` = offset from top-left of `<img>` element (from `MouseEvent.offsetX/offsetY` or computed from `clientX/clientY - getBoundingClientRect()`)
+- `imgDisplayWidth`, `imgDisplayHeight` = the rendered size of the `<img>` in CSS pixels (from `getBoundingClientRect()` or `imgRef.current.clientWidth/clientHeight`)
+- `viewportWidth`, `viewportHeight` = the actual browser viewport dimensions in CSS pixels
+
+### The `object-contain` Complication
+
+The `<img>` currently uses `className="object-contain"` which preserves aspect ratio. This means there may be **letterboxing** (black bars on top/bottom or left/right) depending on the container aspect ratio vs. the frame aspect ratio.
+
+With `object-contain`, the actual rendered image area is smaller than the `<img>` element. Clicks in the letterbox region should be ignored or clamped.
+
+**Correct mapping with object-contain:**
+
+```typescript
+function mapToViewport(
+  clientX: number,
+  clientY: number,
+  imgElement: HTMLImageElement,
+  viewportWidth: number,
+  viewportHeight: number,
+): { x: number; y: number } | null {
+  const rect = imgElement.getBoundingClientRect();
+
+  // Position relative to <img> element
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+
+  // Calculate actual rendered image area within the element.
+  // object-contain scales to fit while preserving aspect ratio.
+  const imgAspect = viewportWidth / viewportHeight;
+  const elemAspect = rect.width / rect.height;
+
+  let renderWidth: number;
+  let renderHeight: number;
+  let offsetX: number;
+  let offsetY: number;
+
+  if (imgAspect > elemAspect) {
+    // Image is wider than container -- letterbox top/bottom
+    renderWidth = rect.width;
+    renderHeight = rect.width / imgAspect;
+    offsetX = 0;
+    offsetY = (rect.height - renderHeight) / 2;
+  } else {
+    // Image is taller than container -- letterbox left/right
+    renderHeight = rect.height;
+    renderWidth = rect.height * imgAspect;
+    offsetX = (rect.width - renderWidth) / 2;
+    offsetY = 0;
+  }
+
+  // Position relative to actual rendered image (excluding letterbox)
+  const imageX = relX - offsetX;
+  const imageY = relY - offsetY;
+
+  // Out of bounds (in letterbox area) -- ignore
+  if (imageX < 0 || imageX > renderWidth || imageY < 0 || imageY > renderHeight) {
+    return null;
+  }
+
+  // Scale to viewport coordinates
+  return {
+    x: Math.round((imageX / renderWidth) * viewportWidth),
+    y: Math.round((imageY / renderHeight) * viewportHeight),
+  };
+}
+```
+
+### Obtaining Viewport Dimensions
+
+**Current gap:** The server broadcasts only `frame.data` (base64 string), NOT the viewport metadata. The `ScreencastFrameData.viewport` contains `{ width, height, offsetTop, scrollOffsetX, scrollOffsetY, pageScaleFactor }` but `ViewerRegistry.broadcastFrame()` at line 231 discards it:
+
+```typescript
+// CURRENT: only sends data
+stream.on('frame', frame => {
+  this.broadcastFrame(agentId, frame.data);
+});
+```
+
+**Two options for getting viewport dimensions to the client:**
+
+**Option A (Recommended): Send viewport metadata once, on change.**
+Send a JSON message `{ viewport: { width, height } }` when the screencast starts and whenever dimensions change. The client caches the last-known viewport dimensions. Frame data continues as raw base64 (no per-frame overhead).
+
+Rationale: Viewport dimensions rarely change during a session. Sending them on every frame wastes bandwidth. The client's message discriminator already handles JSON messages (checks `data.startsWith('{')`) vs raw base64 frame data.
+
+**Option B (Simpler but wasteful): Wrap every frame in JSON.**
+Send `{ frame: base64data, viewport: { width, height } }` for every frame. This changes the frame format and adds JSON overhead per frame, and breaks the existing raw-base64 path.
+
+**Recommendation: Option A.** It preserves the existing raw-base64 frame path for performance and only adds a new JSON message type (`viewport`) that the client already knows how to handle through its JSON parsing branch.
+
+---
+
+## WebSocket Message Types (Client to Server)
+
+The existing WebSocket is bidirectional but the `onMessage` handler is currently a no-op. Define these message types for client-to-server input injection:
+
+### Mouse Event
+
+```typescript
+interface WsMouseInput {
+  type: 'mouse';
+  action: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel';
+  x: number;          // Already mapped to viewport CSS pixels by client
+  y: number;          // Already mapped to viewport CSS pixels by client
+  button?: 'left' | 'right' | 'middle' | 'none';
+  clickCount?: number;
+  deltaX?: number;    // For scroll events
+  deltaY?: number;    // For scroll events
+  modifiers?: number; // Alt=1, Ctrl=2, Meta=4, Shift=8
+}
+```
+
+### Keyboard Event
+
+```typescript
+interface WsKeyboardInput {
+  type: 'keyboard';
+  action: 'keyDown' | 'keyUp' | 'char';
+  key?: string;       // DOM key value
+  code?: string;      // DOM physical key code
+  text?: string;      // Text for printable characters
+  modifiers?: number;
+}
+```
+
+### Scroll Event (convenience -- can also use mouse with mouseWheel)
+
+```typescript
+interface WsScrollInput {
+  type: 'scroll';
+  x: number;          // Mouse position during scroll (viewport CSS pixels)
+  y: number;
+  deltaX: number;
+  deltaY: number;
+  modifiers?: number;
+}
+```
+
+### Union Type
+
+```typescript
+type WsInputMessage = WsMouseInput | WsKeyboardInput | WsScrollInput;
+```
+
+### Where Coordinate Mapping Happens
+
+**Client-side.** The React component computes viewport coordinates before sending over WebSocket. The server receives pre-mapped coordinates and passes them directly to `BrowserToolset.injectMouseEvent()`.
+
+Rationale: The client has both the `<img>` element's rendered dimensions and the viewport metadata. Having the server do mapping would require sending element dimensions back to the server, which is a pointless round-trip. This keeps the server handler trivially simple (JSON parse, type check, delegate to toolset).
+
+---
+
+## WebSocket Message Types (Server to Client) -- New Addition
+
+Add one new JSON message type alongside existing ones:
+
+```typescript
+// Existing types (no changes needed)
+interface WsStatusMessage { status: 'connected' | 'browser_starting' | 'streaming' | 'browser_closed' }
+interface WsErrorMessage  { error: string; message: string }
+interface WsUrlMessage    { url: string }
+
+// NEW: viewport metadata
+interface WsViewportMessage {
+  viewport: {
+    width: number;   // Browser viewport width in CSS pixels
+    height: number;  // Browser viewport height in CSS pixels
+  };
+}
+```
+
+Sent: once when streaming starts, and again if viewport dimensions change between frames.
+
+Client discrimination logic in `useBrowserStream` already handles JSON messages via `data.startsWith('{')` and `JSON.parse()`. Adding `viewport` is a new field check alongside existing `status`, `error`, and `url` checks.
+
+---
+
+## Server-Side onMessage Handler
+
+The existing no-op handler in `browser-stream.ts` line 54:
+
+```typescript
+onMessage(_event, _ws) {
+  // Future: handle input events for Phase 10+ (mouse/keyboard injection)
+},
+```
+
+Becomes:
+
+```typescript
+onMessage(event, _ws) {
+  const data = typeof event.data === 'string' ? event.data : '';
+  if (!data.startsWith('{')) return; // Ignore non-JSON
+
+  try {
+    const msg = JSON.parse(data) as WsInputMessage;
+    const toolset = config.getToolset(agentId);
+    if (!toolset) return;
+
+    switch (msg.type) {
+      case 'mouse':
+        void toolset.injectMouseEvent({
+          type: msg.action,
+          x: msg.x,
+          y: msg.y,
+          button: msg.button,
+          clickCount: msg.clickCount,
+          deltaX: msg.deltaX,
+          deltaY: msg.deltaY,
+          modifiers: msg.modifiers,
+        });
+        break;
+      case 'keyboard':
+        void toolset.injectKeyboardEvent({
+          type: msg.action,
+          key: msg.key,
+          code: msg.code,
+          text: msg.text,
+          modifiers: msg.modifiers,
+        });
+        break;
+      case 'scroll':
+        void toolset.injectMouseEvent({
+          type: 'mouseWheel',
+          x: msg.x,
+          y: msg.y,
+          deltaX: msg.deltaX,
+          deltaY: msg.deltaY,
+          modifiers: msg.modifiers,
+        });
+        break;
+    }
+  } catch {
+    // Invalid JSON or missing fields -- silently ignore
+  }
+},
+```
+
+Note: `injectMouseEvent()` and `injectKeyboardEvent()` on `BrowserToolset` are fire-and-forget from the WebSocket handler perspective. They return `Promise<void>` but the handler uses `void` operator to intentionally discard the promise. For user input at interactive frame rates, we want minimum latency -- the CDP calls are fast and failures are non-critical (the user just clicks again).
+
+**Critical gap:** `BrowserToolsetLike` interface (in `packages/core/src/agent/types.ts`) does NOT currently include `injectMouseEvent()` or `injectKeyboardEvent()`. The `getToolset` function returns `BrowserToolsetLike | undefined`. The interface needs extending.
+
+**Recommendation:** Extend `BrowserToolsetLike` to include the inject methods. They are part of the toolset's public API and the deployer layer should not need to cast types.
+
+---
+
+## Required Changes Summary
+
+### No New Dependencies
+
+Zero new npm packages required. Everything is built on:
+- Native DOM events (`MouseEvent`, `KeyboardEvent`, `WheelEvent`) in the browser
+- Existing WebSocket (Hono + @hono/node-ws) already bidirectional
+- Existing CDP passthroughs (BrowserManager methods wrapping Input.dispatch*)
+- Existing BrowserToolset passthrough methods
+
+### Changes by File
+
+| File | Change | Complexity |
+|------|--------|------------|
+| `packages/core/src/agent/types.ts` | Add `injectMouseEvent()` and `injectKeyboardEvent()` to `BrowserToolsetLike` interface | Trivial |
+| `packages/deployer/src/server/browser-stream/types.ts` | Add `WsInputMessage` union type and `WsViewportMessage` type | Small |
+| `packages/deployer/src/server/browser-stream/browser-stream.ts` | Implement `onMessage` handler: parse JSON, switch on type, call toolset inject methods | Small |
+| `packages/deployer/src/server/browser-stream/viewer-registry.ts` | (1) Send viewport metadata on stream start. (2) Track last viewport, send again on change. | Small |
+| `packages/playground-ui/.../hooks/use-browser-stream.ts` | (1) Parse `viewport` messages, expose via return value. (2) Expose `sendInput()` method using `wsRef`. | Medium |
+| `packages/playground-ui/.../browser-view/browser-view-frame.tsx` | (1) Attach `onMouseDown/Up/Move`, `onKeyDown/Up`, `onWheel` to img/container. (2) Coordinate mapping with object-contain. (3) Call `sendInput()` from hook. | Medium |
+| `packages/playground-ui/.../browser-view/browser-view-panel.tsx` | Pass viewport state and sendInput callback down to frame. Minor prop threading. | Trivial |
+
+### What NOT to Add
+
+| Thing | Why Not |
+|-------|---------|
+| `socket.io` | Already have raw WebSocket via Hono. Adding a library for what amounts to `ws.send(JSON.stringify(msg))` is unnecessary overhead. |
+| Canvas-based rendering | The `<img>` tag with `object-contain` works. Canvas adds complexity with no benefit for static frame display. Canvas would only help if we needed sub-frame cursor overlay, which is not in scope. |
+| Server-side coordinate mapping | The client has the `<img>` element dimensions. Sending them to the server would be a pointless round-trip. Map on the client, send viewport coords. |
+| Input debouncing/throttling library | For clicks and keys, nothing to throttle. For `mouseMoved`, a simple `requestAnimationFrame` gate is sufficient. No lodash/throttle dependency. |
+| Separate HTTP endpoint for input | The WebSocket is already open and lower-latency than HTTP POST. Using HTTP would add per-request overhead and duplicate agent routing. |
+| Touch event support (v1) | `BrowserManager.injectTouchEvent()` exists but desktop Studio UI is mouse+keyboard. Touch can be added later for mobile emulation. |
+| Virtual keyboard overlay | Out of scope. Physical keyboard events are sufficient. Visual keyboard is a later mobile emulation feature. |
+
+---
+
+## Modifier Key Bitmask Reference
+
+CDP uses a bitmask for modifier keys. Same across mouse and keyboard events.
+
+| Modifier | Bit | Value |
+|----------|-----|-------|
+| Alt      | 0   | 1     |
+| Ctrl     | 1   | 2     |
+| Meta/Cmd | 2   | 4     |
+| Shift    | 3   | 8     |
+
+**DOM to CDP mapping in the client:**
+
+```typescript
+function getModifiers(event: MouseEvent | KeyboardEvent): number {
+  let modifiers = 0;
+  if (event.altKey) modifiers |= 1;
+  if (event.ctrlKey) modifiers |= 2;
+  if (event.metaKey) modifiers |= 4;
+  if (event.shiftKey) modifiers |= 8;
+  return modifiers;
+}
+```
+
+---
+
+## Keyboard Event Mapping: DOM to CDP
+
+DOM `KeyboardEvent` properties map directly to CDP parameters:
+
+| DOM Property | CDP Parameter | Notes |
+|-------------|---------------|-------|
+| `event.key` | `key` | "a", "Enter", "ArrowDown", " " (space) |
+| `event.code` | `code` | "KeyA", "Enter", "ArrowDown", "Space" |
+| `event.key` (length === 1) | `text` | "a", "A", "1", " " |
+| `event.type` mapping | `type` | `keydown` -> `keyDown`, `keyup` -> `keyUp` |
+
+For printable characters, the client should also send a `char` event after `keyDown`:
+- `keydown` -> send `keyDown` + `char` (with `text` set to the character)
+- `keyup` -> send `keyUp`
+
+For non-printable keys (Enter, Escape, arrows, function keys), omit the `char` event:
+- `keydown` -> send `keyDown` (no `text`)
+- `keyup` -> send `keyUp`
+
+**Detecting printable vs non-printable:** `event.key.length === 1` is the standard heuristic. Single-character keys are printable. Multi-character keys ("Enter", "ArrowDown") are control keys.
+
+---
+
+## Performance Considerations
+
+### mouseMoved Throttling
+
+At 60fps mouse movement, sending every `mouseMoved` event would generate ~60 WebSocket messages/second. This is unnecessary for hover feedback.
+
+**Recommendation:** Gate `mouseMoved` sends behind `requestAnimationFrame`:
+
+```typescript
+const pendingMoveRef = useRef<WsMouseInput | null>(null);
+const rafRef = useRef<number>(0);
+
+function handleMouseMove(e: React.MouseEvent) {
+  const coords = mapToViewport(e.clientX, e.clientY, imgRef.current!, vw, vh);
+  if (!coords) return;
+
+  pendingMoveRef.current = {
+    type: 'mouse', action: 'mouseMoved',
+    x: coords.x, y: coords.y,
+    modifiers: getModifiers(e.nativeEvent),
+  };
+
+  if (!rafRef.current) {
+    rafRef.current = requestAnimationFrame(() => {
+      if (pendingMoveRef.current) {
+        sendInput(pendingMoveRef.current);
+        pendingMoveRef.current = null;
+      }
+      rafRef.current = 0;
+    });
+  }
+}
+```
+
+This caps `mouseMoved` at the display refresh rate (~60Hz), which is more than sufficient.
+
+### Click and Keyboard Latency
+
+Click events (mousePressed + mouseReleased) and keyboard events should NOT be throttled. They are discrete events and users expect immediate response. The WebSocket round-trip + CDP dispatch is typically <10ms on localhost.
+
+---
+
+## Data Flow Diagram
+
+```
+User clicks on <img> in BrowserViewFrame
+    |
+    v
+React onMouseDown handler
+    |
+    v
+mapToViewport(clientX, clientY, imgElement, viewportWidth, viewportHeight)
+    |  (accounts for object-contain letterboxing)
+    v
+{ type: 'mouse', action: 'mousePressed', x: viewportX, y: viewportY, button: 'left', clickCount: 1 }
+    |
+    v
+ws.send(JSON.stringify(msg))
+    |
+    v  [WebSocket transport]
+    |
+onMessage handler in browser-stream.ts
+    |
+    v
+JSON.parse -> switch on msg.type
+    |
+    v
+toolset.injectMouseEvent({ type: 'mousePressed', x, y, button, clickCount })
+    |
+    v
+BrowserManager.injectMouseEvent()
+    |
+    v
+cdpSession.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, clickCount })
+    |
+    v
+Chrome processes the click at (x, y) in the viewport
+```
+
+---
+
+## Sources
+
+- Chrome DevTools Protocol Input domain: https://chromedevtools.github.io/devtools-protocol/tot/Input/
+- Chrome DevTools Protocol Page.screencastFrame: https://chromedevtools.github.io/devtools-protocol/tot/Page/#event-screencastFrame
+- Codebase: `integrations/agent-browser/src/toolset.ts` (inject methods)
+- Codebase: `agent-browser/dist/browser.js` (CDP session + dispatch calls)
+- Codebase: `packages/deployer/src/server/browser-stream/` (WebSocket + ViewerRegistry)
+- Codebase: `packages/playground-ui/src/domains/agents/` (React components + hooks)
