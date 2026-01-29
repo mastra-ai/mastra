@@ -1,0 +1,153 @@
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons/Icon';
+import { EntryList } from '@/ds/components/EntryList';
+import { useLinkComponent } from '@/lib/framework';
+import { Wand2, BookOpen, Package, Home, Server } from 'lucide-react';
+import type { SkillMetadata, SkillSource } from '../types';
+
+export interface SkillsTableProps {
+  skills: SkillMetadata[];
+  isLoading: boolean;
+  isSkillsConfigured?: boolean;
+  /** Base path for skill links (should include workspaceId, e.g., /workspaces/{id}/skills) */
+  basePath?: string;
+}
+
+const columns = [
+  { name: 'name', label: 'Skill', size: '1fr' },
+  { name: 'description', label: 'Description', size: '2fr' },
+];
+
+function getSourceIcon(source?: SkillSource) {
+  if (!source) return <Package className="h-3 w-3" />;
+
+  switch (source.type) {
+    case 'external':
+      return <Package className="h-3 w-3" />;
+    case 'local':
+      return <Home className="h-3 w-3" />;
+    case 'managed':
+      return <Server className="h-3 w-3" />;
+    default:
+      return <Package className="h-3 w-3" />;
+  }
+}
+
+function getSourceLabel(source?: SkillSource) {
+  if (!source) return 'Unknown';
+
+  switch (source.type) {
+    case 'external':
+      return 'External';
+    case 'local':
+      return 'Local';
+    case 'managed':
+      return 'Managed';
+    default:
+      return 'Unknown';
+  }
+}
+
+export function SkillsTable({
+  skills,
+  isLoading,
+  isSkillsConfigured = true,
+  basePath = '/workspace/skills',
+}: SkillsTableProps) {
+  const { navigate } = useLinkComponent();
+
+  if (!isSkillsConfigured && !isLoading) {
+    return <SkillsNotConfigured />;
+  }
+
+  if (isLoading) {
+    return <SkillsTableSkeleton />;
+  }
+
+  return (
+    <EntryList>
+      <EntryList.Trim>
+        <EntryList.Header columns={columns} />
+        {skills.length > 0 ? (
+          <EntryList.Entries>
+            {skills.map(skill => {
+              const entry = {
+                id: skill.name,
+                name: skill.name,
+                description: skill.description || '—',
+              };
+
+              return (
+                <EntryList.Entry
+                  key={skill.name}
+                  entry={entry}
+                  columns={columns}
+                  onClick={() => {
+                    const url = `${basePath}/${encodeURIComponent(skill.name)}`;
+                    navigate(url);
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-1.5 rounded bg-surface5">
+                      <Wand2 className="h-3.5 w-3.5 text-icon4" />
+                    </div>
+                    <span className="font-medium text-icon6">{skill.name}</span>
+                  </div>
+                  <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
+                </EntryList.Entry>
+              );
+            })}
+          </EntryList.Entries>
+        ) : (
+          <EntryList.Message message="No skills discovered. Add SKILL.md files to your skills directory." />
+        )}
+      </EntryList.Trim>
+    </EntryList>
+  );
+}
+
+function SkillsTableSkeleton() {
+  return (
+    <EntryList>
+      <EntryList.Trim>
+        <EntryList.Header columns={columns} />
+        <EntryList.Entries>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <EntryList.Entry key={i} columns={columns} isLoading>
+              <div className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded bg-surface4 animate-pulse" />
+                <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
+              </div>
+              <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
+            </EntryList.Entry>
+          ))}
+        </EntryList.Entries>
+      </EntryList.Trim>
+    </EntryList>
+  );
+}
+
+function SkillsNotConfigured() {
+  return (
+    <div className="grid place-items-center py-16">
+      <div className="flex flex-col items-center text-center max-w-md">
+        <div className="p-4 rounded-full bg-surface4 mb-4">
+          <Wand2 className="h-8 w-8 text-icon3" />
+        </div>
+        <h2 className="text-lg font-medium text-icon6 mb-2">Skills Not Configured</h2>
+        <p className="text-sm text-icon4 mb-6">
+          No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
+          agent skills.
+        </p>
+        <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
+          <Icon>
+            <BookOpen className="h-4 w-4" />
+          </Icon>
+          Learn about Skills
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export { SkillsNotConfigured };
