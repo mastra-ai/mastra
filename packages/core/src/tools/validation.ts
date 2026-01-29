@@ -141,6 +141,57 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Recursively strips null and undefined values from object properties.
+ * This handles LLMs (e.g. Gemini) that send null for optional fields,
+ * since Zod's .optional() only accepts undefined, not null. (GitHub #12362)
+ *
+ * When a property value is null or undefined, it is omitted from the result
+ * object entirely, which is equivalent to "not provided" for Zod validation.
+ *
+ * Only recurses into plain objects to preserve class instances and built-in objects
+ * like Date, Map, URL, etc.
+ *
+ * NOTE: This function should NOT be called unconditionally because it breaks
+ * schemas that use .nullable() (where null is a valid value). It is used as
+ * a fallback when initial validation fails. See validateToolInput for usage.
+ *
+ * @param input The input to process
+ * @returns The processed input with null/undefined values stripped
+ */
+function stripNullishValues(input: unknown): unknown {
+  // Top-level null/undefined becomes undefined
+  if (input === null || input === undefined) {
+    return undefined;
+  }
+
+  if (typeof input !== 'object') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    // For arrays, recursively process elements but keep nulls in arrays
+    // (array elements with null may be intentional)
+    return input.map(item => (item === null ? null : stripNullishValues(item)));
+  }
+
+  // Only recurse into plain objects - preserve class instances, built-in objects
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  // It's a plain object - recursively process all properties, omitting null/undefined values
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === null || value === undefined) {
+      // Omit null/undefined values - equivalent to "not provided" for optional fields
+      continue;
+    }
+    result[key] = stripNullishValues(value);
+  }
+  return result;
+}
+
+/**
  * Recursively converts undefined values to null in an object.
  * This is needed for OpenAI compat layers which convert .optional() to .nullable()
  * for strict mode compliance. When fields are omitted (undefined), we convert them
@@ -198,25 +249,49 @@ export function validateToolInput<T = any>(
     return { data: input };
   }
 
-  // Normalize undefined/null input to appropriate default for the schema type
-  // This handles LLMs that send undefined instead of {} or [] for optional parameters
+  // Validation pipeline:
+  //
+  // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
+  //    Handles LLMs that send undefined instead of {} or [] for all-optional parameters.
+  //
+  // 2. convertUndefinedToNull: Convert undefined values to null in object properties.
+  //    Needed for OpenAI compat layers that convert .optional() to .nullable() for
+  //    strict mode compliance. The schema's transform converts null back to undefined.
+  //    (GitHub #11457)
+  //
+  // 3. First validation attempt with null values preserved. This handles .nullable()
+  //    schemas correctly (where null is a valid value).
+  //
+  // 4. If validation fails, retry with null values stripped from object properties.
+  //    This handles LLMs (e.g. Gemini) that send null for .optional() fields, where
+  //    Zod expects undefined, not null. (GitHub #12362)
+
+  // Step 1: Normalize top-level null/undefined to appropriate default
   let normalizedInput = normalizeNullishInput(schema, input);
 
-  // Convert undefined values to null recursively (GitHub #11457)
-  // This is needed because OpenAI compat layers convert .optional() to .nullable()
-  // for strict mode compliance. When fields are omitted (undefined), we convert them
-  // to null so the schema validation passes. The schema's transform will then convert
-  // null back to undefined to match the original .optional() semantics.
+  // Step 2: Convert undefined values to null recursively (GitHub #11457)
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
-  // Validate the normalized input
+  // Step 3: Try validation with null values preserved
   const validation = schema.safeParse(normalizedInput);
-
   if (validation.success) {
     return { data: validation.data };
   }
 
-  // Validation failed, return error
+  // Step 4: Retry with null values stripped (GitHub #12362)
+  // LLMs like Gemini send null for optional fields, but Zod's .optional() only
+  // accepts undefined, not null. By stripping nullish values and retrying, we
+  // handle this case without breaking .nullable() schemas that passed in step 3.
+  const strippedInput = stripNullishValues(input);
+  const normalizedStripped = normalizeNullishInput(schema, strippedInput);
+  const retryValidation = schema.safeParse(normalizedStripped);
+
+  if (retryValidation.success) {
+    return { data: retryValidation.data };
+  }
+
+  // Both attempts failed - return the original (non-stripped) error since it's
+  // more informative about what the schema actually expects
   const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {

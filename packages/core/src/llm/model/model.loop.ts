@@ -168,6 +168,7 @@ export class MastraLLMVNext extends MastraBase {
     autoResumeSuspendedTools,
     maxProcessorRetries,
     processorStates,
+    activeTools,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -240,6 +241,7 @@ export class MastraLLMVNext extends MastraBase {
         autoResumeSuspendedTools,
         maxProcessorRetries,
         processorStates,
+        activeTools,
         options: {
           ...options,
           onStepFinish: async props => {
