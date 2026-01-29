@@ -48,6 +48,29 @@ const agent = new Agent({
 });
 ```
 
+## Using the recall() Method
+
+While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than just recency, use `recall()` with a `vectorSearchString`:
+
+```typescript
+const memory = await agent.getMemory();
+
+// Basic recall - similar to listMessages
+const { messages } = await memory!.recall({
+  threadId: "thread-123",
+  perPage: 50,
+});
+
+// Semantic recall - find messages by meaning
+const { messages: relevantMessages } = await memory!.recall({
+  threadId: "thread-123",
+  vectorSearchString: "What did we discuss about the project deadline?",
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+```
+
 ## Storage configuration
 
 Semantic recall relies on a [storage and vector db](/reference/memory/memory-class) to store messages and their embeddings.
