@@ -161,6 +161,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
+  private _sandboxFolderPath?: string;
   private readonly _createdAt: Date;
 
   /**
@@ -243,9 +244,11 @@ export class LocalSandbox implements WorkspaceSandbox {
           this._nativeSandboxConfig.seatbeltProfile ??
           generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
 
-        // Write profile to file for debugging/inspection purposes
+        // Write profile to .sandbox folder for debugging/inspection purposes
         // Use unique filename to prevent potential profile replacement attacks
-        this._seatbeltProfilePath = path.join(this.workingDirectory, `.sandbox-${this.id}.sb`);
+        this._sandboxFolderPath = path.join(this.workingDirectory, '.sandbox');
+        await fs.mkdir(this._sandboxFolderPath, { recursive: true });
+        this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `${this.id}.sb`);
         await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
       }
 
@@ -270,6 +273,16 @@ export class LocalSandbox implements WorkspaceSandbox {
       }
       this._seatbeltProfilePath = undefined;
       this._seatbeltProfile = undefined;
+    }
+
+    // Try to remove .sandbox folder if empty
+    if (this._sandboxFolderPath) {
+      try {
+        await fs.rmdir(this._sandboxFolderPath);
+      } catch {
+        // Ignore errors - folder may not be empty or may not exist
+      }
+      this._sandboxFolderPath = undefined;
     }
 
     await this.stop();
