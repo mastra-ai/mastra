@@ -87,7 +87,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Use getAgentByIdResolved to automatically resolve from active version
-      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
+      // Fall back to getAgentById for backwards compatibility with older core versions
+      const agent =
+        typeof agentsStore.getAgentByIdResolved === 'function'
+          ? await agentsStore.getAgentByIdResolved({ id: storedAgentId })
+          : await agentsStore.getAgentById({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });

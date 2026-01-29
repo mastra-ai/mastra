@@ -69,15 +69,18 @@ async function listScorersFromSystem({
   }
 
   // Process stored agents (database-backed agents)
-  try {
-    const storedAgentsResult = await mastra.listStoredAgents();
-    if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+  // Check if method exists for backwards compatibility with older core versions
+  if (typeof mastra.listStoredAgents === 'function') {
+    try {
+      const storedAgentsResult = await mastra.listStoredAgents();
+      if (storedAgentsResult?.agents) {
+        for (const storedAgent of storedAgentsResult.agents) {
+          await processAgentScorers(storedAgent);
+        }
       }
+    } catch {
+      // Silently ignore if storage is not configured - not all setups have storage
     }
-  } catch {
-    // Silently ignore if storage is not configured - not all setups have storage
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {

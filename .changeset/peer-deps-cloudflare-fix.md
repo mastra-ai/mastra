@@ -5,6 +5,7 @@
 '@mastra/libsql': patch
 '@mastra/mongodb': patch
 '@mastra/clickhouse': patch
+'@mastra/server': patch
 ---
 
 Fix peer dependency compatibility issues:
@@ -15,4 +16,9 @@ Fix peer dependency compatibility issues:
 
 - Update storage adapters (pg, libsql, mongodb, cloudflare, clickhouse) to use local constants for `TABLE_AGENT_VERSIONS` instead of importing from core, avoiding import failures with older core versions.
 
-- Update storage adapters to use `getSchema()` method in `init()` for backwards-compatible table creation.
+- Update storage adapters to use `#safeGetSchema()` helper in `init()` for backwards-compatible table creation that checks if `getSchema` method exists.
+
+- Update server handlers to check if new Mastra methods exist before calling them:
+  - `mastra.getStoredAgentById()` - check before calling in agent lookup
+  - `mastra.listStoredAgents()` - check before calling in agent list and scorers
+  - `agentsStore.getAgentByIdResolved()` - fall back to `getAgentById()` if not available
