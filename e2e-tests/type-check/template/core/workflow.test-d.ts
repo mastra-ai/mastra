@@ -58,6 +58,24 @@ describe('workflow', () => {
         });
       });
 
+      it('should allow bail() to accept any type, not just the step output type', () => {
+        const step = createStep({
+          id: 'bail-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ bail, inputData }) => {
+            if (inputData.value === 'stop') {
+              // bail() should accept any type since it bails the workflow, not the step
+              return bail({ workflowResult: 123 });
+            }
+            if (inputData.value === 'empty') {
+              return bail();
+            }
+            return { result: inputData.value };
+          },
+        });
+      });
+
       it('should error when execute returns wrong type', () => {
         const step = createStep({
           id: 'bad-step',
