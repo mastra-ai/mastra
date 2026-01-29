@@ -8,7 +8,7 @@ import { EntityType, SpanType, wrapMastra } from '../../observability';
 import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { NESTED_WORKFLOW_RESULT_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
@@ -463,7 +463,21 @@ export async function executeStep(
     } else if (durableResult.nestedWflowStepPaused) {
       execResults = { status: 'paused' };
     } else {
-      execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
+      // Check if output is a nested workflow result wrapper
+      const output = durableResult.output;
+      if (output && typeof output === 'object' && NESTED_WORKFLOW_RESULT_SYMBOL in output) {
+        const nestedResult = output as { result: any; runId: string };
+        // Merge nestedRunId with existing metadata (preserve iterationCount, etc.)
+        const existingMetadata = (stepInfo as any).metadata || {};
+        execResults = {
+          status: 'success',
+          output: nestedResult.result,
+          endedAt: Date.now(),
+          metadata: { ...existingMetadata, nestedRunId: nestedResult.runId },
+        };
+      } else {
+        execResults = { status: 'success', output, endedAt: Date.now() };
+      }
     }
   }
 

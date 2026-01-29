@@ -31,7 +31,7 @@ import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { NESTED_WORKFLOW_RESULT_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
@@ -2090,7 +2090,16 @@ export class Workflow<
       throw res.error;
     }
 
-    return res.status === 'success' ? res.result : undefined;
+    // Return wrapper with runId for successful nested workflows so step handler can store it in metadata
+    if (res.status === 'success') {
+      return {
+        [NESTED_WORKFLOW_RESULT_SYMBOL]: true,
+        result: res.result,
+        runId: run.runId,
+      } as any;
+    }
+
+    return undefined;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
@@ -2316,10 +2325,17 @@ export class Workflow<
       }
       // Strip __state from steps (internal implementation detail for state propagation)
       const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
-      // Also strip __state from each individual step result (only for objects, not arrays)
+      // Also strip __state and nestedRunId from each individual step result (only for objects, not arrays)
       for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
         if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult)) {
-          const { __state: _stepState, ...cleanStepResult } = stepResult as any;
+          const { __state: _stepState, metadata, ...cleanStepResult } = stepResult as any;
+          // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
+          if (metadata) {
+            const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
+            if (Object.keys(userMetadata).length > 0) {
+              (cleanStepResult as any).metadata = userMetadata;
+            }
+          }
           steps[stepId] = cleanStepResult;
         } else {
           steps[stepId] = stepResult;

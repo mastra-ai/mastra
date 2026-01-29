@@ -1182,6 +1182,44 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       let newResult = prevResult;
       if (currentIdx !== undefined) {
+        // Check for bail - short circuit foreach execution
+        // @ts-expect-error - bailed status not in type
+        if (prevResult.status === 'bailed') {
+          const bailedResult = {
+            status: 'success' as const,
+            output: (prevResult as any).output,
+            startedAt: existingStepResult?.startedAt ?? Date.now(),
+            endedAt: Date.now(),
+            payload: originalPayload,
+          };
+
+          // Store final result
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: workflow.id,
+            runId,
+            stepId: step.step.id,
+            result: bailedResult as any,
+            requestContext,
+          });
+
+          // End workflow with bail result
+          return this.endWorkflow({
+            workflow,
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath: [executionPath[0]!],
+            resumeSteps,
+            stepResults: { ...stepResults, [step.step.id]: bailedResult },
+            prevResult: bailedResult,
+            activeSteps,
+            requestContext,
+            perStep,
+            state: currentState,
+            outputOptions,
+          });
+        }
+
         // For foreach, store the full iteration result (including status, suspendPayload, etc.)
         // not just the output, so suspend state is preserved
         const iterationResult =

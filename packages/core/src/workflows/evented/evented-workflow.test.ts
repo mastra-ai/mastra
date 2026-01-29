@@ -2188,7 +2188,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4654,7 +4654,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4714,7 +4714,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -4787,7 +4787,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -17967,11 +17967,16 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    // Note: closeOnSuspend test skipped for evented runtime as streaming behavior differs
-    // The evented runtime uses pubsub events instead of the stream() API with closeOnSuspend option
-    it.skip('should handle basic suspend and resume flow that does not close on suspend', async () => {
-      // This test requires stream() API with closeOnSuspend option which is not yet implemented
-      // in the evented runtime. The evented runtime handles streaming differently via pubsub.
+    // Note: closeOnSuspend: false with same-stream resume requires investigation.
+    // The evented runtime's pubsub-based streaming has timing complexities where:
+    // 1. Stream subscribes to workflow.events.v2.${runId}
+    // 2. Resume triggers workflow.resume event to 'workflows' channel
+    // 3. Event processor processes resume and publishes new events back to workflow.events.v2.${runId}
+    // 4. The for-await loop may exit before these events arrive due to pubsub async delivery timing
+    // Use resumeStream() for evented runtime resume with streaming instead.
+    it.skip('should handle basic suspend and resume flow that does not close on suspend - requires same-stream resume investigation', async () => {
+      // This test verifies that with closeOnSuspend: false, resume events flow through the same stream.
+      // The evented runtime's pubsub architecture makes this more complex than the sync runtime.
     });
 
     it('should handle consecutive nested workflows with suspend/resume', async () => {
@@ -19520,10 +19525,7 @@ describe('Workflow', () => {
   });
 
   describe('Nested Workflow Information - Phase 6', () => {
-    // Skip: Evented runtime times out when executing 3-level deep nested workflows
-    // The nestedRunId metadata fix is implemented but the workflow execution itself hangs
-    // This requires deeper investigation into the evented runtime's nested workflow handling
-    it.skip('should return workflow run execution result with nested workflow steps information', async () => {
+    it('should return workflow run execution result with nested workflow steps information', async () => {
       const incrementStep = createStep({
         id: 'increment',
         inputSchema: z.object({
@@ -19577,7 +19579,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
-        workflows: { incrementWorkflow },
+        workflows: { 'increment-workflow': incrementWorkflow },
       });
       await mastra.startEventEngine();
 
@@ -19635,8 +19637,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    // Skip: Same issue as above - evented runtime times out for nested workflows with getWorkflowRunById
-    it.skip('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
+    it('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
       const innerStep = createStep({
         id: 'inner-step',
         execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
@@ -19671,7 +19672,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
-        workflows: { parentWorkflow, nestedWorkflow },
+        workflows: { 'parent-workflow': parentWorkflow, 'nested-workflow': nestedWorkflow },
       });
       await mastra.startEventEngine();
 
@@ -19940,8 +19941,52 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it.skip('should bail foreach execution when called in a concurrent batch - evented runtime foreach bail not implemented', async () => {
-      // Bail functionality for foreach concurrent execution is not implemented in evented runtime
+    it('should bail foreach execution when called in a concurrent batch', async () => {
+      const bailResult = { bailed: true, value: 15 };
+      let iterationCount = 0;
+
+      const workflow = createWorkflow({
+        id: 'root',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.object({ bailed: z.boolean(), value: z.number() }),
+      })
+        .foreach(
+          createStep({
+            id: 's1s',
+            inputSchema: z.number(),
+            outputSchema: z.object({ bailed: z.boolean(), value: z.number() }),
+            execute: async ctx => {
+              iterationCount++;
+              // Bail on the third iteration
+              if (ctx.inputData === 3) {
+                return ctx.bail(bailResult);
+              }
+              return { bailed: false, value: ctx.inputData };
+            },
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { root: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: [1, 2, 3, 4],
+      });
+
+      expect(result.status).toBe('success');
+      // Should have run 3 iterations (1, 2, then bail on 3)
+      expect(iterationCount).toBe(3);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
+
+      await mastra.stopEventEngine();
     });
 
     it.skip('should not show removed requestContext values in subsequent steps - evented runtime requestContext removal not tested', async () => {
