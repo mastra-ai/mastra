@@ -4,41 +4,38 @@
 
 See: .planning/PROJECT.md (updated 2026-01-28)
 
-**Core value:** Agents can browse real websites and users can watch them work in real-time
-**Current focus:** Planning next milestone
+**Core value:** Agents can browse real websites and users can watch and assist them in real-time
+**Current focus:** v1.2 Browser Input Injection
 
 ## Current Position
 
-Phase: 9 of 9 — all milestones complete
-Plan: N/A
-Status: Ready for next milestone
-Last activity: 2026-01-28 — v1.1 milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-01-28 — Milestone v1.2 started
 
-Progress: [####################] 100% (6/6 v1.0 phases + 3/3 v1.1 phases)
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **v1.0 Milestone:**
 - Total plans completed: 10
-- Average duration: 4 min
-- Total execution time: 40 min
 - Phases: 6
 
 **v1.1 Milestone:**
 - Total plans completed: 5
 - Phases: 3 (7, 8, 9)
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 07-screencast-api | 1 | 3 min | 3 min |
-| 08-transport-layer | 2 | 10 min | 5 min |
-| 09-studio-ui | 2 | — | — |
-
 ## Accumulated Context
 
 ### Decisions
 
-All decisions documented in PROJECT.md Key Decisions table (19 entries across v1.0 and v1.1).
+All prior decisions documented in PROJECT.md Key Decisions table (19 entries).
+
+Key infrastructure for v1.2:
+- injectMouseEvent() and injectKeyboardEvent() exist as CDP passthroughs (Phase 7)
+- WebSocket is bidirectional (Phase 8)
+- BrowserViewPanel renders scaled frames with coordinate info (Phase 9)
 
 ### Pending Todos
 

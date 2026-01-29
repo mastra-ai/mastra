@@ -32,7 +32,11 @@ Agents can browse and interact with real websites to gather information, and use
 
 ### Active
 
-(None — next milestone will define new requirements)
+- [ ] User can click on the live view frame to interact with browser elements — v1.2
+- [ ] User can type in the live view to fill forms or enter text — v1.2
+- [ ] User can scroll in the live view to navigate long pages — v1.2
+- [ ] Coordinate mapping translates frame clicks to browser viewport coordinates — v1.2
+- [ ] Agent can detect page changes after user input and continue working — v1.2
 
 ### Out of Scope
 
@@ -43,9 +47,9 @@ Agents can browse and interact with real websites to gather information, and use
 - Multi-tab support — v2
 - PDF capture — v2
 - Testing/QA use cases — research focus for v1
-- User interaction through browser view (click/type/scroll from UI) — v2
 - Session recording/playback — v2
 - Multi-viewer sync — v2
+- Full takeover mode (user exclusively controls browser) — v1.3, start with assist mode
 
 ## Context
 
@@ -98,5 +102,24 @@ Agents can browse and interact with real websites to gather information, and use
 | everyNthFrame: 1 for headless | Chrome generates fewer frames without display cycle | Good |
 | BrowserToolCallsContext bridge | React Context bridges ToolFallback and BrowserViewPanel | Good |
 
+## Current Milestone: v1.2 Browser Input Injection
+
+**Goal:** Users can click, type, and scroll in the live view panel to unblock agents stuck on CAPTCHAs, popups, or login prompts (assist mode).
+
+**Target features:**
+- Click on live view frame → click forwarded to browser element
+- Type in live view → keystrokes forwarded to browser
+- Scroll in live view → viewport scrolls in browser
+- Coordinate mapping from scaled frame to actual viewport
+- Agent auto-detects page changes after user input, or user clicks "Resume"
+- Assist mode: user intervenes briefly, agent continues working
+
+**Use case:** Agent navigates to a site, hits a CAPTCHA. User sees it in the live view, clicks to solve it, agent resumes automatically.
+
+**Infrastructure ready:**
+- `injectMouseEvent()` and `injectKeyboardEvent()` exist on BrowserToolset (Phase 7)
+- WebSocket is already bidirectional (Phase 8)
+- BrowserViewPanel renders frames with coordinate info available (Phase 9)
+
 ---
-*Last updated: 2026-01-28 after v1.1 milestone completion*
+*Last updated: 2026-01-28 after v1.2 milestone start*
