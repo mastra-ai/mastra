@@ -1,4 +1,4 @@
-import deepEqual from 'fast-deep-equal';
+import { deepEqual } from '../../../utils';
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   StorageAgentType,
