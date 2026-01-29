@@ -669,5 +669,57 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
       expect(resultMessages[0].content).toContain('No working memory data available.');
     });
+
+    it('should use read-only instruction format with resource-scoped memory', async () => {
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        scope: 'resource',
+        readOnly: true,
+      });
+
+      const resourceId = 'resource-456';
+      const workingMemoryData = '# User Profile\n- Name: Alice\n- Preferences: Dark mode';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-123', resourceId, title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId,
+      });
+
+      vi.mocked(mockStorage.getResourceById).mockResolvedValue({
+        id: resourceId,
+        workingMemory: workingMemoryData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages).toHaveLength(2);
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(resultMessages[0].content).toContain(workingMemoryData);
+      expect(resultMessages[0].content).not.toContain('updateWorkingMemory');
+      expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId });
+      expect(mockStorage.getThreadById).not.toHaveBeenCalled();
+    });
   });
 });
