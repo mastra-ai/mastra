@@ -158,7 +158,16 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Z.AI Coding Plan",
-      "models": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+      "models": [
+        "glm-4.5",
+        "glm-4.5-air",
+        "glm-4.5-flash",
+        "glm-4.5v",
+        "glm-4.6",
+        "glm-4.6v",
+        "glm-4.7",
+        "glm-4.7-flash"
+      ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
     },
@@ -1187,17 +1196,22 @@
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
       "models": [
+        "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "deepseek-ai/DeepSeek-R1",
         "deepseek-ai/DeepSeek-V3",
         "deepseek-ai/DeepSeek-V3-1",
         "essentialai/Rnj-1-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "moonshotai/Kimi-K2-5",
         "moonshotai/Kimi-K2-Instruct",
+        "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2.5",
         "openai/gpt-oss-120b",
-        "zai-org/GLM-4.6"
+        "zai-org/GLM-4.6",
+        "zai-org/GLM-4.7"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
       "gateway": "models.dev",
@@ -2730,7 +2744,16 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2025-09-23"
     ],
-    "zai-coding-plan": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+    "zai-coding-plan": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v",
+      "glm-4.6",
+      "glm-4.6v",
+      "glm-4.7",
+      "glm-4.7-flash"
+    ],
     "ollama-cloud": [
       "cogito-2.1:671b",
       "deepseek-v3.1:671b",
@@ -3576,17 +3599,22 @@
       "xai/grok-3-mini"
     ],
     "togetherai": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
       "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V3",
       "deepseek-ai/DeepSeek-V3-1",
       "essentialai/Rnj-1-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "moonshotai/Kimi-K2-5",
       "moonshotai/Kimi-K2-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
       "moonshotai/Kimi-K2.5",
       "openai/gpt-oss-120b",
-      "zai-org/GLM-4.6"
+      "zai-org/GLM-4.6",
+      "zai-org/GLM-4.7"
     ],
     "baseten": [
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
