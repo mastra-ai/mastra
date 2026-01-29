@@ -24,11 +24,11 @@ Requirements for Browser Live View milestone. Each maps to roadmap phases.
 
 ### Studio UI
 
-- [ ] **UI-01**: BrowserViewPanel component renders screencast frames inline with agent chat
-- [ ] **UI-02**: Component uses `useRef` pattern to avoid virtual DOM thrashing
-- [ ] **UI-03**: Connection status indicator shows connected/connecting/disconnected states
-- [ ] **UI-04**: Empty state shown when no browser is active
-- [ ] **UI-05**: Loading state shown during browser initialization
+- [x] **UI-01**: BrowserViewPanel component renders screencast frames inline with agent chat
+- [x] **UI-02**: Component uses `useRef` pattern to avoid virtual DOM thrashing
+- [x] **UI-03**: Connection status indicator shows connected/connecting/disconnected states
+- [x] **UI-04**: Empty state shown when no browser is active
+- [x] **UI-05**: Loading state shown during browser initialization
 
 ## Future Requirements
 
@@ -80,11 +80,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | XPORT-02 | Phase 8 | Complete |
 | XPORT-03 | Phase 8 | Complete |
 | XPORT-04 | Phase 8 | Complete |
-| UI-01 | Phase 9 | Pending |
-| UI-02 | Phase 9 | Pending |
-| UI-03 | Phase 9 | Pending |
-| UI-04 | Phase 9 | Pending |
-| UI-05 | Phase 9 | Pending |
+| UI-01 | Phase 9 | Complete |
+| UI-02 | Phase 9 | Complete |
+| UI-03 | Phase 9 | Complete |
+| UI-04 | Phase 9 | Complete |
+| UI-05 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 14 total
@@ -93,4 +93,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 8 completion*
+*Last updated: 2026-01-28 after v1.1 milestone audit*
