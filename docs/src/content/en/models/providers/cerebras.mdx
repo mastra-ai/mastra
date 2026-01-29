@@ -11,11 +11,11 @@ Access 3 Cerebras models through Mastra's model router. Authentication is handle
 
 Learn more in the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview).
 
-```bash
+```bash title=".env"
 CEREBRAS_API_KEY=your-api-key
 ```
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -34,12 +34,6 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
-
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview) for details.
-
-:::
 
 ## Models
 
@@ -88,12 +82,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ### Custom Headers
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.cerebras.ai/v1",
     id: "cerebras/gpt-oss-120b",
     apiKey: process.env.CEREBRAS_API_KEY,
     headers: {
@@ -105,7 +98,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

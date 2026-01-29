@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -17,7 +18,6 @@ import {
   DialogBody,
 } from '@/ds/components/Dialog';
 import { isObjectEmpty } from '@/lib/object';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
@@ -90,7 +90,8 @@ export function WorkflowTrigger({
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
+
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 
   const [innerRunId, setInnerRunId] = useState<string>('');

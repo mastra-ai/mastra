@@ -1,41 +1,31 @@
+import 'dotenv/config'
 import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
-import 'dotenv/config'
 import type { Config } from '@docusaurus/types'
+import type { ThemeConfig } from '@docusaurus/preset-classic'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 
 const config: Config = {
   title: 'Mastra Docs',
-  tagline: 'TypeScript agent framework',
+  tagline: 'The TypeScript Agent Framework',
   favicon: '/img/favicon.ico',
-
-  // Set the production url of your site here
   url: 'https://mastra.ai',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
-
   onBrokenLinks: 'throw',
-
-  // Markdown configuration
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: 'warn',
     },
   },
-  // Enable v4 features in prod
-
-  ...(process.env.NODE_ENV === 'production' && {
-    future: {
-      v4: {
-        useCssCascadeLayers: false,
-        removeLegacyPostBuildHeadAttribute: true,
-      },
-      experimental_faster: true,
+  future: {
+    v4: {
+      // TODO: Turn this to true and fix everything
+      useCssCascadeLayers: false,
+      removeLegacyPostBuildHeadAttribute: true,
     },
-  }),
-
+    experimental_faster: true,
+  },
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
@@ -50,26 +40,6 @@ const config: Config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
     kapaGroupId: process.env.KAPA_GROUP_ID,
   },
-
-  // Preconnect to Google Fonts
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'anonymous',
-      },
-    },
-  ],
-
   plugins: [
     [
       '@docusaurus/plugin-vercel-analytics',
@@ -112,7 +82,6 @@ const config: Config = {
       },
     ],
   ],
-
   presets: [
     [
       'classic',
@@ -140,19 +109,19 @@ const config: Config = {
       },
     ],
   ],
-
-  themeConfig:
-    /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
-    {
-      colorMode: {
-        respectPrefersColorScheme: true,
-      },
-      prism: {
-        theme: prismMastraLight,
-        darkTheme: prismMastraDark,
-        additionalLanguages: ['diff', 'bash'],
-      },
+  themeConfig: {
+    image: 'img/og-image.png',
+    colorMode: {
+      respectPrefersColorScheme: true,
     },
+    prism: {
+      // @ts-expect-error: FIXME
+      theme: prismMastraLight,
+      // @ts-expect-error: FIXME
+      darkTheme: prismMastraDark,
+      additionalLanguages: ['diff', 'bash'],
+    },
+  } satisfies ThemeConfig,
 }
 
 export default config

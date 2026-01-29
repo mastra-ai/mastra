@@ -9,6 +9,8 @@ import { transitions } from '@/ds/primitives/transitions';
 export type ComboboxOption = {
   label: string;
   value: string;
+  start?: React.ReactNode;
+  end?: React.ReactNode;
 };
 
 export type ComboboxProps = {
@@ -22,6 +24,8 @@ export type ComboboxProps = {
   disabled?: boolean;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
   size?: FormElementSize;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function Combobox({
@@ -35,6 +39,8 @@ export function Combobox({
   disabled = false,
   variant = 'default',
   size = 'md',
+  open,
+  onOpenChange,
 }: ComboboxProps) {
   const selectedOption = options.find(option => option.value === value) ?? null;
 
@@ -45,16 +51,26 @@ export function Combobox({
   };
 
   return (
-    <BaseCombobox.Root items={options} value={selectedOption} onValueChange={handleSelect} disabled={disabled}>
-      <BaseCombobox.Trigger className={cn(buttonVariants({ variant, size }), 'w-full justify-between', className)}>
-        <span className="truncate">
+    <BaseCombobox.Root
+      items={options}
+      value={selectedOption}
+      onValueChange={handleSelect}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <BaseCombobox.Trigger
+        className={cn(buttonVariants({ variant, size }), 'w-full min-w-32 justify-between', className)}
+      >
+        <span className="truncate flex items-center gap-2">
+          {selectedOption?.start}
           <BaseCombobox.Value placeholder={placeholder} />
         </span>
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal>
-        <BaseCombobox.Positioner align="start" sideOffset={4}>
+        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-50">
           <BaseCombobox.Popup
             className={cn(
               'min-w-[var(--anchor-width)] w-max rounded-md bg-surface3 text-neutral5',
@@ -97,7 +113,11 @@ export function Combobox({
                       <Check className={cn('h-4 w-4 text-accent1', transitions.opacity)} />
                     </BaseCombobox.ItemIndicator>
                   </span>
-                  <span className="whitespace-nowrap">{option.label}</span>
+                  <span className="whitespace-nowrap flex items-center gap-2 w-full">
+                    {option.start}
+                    {option.label}
+                    {option.end ? <div className="ml-auto">{option.end}</div> : null}
+                  </span>
                 </BaseCombobox.Item>
               )}
             </BaseCombobox.List>

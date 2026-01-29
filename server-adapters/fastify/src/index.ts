@@ -141,6 +141,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.headers['content-type'] || '';
@@ -155,13 +156,16 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -229,7 +233,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     reply: FastifyReply,
     result: unknown,
     request?: FastifyRequest,
+    prefix?: string,
   ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -279,7 +286,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: reply.raw,
           options: Object.keys(options).length > 0 ? options : undefined,
@@ -320,8 +327,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -337,7 +344,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
-  async registerRoute(app: FastifyInstance, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: FastifyInstance,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Fastify-style :param (they're the same, but ensure consistency)
@@ -359,6 +373,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       const params = await this.getParams(route, request);
+
+      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+      if (params.bodyParseError) {
+        return reply.status(400).send({
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        });
+      }
 
       if (params.queryParams) {
         try {
@@ -401,12 +423,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: prefix,
       };
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, reply, result, request);
+        await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code
