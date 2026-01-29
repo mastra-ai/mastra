@@ -2186,13 +2186,13 @@ ${suggestedResponse}
         });
       }
 
+      // Track IDs of messages we've already saved with observation markers (sealed)
+      // These IDs cannot be reused - if we see them again, we must regenerate
+      const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
         omDebug(`[OM processInputStep] Threshold reached, triggering observation`);
         omDebug(`[OM processInputStep] writer available: ${!!writer}`);
-
-        // Track IDs of messages we've already saved with observation markers (sealed)
-        // These IDs cannot be reused - if we see them again, we must regenerate
-        const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
 
         const lockKey = this.getLockKey(threadId, resourceId);
         let observationSucceeded = false;
@@ -2243,42 +2243,35 @@ ${suggestedResponse}
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
-          // Regenerate IDs for messages that were already saved with observation markers
-          // This prevents overwriting sealed messages in the DB
-          let regeneratedIds = 0;
-          for (const msg of messagesToSave) {
-            if (sealedIds.has(msg.id)) {
-              // This message ID was already saved as sealed - generate new ID
-              const oldId = msg.id;
-              msg.id = crypto.randomUUID();
-              omDebug(
-                `[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`,
-              );
-              regeneratedIds++;
-            }
-          }
-
-          omDebug(
-            `[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`,
-          );
-          await this.messageHistory.persistMessages({
-            messages: messagesToSave,
-            threadId,
-            resourceId,
-          });
-
-          // After successful save, track IDs of messages that now have observation markers (sealed)
-          // These IDs cannot be reused in future cycles
-          for (const msg of messagesToSave) {
-            if (this.findLastCompletedObservationBoundary(msg) !== -1) {
-              sealedIds.add(msg.id);
-            }
-          }
-          state.sealedIds = sealedIds;
+          await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
         }
 
         // Re-fetch record to get updated observations
         record = await this.getOrCreateRecord(threadId, resourceId);
+      } else if (stepNumber > 0) {
+        // ── PER-STEP SAVE ──────────────────────────────────────────────────
+        // Threshold not reached, but we still need to persist messages incrementally.
+        // Without this, messages would be lost if the agent is interrupted or
+        // the process exits before processOutputResult runs.
+        //
+        // Pattern: clear → save → re-add
+        //   1. clear: get messages and remove from "unsaved" tracking
+        //   2. save: persist to storage
+        //   3. re-add: put back in context (deduped by messageList.add)
+        // ────────────────────────────────────────────────────────────────────
+        const newInput = messageList.clear.input.db();
+        const newOutput = messageList.clear.response.db();
+        const messagesToSave = [...newInput, ...newOutput];
+
+        if (messagesToSave.length > 0) {
+          omDebug(`[OM processInputStep] Per-step save: ${messagesToSave.length} messages`);
+          await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+
+          // Re-add messages to context so the agent can still see them
+          for (const msg of messagesToSave) {
+            messageList.add(msg, 'memory');
+          }
+        }
       }
     }
 
@@ -2422,7 +2415,8 @@ NOTE: Any messages following this system reminder are newer than your memories.
       return messageList;
     }
 
-    // Get unsaved messages from messageList
+    // Final save: persist any messages that weren't saved during per-step saves
+    // (e.g., the final assistant response after the last processInputStep)
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
     const messagesToSave = [...newInput, ...newOutput];
@@ -2432,27 +2426,59 @@ NOTE: Any messages following this system reminder are newer than your memories.
       return messageList;
     }
 
-    // Regenerate IDs for messages that were already saved with observation markers (sealed)
     const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+
+    omDebug(`[OM processOutputResult] Final save: ${messagesToSave.length} unsaved messages`);
+    await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+
+    return messageList;
+  }
+
+  /**
+   * Save messages to storage, regenerating IDs for any messages that were
+   * previously saved with observation markers (sealed).
+   *
+   * After saving, tracks which messages now have observation markers
+   * so their IDs won't be reused in future save cycles.
+   */
+  private async saveMessagesWithSealedIdTracking(
+    messagesToSave: MastraDBMessage[],
+    sealedIds: Set<string>,
+    threadId: string,
+    resourceId: string | undefined,
+    state: Record<string, unknown>,
+  ): Promise<void> {
+    // Regenerate IDs for messages that were already saved with observation markers
+    // This prevents overwriting sealed messages in the DB
     let regeneratedIds = 0;
     for (const msg of messagesToSave) {
       if (sealedIds.has(msg.id)) {
+        const oldId = msg.id;
         msg.id = crypto.randomUUID();
+        omDebug(
+          `[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`,
+        );
         regeneratedIds++;
       }
     }
 
     omDebug(
-      `[OM processOutputResult] Saving ${messagesToSave.length} unsaved messages (${regeneratedIds} with regenerated IDs)`,
+      `[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`,
     );
-
     await this.messageHistory.persistMessages({
       messages: messagesToSave,
       threadId,
       resourceId,
     });
 
-    return messageList;
+    // After successful save, track IDs of messages that now have observation markers (sealed)
+    // These IDs cannot be reused in future cycles
+    for (const msg of messagesToSave) {
+      if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+        sealedIds.add(msg.id);
+      }
+    }
+    state.sealedIds = sealedIds;
   }
 
   /**
