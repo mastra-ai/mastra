@@ -1,4 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createCerebras } from '@ai-sdk/cerebras-v5';
+import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
 import { createDeepSeek } from '@ai-sdk/deepseek-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createMistral } from '@ai-sdk/mistral-v5';
@@ -6,6 +8,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { createPerplexity } from '@ai-sdk/perplexity-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createTogetherAI } from '@ai-sdk/togetherai-v5';
 import { createXai } from '@ai-sdk/xai-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
@@ -34,20 +37,11 @@ interface ModelsDevResponse {
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
-  cerebras: {
-    url: 'https://api.cerebras.ai/v1',
-  },
   mistral: {
     url: 'https://api.mistral.ai/v1',
   },
   groq: {
     url: 'https://api.groq.com/openai/v1',
-  },
-  togetherai: {
-    url: 'https://api.together.xyz/v1',
-  },
-  deepinfra: {
-    url: 'https://api.deepinfra.com/v1/openai',
   },
   vercel: {
     url: 'https://ai-gateway.vercel.sh/v1',
@@ -130,6 +124,11 @@ export class ModelsDevGateway extends MastraModelGateway {
           models: modelIds,
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
+          // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
+          npm:
+            providerInfo.npm && providerInfo.npm !== '@ai-sdk/openai-compatible' && providerInfo.npm !== '@ai-sdk/gateway'
+              ? providerInfo.npm
+              : undefined,
         };
       }
     }
@@ -213,11 +212,42 @@ export class ModelsDevGateway extends MastraModelGateway {
         })(modelId);
       case 'perplexity':
         return createPerplexity({ apiKey })(modelId);
-      default:
+      case 'cerebras':
+        return createCerebras({ apiKey })(modelId);
+      case 'togetherai':
+        return createTogetherAI({ apiKey })(modelId);
+      case 'deepinfra':
+        return createDeepInfra({ apiKey })(modelId);
+      default: {
+        // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
+        const config = this.providerConfigs[providerId];
+        const npm = config?.npm;
+
+        if (npm === '@ai-sdk/anthropic') {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createAnthropic({ apiKey, baseURL })(modelId);
+        }
+
+        if (npm === '@ai-sdk/openai') {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createOpenAI({ apiKey, baseURL }).chat(modelId);
+        }
+
+        if (npm === '@ai-sdk/google') {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createGoogleGenerativeAI({ apiKey, baseURL }).chat(modelId);
+        }
+
+        if (npm === '@ai-sdk/mistral') {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createMistral({ apiKey, baseURL })(modelId);
+        }
+
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
           modelId,
         );
+      }
     }
   }
 }

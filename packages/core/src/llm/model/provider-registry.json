@@ -287,7 +287,8 @@
         "grok-vision-beta"
       ],
       "docUrl": "https://docs.x.ai/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/xai"
     },
     "vultr": {
       "url": "https://api.vultrinference.com/v1",
@@ -411,7 +412,8 @@
         "qwen/qwen3-32b"
       ],
       "docUrl": "https://console.groq.com/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/groq"
     },
     "bailing": {
       "url": "https://api.tbox.cn/api/llm/v1/chat/completions",
@@ -455,7 +457,8 @@
         "pixtral-large-latest"
       ],
       "docUrl": "https://docs.mistral.ai/getting-started/models/",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/mistral"
     },
     "abacus": {
       "url": "https://routellm.abacus.ai/v1",
@@ -1004,7 +1007,8 @@
         "gpt-5.2-codex"
       ],
       "docUrl": "https://docs.vivgrid.com/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/openai"
     },
     "chutes": {
       "url": "https://llm.chutes.ai/v1",
@@ -1085,7 +1089,8 @@
       "name": "Kimi For Coding",
       "models": ["k2p5", "kimi-k2-thinking"],
       "docUrl": "https://www.kimi.com/coding/docs/en/third-party-agents.html",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "cortecs": {
       "url": "https://api.cortecs.ai/v1",
@@ -1179,9 +1184,7 @@
       "gateway": "models.dev"
     },
     "togetherai": {
-      "url": "https://api.together.xyz/v1",
       "apiKeyEnvVar": "TOGETHER_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Together AI",
       "models": [
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
@@ -1197,7 +1200,8 @@
         "zai-org/GLM-4.6"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/togetherai"
     },
     "baseten": {
       "url": "https://inference.baseten.co/v1",
@@ -1501,7 +1505,8 @@
       "name": "MiniMax (minimax.io)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "google": {
       "apiKeyEnvVar": "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -1535,7 +1540,8 @@
         "gemini-live-2.5-flash-preview-native-audio"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/google"
     },
     "inception": {
       "url": "https://api.inceptionlabs.ai/v1/",
@@ -1686,7 +1692,8 @@
         "text-embedding-ada-002"
       ],
       "docUrl": "https://platform.openai.com/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/openai"
     },
     "zhipuai-coding-plan": {
       "url": "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -1713,14 +1720,16 @@
       "name": "MiniMax (minimaxi.com)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
       "models": ["sonar", "sonar-pro", "sonar-reasoning-pro"],
       "docUrl": "https://docs.perplexity.ai",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/perplexity"
     },
     "openrouter": {
       "url": "https://openrouter.ai/api/v1",
@@ -1943,7 +1952,8 @@
       "name": "MiniMax Coding Plan (minimax.io)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "ovhcloud": {
       "url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
@@ -2029,9 +2039,7 @@
       "gateway": "models.dev"
     },
     "deepinfra": {
-      "url": "https://api.deepinfra.com/v1/openai",
       "apiKeyEnvVar": "DEEPINFRA_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Deep Infra",
       "models": [
         "MiniMaxAI/MiniMax-M2",
@@ -2045,7 +2053,8 @@
         "zai-org/GLM-4.7"
       ],
       "docUrl": "https://deepinfra.com/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/deepinfra"
     },
     "zhipuai": {
       "url": "https://open.bigmodel.cn/api/paas/v4",
@@ -2248,7 +2257,8 @@
         "claude-sonnet-4-5-20250929"
       ],
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "aihubmix": {
       "url": "https://aihubmix.com/v1",
@@ -2541,16 +2551,16 @@
       "name": "MiniMax Coding Plan (minimaxi.com)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "cerebras": {
-      "url": "https://api.cerebras.ai/v1",
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Cerebras",
       "models": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/cerebras"
     },
     "netlify": {
       "apiKeyEnvVar": ["NETLIFY_TOKEN", "NETLIFY_SITE_ID"],
@@ -4652,3 +4662,4 @@
   },
   "version": "1.0.0"
 }
+
