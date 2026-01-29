@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
+import { IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -167,10 +167,16 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('cmd-value');
     });
 
-    it('should throw SandboxNotReadyError when not started', async () => {
+    it('should auto-start when executeCommand is called without start()', async () => {
       const newSandbox = new LocalSandbox({ workingDirectory: tempDir });
 
-      await expect(newSandbox.executeCommand('echo', ['test'])).rejects.toThrow(SandboxNotReadyError);
+      // Should auto-start and execute successfully
+      const result = await newSandbox.executeCommand('echo', ['test']);
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('test');
+      expect(newSandbox.status).toBe('running');
+
+      await newSandbox.destroy();
     });
   });
 

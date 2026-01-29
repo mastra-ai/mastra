@@ -77,6 +77,3 @@ export const mastra = new Mastra({
 
 // Export workspace alias for convenience
 export const workspace = globalWorkspace;
-
-// Initialize workspace on module load (ensures sandbox is ready)
-globalWorkspace.init().catch(console.error);

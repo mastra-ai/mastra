@@ -215,11 +215,16 @@ Each tool can be configured with these options:
 
 #### `init()`
 
-Initialize the workspace. Starts the sandbox and indexes files from `autoIndexPaths`.
+Initialize the workspace and prepare resources.
 
 ```typescript
 await workspace.init();
 ```
+
+Initialization performs:
+- Starts the filesystem provider (creates base directory if needed)
+- Starts the sandbox provider (creates working directory, sets up isolation if configured)
+- Indexes files from `autoIndexPaths` for search
 
 #### `destroy()`
 

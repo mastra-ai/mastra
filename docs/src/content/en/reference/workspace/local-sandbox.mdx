@@ -34,7 +34,14 @@ const sandbox = new LocalSandbox({
     NODE_ENV: 'development',
   },
 });
+
+// Execute a command (auto-starts if not already running)
+const result = await sandbox.executeCommand('echo', ['hello']);
 ```
+
+### Auto-start behavior
+
+`LocalSandbox` automatically starts on the first `executeCommand()` call if not already running. You can also explicitly start the sandbox by calling `workspace.init()` at application startup to avoid first-command latency.
 
 ## Constructor Parameters
 
@@ -277,6 +284,19 @@ When isolation is enabled:
 - File reads are allowed everywhere (needed for system binaries)
 - Network access is blocked by default
 - Process isolation prevents affecting the host system
+
+### Sandbox profile location
+
+When using seatbelt isolation on macOS, `LocalSandbox` generates a profile file in a `.sandbox/` folder within the working directory:
+
+```
+workspace/
+├── .sandbox/
+│   └── local-sandbox-abc123.sb    # Seatbelt profile
+└── ... your files
+```
+
+The profile is created when the sandbox starts and cleaned up when destroyed. The `.sandbox/` folder is automatically removed if empty after cleanup.
 
 ## Related
 
