@@ -16,6 +16,7 @@ import type {
   WorkflowResult,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
+import type { InngestWorkflow } from './workflow';
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
@@ -443,6 +444,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       perStep,
       stepSpan,
     } = params;
+    const nestedStep = step as InngestWorkflow;
 
     // Build trace context to propagate to nested workflow
     const nestedTracingContext = executionContext.tracingIds?.traceId
@@ -468,7 +470,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
 
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
-          function: step.getFunction(),
+          function: nestedStep.getFunction(),
           data: {
             inputData,
             initialState: executionContext.state ?? snapshot?.value ?? {},
@@ -501,10 +503,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           context: (timeTravel.nestedStepResults?.[step.id] ?? {}) as any,
           nestedStepsContext: (timeTravel.nestedStepResults ?? {}) as any,
           snapshot,
-          graph: step.buildExecutionGraph(),
+          graph: nestedStep.buildExecutionGraph(),
         });
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
-          function: step.getFunction(),
+          function: nestedStep.getFunction(),
           data: {
             timeTravel: timeTravelParams,
             initialState: executionContext.state ?? {},
@@ -519,7 +521,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         executionContext.state = invokeResp.result.state;
       } else {
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
-          function: step.getFunction(),
+          function: nestedStep.getFunction(),
           data: {
             inputData,
             initialState: executionContext.state ?? {},
