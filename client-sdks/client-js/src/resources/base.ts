@@ -1,15 +1,33 @@
 import type { RequestOptions, ClientOptions } from '../types';
+import { normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
+  protected readonly apiPrefix: string;
 
   constructor(options: ClientOptions) {
     this.options = options;
+    this.apiPrefix = normalizeRoutePath(options.apiPrefix ?? '/api');
+  }
+
+  /**
+   * Path segments that should NOT have the API prefix applied (protocol-specific paths).
+   * These are special protocol endpoints that exist at the root level.
+   */
+  private static readonly NON_API_PATHS = ['/a2a', '/.well-known'];
+
+  /**
+   * Checks if a path should have the API prefix applied.
+   * Returns false for protocol-specific paths like /a2a and /.well-known
+   * Matches exact path or path followed by / to avoid false positives (e.g., /a2a-other)
+   */
+  private shouldApplyPrefix(path: string): boolean {
+    return !BaseResource.NON_API_PATHS.some(nonApiPath => path === nonApiPath || path.startsWith(nonApiPath + '/'));
   }
 
   /**
    * Makes an HTTP request to the API with retries and exponential backoff
-   * @param path - The API endpoint path
+   * @param path - The API endpoint path (without prefix, e.g., '/agents')
    * @param options - Optional request configuration
    * @returns Promise containing the response data
    */
@@ -28,9 +46,12 @@ export class BaseResource {
 
     let delay = backoffMs;
 
+    // Build the full URL with apiPrefix (unless it's a protocol-specific path)
+    const fullPath = this.shouldApplyPrefix(path) ? `${this.apiPrefix}${path}` : path;
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${path}`, {
+        const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
           ...options,
           headers: {
             ...(options.body &&

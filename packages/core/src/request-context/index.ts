@@ -139,4 +139,20 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   public toJSON(): Record<string, any> {
     return Object.fromEntries(this.registry);
   }
+
+  /**
+   * Get all values as a typed object for destructuring.
+   * Returns Record<string, any> when untyped, or the Values type when typed.
+   *
+   * @example
+   * ```typescript
+   * const ctx = new RequestContext<{ userId: string; apiKey: string }>();
+   * ctx.set('userId', 'user-123');
+   * ctx.set('apiKey', 'key-456');
+   * const { userId, apiKey } = ctx.all;
+   * ```
+   */
+  public get all(): Values extends Record<string, any> ? Values : Record<string, any> {
+    return Object.fromEntries(this.registry) as Values extends Record<string, any> ? Values : Record<string, any>;
+  }
 }
