@@ -3894,3 +3894,168 @@ Date: January 7, 2026
 });
 
 
+
+// =============================================================================
+// Resource Scope: Other-thread messages in processInputStep
+// =============================================================================
+
+describe('Resource Scope: other-conversation blocks after observation', () => {
+  it('should include other thread messages in context even after those threads have been observed', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const resourceId = 'user-resource-1';
+    const threadAId = 'thread-A';
+    const threadBId = 'thread-B';
+
+    // Thread A's messages were created at 09:01-09:02, observed at 09:02
+    const threadAObservedAt = new Date('2025-01-01T09:02:00Z');
+
+    // Create Thread A with per-thread lastObservedAt in metadata (simulating completed observation)
+    await storage.saveThread({
+      thread: {
+        id: threadAId,
+        resourceId,
+        title: 'Thread A',
+        createdAt: new Date('2025-01-01T09:00:00Z'),
+        updatedAt: new Date('2025-01-01T09:00:00Z'),
+        metadata: {
+          __om: { lastObservedAt: threadAObservedAt.toISOString() },
+        },
+      },
+    });
+
+    // Create Thread B (no observation yet)
+    await storage.saveThread({
+      thread: {
+        id: threadBId,
+        resourceId,
+        title: 'Thread B',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        updatedAt: new Date('2025-01-01T10:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Add messages to Thread A (already observed)
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'msg-a-1',
+          role: 'user' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'My favorite color is blue' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:01:00Z'),
+          threadId: threadAId,
+          resourceId,
+        },
+        {
+          id: 'msg-a-2',
+          role: 'assistant' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Blue is a great color!' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:02:00Z'),
+          threadId: threadAId,
+          resourceId,
+        },
+      ],
+    });
+
+    // Add messages to Thread B (not yet observed)
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'msg-b-1',
+          role: 'user' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello from thread B!' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: threadBId,
+          resourceId,
+        },
+      ],
+    });
+
+    // Initialize OM record at resource level with lastObservedAt set to Thread A's observation time
+    // This simulates the state after Thread A has been observed
+    const record = await storage.initializeObservationalMemory({
+      threadId: null, // Resource scope
+      resourceId,
+      scope: 'resource',
+      config: {},
+    });
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      tokenCount: 50,
+      lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
+    });
+
+    // Verify setup: resource-level lastObservedAt is set
+    const setupRecord = await storage.getObservationalMemory(null, resourceId);
+    expect(setupRecord?.lastObservedAt).toEqual(threadAObservedAt);
+    expect(setupRecord?.activeObservations).toContain('favorite color is blue');
+
+    // Create OM with resource scope
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [{ type: 'text' as const, text: '<observations>\n- observed\n</observations>' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        model: mockModel as any,
+        messageTokens: 50000, // High threshold — we don't want observation to trigger
+      },
+      reflection: {
+        model: mockModel as any,
+        observationTokens: 50000,
+      },
+      scope: 'resource',
+    });
+
+    // Call processInputStep for Thread B
+    const messageList = new MessageList({ threadId: threadBId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadBId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T10:05:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => { throw new Error('aborted'); }) as any,
+    });
+
+    // Extract the OM system message (tagged as 'observational-memory')
+    const omSystemMessages = messageList.getSystemMessages('observational-memory');
+    expect(omSystemMessages.length).toBeGreaterThan(0);
+
+    const omSystemMessage = omSystemMessages[0]!;
+    const omContent =
+      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+
+    // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
+    // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
+    // The agent on Thread B needs to see Thread A's raw conversation to have full context.
+    expect(omContent).toContain('other-conversation');
+    expect(omContent).toContain('My favorite color is blue');
+    expect(omContent).toContain('Blue is a great color!');
+
+    // Thread B's messages should NOT be in <other-conversation> blocks (it's the active thread)
+    expect(omContent).not.toContain('Hello from thread B!');
+  });
+});
