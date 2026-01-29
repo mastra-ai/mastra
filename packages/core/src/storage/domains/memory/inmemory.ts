@@ -759,6 +759,7 @@ export class InMemoryMemory extends MemoryStorage {
       // This ensures historical data (like LongMemEval fixtures) works correctly
       lastObservedAt: undefined,
       originType: 'initial',
+      generationCount: 0,
       activeObservations: '',
       // Buffering (for async observation/reflection)
       bufferedObservations: undefined,
@@ -889,6 +890,7 @@ export class InMemoryMemory extends MemoryStorage {
       updatedAt: now,
       lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
       originType: 'reflection',
+      generationCount: currentRecord.generationCount + 1,
       activeObservations: reflection,
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.

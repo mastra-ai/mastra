@@ -1392,6 +1392,7 @@ export class MemoryPG extends MemoryStorage {
       updatedAt: new Date(row.updatedAtZ),
       lastObservedAt: row.lastObservedAtZ ? new Date(row.lastObservedAtZ) : undefined,
       originType: row.originType || 'initial',
+      generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
       patterns: row.patterns ? (typeof row.patterns === 'string' ? JSON.parse(row.patterns) : row.patterns) : undefined,
@@ -1476,6 +1477,7 @@ export class MemoryPG extends MemoryStorage {
         updatedAt: now,
         lastObservedAt: undefined,
         originType: 'initial',
+        generationCount: 0,
         activeObservations: '',
         totalTokensObserved: 0,
         observationTokenCount: 0,
@@ -1616,6 +1618,7 @@ export class MemoryPG extends MemoryStorage {
         updatedAt: now,
         lastObservedAt: input.currentRecord.lastObservedAt,
         originType: 'reflection',
+        generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,
         patterns: input.patterns,
         totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
@@ -1652,7 +1655,7 @@ export class MemoryPG extends MemoryStorage {
           input.patterns ? JSON.stringify(input.patterns) : null,
           'reflection',
           JSON.stringify(record.config),
-          ((input.currentRecord as any).generationCount ?? 0) + 1,
+          input.currentRecord.generationCount + 1,
           lastObservedAtStr, // lastObservedAt
           lastObservedAtStr, // lastObservedAtZ
           nowStr, // lastReflectionAt

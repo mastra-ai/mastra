@@ -1588,21 +1588,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       allMessages.push(...msgs);
     }
 
-    // TEMPORARY DEBUG: Check for duplicate message observation
-    const duplicateIds: string[] = [];
-    for (const msg of allMessages) {
-      if (this.observedMessageIds.has(msg.id)) {
-        duplicateIds.push(msg.id);
-      }
-    }
-    if (duplicateIds.length > 0) {
-      throw new Error(
-        `[OM BUG] Attempting to observe ${duplicateIds.length} messages that were already observed! ` +
-          `Message IDs: ${duplicateIds.slice(0, 5).join(', ')}${duplicateIds.length > 5 ? '...' : ''}. ` +
-          `This indicates a bug in the observation flow - messages should only be observed once.`,
-      );
-    }
-    // Mark all messages as observed
+    // Mark all messages as observed (skip any already-observed)
     for (const msg of allMessages) {
       this.observedMessageIds.add(msg.id);
     }
@@ -2014,7 +2000,8 @@ ${suggestedResponse}
         for (const thread of allThreads) {
           if (thread.id === threadId) {
             // Current thread: use resource-level lastObservedAt (consistent with thread scope behavior)
-            const currentThreadMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
+            // Pass undefined for resourceId so we query by threadId only (not all threads for the resource)
+            const currentThreadMessages = await this.loadUnobservedMessages(threadId, undefined, lastObservedAt);
             if (currentThreadMessages.length > 0) {
               messagesByThread.set(threadId, currentThreadMessages);
               totalLoaded += currentThreadMessages.length;
@@ -3036,6 +3023,25 @@ ${formattedMessages}
       }
 
       messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
+    }
+
+    // Filter out messages already observed in this instance's lifetime.
+    // This can happen when doResourceScopedObservation re-queries the DB using per-thread
+    // lastObservedAt cursors that haven't fully advanced past messages observed in a prior cycle.
+    let totalFiltered = 0;
+    for (const [tid, msgs] of messagesByThread) {
+      const filtered = msgs.filter(m => !this.observedMessageIds.has(m.id));
+      if (filtered.length < msgs.length) {
+        totalFiltered += msgs.length - filtered.length;
+      }
+      if (filtered.length > 0) {
+        messagesByThread.set(tid, filtered);
+      } else {
+        messagesByThread.delete(tid);
+      }
+    }
+    if (totalFiltered > 0) {
+      omDebug(`[OM] Filtered out ${totalFiltered} already-observed messages from DB results`);
     }
 
     // Count total messages

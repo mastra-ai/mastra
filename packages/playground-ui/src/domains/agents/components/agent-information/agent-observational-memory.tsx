@@ -11,7 +11,7 @@ import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-render
 // Format tokens helper
 const formatTokens = (n: number) => {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return n.toString();
+  return Math.round(n).toString();
 };
 
 // Get bar color based on percentage: green 0-60%, blue 60%+
@@ -249,6 +249,25 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const record = omData?.record;
   const history = omData?.history ?? [];
 
+  // DEBUG: trace OM sidebar data flow
+  console.log('[OM Sidebar Debug]', {
+    isStatusLoading,
+    isOMLoading,
+    isEnabled,
+    statusData: statusData?.observationalMemory,
+    omData: omData ? { record: !!omData.record, historyLen: omData.history?.length } : null,
+    record: record ? {
+      id: record.id,
+      hasActiveObservations: !!record.activeObservations,
+      activeObservationsLen: record.activeObservations?.length,
+      observationTokenCount: record.observationTokenCount,
+      pendingMessageTokens: record.pendingMessageTokens,
+      generationCount: record.generationCount,
+      config: record.config,
+    } : null,
+    streamProgress,
+  });
+
   // Extract threshold values - try multiple sources in priority order:
   // 1. Stream progress (real-time during streaming)
   // 2. Record config (from OM processor when added via input/output processors)
@@ -268,8 +287,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   )?.observationalMemory;
   const recordConfig = record?.config as
     | {
-        messageTokens?: number;
-        observationTokens?: number;
+        observation?: { messageTokens?: number };
+        reflection?: { observationTokens?: number };
         observationModel?: string;
         reflectionModel?: string;
       }
@@ -313,14 +332,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
   const messageTokensThreshold =
     streamProgress?.messageTokens ??
-    recordConfig?.messageTokens ??
+    recordConfig?.observation?.messageTokens ??
     getThresholdValue(omAgentConfig?.messageTokens, 10000);
 
   // For observations bar: use the configured observation tokens threshold (not calculated remaining)
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 30000);
   const observationTokensThreshold =
-    streamProgress?.observationTokensThreshold ?? recordConfig?.observationTokens ?? configObservationTokens;
+    streamProgress?.observationTokensThreshold ?? recordConfig?.reflection?.observationTokens ?? configObservationTokens;
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;

@@ -464,6 +464,8 @@ export interface ObservationalMemoryRecord {
   // Generation tracking
   /** How this record was created */
   originType: ObservationalMemoryOriginType;
+  /** Generation counter - incremented each time a reflection creates a new record */
+  generationCount: number;
 
   // Observation content
   /**

@@ -300,11 +300,13 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         if (agent) {
           const omConfig = await getOMConfigFromAgent(agent, requestContext);
           if (omConfig?.enabled && resourceId) {
+            // For resource-scoped OM, lookup by resourceId only (threadId=null)
+            const omThreadId = omConfig.scope === 'resource' ? undefined : threadId;
             // Get OM status from the agent's memory storage (not mastra.getStorage())
             try {
               const memoryStore = await memory.storage.getStore('memory');
               if (memoryStore) {
-                const status = await getOMStatus(memoryStore, resourceId, threadId);
+                const status = await getOMStatus(memoryStore, resourceId, omThreadId);
                 if (status) {
                   omStatus = {
                     enabled: true,
@@ -436,11 +438,14 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
       }
 
+      // For resource-scoped OM, lookup by resourceId only (threadId=null)
+      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
+
       // Get current record
-      const record = await memoryStore.getObservationalMemory(threadId ?? null, effectiveResourceId);
+      const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
 
       // Get history (last 5 generations)
-      const history = await memoryStore.getObservationalMemoryHistory(threadId ?? null, effectiveResourceId, 5);
+      const history = await memoryStore.getObservationalMemoryHistory(omThreadId, effectiveResourceId, 5);
 
       return {
         record: record ?? null,
