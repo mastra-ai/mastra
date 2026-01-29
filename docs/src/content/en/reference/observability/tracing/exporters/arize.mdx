@@ -141,9 +141,180 @@ async shutdown(): Promise<void>
 
 Flushes pending data and shuts down the client.
 
+## createArizeConfig
+
+Function that returns an observability configuration object with default `serializationOptions` set to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`. All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through.
+
+```typescript
+function createArizeConfig(options: CreateArizeConfigOptions): Omit<ObservabilityInstanceConfig, 'name'>
+```
+
+### CreateArizeConfigOptions
+
+```typescript
+interface CreateArizeConfigOptions extends Omit<ObservabilityInstanceConfig, 'name' | 'serviceName'> {
+  serviceName?: string;
+  serializationOptions?: SerializationOptions;
+}
+```
+
+Extends `ObservabilityInstanceConfig` to allow pass-through of all observability configuration properties.
+
+<PropertiesTable
+  props={[
+    {
+      name: "exporters",
+      type: "ObservabilityExporter[]",
+      description: "Array of exporter instances. Each `ArizeExporter` in the array can be configured with either an `endpoint` (for Phoenix/collectors) or `spaceId` (for Arize AX). Can include multiple `ArizeExporter` instances or other exporter types.",
+      required: true,
+    },
+    {
+      name: "serviceName",
+      type: "string",
+      description:
+        "Service name for observability. Resolves in order: `PHOENIX_PROJECT_NAME` environment variable → `ARIZE_PROJECT_NAME` environment variable → `'mastra-tracing'`.",
+      required: false,
+    },
+    {
+      name: "serializationOptions",
+      type: "SerializationOptions",
+      description:
+        "Options for controlling serialization of span data (input/output/attributes). Defaults to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` which sets `maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999` to prevent truncation. Custom values are merged with these defaults.",
+      required: false,
+    },
+    {
+      name: "...rest",
+      type: "ObservabilityInstanceConfig properties",
+      description:
+        "All other `ObservabilityInstanceConfig` properties (`spanOutputProcessors`, `sampling`, `bridge`, `includeInternalSpans`, `requestContextKeys`) are passed through unchanged. The `spanOutputProcessors` field accepts an array of span output processors that are used as-is without any default processors added.",
+      required: false,
+    },
+  ]}
+/>
+
+## ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS
+
+Exported constant with Arize's recommended serialization settings to prevent data truncation:
+
+```typescript
+export const ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS: SerializationOptions = {
+  maxStringLength: 9999999,
+  maxDepth: 9999999,
+  maxArrayLength: 9999999,
+  maxObjectKeys: 9999999,
+};
+```
+
+You can spread these into your custom config and override specific values as needed.
+
 ## Usage
 
-### Zero-Config (using environment variables)
+### Configuration with `createArizeConfig`
+
+The `createArizeConfig` function returns a configuration object with default `serializationOptions` set to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`, which sets large payload limits (`maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999`) to prevent truncation of span data. The `exporters` field accepts an array of exporter instances, where each `ArizeExporter` can be configured with either an `endpoint` (for Phoenix/collectors) or `spaceId` (for Arize AX).
+
+#### Basic Usage
+
+The `exporters` field accepts an array of exporter instances. Each `ArizeExporter` in the `exporters` array can be configured with either an `endpoint` (for Phoenix/collectors) or `spaceId` (for Arize AX):
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
+
+// For Phoenix: use endpoint in the exporters array
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
+      }),
+    },
+  }),
+});
+
+// For Arize AX: use spaceId in the exporters array
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            spaceId: process.env.ARIZE_SPACE_ID!,
+            apiKey: process.env.ARIZE_API_KEY!,
+            projectName: process.env.ARIZE_PROJECT_NAME,
+          }),
+        ],
+      }),
+    },
+  }),
+});
+```
+
+#### Multiple Exporters
+
+The `exporters` field accepts multiple exporter instances in an array:
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
+import { DefaultExporter } from "@mastra/observability";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+          }),
+          new DefaultExporter(),
+        ],
+      }),
+    },
+  }),
+});
+```
+
+#### Customizing Serialization Options
+
+The `serializationOptions` field defaults to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`. To override specific limits, pass a `serializationOptions` object that will be merged with the defaults:
+
+```typescript
+import { Observability } from "@mastra/observability";
+import { createArizeConfig, ArizeExporter, ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from "@mastra/arize";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+          }),
+        ],
+        serializationOptions: {
+          ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS,
+          maxStringLength: 500, // Override maxStringLength; other limits inherit defaults
+        },
+      }),
+    },
+  }),
+});
+```
+
+All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through `createArizeConfig`, including `spanOutputProcessors`, `sampling`, `bridge`, `includeInternalSpans`, and `requestContextKeys`.
+
+### Manual Configuration with `ArizeExporter`
+
+For direct control over the configuration, you can use `ArizeExporter` directly:
+
+#### Zero-Config (using environment variables)
 
 ```typescript
 import { ArizeExporter } from "@mastra/arize";

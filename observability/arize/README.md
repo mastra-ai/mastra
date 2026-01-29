@@ -14,7 +14,10 @@ npm install @mastra/arize
 
 You can add `ArizeExporter` to your Mastra configuration to export traces to Arize AX or Phoenix, or any other OpenTelemetry compatible observability platform that supports OpenInference.
 
-The exporter automatically reads credentials from environment variables, enabling zero-config setup.
+The exporter reads credentials from environment variables for zero-config setup.
+
+> [!TIP]
+> For an alternative configuration approach using `createArizeConfig` that applies recommended default parameters, see [Configuration with `createArizeConfig`](#configuration-with-createarizeconfig) below.
 
 ### Phoenix (Zero-Config)
 
@@ -74,7 +77,7 @@ const mastra = new Mastra({
 ```
 
 > [!TIP]
-> You can easily use this exporter with both [self-hosted Phoenix](https://docs.arize.com/phoenix/deployment), or, [Phoenix Cloud](https://app.phoenix.arize.com/login).
+> Works with both [self-hosted Phoenix](https://docs.arize.com/phoenix/deployment) and [Phoenix Cloud](https://app.phoenix.arize.com/login).
 >
 > To quickly verify functionality, you can try out a local in-memory Phoenix instance:
 >
@@ -141,6 +144,136 @@ const mastra = new Mastra({
 
 > [!TIP]
 > Need an Arize AX API key? [Get one here](https://app.arize.com/).
+
+## Configuration with `createArizeConfig`
+
+The `createArizeConfig` function creates an observability configuration with default serialization options. All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through.
+
+**Default behaviors:**
+- **serviceName**: Resolves in order: `PHOENIX_PROJECT_NAME` environment variable → `ARIZE_PROJECT_NAME` environment variable → `'mastra-tracing'`
+- **serializationOptions**: Defaults to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` which sets:
+  - `maxStringLength: 9999999`
+  - `maxDepth: 9999999`
+  - `maxArrayLength: 9999999`
+  - `maxObjectKeys: 9999999`
+  
+  These limits effectively prevent truncation of span data (input, output, and attributes) by default. Custom `serializationOptions` are merged with these defaults.
+
+**ArizeExporter requirements:**
+- For Phoenix/Phoenix Cloud/other collectors: `endpoint` is required (or `PHOENIX_ENDPOINT` env var)
+- For Arize AX: `spaceId` and `apiKey` are required (or `ARIZE_SPACE_ID` and `ARIZE_API_KEY` env vars)
+- `projectName` is optional (can be set via `ARIZE_PROJECT_NAME` or `PHOENIX_PROJECT_NAME` env vars)
+
+### Basic Usage
+
+```typescript
+import { Observability } from '@mastra/observability';
+import { createArizeConfig, ArizeExporter } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
+      }),
+    },
+  }),
+});
+```
+
+### With Multiple Exporters
+
+You can pass multiple exporters to send traces to different destinations:
+
+```typescript
+import { Observability } from '@mastra/observability';
+import { createArizeConfig, ArizeExporter } from '@mastra/arize';
+import { DefaultExporter } from '@mastra/observability';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
+          new DefaultExporter(),
+        ],
+      }),
+    },
+  }),
+});
+```
+
+### With Custom Options
+
+```typescript
+import { Observability } from '@mastra/observability';
+import { createArizeConfig, ArizeExporter, ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
+        serviceName: 'my-custom-service', // Optional: defaults to PHOENIX_PROJECT_NAME → ARIZE_PROJECT_NAME → 'mastra-tracing'
+        serializationOptions: {
+          ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS, // Merge with default limits
+          maxStringLength: 500, // Override specific limit
+        },
+      }),
+    },
+  }),
+});
+```
+
+### Serialization Options
+
+The `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` constant (exported from `@mastra/arize`) defines the default serialization limits used by `createArizeConfig`:
+
+```typescript
+import { ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from '@mastra/arize';
+
+// Default values:
+// {
+//   maxStringLength: 9999999,
+//   maxDepth: 9999999,
+//   maxArrayLength: 9999999,
+//   maxObjectKeys: 9999999,
+// }
+```
+
+When you provide `serializationOptions` to `createArizeConfig`, your values are merged with these defaults. To customize, pass `serializationOptions` in the config object:
+
+```typescript
+createArizeConfig({
+  exporters: [...],
+  serializationOptions: {
+    maxStringLength: 5000, // Override specific limit
+    // Other limits inherit from ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS
+  },
+})
+```
 
 ## Optional Configuration
 
