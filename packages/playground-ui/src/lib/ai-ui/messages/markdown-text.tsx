@@ -11,9 +11,10 @@ import remarkGfm from 'remark-gfm';
 import { IconButton } from '@/ds/components/IconButton';
 import { cn } from '@/lib/utils';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { makePrismAsyncLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+import { useCopyToClipboard } from '../hooks/use-copy-to-clipboard';
 
-const SyntaxHighlighter = makePrismAsyncLightSyntaxHighlighter({
+const SyntaxHighlighter = makePrismLightSyntaxHighlighter({
   style: coldarkDark,
   customStyle: {
     margin: 0,
@@ -71,25 +72,6 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       </IconButton>
     </div>
   );
-};
-
-const useCopyToClipboard = ({
-  copiedDuration = 1500,
-}: {
-  copiedDuration?: number;
-} = {}) => {
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  const copyToClipboard = (value: string) => {
-    if (!value) return;
-
-    navigator.clipboard.writeText(value).then(() => {
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), copiedDuration);
-    });
-  };
-
-  return { isCopied, copyToClipboard };
 };
 
 const ImageWithFallback = ({ alt, src, ...rest }: ImgHTMLAttributes<HTMLImageElement>) => {

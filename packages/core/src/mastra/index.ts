@@ -30,6 +30,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -215,6 +216,13 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Global workspace for file storage, skills, and code execution.
+   * Agents inherit this workspace unless they have their own configured.
+   * Skills are accessed via workspace.skills when skills is configured.
+   */
+  workspace?: Workspace;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -302,6 +310,7 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
+  #workspace?: Workspace;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -552,6 +561,10 @@ export class Mastra<
           this.addVector(vector, key);
         }
       });
+    }
+
+    if (config?.workspace) {
+      this.#workspace = config.workspace;
     }
 
     if (config?.scorers) {
@@ -1498,6 +1511,23 @@ export class Mastra<
   }
 
   /**
+   * Gets the global workspace instance.
+   * Workspace provides file storage, skills, and code execution capabilities.
+   * Agents inherit this workspace unless they have their own configured.
+   *
+   * @example
+   * ```typescript
+   * const workspace = mastra.getWorkspace();
+   * if (workspace?.skills) {
+   *   const skills = await workspace.skills.list();
+   * }
+   * ```
+   */
+  public getWorkspace(): Workspace | undefined {
+    return this.#workspace;
+  }
+
+  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -2195,6 +2225,11 @@ export class Mastra<
       const logger = this.getLogger();
       logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
+    }
+
+    // Register Mastra with the processor if it supports it
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
