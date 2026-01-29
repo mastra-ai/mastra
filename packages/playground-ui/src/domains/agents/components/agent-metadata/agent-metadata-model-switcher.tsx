@@ -156,9 +156,10 @@ export const AgentMetadataModelSwitcher = ({
     const cleanedId = cleanProviderId(providerId);
     setSelectedProvider(cleanedId);
 
-    // Only clear model selection when switching to a different provider
+    // Only clear model selection and open model combobox when switching to a different provider
     if (cleanedId !== currentModelProvider) {
       setSelectedModel('');
+      setModelOpen(true);
     }
   };
 
@@ -255,6 +256,8 @@ export const AgentMetadataModelSwitcher = ({
             emptyText="No providers found"
             variant="default"
             size="md"
+            open={providerOpen}
+            onOpenChange={setProviderOpen}
           />
         </div>
 
@@ -268,6 +271,8 @@ export const AgentMetadataModelSwitcher = ({
             emptyText="No models found"
             variant="default"
             size="md"
+            open={modelOpen}
+            onOpenChange={setModelOpen}
           />
         </div>
 
