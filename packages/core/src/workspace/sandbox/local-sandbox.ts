@@ -267,7 +267,7 @@ export class LocalSandbox implements WorkspaceSandbox {
           // This prevents sandboxed processes from reading/modifying their own security profile
           this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
           await fs.mkdir(this._sandboxFolderPath, { recursive: true });
-          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `${this.id}.sb`);
+          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, 'local-sandbox.sb');
           await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
         }
       }

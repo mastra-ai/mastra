@@ -445,7 +445,7 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox.start();
 
       // Check that profile file was created in .sandbox-profiles folder (outside working directory)
-      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `${seatbeltSandbox.id}.sb`);
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
       const profileExists = await fs
         .access(profilePath)
         .then(() => true)
@@ -599,7 +599,7 @@ describe('LocalSandbox', () => {
 
       await seatbeltSandbox.start();
       // Profile uses unique ID-based filename in .sandbox-profiles folder (outside working directory)
-      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `${seatbeltSandbox.id}.sb`);
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
 
       // Profile should exist
       expect(
