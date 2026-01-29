@@ -127,6 +127,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.6v',
     'glm-4.7',
+    'glm-4.7-flash',
   ];
   readonly 'ollama-cloud': readonly [
     'cogito-2.1:671b',
@@ -973,17 +974,22 @@ export type ProviderModelsMap = {
     'xai/grok-3-mini',
   ];
   readonly togetherai: readonly [
+    'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
+    'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-1',
     'essentialai/Rnj-1-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    'moonshotai/Kimi-K2-5',
     'moonshotai/Kimi-K2-Instruct',
+    'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'moonshotai/Kimi-K2.5',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.6',
+    'zai-org/GLM-4.7',
   ];
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
