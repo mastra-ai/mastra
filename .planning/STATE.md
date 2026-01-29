@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.2 Browser Input Injection (Phase 11)
+**Current focus:** v1.2 Browser Input Injection (Phase 12)
 
 ## Current Position
 
-Phase: 11 - Server Input Routing
-Plan: 01 of 01
-Status: Phase complete
-Last activity: 2026-01-29 — Completed 11-01-PLAN.md
+Phase: 12 - Client Coordinate Mapping and Click
+Plan: 01 of 03
+Status: In progress
+Last activity: 2026-01-29 -- Completed 12-01-PLAN.md
 
-Progress: [██████░░░░░░░░░░░░░░] 33% (2/6 phases)
+Progress: [███████░░░░░░░░░░░░░] 37% (3/8 plans in v1.2)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [██████░░░░░░░░░░░░░░] 33% (2/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -51,6 +51,12 @@ Phase 11 decisions:
 - Type guard validation uses boolean return (not type predicates) due to Record<string,unknown> assignability
 - No server-side rate limiting -- client responsible for throttling mouse moves
 - No upper-bound coordinate validation -- CDP handles out-of-range gracefully
+
+Phase 12 decisions:
+- ModifierKeys interface accepts plain object (not MouseEvent/KeyboardEvent) for testability
+- LINE_HEIGHT_PX = 16 for deltaMode 1 (DOM_DELTA_LINE) conversion
+- MAX_DELTA = 500 clamping for wheel normalization
+- Unknown deltaMode falls back to pixel passthrough
 
 ### Pending Todos
 
@@ -76,7 +82,7 @@ None.
 ### Phase 12: Client Coordinate Mapping and Click
 **Goal:** User can click and scroll in the live view frame with accurate coordinate mapping
 **Requirements:** CLICK-01 through CLICK-06, SCROLL-01, SCROLL-02, VIS-03 (9 total)
-**Status:** Not Started
+**Status:** In Progress (Plan 01 of 03 complete)
 **Depends on:** Phases 10 (complete), 11 (complete)
 
 ### Phase 13: Focus Management and Keyboard
@@ -104,15 +110,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29T15:59:48Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-01-29T20:39:47Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
 
-**Next action:** Plan and execute Phase 12 (Client Coordinate Mapping and Click) or Phase 13 (Focus Management and Keyboard) -- both have Phase 11 dependency satisfied.
+**Next action:** Execute Phase 12 Plan 02 (useBrowserStream viewport extension) and Plan 03 (useMouseInteraction hook).
 
 **Context for next session:**
-- Phase 11 complete: handleInputMessage routes WebSocket text messages to toolset.injectMouseEvent/injectKeyboardEvent
-- input-handler.ts exports handleInputMessage with type guard validation and fire-and-forget injection
-- Phase 12 needs client-side coordinate mapping and mouse event composition (click sequences)
-- Phase 13 needs client-side focus management and keyboard event composition
-- Phases 12 and 13 can run in parallel (no dependency between them)
+- Phase 12 Plan 01 complete: coordinate-mapping.ts exports mapClientToViewport, normalizeWheelDelta, getModifiers
+- All three are pure functions with no DOM/React dependencies, tested with 28 vitest cases
+- Plan 02 extends useBrowserStream to parse ViewportMessage and expose sendMessage
+- Plan 03 creates useMouseInteraction hook that imports all three functions from coordinate-mapping.ts
+- Phase 13 can run in parallel (no dependency on Phase 12)
