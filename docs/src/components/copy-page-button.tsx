@@ -237,7 +237,7 @@ function ViewOptions({ url }: { url: string }) {
                 <div className="h4 w-4">{item.icon}</div>
                 <div className="flex grow items-center justify-between gap-1.5">
                   {item.title}
-                  <ExternalLinkIcon className="h-5 w-5 text-(--mastra-text-tertiary)!" />
+                  <ExternalLinkIcon className="h-4 w-4 text-(--mastra-text-tertiary)" />
                 </div>
               </a>
             </DropdownMenu.Item>
