@@ -1,16 +1,26 @@
-import type { ScreencastStream } from '@mastra/agent-browser';
 import type { WSContext } from 'hono/ws';
 
 import type { StatusMessage, BrowserStreamConfig } from './types.js';
+
+/** Minimal screencast stream interface matching BrowserToolsetLike.startScreencast return type */
+interface ScreencastStreamLike {
+  on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): void;
+  on(event: 'stop', handler: (reason: string) => void): void;
+  on(event: 'error', handler: (error: Error) => void): void;
+  stop(): Promise<void>;
+}
 
 /**
  * ViewerRegistry manages WebSocket connections per agent and controls screencast lifecycle.
  *
  * Key responsibilities:
  * - Track connected viewers per agentId
- * - Start screencast when first viewer connects
+ * - Start screencast when browser becomes active (not on viewer connect)
  * - Stop screencast when last viewer disconnects
  * - Broadcast frames to all viewers for an agent
+ *
+ * The browser is NOT launched when viewers connect - it only starts streaming
+ * when the browser is already running from agent tool usage.
  *
  * @example
  * ```typescript
@@ -28,7 +38,13 @@ export class ViewerRegistry {
   private viewers = new Map<string, Set<WSContext>>();
 
   /** Map of agentId to active screencast stream */
-  private screencasts = new Map<string, ScreencastStream>();
+  private screencasts = new Map<string, ScreencastStreamLike>();
+
+  /** Map of agentId to cleanup function for onBrowserReady callback */
+  private browserReadyCleanups = new Map<string, () => void>();
+
+  /** Map of agentId to last known URL (for dedup) */
+  private lastUrls = new Map<string, string>();
 
   /**
    * Add a viewer for an agent. Starts screencast if this is the first viewer.
@@ -68,9 +84,18 @@ export class ViewerRegistry {
 
     viewerSet.delete(ws);
 
-    // Stop screencast if no more viewers
+    // Clean up if no more viewers
     if (viewerSet.size === 0) {
       this.viewers.delete(agentId);
+      this.lastUrls.delete(agentId);
+
+      // Clean up browser ready callback if pending
+      const cleanup = this.browserReadyCleanups.get(agentId);
+      if (cleanup) {
+        cleanup();
+        this.browserReadyCleanups.delete(agentId);
+      }
+
       await this.stopScreencast(agentId);
     }
   }
@@ -120,26 +145,91 @@ export class ViewerRegistry {
   }
 
   /**
-   * Start screencast for an agent. Called when first viewer connects.
+   * Broadcast a URL update to all viewers for an agent (only if changed).
+   */
+  private broadcastUrlIfChanged(agentId: string, url: string | null): void {
+    if (!url) return;
+    if (this.lastUrls.get(agentId) === url) return;
+
+    this.lastUrls.set(agentId, url);
+
+    const viewerSet = this.viewers.get(agentId);
+    if (!viewerSet) return;
+
+    const message = JSON.stringify({ url });
+    for (const ws of viewerSet) {
+      try {
+        ws.send(message);
+      } catch (error) {
+        console.warn('[ViewerRegistry] Error broadcasting URL:', error);
+      }
+    }
+  }
+
+  /**
+   * Start screencast for an agent. Only starts if browser is already running.
+   * If browser not running, registers a callback to start when browser becomes ready.
    */
   private async startScreencast(agentId: string, getToolset: BrowserStreamConfig['getToolset']): Promise<void> {
     const toolset = getToolset(agentId);
     if (!toolset) {
       // No browser available for this agent - just keep connection open
-      // Future: could implement notification when toolset becomes available
       console.info(`[ViewerRegistry] No toolset for agent ${agentId}, waiting...`);
+      return;
+    }
+
+    // Check if browser is already running
+    if (toolset.isBrowserRunning()) {
+      // Browser is running, start screencast immediately
+      await this.doStartScreencast(agentId, toolset);
+    } else {
+      // Browser not running - register callback to start when it becomes ready
+      console.info(`[ViewerRegistry] Browser not running for ${agentId}, waiting for browser to start...`);
+
+      // Register callback for when browser launches
+      const cleanup = toolset.onBrowserReady(() => {
+        // Only start if we still have viewers
+        if (this.viewers.has(agentId) && !this.screencasts.has(agentId)) {
+          console.info(`[ViewerRegistry] Browser ready for ${agentId}, starting screencast...`);
+          this.doStartScreencast(agentId, toolset).catch(error => {
+            console.error(`[ViewerRegistry] Failed to start screencast on browser ready for ${agentId}:`, error);
+          });
+        }
+      });
+
+      // Store cleanup function
+      this.browserReadyCleanups.set(agentId, cleanup);
+    }
+  }
+
+  /**
+   * Internal method to actually start the screencast stream.
+   */
+  private async doStartScreencast(
+    agentId: string,
+    toolset: NonNullable<ReturnType<BrowserStreamConfig['getToolset']>>,
+  ): Promise<void> {
+    // Skip if already streaming
+    if (this.screencasts.has(agentId)) {
       return;
     }
 
     try {
       this.broadcastStatus(agentId, { status: 'browser_starting' });
 
-      const stream = await toolset.startScreencast();
+      // Use startScreencastIfBrowserActive to avoid launching browser
+      const stream = await toolset.startScreencastIfBrowserActive();
+      if (!stream) {
+        console.warn(`[ViewerRegistry] Browser no longer active for ${agentId}`);
+        return;
+      }
+
       this.screencasts.set(agentId, stream);
 
-      // Wire up frame events
+      // Wire up frame events + URL tracking
       stream.on('frame', frame => {
         this.broadcastFrame(agentId, frame.data);
+        this.broadcastUrlIfChanged(agentId, toolset.getCurrentUrl());
       });
 
       // Wire up stop events
@@ -155,6 +245,9 @@ export class ViewerRegistry {
       });
 
       this.broadcastStatus(agentId, { status: 'streaming' });
+
+      // Send initial URL
+      this.broadcastUrlIfChanged(agentId, toolset.getCurrentUrl());
     } catch (error) {
       console.error(`[ViewerRegistry] Failed to start screencast for ${agentId}:`, error);
       // Connection stays open - user can see error status
@@ -197,5 +290,40 @@ export class ViewerRegistry {
    */
   hasActiveScreencast(agentId: string): boolean {
     return this.screencasts.has(agentId);
+  }
+
+  /**
+   * Close the browser session for an agent.
+   * Stops screencast and broadcasts browser_closed status.
+   * Call this before calling toolset.close() to ensure UI is notified.
+   *
+   * @param agentId - The agent ID
+   */
+  async closeBrowserSession(agentId: string): Promise<void> {
+    // NOTE: Do NOT clean up the onBrowserReady callback here.
+    // Viewers are still connected (WebSocket stays open), so we need
+    // the callback to fire when the browser relaunches from a subsequent
+    // tool call. Callback cleanup only happens in removeViewer() when
+    // the last viewer disconnects.
+
+    // Clear URL tracking so next session sends fresh URL
+    this.lastUrls.delete(agentId);
+
+    // Stop screencast if active
+    const stream = this.screencasts.get(agentId);
+    if (stream) {
+      try {
+        await stream.stop();
+        // Note: stream.stop() emits 'stop' event which triggers broadcastStatus
+      } catch (error) {
+        console.warn(`[ViewerRegistry] Error stopping screencast for ${agentId}:`, error);
+        // Still broadcast browser_closed even if stop fails
+        this.screencasts.delete(agentId);
+        this.broadcastStatus(agentId, { status: 'browser_closed' });
+      }
+    } else {
+      // No active screencast, but still broadcast browser_closed
+      this.broadcastStatus(agentId, { status: 'browser_closed' });
+    }
   }
 }

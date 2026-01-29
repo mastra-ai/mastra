@@ -38,6 +38,67 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
+/** Screencast stream return type */
+interface ScreencastStreamLike {
+  on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): void;
+  on(event: 'stop', handler: (reason: string) => void): void;
+  on(event: 'error', handler: (error: Error) => void): void;
+  stop(): Promise<void>;
+}
+
+/** Screencast options type */
+interface ScreencastOptionsLike {
+  format?: 'jpeg' | 'png';
+  quality?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  everyNthFrame?: number;
+}
+
+/**
+ * Interface for browser toolsets compatible with Agent.browser property.
+ * This is a structural interface - any object with these properties/methods is compatible.
+ * Used to avoid circular dependencies with @mastra/agent-browser package.
+ */
+export interface BrowserToolsetLike {
+  /** Browser automation tools to be merged into agent tools */
+  readonly tools: ToolsInput;
+
+  /**
+   * Check if the browser is currently running.
+   * Does NOT launch the browser - just checks current state.
+   */
+  isBrowserRunning(): boolean;
+
+  /**
+   * Register a callback to be invoked when the browser launches.
+   * If browser is already running, callback is invoked immediately.
+   * @returns Cleanup function to unregister the callback
+   */
+  onBrowserReady(callback: () => void): () => void;
+
+  /**
+   * Start screencast streaming for live browser view.
+   * Launches browser if not already running.
+   */
+  startScreencast(options?: ScreencastOptionsLike): Promise<ScreencastStreamLike>;
+
+  /**
+   * Start screencast only if browser is already running.
+   * Does NOT launch the browser - returns null if browser not running.
+   */
+  startScreencastIfBrowserActive(options?: ScreencastOptionsLike): Promise<ScreencastStreamLike | null>;
+
+  /**
+   * Get the current page URL without launching the browser.
+   * @returns The current URL string, or null if browser is not running
+   */
+  getCurrentUrl(): string | null;
+
+  /** Close browser and release resources */
+  close(): Promise<void>;
+}
+
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
@@ -246,6 +307,26 @@ export interface AgentConfig<
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Browser toolset for browser automation capabilities.
+   * Tools from the browser toolset are automatically merged into agent tools.
+   * The toolset is accessible via agent.browser for server-side features like screencast.
+   *
+   * @example
+   * ```typescript
+   * import { BrowserToolset } from '@mastra/agent-browser';
+   *
+   * const agent = new Agent({
+   *   id: 'browser-agent',
+   *   browser: new BrowserToolset({ headless: false }),
+   *   // browser tools are automatically available
+   * });
+   *
+   * // Server can access browser for screencast
+   * const stream = await agent.browser?.startScreencast();
+   * ```
+   */
+  browser?: BrowserToolsetLike;
 }
 
 export type AgentMemoryOption = {

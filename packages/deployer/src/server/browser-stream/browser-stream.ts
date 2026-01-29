@@ -70,5 +70,31 @@ export function setupBrowserStream<E extends Env, S extends Schema, B extends st
     }),
   );
 
+  // Close browser session endpoint
+  app.post('/api/agents/:agentId/browser/close', async c => {
+    const agentId = c.req.param('agentId');
+    if (!agentId) {
+      return c.json({ error: 'Agent ID is required' }, 400);
+    }
+
+    const toolset = config.getToolset(agentId);
+    if (!toolset) {
+      return c.json({ error: 'No browser session for this agent' }, 404);
+    }
+
+    try {
+      // First, close the session in the registry (stops screencast, notifies viewers)
+      await registry.closeBrowserSession(agentId);
+
+      // Then close the browser toolset
+      await toolset.close();
+
+      return c.json({ success: true });
+    } catch (error) {
+      console.error(`[BrowserStream] Error closing browser for ${agentId}:`, error);
+      return c.json({ error: 'Failed to close browser' }, 500);
+    }
+  });
+
   return { injectWebSocket, registry };
 }

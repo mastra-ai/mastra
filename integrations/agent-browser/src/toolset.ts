@@ -3,6 +3,7 @@ import type { ToolAction } from '@mastra/core/tools';
 
 import { ScreencastStream, type ScreencastOptions } from './screencast/index.js';
 import { createClickTool } from './tools/click.js';
+import { createCloseTool } from './tools/close.js';
 import { createNavigateTool } from './tools/navigate.js';
 import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollTool } from './tools/scroll.js';
@@ -49,6 +50,9 @@ export class BrowserToolset {
   /** Tools exposed by this toolset */
   readonly tools: Record<string, ToolAction<any, any>>;
 
+  /** Callbacks to invoke when browser launches */
+  private onBrowserReadyCallbacks: Set<() => void> = new Set();
+
   /**
    * Creates a new BrowserToolset instance.
    *
@@ -71,6 +75,7 @@ export class BrowserToolset {
       browser_select: createSelectTool(() => this.getBrowser(), this.config.timeout),
       browser_scroll: createScrollTool(() => this.getBrowser()),
       browser_screenshot: createScreenshotTool(() => this.getBrowser(), 30_000), // 30s timeout for screenshots
+      browser_close: createCloseTool(() => this.close()),
     };
   }
 
@@ -112,6 +117,16 @@ export class BrowserToolset {
       });
       // Store the successfully launched browser
       this.browserManager = manager;
+
+      // Notify all registered callbacks that browser is ready
+      for (const callback of this.onBrowserReadyCallbacks) {
+        try {
+          callback();
+        } catch (error) {
+          console.warn('[BrowserToolset] onBrowserReady callback error:', error);
+        }
+      }
+
       return manager;
     } catch (error) {
       // Reset promise to allow retry on next call
@@ -124,6 +139,73 @@ export class BrowserToolset {
       }
       throw error;
     }
+  }
+
+  /**
+   * Check if the browser is currently running.
+   * Does NOT launch the browser - just checks current state.
+   *
+   * @returns true if browser is running, false otherwise
+   */
+  isBrowserRunning(): boolean {
+    return this.browserManager !== null;
+  }
+
+  /**
+   * Get the current page URL without launching the browser.
+   *
+   * @returns The current URL string, or null if browser is not running
+   */
+  getCurrentUrl(): string | null {
+    if (!this.browserManager) {
+      return null;
+    }
+    try {
+      return this.browserManager.getPage().url();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Register a callback to be invoked when the browser launches.
+   * If browser is already running, callback is invoked immediately.
+   *
+   * @param callback - Function to call when browser becomes ready
+   * @returns Cleanup function to unregister the callback
+   */
+  onBrowserReady(callback: () => void): () => void {
+    // If browser is already running, invoke immediately
+    if (this.browserManager) {
+      callback();
+    }
+
+    // Register for future launches (e.g., after close and relaunch)
+    this.onBrowserReadyCallbacks.add(callback);
+
+    // Return cleanup function
+    return () => {
+      this.onBrowserReadyCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Start screencast only if browser is already running.
+   * Does NOT launch the browser - returns null if browser not running.
+   *
+   * Use this when you want to observe an existing browser session without
+   * triggering a browser launch.
+   *
+   * @param options - Screencast configuration (format, quality, dimensions)
+   * @returns Promise resolving to ScreencastStream if browser running, null otherwise
+   */
+  async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
+    if (!this.browserManager) {
+      return null;
+    }
+    const stream = new ScreencastStream(this.browserManager, options);
+    await stream.start();
+    return stream;
   }
 
   /**

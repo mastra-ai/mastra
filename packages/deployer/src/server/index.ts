@@ -148,7 +148,11 @@ export async function createHonoServer(
   // Browser stream WebSocket setup - MUST be before CORS middleware
   // to avoid "can't modify immutable headers" error on WebSocket upgrade
   const browserStreamSetup = setupBrowserStream(app, {
-    getToolset: (agentId: string) => options.browserToolsets?.get(agentId),
+    getToolset: (agentId: string) => {
+      // Look up agent and return its browser toolset if configured
+      const agent = mastra.getAgentById(agentId);
+      return agent?.browser;
+    },
   });
 
   //Global cors config
