@@ -2120,7 +2120,7 @@ ${suggestedResponse}
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // On step N > 0, messageList contains the previous step's output
     // ════════════════════════════════════════════════════════════════════════
-    if (!readOnly && stepNumber > 0) {
+    if (!readOnly) {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = this.getUnobservedMessages(allMessages, record);
       const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
@@ -2186,7 +2186,7 @@ ${suggestedResponse}
         });
       }
 
-      if (totalPendingTokens >= threshold) {
+      if (stepNumber > 0 && totalPendingTokens >= threshold) {
         omDebug(`[OM processInputStep] Threshold reached, triggering observation`);
         omDebug(`[OM processInputStep] writer available: ${!!writer}`);
 
