@@ -79,6 +79,8 @@ export const myAgent = new Agent({
 You can optionally call `init()` to initialize the workspace before use:
 
 ```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
@@ -93,7 +95,7 @@ Initialization runs setup logic for each configured provider:
 
 - **LocalFilesystem**: Creates the base directory if it doesn't exist
 - **LocalSandbox**: Creates working directory
-- **Search**: Indexes files from `autoIndexPaths` (if configured)
+- **Search** (if configured): Indexes files from `autoIndexPaths` — see [Search and Indexing](/docs/workspace/search)
 
 External providers may perform additional setup like establishing connections or authenticating.
 

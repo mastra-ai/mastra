@@ -52,7 +52,7 @@ const agent = new Agent({
 });
 
 // The agent now has the execute_command tool available
-const response = await agent.generate('List all files in the workspace');
+const response = await agent.generate('Run `ls -la` in the workspace directory');
 ```
 
 See [LocalSandbox Reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.

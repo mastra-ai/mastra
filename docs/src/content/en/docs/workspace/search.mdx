@@ -55,7 +55,7 @@ For custom BM25 parameters:
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: {
-    k1: 1.2,   // Term frequency saturation (default: 1.2)
+    k1: 1.5,   // Term frequency saturation (default: 1.5)
     b: 0.75,  // Document length normalization (default: 0.75)
   },
 });

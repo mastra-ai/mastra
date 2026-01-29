@@ -227,8 +227,8 @@ const ready = await sandbox.isReady();
 Execute a shell command in the sandbox.
 
 ```typescript
-const result = await sandbox.executeCommand('ls', ['-la']);
-const result = await sandbox.executeCommand('npm', ['install', 'lodash'], {
+const listResult = await sandbox.executeCommand('ls', ['-la']);
+const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
   timeout: 60000,
   env: { NODE_ENV: 'development' },
 });
