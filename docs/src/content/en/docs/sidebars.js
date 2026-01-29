@@ -106,6 +106,40 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workspace',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Workflows',
       items: [
         {

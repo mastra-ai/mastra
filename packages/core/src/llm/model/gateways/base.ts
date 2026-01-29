@@ -14,6 +14,7 @@ export interface ProviderConfig {
   models: string[];
   docUrl?: string; // Optional documentation URL
   gateway: string;
+  npm?: string; // NPM package name from models.dev (e.g., "@ai-sdk/anthropic")
 }
 
 /**
