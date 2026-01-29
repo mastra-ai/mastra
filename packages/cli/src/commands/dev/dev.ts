@@ -317,6 +317,7 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  requestContextPresets: _requestContextPresets,
   debug,
 }: {
   dir?: string;
@@ -327,6 +328,7 @@ export async function dev({
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: boolean;
+  requestContextPresets?: string;
   debug: boolean;
 }) {
   const rootDir = root || process.cwd();

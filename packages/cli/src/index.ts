@@ -126,6 +126,7 @@ program
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .option('-s, --https', 'Enable local HTTPS')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
