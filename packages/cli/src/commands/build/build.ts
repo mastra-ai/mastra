@@ -1,10 +1,13 @@
 import { join } from 'node:path';
 
+import { getDeployer } from '@mastra/deployer';
+
 import { FileService } from '../../services/service.file';
+import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
+import { createLogger } from '../../utils/logger';
+import { getMastraPackages } from '../../utils/mastra-packages';
 
 import { BuildBundler } from './BuildBundler';
-import { getDeployer } from '@mastra/deployer';
-import { createLogger } from '../../utils/logger';
 
 export async function build({
   dir,
@@ -23,6 +26,11 @@ export async function build({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
+
+  // Check for peer dependency version mismatches
+  const mastraPackages = await getMastraPackages(rootDir);
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
+  logPeerDepWarnings(peerDepMismatches);
 
   try {
     const fs = new FileService();
