@@ -1,4 +1,5 @@
 import { Badge } from '@/ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
@@ -319,22 +320,29 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
     <AgentMetadataList>
       {skills.map(skill => {
         const isActivated = isSkillActivated(skill.name);
-        return (
-          <AgentMetadataListItem
-            key={skill.name}
-            className={`flex-col items-start gap-1 ${isActivated ? 'bg-green-500/10 rounded-md p-1 -m-1' : ''}`}
+        const badge = (
+          <Badge
+            icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
+            variant={isActivated ? 'success' : 'default'}
           >
-            <div className="flex items-center gap-2">
-              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
-                <Badge
-                  icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
-                  variant={isActivated ? 'success' : 'default'}
-                >
-                  {skill.name}
-                </Badge>
-              </Link>
-              {isActivated && <span className="text-[10px] text-green-400 font-medium">Active</span>}
-            </div>
+            {skill.name}
+          </Badge>
+        );
+
+        return (
+          <AgentMetadataListItem key={skill.name}>
+            <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+              {isActivated ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>{badge}</TooltipTrigger>
+                    <TooltipContent className="bg-surface3 text-icon6 border border-border1">Active</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                badge
+              )}
+            </Link>
           </AgentMetadataListItem>
         );
       })}
