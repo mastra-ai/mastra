@@ -14,6 +14,10 @@ export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
+export const agentSkillPathParams = agentIdPathParams.extend({
+  skillName: z.string().describe('Name of the skill'),
+});
+
 export const modelConfigIdPathParams = agentIdPathParams.extend({
   modelConfigId: z.string().describe('Unique identifier for the model configuration'),
 });
@@ -251,7 +255,7 @@ export const agentExecutionBodySchema = z
 
 /**
  * Legacy body schema for deprecated endpoints that still use threadId/resourceId
- * Used by /api/agents/:agentId/generate-legacy and /api/agents/:agentId/stream-legacy
+ * Used by /agents/:agentId/generate-legacy and /agents/:agentId/stream-legacy
  */
 export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   resourceId: z.string().optional(),

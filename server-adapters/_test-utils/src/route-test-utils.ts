@@ -3,6 +3,36 @@ import type { ServerRoute } from '@mastra/server/server-adapter';
 import { getZodTypeName, getZodDef } from '@mastra/core/utils';
 
 /**
+ * Normalizes a route path to ensure consistent formatting.
+ * - Removes leading/trailing whitespace
+ * - Validates no path traversal (..), query strings (?), or fragments (#)
+ * - Collapses multiple consecutive slashes
+ * - Removes trailing slashes
+ * - Ensures leading slash (unless empty)
+ *
+ * @param path - The route path to normalize
+ * @returns The normalized path (empty string for root paths)
+ * @throws Error if path contains invalid characters
+ */
+export function normalizeRoutePath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
+    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
+  }
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/' || normalized === '') {
+    return '';
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  return normalized;
+}
+
+/**
  * Generate context-aware test value based on field name
  */
 export function generateContextualValue(fieldName?: string): string {
@@ -18,9 +48,19 @@ export function generateContextualValue(fieldName?: string): string {
   // Email fields need valid email format
   if (field === 'email' || field.includes('email')) return 'test@example.com';
 
+  // Version comparison query params (from/to are version IDs)
+  if (field === 'from') return 'test-version-1';
+  if (field === 'to') return 'test-version-id';
+
+  // Workspace filesystem - content and query fields
+  if (field === 'content') return 'test content'; // For write/index operations
+  if (field === 'query') return 'test'; // For search operations
+
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
   if (field.includes('tool')) return 'test-tool';
+  if (field.includes('skill')) return 'test-skill';
+  if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
   if (field.includes('thread')) return 'test-thread';
   if (field.includes('resource')) return 'test-resource';
   if (field.includes('run')) return 'test-run';
@@ -167,7 +207,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
 export function getDefaultValidPathParams(route: ServerRoute): Record<string, any> {
   const params: Record<string, any> = {};
 
-  if (route.path.includes(':agentId')) params.agentId = 'test-agent';
+  // For stored agent routes (versions), use 'test-stored-agent' to match test context
+  // For regular agent routes, use 'test-agent'
+  if (route.path.includes(':agentId') && route.path.includes('/stored/agents/')) {
+    params.agentId = 'test-stored-agent';
+  } else if (route.path.includes(':agentId')) {
+    params.agentId = 'test-agent';
+  }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
@@ -186,12 +232,19 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
-
   // MCP route params - need to get actual server ID from test context
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+
+  // Workspace route params
+  if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';
+
+  // Skills route params
+  if (route.path.includes(':skillName')) params.skillName = 'test-skill';
+  if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
 
   return params;
 }

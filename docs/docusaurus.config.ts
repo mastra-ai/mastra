@@ -1,39 +1,31 @@
-import prismMastraDark from "./src/theme/prism-mastra-dark.js";
-import prismMastraLight from "./src/theme/prism-mastra-light.js";
-import "dotenv/config";
-import type { Config } from "@docusaurus/types";
+import 'dotenv/config'
+import prismMastraDark from './src/theme/prism-mastra-dark.js'
+import prismMastraLight from './src/theme/prism-mastra-light.js'
+import type { Config } from '@docusaurus/types'
+import type { ThemeConfig } from '@docusaurus/preset-classic'
+
+const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 
 const config: Config = {
-  title: "Mastra Docs",
-  tagline: "TypeScript agent framework",
-  favicon: "/img/favicon.ico",
-
-  // Set the production url of your site here
-  url: "https://mastra.ai",
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: "/",
-
-  onBrokenLinks: "throw",
-
-  // Markdown configuration
+  title: 'Mastra Docs',
+  tagline: 'The TypeScript Agent Framework',
+  favicon: '/img/favicon.ico',
+  url: 'https://mastra.ai',
+  baseUrl: '/',
+  onBrokenLinks: 'throw',
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: "warn",
+      onBrokenMarkdownLinks: 'warn',
     },
   },
-  // Enable v4 features in prod
-
-  ...(process.env.NODE_ENV === "production" && {
-    future: {
-      v4: {
-        useCssCascadeLayers: false,
-        removeLegacyPostBuildHeadAttribute: true,
-      },
-      experimental_faster: true,
+  future: {
+    v4: {
+      // TODO: Turn this to true and fix everything
+      useCssCascadeLayers: false,
+      removeLegacyPostBuildHeadAttribute: true,
     },
-  }),
-
+    experimental_faster: true,
+  },
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
@@ -48,111 +40,98 @@ const config: Config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
     kapaGroupId: process.env.KAPA_GROUP_ID,
   },
-
-  // Preconnect to Google Fonts
-  headTags: [
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
-      },
-    },
-  ],
-
   plugins: [
     [
-      "@docusaurus/plugin-vercel-analytics",
+      '@docusaurus/plugin-vercel-analytics',
       {
         debug: false,
-        mode: "auto",
+        mode: 'auto',
       },
     ],
     [
-      "@docusaurus/plugin-content-docs",
+      '@docusaurus/plugin-content-docs',
       {
-        id: "models",
-        path: "src/content/en/models",
-        routeBasePath: "models",
-        sidebarPath: "./src/content/en/models/sidebars.js",
-        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        id: 'models',
+        path: 'src/content/en/models',
+        routeBasePath: 'models',
+        sidebarPath: './src/content/en/models/sidebars.js',
+        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
     [
-      "@docusaurus/plugin-content-docs",
+      '@docusaurus/plugin-content-docs',
       {
-        id: "guides",
-        path: "src/content/en/guides",
-        routeBasePath: "guides",
-        sidebarPath: "./src/content/en/guides/sidebars.js",
-        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        id: 'guides',
+        path: 'src/content/en/guides',
+        routeBasePath: 'guides',
+        sidebarPath: './src/content/en/guides/sidebars.js',
+        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
     [
-      "@docusaurus/plugin-content-docs",
+      '@docusaurus/plugin-content-docs',
       {
-        id: "reference",
-        path: "src/content/en/reference",
-        routeBasePath: "reference",
-        sidebarPath: "./src/content/en/reference/sidebars.js",
-        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        id: 'reference',
+        path: 'src/content/en/reference',
+        routeBasePath: 'reference',
+        sidebarPath: './src/content/en/reference/sidebars.js',
+        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
+      },
+    ],
+    [
+      require.resolve('./src/plugins/docusaurus-plugin-llms-txt'),
+      {
+        siteUrl: 'https://mastra.ai',
+        siteTitle: 'Mastra',
+        siteDescription:
+          'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
+        excludeRoutes: ['/404', '/showcase'],
       },
     ],
   ],
-
   presets: [
     [
-      "classic",
+      'classic',
       {
         docs: {
-          path: "src/content/en/docs",
-          routeBasePath: "docs",
-          sidebarPath: "./src/content/en/docs/sidebars.js",
+          path: 'src/content/en/docs',
+          routeBasePath: 'docs',
+          sidebarPath: './src/content/en/docs/sidebars.js',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+          editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+          remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
         },
         blog: false,
         theme: {
-          customCss: "./src/css/custom.css",
+          customCss: './src/css/custom.css',
         },
         sitemap: {
-          lastmod: "date",
-          changefreq: "weekly",
+          lastmod: 'date',
+          changefreq: 'weekly',
           priority: 0.5,
-          ignorePatterns: ["/tags/**"],
-          filename: "sitemap.xml",
+          ignorePatterns: ['/tags/**'],
+          filename: 'sitemap.xml',
         },
       },
     ],
   ],
-
-  themeConfig:
-    /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
-    {
-      colorMode: {
-        respectPrefersColorScheme: true,
-      },
-      navbar: {
-        logo: {
-          alt: "Mastra Logo",
-          src: "logo.svg",
-        },
-      },
-      prism: {
-        theme: prismMastraLight,
-        darkTheme: prismMastraDark,
-        additionalLanguages: ["diff", "bash"],
-      },
+  themeConfig: {
+    image: 'img/og-image.png',
+    colorMode: {
+      respectPrefersColorScheme: true,
     },
-};
+    prism: {
+      // @ts-expect-error: FIXME
+      theme: prismMastraLight,
+      // @ts-expect-error: FIXME
+      darkTheme: prismMastraDark,
+      additionalLanguages: ['diff', 'bash'],
+    },
+  } satisfies ThemeConfig,
+}
 
-export default config;
+export default config

@@ -1,5 +1,6 @@
 import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
@@ -10,21 +11,17 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
-import { AlertTriangleIcon, GaugeIcon } from 'lucide-react';
-import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
+import { GaugeIcon, Folder } from 'lucide-react';
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
+import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
-import {
-  useReorderModelList,
-  useResetAgentModel,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-} from '../../hooks/use-agents';
+import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useMemory } from '@/domains/memory/hooks';
+import { useActivatedSkills } from '../../context/activated-skills-context';
 
 export interface AgentMetadataProps {
   agentId: string;
@@ -60,9 +57,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
-  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -82,6 +77,9 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const agentWorkflows = agent.workflows ?? {};
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
+  const skills = agent.skills ?? [];
+  const workspaceTools = agent.workspaceTools ?? [];
+  const workspaceId = agent.workspaceId;
   const inputProcessors = agent.inputProcessors ?? [];
   const outputProcessors = agent.outputProcessors ?? [];
 
@@ -92,32 +90,12 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           <p className="text-sm text-neutral6">{agent.description}</p>
         </AgentMetadataSection>
       )}
-      {agent.modelList ? (
+      {agent.modelList && (
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
             updateModelInModelList={updateModelInModelList}
             reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      ) : (
-        <AgentMetadataSection
-          title={'Model'}
-          hint={
-            agent.modelVersion === 'v2' || agent.modelVersion === 'v3'
-              ? undefined
-              : {
-                  link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
-                  title: 'You are using a legacy v1 model',
-                  icon: <AlertTriangleIcon fontSize={14} className="mb-0.5" />,
-                }
-          }
-        >
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            resetModel={resetModel}
           />
         </AgentMetadataSection>
       )}
@@ -184,6 +162,28 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       >
         <AgentMetadataWorkflowList workflows={workflows} />
       </AgentMetadataSection>
+
+      <AgentMetadataSection
+        title="Skills"
+        hint={{
+          link: 'https://mastra.ai/en/docs/workspace/skills',
+          title: 'Skills documentation',
+        }}
+      >
+        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={workspaceId} />
+      </AgentMetadataSection>
+
+      {workspaceTools.length > 0 && (
+        <AgentMetadataSection
+          title="Workspace Tools"
+          hint={{
+            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
+            title: 'Workspace tools documentation',
+          }}
+        >
+          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
+        </AgentMetadataSection>
+      )}
 
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
@@ -291,6 +291,83 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
           <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
             <Badge icon={<GaugeIcon className="text-neutral3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataSkillListProps {
+  skills: Array<{
+    name: string;
+    description: string;
+    license?: string;
+  }>;
+  agentId: string;
+  workspaceId?: string;
+}
+
+export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMetadataSkillListProps) => {
+  const { Link, paths } = useLinkComponent();
+  const { isSkillActivated } = useActivatedSkills();
+
+  if (skills.length === 0) {
+    return <AgentMetadataListEmpty>No skills</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {skills.map(skill => {
+        const isActivated = isSkillActivated(skill.name);
+        return (
+          <AgentMetadataListItem
+            key={skill.name}
+            className={`flex-col items-start gap-1 ${isActivated ? 'bg-green-500/10 rounded-md p-1 -m-1' : ''}`}
+          >
+            <div className="flex items-center gap-2">
+              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+                <Badge
+                  icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
+                  variant={isActivated ? 'success' : 'default'}
+                >
+                  {skill.name}
+                </Badge>
+              </Link>
+              {isActivated && <span className="text-[10px] text-green-400 font-medium">Active</span>}
+            </div>
+          </AgentMetadataListItem>
+        );
+      })}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataWorkspaceToolsListProps {
+  tools: string[];
+}
+
+/**
+ * Format a workspace tool name for display.
+ * Converts "mastra_workspace_read_file" to "read_file"
+ */
+function formatWorkspaceToolName(toolName: string): string {
+  const prefix = `${WORKSPACE_TOOLS_PREFIX}_`;
+  if (toolName.startsWith(prefix)) {
+    return toolName.slice(prefix.length);
+  }
+  return toolName;
+}
+
+export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspaceToolsListProps) => {
+  if (tools.length === 0) {
+    return <AgentMetadataListEmpty>No workspace tools</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {tools.map(tool => (
+        <AgentMetadataListItem key={tool}>
+          <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

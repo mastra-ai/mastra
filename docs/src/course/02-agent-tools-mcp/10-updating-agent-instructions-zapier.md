@@ -4,7 +4,7 @@ Next, let's update your agent's instructions to include information about the Za
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: "Personal Assistant",
+  name: 'Personal Assistant',
   instructions: `
     You are a helpful personal assistant that can help with various tasks such as email 
     and scheduling social media posts.
@@ -18,10 +18,10 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: "openai/gpt-4.1-mini",
+  model: 'openai/gpt-4.1-mini',
   tools: { ...mcpTools },
   memory,
-});
+})
 ```
 
 Updating your agent's instructions is crucial for helping it understand when and how to use the tools available to it. By explicitly mentioning the Gmail tools in the instructions, you're giving your agent context about what these tools do and when to use them.

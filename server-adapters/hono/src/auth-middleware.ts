@@ -23,7 +23,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
   const method = c.req.method;
   const getHeader = (name: string) => c.req.header(name);
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -112,7 +112,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
   const method = c.req.method;
   const getHeader = (name: string) => c.req.header(name);
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }

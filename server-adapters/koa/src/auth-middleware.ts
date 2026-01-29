@@ -22,7 +22,7 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
   const method = String(ctx.method || 'GET');
   const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -115,7 +115,7 @@ export const authorizationMiddleware: Middleware = async (ctx: Context, next: Ne
   const method = String(ctx.method || 'GET');
   const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }

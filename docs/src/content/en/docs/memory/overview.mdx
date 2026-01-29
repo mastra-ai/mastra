@@ -9,75 +9,44 @@ packages:
 
 # Memory
 
-Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.
+Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
 
-Mastra requires a [storage provider](./storage) to persist memory and supports three types:
+Mastra supports three complementary memory types:
 
-- [**Message history**](/docs/memory/message-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
-- [**Working memory**](/docs/memory/working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data.
-- [**Semantic recall**](/docs/memory/semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+- [**Message history**](/docs/memory/message-history) - keeps recent messages from the current conversation so they can be rendered in the UI and used to maintain short-term continuity within the exchange.
+- [**Working memory**](/docs/memory/working-memory) - stores persistent, structured user data such as names, preferences, and goals.
+- [**Semantic recall**](/docs/memory/semantic-recall) - retrieves relevant messages from older conversations based on semantic meaning rather than exact keywords, mirroring how humans recall information by association. Requires a [vector database](/docs/memory/semantic-recall#storage-configuration) and an [embedding model](/docs/memory/semantic-recall#embedder-configuration).
 
-You can enable any combination of these memory types. Mastra assembles the relevant memories into the model’s context window. If the total exceeds the model's token limit, use [memory processors](/docs/memory/memory-processors) to trim or filter messages before sending them to the model.
+If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
 ## Getting started
 
-Install Mastra's memory module and the storage adapter for your preferred database (see the storage section below):
+Choose a memory option to get started:
 
-```bash 
-npm install @mastra/memory@latest @mastra/libsql@latest
-```
-
-Add the storage adapter to the main Mastra instance:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: ":memory:",
-  }),
-});
-```
-
-Enable memory by passing a `Memory` instance to your agent:
-
-```typescript title="src/mastra/agents/test-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-
-export const testAgent = new Agent({
-  id: "test-agent",
-  memory: new Memory({
-    options: {
-      lastMessages: 20,
-    },
-  }),
-});
-```
-When you send a new message, the model can now "see" the previous 20 messages, which gives it better context for the conversation and leads to more coherent, accurate replies.
-
-This example configures basic [message history](/docs/memory/message-history). You can also enable [working memory](/docs/memory/working-memory) and [semantic recall](/docs/memory/semantic-recall) by passing additional options to `Memory`.
+- [Message history](/docs/memory/message-history)
+- [Working memory](/docs/memory/working-memory)
+- [Semantic recall](/docs/memory/semantic-recall)
 
 ## Storage
 
-Before enabling memory, you must first configure a storage adapter. Mastra supports multiple database providers including PostgreSQL, MongoDB, libSQL, and more.
+Before enabling memory, you must first configure a storage adapter. Mastra supports several databases including PostgreSQL, MongoDB, libSQL, and [more](/docs/memory/storage#supported-providers).
 
-Storage can be configured at the instance level (shared across all agents) or at the agent level (dedicated per agent). You can also use different databases for storage and vector operations.
+Storage can be configured at the [instance level](/docs/memory/storage#instance-level-storage) (shared across all agents) or at the [agent level](/docs/memory/storage#agent-level-storage) (dedicated per agent).
+
+For semantic recall, you can use a separate vector database like Pinecone alongside your primary storage.
 
 See the [Storage](/docs/memory/storage) documentation for configuration options, supported providers, and examples.
 
 ## Debugging memory
 
-When tracing is enabled, you can inspect exactly which messages the agent uses for context in each request. The trace output shows all memory included in the agent's context window - both recent message history and messages recalled via semantic recall.
+When [tracing](/docs/observability/tracing/overview) is enabled, you can inspect exactly which messages the agent uses for context in each request. The trace output shows all memory included in the agent's context window - both recent message history and messages recalled via semantic recall.
+
+![Trace output showing memory context included in an agent request](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
 
 This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
 
-For more details on enabling and configuring tracing, see [Tracing](/docs/observability/tracing/overview).
-
-## Next Steps
+## Next steps
 
 - Learn more about [Storage](/docs/memory/storage) providers and configuration options
-- Add [Message History](/docs/memory/message-history), [Working Memory](/docs/memory/working-memory), or [Semantic Recall](/docs/memory/semantic-recall)
+- Add [Message history](/docs/memory/message-history), [Working memory](/docs/memory/working-memory), or [Semantic recall](/docs/memory/semantic-recall)
 - Visit [Memory configuration reference](/reference/memory/memory-class) for all available options

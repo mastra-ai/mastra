@@ -7,6 +7,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  FolderIcon,
   Cpu,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
@@ -51,6 +52,7 @@ const mainNavigation: NavSection[] = [
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'MCP Servers',
@@ -70,7 +72,11 @@ const mainNavigation: NavSection[] = [
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
       },
-
+      {
+        name: 'Workspaces',
+        url: '/workspaces',
+        icon: <FolderIcon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',

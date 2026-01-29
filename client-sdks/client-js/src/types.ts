@@ -40,6 +40,8 @@ import type { ZodSchema } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
@@ -88,6 +90,10 @@ export interface GetAgentResponse {
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;
@@ -108,6 +114,10 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -168,6 +178,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema?: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -217,6 +228,8 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
   stateSchema: string;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -602,6 +615,7 @@ export interface StoredAgentResponse {
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
+  integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
@@ -650,11 +664,13 @@ export interface CreateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -669,11 +685,13 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
   memory?: string;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
+  ownerId?: string;
 }
 
 /**
@@ -682,6 +700,77 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name?: string;
+  snapshot: Record<string, any>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateAgentVersionParams {
+  name?: string;
+  changeMessage?: string;
+}
+
+export interface CreateAgentVersionResponse {
+  version: AgentVersionResponse;
+}
+
+export interface ActivateAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface RestoreAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface DeleteAgentVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VersionDiff {
+  field: string;
+  previousValue: any;
+  currentValue: any;
+  changeType?: 'added' | 'removed' | 'modified';
+}
+
+export type AgentVersionDiff = VersionDiff;
+
+export interface CompareVersionsResponse {
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
 }
 
 export interface ListAgentsModelProvidersResponse {
@@ -708,6 +797,277 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Workspace Types
+// ============================================================================
+
+/**
+ * Workspace capabilities
+ */
+export interface WorkspaceCapabilities {
+  hasFilesystem: boolean;
+  hasSandbox: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+  hasSkills: boolean;
+}
+
+/**
+ * Workspace safety configuration
+ */
+export interface WorkspaceSafety {
+  readOnly: boolean;
+}
+
+/**
+ * Response for getting workspace info
+ */
+export interface WorkspaceInfoResponse {
+  isWorkspaceConfigured: boolean;
+  id?: string;
+  name?: string;
+  status?: string;
+  capabilities?: WorkspaceCapabilities;
+  safety?: WorkspaceSafety;
+}
+
+/**
+ * Workspace item in list response
+ */
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  status: string;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+  capabilities: WorkspaceCapabilities;
+  safety: WorkspaceSafety;
+}
+
+/**
+ * Response for listing all workspaces
+ */
+export interface ListWorkspacesResponse {
+  workspaces: WorkspaceItem[];
+}
+
+/**
+ * File entry in directory listing
+ */
+export interface WorkspaceFileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+}
+
+/**
+ * Response for reading a file
+ */
+export interface WorkspaceFsReadResponse {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mimeType?: string;
+}
+
+/**
+ * Response for writing a file
+ */
+export interface WorkspaceFsWriteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for listing files
+ */
+export interface WorkspaceFsListResponse {
+  path: string;
+  entries: WorkspaceFileEntry[];
+}
+
+/**
+ * Response for deleting a file
+ */
+export interface WorkspaceFsDeleteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for creating a directory
+ */
+export interface WorkspaceFsMkdirResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for getting file stats
+ */
+export interface WorkspaceFsStatResponse {
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  mimeType?: string;
+}
+
+/**
+ * Workspace search result
+ */
+export interface WorkspaceSearchResult {
+  /** Document identifier (typically the indexed file path) */
+  id: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching workspace content
+ */
+export interface WorkspaceSearchParams {
+  query: string;
+  topK?: number;
+  mode?: 'bm25' | 'vector' | 'hybrid';
+  minScore?: number;
+}
+
+/**
+ * Response for searching workspace
+ */
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[];
+  query: string;
+  mode: 'bm25' | 'vector' | 'hybrid';
+}
+
+/**
+ * Parameters for indexing content
+ */
+export interface WorkspaceIndexParams {
+  path: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for indexing content
+ */
+export interface WorkspaceIndexResponse {
+  success: boolean;
+  path: string;
+}
+
+// ============================================================================
+// Skills Types
+// ============================================================================
+
+/**
+ * Skill source type indicating where the skill comes from
+ */
+export type SkillSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill metadata (without instructions content)
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Full skill data including instructions and file paths
+ */
+export interface Skill extends SkillMetadata {
+  path: string;
+  instructions: string;
+  source: SkillSource;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+}
+
+/**
+ * Response for listing skills
+ */
+export interface ListSkillsResponse {
+  skills: SkillMetadata[];
+  isSkillsConfigured: boolean;
+}
+
+/**
+ * Skill search result
+ */
+export interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching skills
+ */
+export interface SearchSkillsParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  skillNames?: string[];
+  includeReferences?: boolean;
+}
+
+/**
+ * Response for searching skills
+ */
+export interface SearchSkillsResponse {
+  results: SkillSearchResult[];
+  query: string;
+}
+
+/**
+ * Response for listing skill references
+ */
+export interface ListSkillReferencesResponse {
+  skillName: string;
+  references: string[];
+}
+
+/**
+ * Response for getting skill reference content
+ */
+export interface GetSkillReferenceResponse {
+  skillName: string;
+  referencePath: string;
+  content: string;
 }
 
 // ============================================================================

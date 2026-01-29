@@ -65,7 +65,7 @@ Use `getStepResult()` to access the full output of a specific step by referencin
 
 ## Using `getInitData()`
 
-Use `getInitData()` to access the initial input data provided to the workflow.
+Use `getInitData<typeof workflow>()` to access the initial input data provided to the workflow.
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)

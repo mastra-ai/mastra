@@ -22,7 +22,7 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
   const method = String(request.method || 'GET');
   const getHeader = (name: string) => request.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return;
   }
@@ -109,7 +109,7 @@ export const authorizationMiddleware: preHandlerHookHandler = async (request: Fa
   const method = String(request.method || 'GET');
   const getHeader = (name: string) => request.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return;
   }

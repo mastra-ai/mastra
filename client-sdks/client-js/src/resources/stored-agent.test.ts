@@ -254,5 +254,337 @@ describe('StoredAgent Resource', () => {
         expect.anything(),
       );
     });
+
+    describe('Version Management', () => {
+      it('should list versions for stored agent', async () => {
+        const mockResponse = {
+          versions: [
+            {
+              id: 'version-1',
+              agentId: storedAgentId,
+              versionNumber: 1,
+              name: 'v1',
+              snapshot: {
+                id: storedAgentId,
+                name: 'Test Agent',
+                instructions: 'You are a helpful assistant',
+                model: { provider: 'openai', name: 'gpt-4' },
+              },
+              changedFields: ['instructions'],
+              changeMessage: 'Updated instructions',
+              createdAt: '2024-01-01T00:00:00.000Z',
+            },
+          ],
+          total: 1,
+          page: 0,
+          perPage: 10,
+          hasMore: false,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.listVersions();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should list versions with pagination and sorting', async () => {
+        const mockResponse = {
+          versions: [],
+          total: 0,
+          page: 1,
+          perPage: 5,
+          hasMore: false,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.listVersions({
+          page: 1,
+          perPage: 5,
+          orderBy: 'createdAt',
+          sortDirection: 'DESC',
+        });
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=createdAt&sortDirection=DESC`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should create a version', async () => {
+        const createParams = {
+          name: 'Production Release',
+          changeMessage: 'Stable version for production',
+        };
+        const mockResponse = {
+          id: 'version-new',
+          agentId: storedAgentId,
+          versionNumber: 2,
+          name: createParams.name,
+          snapshot: {
+            id: storedAgentId,
+            name: 'Test Agent',
+            instructions: 'You are a helpful assistant',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+          changedFields: [],
+          changeMessage: createParams.changeMessage,
+          createdAt: '2024-01-02T00:00:00.000Z',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.createVersion(createParams);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions`,
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify(createParams),
+            headers: expect.objectContaining({
+              'content-type': 'application/json',
+            }),
+          }),
+        );
+      });
+
+      it('should create a version without params', async () => {
+        const mockResponse = {
+          id: 'version-auto',
+          agentId: storedAgentId,
+          versionNumber: 3,
+          snapshot: {
+            id: storedAgentId,
+            name: 'Test Agent',
+            instructions: 'You are a helpful assistant',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+          changedFields: [],
+          createdAt: '2024-01-03T00:00:00.000Z',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.createVersion();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions`,
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({}),
+          }),
+        );
+      });
+
+      it('should get a specific version', async () => {
+        const versionId = 'version-1';
+        const mockResponse = {
+          id: versionId,
+          agentId: storedAgentId,
+          versionNumber: 1,
+          name: 'v1',
+          snapshot: {
+            id: storedAgentId,
+            name: 'Test Agent',
+            instructions: 'You are a helpful assistant',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+          changedFields: ['instructions'],
+          changeMessage: 'Updated instructions',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.getVersion(versionId);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should activate a version', async () => {
+        const versionId = 'version-1';
+        const mockResponse = {
+          success: true,
+          message: 'Version 1 is now active',
+          activeVersionId: versionId,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.activateVersion(versionId);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}/activate`,
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should restore a version', async () => {
+        const versionId = 'version-1';
+        const mockResponse = {
+          id: 'version-new',
+          agentId: storedAgentId,
+          versionNumber: 4,
+          name: 'Restored from v1',
+          snapshot: {
+            id: storedAgentId,
+            name: 'Test Agent',
+            instructions: 'You are a helpful assistant',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+          changedFields: ['instructions'],
+          changeMessage: 'Restored from version 1',
+          createdAt: '2024-01-04T00:00:00.000Z',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.restoreVersion(versionId);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}/restore`,
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should delete a version', async () => {
+        const versionId = 'version-1';
+        const mockResponse = {
+          success: true,
+          message: 'Version deleted successfully',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.deleteVersion(versionId);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${versionId}`,
+          expect.objectContaining({
+            method: 'DELETE',
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should compare two versions', async () => {
+        const fromId = 'version-1';
+        const toId = 'version-2';
+        const mockResponse = {
+          fromVersion: {
+            id: fromId,
+            agentId: storedAgentId,
+            versionNumber: 1,
+            snapshot: {
+              id: storedAgentId,
+              name: 'Test Agent',
+              instructions: 'You are a helpful assistant',
+              model: { provider: 'openai', name: 'gpt-4' },
+            },
+            createdAt: '2024-01-01T00:00:00.000Z',
+          },
+          toVersion: {
+            id: toId,
+            agentId: storedAgentId,
+            versionNumber: 2,
+            snapshot: {
+              id: storedAgentId,
+              name: 'Test Agent',
+              instructions: 'You are a very helpful assistant',
+              model: { provider: 'openai', name: 'gpt-4' },
+            },
+            createdAt: '2024-01-02T00:00:00.000Z',
+          },
+          diffs: [
+            {
+              field: 'instructions',
+              previousValue: 'You are a helpful assistant',
+              currentValue: 'You are a very helpful assistant',
+              changeType: 'modified' as const,
+            },
+          ],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.compareVersions(fromId, toId);
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/compare?from=${fromId}&to=${toId}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should handle special characters in version IDs', async () => {
+        const versionId = 'version/with/slashes';
+        const encodedVersionId = encodeURIComponent(versionId);
+        const mockResponse = {
+          id: versionId,
+          agentId: storedAgentId,
+          versionNumber: 1,
+          snapshot: {
+            id: storedAgentId,
+            name: 'Test Agent',
+            instructions: 'Test',
+            model: { provider: 'openai', name: 'gpt-4' },
+          },
+          changedFields: [],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        };
+        mockFetchResponse(mockResponse);
+
+        await storedAgent.getVersion(versionId);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/${encodedVersionId}`,
+          expect.anything(),
+        );
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should handle 404 error for non-existent agent', async () => {
+        const errorResponse = new Response(JSON.stringify({ error: 'Agent not found' }), {
+          status: 404,
+          statusText: 'Not Found',
+          headers: new Headers({
+            'Content-Type': 'application/json',
+          }),
+        });
+        (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+        await expect(storedAgent.details()).rejects.toThrow();
+      });
+
+      it('should handle 500 error', async () => {
+        const errorResponse = new Response(JSON.stringify({ error: 'Internal server error' }), {
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: new Headers({
+            'Content-Type': 'application/json',
+          }),
+        });
+        (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+        await expect(storedAgent.update({ name: 'New Name' })).rejects.toThrow();
+      });
+
+      it('should handle network errors', async () => {
+        (global.fetch as any).mockRejectedValue(new Error('Network error'));
+
+        await expect(storedAgent.details()).rejects.toThrow();
+      });
+    });
   });
 });

@@ -1,0 +1,206 @@
+name: Major Version Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: write
+
+jobs:
+  check-major-bump:
+    runs-on: ubuntu-latest
+    # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request))
+    steps:
+      - name: Check for major changesets
+        id: check_major
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
+
+            if (!prNumber) {
+              core.setOutput('has_major_changeset', false);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+
+            // Get all files changed in the PR (paginated to handle large PRs)
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            // Filter to only changeset files early
+            const changesetFiles = files.filter(
+              file => file.filename.startsWith('.changeset/') && 
+                      file.filename.endsWith('.md') &&
+                      file.status !== 'removed'
+            );
+
+            if (changesetFiles.length === 0) {
+              core.setOutput('has_major_changeset', false);
+              return;
+            }
+
+            // Get PR data - use context if available, otherwise fetch
+            const pr = context.payload.pull_request || (
+              await github.rest.pulls.get({ owner, repo, pull_number: prNumber })
+            ).data;
+
+            const headSha = pr.head.sha;
+            // Output SHAs for downstream steps
+            core.setOutput('head_sha', headSha);
+            // Output base SHA for checkout step (to prevent malicious PR from modifying local action)
+            core.setOutput('base_sha', pr.base.sha);
+
+            // Regex to check for major in frontmatter
+            const majorRegex = /:\s*["']?major["']?/;
+
+            // Fetch all changeset contents in parallel
+            const contentPromises = changesetFiles.map(async (file) => {
+              const { data } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: file.filename,
+                ref: headSha,
+              });
+              return Buffer.from(data.content, data.encoding).toString();
+            });
+
+            const contents = await Promise.all(contentPromises);
+
+            // Check if any changeset has a major bump in frontmatter
+            const hasMajorChangeset = contents.some(content => {
+              const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/m);
+              return frontmatterMatch && majorRegex.test(frontmatterMatch[1]);
+            });
+
+            core.setOutput('has_major_changeset', hasMajorChangeset);
+
+      - name: Checkout for local action
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        uses: actions/checkout@v4
+        with:
+          # Pin to PR base SHA to prevent malicious PRs from modifying the local action
+          ref: ${{ steps.check_major.outputs.base_sha }}
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ secrets.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Check if major version bump is allowed
+        if: steps.check_major.outputs.has_major_changeset == 'true'
+        id: check_approval
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
+            const { owner, repo } = context.repo;
+            const headSha = '${{ steps.check_major.outputs.head_sha }}';
+            const isCommentEvent = context.eventName === 'issue_comment';
+            const checkName = 'Major Version Check';
+
+            // Helper to create/update check run on PR head SHA
+            const reportCheckResult = async (conclusion, title, summary) => {
+              // For issue_comment events, we need to create a check run on the PR head SHA
+              // because the workflow runs on the default branch, not the PR
+              if (isCommentEvent) {
+                await github.rest.checks.create({
+                  owner,
+                  repo,
+                  name: checkName,
+                  head_sha: headSha,
+                  status: 'completed',
+                  conclusion,
+                  output: { title, summary },
+                });
+                console.log(`Created check run on ${headSha}: ${conclusion}`);
+              }
+            };
+
+            // Get all comments on the PR (paginated to handle PRs with many comments)
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+            });
+
+            // Filter to only approval comments first
+            const approvalComments = comments.filter(
+              comment => comment.body.trim().toLowerCase() === '!allow-major'
+            );
+
+            if (approvalComments.length === 0) {
+              const msg = 'Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.';
+              await reportCheckResult('failure', 'Approval Required', msg);
+              core.setFailed(msg);
+              return;
+            }
+
+            // Cache membership results to avoid duplicate API calls
+            const membershipCache = new Map();
+
+            const checkMembership = async (username) => {
+              if (membershipCache.has(username)) {
+                return membershipCache.get(username);
+              }
+
+              try {
+                await github.rest.orgs.checkMembershipForUser({
+                  org: owner,
+                  username,
+                });
+                membershipCache.set(username, true);
+                return true;
+              } catch (error) {
+                // 403: Token lacks org:read permission - this is a configuration error
+                if (error.status === 403) {
+                  const msg = `Permission denied checking org membership. Ensure the GitHub App has "Organization members: Read" permission. Error: ${error.message}`;
+                  await reportCheckResult('failure', 'Permission Error', msg);
+                  core.setFailed(msg);
+                  throw error;
+                }
+                // 404: User is not a member of the org - this is expected for non-members
+                if (error.status === 404) {
+                  membershipCache.set(username, false);
+                  return false;
+                }
+                // Other errors (network issues, rate limits, etc.) - rethrow to fail loudly
+                const msg = `Unexpected error checking org membership for ${username}: ${error.message}`;
+                await reportCheckResult('failure', 'Unexpected Error', msg);
+                core.setFailed(msg);
+                throw error;
+              }
+            };
+
+            // Check membership for all approval comment authors
+            for (const comment of approvalComments) {
+              if (await checkMembership(comment.user.login)) {
+                const msg = `Major version bump approved by organization member: ${comment.user.login}`;
+                await reportCheckResult('success', 'Approved', msg);
+                console.log(msg);
+                return;
+              }
+            }
+
+            const msg = 'Major version bump requires approval from an organization member by commenting "!allow-major" on the PR.';
+            await reportCheckResult('failure', 'Approval Required', msg);
+            core.setFailed(msg);

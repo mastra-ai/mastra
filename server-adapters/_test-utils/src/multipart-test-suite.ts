@@ -246,7 +246,17 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
             success: true,
             // Filter out all system-injected params to get only body fields
             bodyKeys: Object.keys(params).filter(
-              k => !['mastra', 'requestContext', 'tools', 'taskStore', 'abortSignal', 'request'].includes(k),
+              k =>
+                ![
+                  'mastra',
+                  'requestContext',
+                  'tools',
+                  'taskStore',
+                  'abortSignal',
+                  'registeredTools',
+                  'routePrefix',
+                  'request',
+                ].includes(k),
             ),
           };
         },

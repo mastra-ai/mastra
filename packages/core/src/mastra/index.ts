@@ -30,6 +30,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -215,6 +216,13 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Global workspace for file storage, skills, and code execution.
+   * Agents inherit this workspace unless they have their own configured.
+   * Skills are accessed via workspace.skills when skills is configured.
+   */
+  workspace?: Workspace;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -302,6 +310,7 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
+  #workspace?: Workspace;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -315,6 +324,8 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
+  // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
+  #storedAgentsCache: Map<string, Agent> = new Map();
 
   get pubsub() {
     return this.#pubsub;
@@ -552,6 +563,10 @@ export class Mastra<
       });
     }
 
+    if (config?.workspace) {
+      this.#workspace = config.workspace;
+    }
+
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
         if (scorer != null) {
@@ -745,6 +760,8 @@ export class Mastra<
    * @param id - The unique identifier of the stored agent
    * @param options - Options for the query
    * @param options.raw - If true, returns raw stored data instead of Agent instance
+   * @param options.versionId - Fetch a specific version by its ID
+   * @param options.versionNumber - Fetch a specific version by its version number
    *
    * @throws {MastraError} When storage is not configured or doesn't support agents
    *
@@ -766,11 +783,26 @@ export class Mastra<
    * if (rawConfig) {
    *   console.log(rawConfig.instructions);
    * }
+   *
+   * // Get a specific version by versionId
+   * const versionedAgent = await mastra.getStoredAgentById('my-agent-id', { versionId: 'version-ulid' });
+   *
+   * // Get a specific version by version number
+   * const v2Agent = await mastra.getStoredAgentById('my-agent-id', { versionNumber: 2 });
    * ```
    */
-  public async getStoredAgentById(id: string, options?: { raw?: false }): Promise<Agent | null>;
-  public async getStoredAgentById(id: string, options: { raw: true }): Promise<StorageAgentType | null>;
-  public async getStoredAgentById(id: string, options?: { raw?: boolean }): Promise<Agent | StorageAgentType | null> {
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: false; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | null>;
+  public async getStoredAgentById(
+    id: string,
+    options: { raw: true; versionId?: string; versionNumber?: number },
+  ): Promise<StorageAgentType | null>;
+  public async getStoredAgentById(
+    id: string,
+    options?: { raw?: boolean; versionId?: string; versionNumber?: number },
+  ): Promise<Agent | StorageAgentType | null> {
     const storage = this.#storage;
 
     if (!storage) {
@@ -798,7 +830,51 @@ export class Mastra<
       throw error;
     }
 
-    const storedAgent = await agentsStore.getAgentById({ id });
+    // Handle version resolution
+    if (options?.versionId && options?.versionNumber !== undefined) {
+      this.#logger?.warn(`Both versionId and versionNumber provided for agent "${id}". Using versionId.`);
+    }
+
+    if (options?.versionId) {
+      // Fetch the specific version by its ID
+      const version = await agentsStore.getVersion(options.versionId);
+      if (!version) {
+        return null;
+      }
+      // Verify the version belongs to the requested agent
+      if (version.agentId !== id) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    if (options?.versionNumber !== undefined) {
+      // Fetch the specific version by agent ID and version number
+      const version = await agentsStore.getVersionByNumber(id, options.versionNumber);
+      if (!version) {
+        return null;
+      }
+      if (options?.raw) {
+        return version.snapshot;
+      }
+      return this.#createAgentFromStoredConfig(version.snapshot);
+    }
+
+    // Default behavior: get the current agent config with version resolution
+    // Check cache first for non-raw requests (allows in-memory model changes to persist)
+    if (!options?.raw) {
+      const cachedAgent = this.#storedAgentsCache.get(id);
+      if (cachedAgent) {
+        this.#logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
+        return cachedAgent;
+      }
+      this.#logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
+    }
+
+    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
 
     if (!storedAgent) {
       return null;
@@ -808,7 +884,21 @@ export class Mastra<
       return storedAgent;
     }
 
-    return this.#createAgentFromStoredConfig(storedAgent);
+    const agent = this.#createAgentFromStoredConfig(storedAgent);
+    // Cache the agent for future requests
+    this.#storedAgentsCache.set(id, agent);
+    return agent;
+  }
+
+  /**
+   * Clears the cached stored agent instance, forcing a fresh load from storage on next access.
+   * This should be called when an agent is updated via the Edit dialog to ensure
+   * the cached instance is refreshed with the new configuration.
+   *
+   * @param id - The ID of the agent to clear from cache
+   */
+  public clearStoredAgentCache(id: string): void {
+    this.#storedAgentsCache.delete(id);
   }
 
   /**
@@ -914,7 +1004,8 @@ export class Mastra<
       throw error;
     }
 
-    const result = await agentsStore.listAgents({
+    // Use listAgentsResolved to get version-resolved configs
+    const result = await agentsStore.listAgentsResolved({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,
@@ -1000,6 +1091,9 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    // Mark the agent as coming from storage (used by UI to show edit button)
+    (agent as any).source = 'stored';
+
     return agent;
   }
 
@@ -1013,13 +1107,13 @@ export class Mastra<
     }
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
-    const registeredTools = this.#tools;
 
     for (const toolKey of storedTools) {
-      // Try to find the tool in registered tools
-      if (registeredTools && registeredTools[toolKey]) {
-        resolvedTools[toolKey] = registeredTools[toolKey];
-      } else {
+      // Try to find the tool by ID (which also falls back to registration key)
+      try {
+        const tool = this.getToolById(toolKey as any);
+        resolvedTools[toolKey] = tool;
+      } catch {
         // Tool reference exists but tool is not registered - log warning
         this.#logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }
@@ -1117,7 +1211,7 @@ export class Mastra<
    * @private
    */
   #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
-    if (!storedScorers) {
+    if (!storedScorers || Object.keys(storedScorers).length === 0) {
       return undefined;
     }
 
@@ -1414,6 +1508,23 @@ export class Mastra<
    */
   public getDeployer() {
     return this.#deployer;
+  }
+
+  /**
+   * Gets the global workspace instance.
+   * Workspace provides file storage, skills, and code execution capabilities.
+   * Agents inherit this workspace unless they have their own configured.
+   *
+   * @example
+   * ```typescript
+   * const workspace = mastra.getWorkspace();
+   * if (workspace?.skills) {
+   *   const skills = await workspace.skills.list();
+   * }
+   * ```
+   */
+  public getWorkspace(): Workspace | undefined {
+    return this.#workspace;
   }
 
   /**
@@ -1770,6 +1881,56 @@ export class Mastra<
     throw error;
   }
 
+  // NOTE: Stored scorer methods are commented out until the storage infrastructure is added in PR2
+  // /**
+  //  * Retrieves a stored scorer by its ID from the database.
+  //  */
+  // public async getStoredScorerById(id: string): Promise<StoredScorerType | null> {
+  //   // Implementation will be added in PR2
+  //   throw new Error('Stored scorers not yet implemented');
+  // }
+
+  // /**
+  //  * Lists all stored scorers from the database with optional pagination.
+  //  */
+  // public async listStoredScorers(args?: {
+  //   page?: number;
+  //   perPage?: number | false;
+  //   orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+  // }): Promise<{
+  //   scorers: StoredScorerType[];
+  //   total: number;
+  //   page: number;
+  //   perPage: number | false;
+  //   hasMore: boolean;
+  // }> {
+  //   // Implementation will be added in PR2
+  //   throw new Error('Stored scorers not yet implemented');
+  // }
+
+  // /**
+  //  * Retrieves and resolves a stored scorer from the database into an executable MastraScorer.
+  //  */
+  // public async resolveStoredScorer(id: string): Promise<MastraScorer | null> {
+  //   // Implementation will be added in PR2
+  //   return null;
+  // }
+
+  // /**
+  //  * Unified method to get a scorer by ID, checking code-defined scorers first,
+  //  * then falling back to stored scorers from the database.
+  //  */
+  // public async getScorerUnified(id: string): Promise<MastraScorer | null> {
+  //   // First, try to find in code-defined scorers
+  //   try {
+  //     const scorer = this.getScorerById(id);
+  //     return scorer;
+  //   } catch {
+  //     // Stored scorers will be added in PR2
+  //     return null;
+  //   }
+  // }
+
   /**
    * Retrieves a specific tool by registration key.
    *
@@ -2064,6 +2225,11 @@ export class Mastra<
       const logger = this.getLogger();
       logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
+    }
+
+    // Register Mastra with the processor if it supports it
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
