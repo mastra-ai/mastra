@@ -51,6 +51,12 @@ export interface ProcessorContext<TTripwireMetadata = unknown> {
    * Use writer.custom() to emit data-* chunks that will be streamed to the client.
    */
   writer?: ProcessorStreamWriter;
+  /**
+   * Optional abort signal from the parent agent execution.
+   * Processors should pass this to any long-running operations (e.g., LLM calls)
+   * so they can be canceled when the parent agent is aborted.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**

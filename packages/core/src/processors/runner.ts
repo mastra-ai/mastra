@@ -165,16 +165,19 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
     // Create a run and start the workflow
     const run = await workflow.createRun();
     const result = await run.start({
-      // Cast to allow processorStates - it's passed through to workflow processor steps
+      // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
       // but not part of the official ProcessorStepOutput schema
       inputData: {
         ...input,
         // Pass the processorStates map so workflow processor steps can access their state
         processorStates: this.processorStates,
+        // Pass abortSignal so processors can cancel in-flight work
+        abortSignal,
       } as ProcessorStepOutput,
       tracingContext,
       requestContext,
@@ -804,6 +807,7 @@ export class ProcessorRunner {
           tracingContext,
           requestContext,
           writer,
+          args.abortSignal,
         );
         Object.assign(stepInput, result);
         continue;
@@ -876,6 +880,7 @@ export class ProcessorRunner {
           tracingContext: { currentSpan: processorSpan },
           retryCount: args.retryCount ?? 0,
           writer,
+          abortSignal: args.abortSignal,
         };
 
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(

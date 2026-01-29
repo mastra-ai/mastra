@@ -1452,74 +1452,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Retry wrapper for LLM calls with exponential backoff.
-   * Handles 429 rate limit errors by waiting and retrying.
+   * Wrapper for observer/reflector agent.generate() calls that checks for abort.
+   * agent.generate() returns an empty result on abort instead of throwing,
+   * so we must check the signal before and after the call.
+   * Retries are handled by Mastra's built-in p-retry at the model execution layer.
    */
-  private async withRetry<T>(
-    fn: () => Promise<T>,
-    maxRetries = 3,
-    context = 'LLM call',
-    contextData?: { prompt?: string; messages?: MastraDBMessage[] },
-  ): Promise<T> {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error: any) {
-        const is429 = error?.statusCode === 429 || error?.message?.includes('Too Many Requests');
-        const errorMessage = error?.message || '';
-        const errorString = String(error);
-        const causeString = error?.cause ? String(error.cause) : '';
-        const isProhibited =
-          errorMessage.includes('PROHIBITED_CONTENT') ||
-          errorMessage.includes('blockReason') ||
-          errorString.includes('PROHIBITED_CONTENT') ||
-          causeString.includes('PROHIBITED_CONTENT');
-
-        console.error(`\n🔍 [OM] Error caught in withRetry. isProhibited=${isProhibited}`);
-
-        // If PROHIBITED_CONTENT, dump context for debugging
-        if (isProhibited && contextData) {
-          const dumpPath = `/tmp/om-prohibited-${Date.now()}.json`;
-          console.error(`\n🔍 [OM] Attempting to dump context to: ${dumpPath}`);
-          const contextDump = {
-            context,
-            prompt: contextData.prompt?.slice(0, 50000), // Truncate to avoid huge files
-            messageCount: contextData.messages?.length,
-            messages: contextData.messages?.map(m => ({
-              id: m.id,
-              role: m.role,
-              content: JSON.stringify(m.content).slice(0, 2000),
-              createdAt: m.createdAt,
-            })),
-            error: error?.message?.slice(0, 1000),
-            timestamp: new Date().toISOString(),
-          };
-          try {
-            const fs = await import('fs/promises');
-            await fs.writeFile(dumpPath, JSON.stringify(contextDump, null, 2));
-            console.error(`\n⚠️ [OM] PROHIBITED_CONTENT detected! Context dumped to: ${dumpPath}`);
-          } catch {
-            // Ignore write errors
-          }
-        }
-
-        if (is429 && attempt < maxRetries) {
-          // Extract retry-after header or use exponential backoff
-          const retryAfter = parseInt(error?.responseHeaders?.['retry-after'] || '0', 10);
-          const waitSeconds = retryAfter > 0 ? retryAfter : Math.pow(2, attempt + 1) * 15; // 30s, 60s, 120s
-
-          omWarn(
-            `[OM] ${context} rate limited (429). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting ${waitSeconds}s...`,
-          );
-
-          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
-          continue;
-        }
-
-        throw error;
-      }
+  private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
+    if (abortSignal?.aborted) {
+      throw new Error('The operation was aborted.');
     }
-    throw new Error(`[OM] ${context} failed after ${maxRetries + 1} attempts`);
+
+    const result = await fn();
+
+    if (abortSignal?.aborted) {
+      throw new Error('The operation was aborted.');
+    }
+
+    return result;
   }
 
   /**
@@ -1529,6 +1478,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     existingPatterns?: Record<string, string[]>,
+    abortSignal?: AbortSignal,
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -1555,7 +1505,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const prompt = buildObserverPrompt(observationsWithPatterns, messagesToObserve);
 
-    const result = await this.withRetry(
+    const result = await this.withAbortCheck(
       () =>
         agent.generate(prompt, {
           modelSettings: {
@@ -1563,10 +1513,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
           },
           providerOptions: this.observerConfig.providerOptions as any,
+          abortSignal,
         }),
-      3,
-      'Observer',
-      { prompt, messages: messagesToObserve },
+      abortSignal,
     );
 
     const parsed = parseObserverOutput(result.text);
@@ -1601,6 +1550,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
     existingPatterns?: Record<string, string[]>,
+    abortSignal?: AbortSignal,
   ): Promise<{
     results: Map<
       string,
@@ -1665,8 +1615,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
-    debugger;
-    const result = await this.withRetry(
+    const result = await this.withAbortCheck(
       () =>
         agent.generate(prompt, {
           modelSettings: {
@@ -1674,10 +1623,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
           },
           providerOptions: this.observerConfig.providerOptions as any,
+          abortSignal,
         }),
-      3,
-      'MultiThreadObserver',
-      { prompt, messages: allMessages },
+      abortSignal,
     );
 
     const parsed = parseMultiThreadObserverOutput(result.text);
@@ -1744,6 +1692,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       threadId: string;
     },
     reflectionThreshold?: number,
+    abortSignal?: AbortSignal,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -1784,7 +1733,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // First attempt
     let prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, false);
-    let result = await this.withRetry(
+    let result = await this.withAbortCheck(
       () =>
         agent.generate(prompt, {
           modelSettings: {
@@ -1792,9 +1741,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
           },
           providerOptions: this.reflectorConfig.providerOptions as any,
+          abortSignal,
         }),
-      3,
-      'Reflector',
+      abortSignal,
     );
 
     // Accumulate usage from first attempt
@@ -1846,7 +1795,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       // Retry with compression prompt
       prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, true);
-      result = await this.withRetry(
+      result = await this.withAbortCheck(
         () =>
           agent.generate(prompt, {
             modelSettings: {
@@ -1854,9 +1803,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
             },
             providerOptions: this.reflectorConfig.providerOptions as any,
+            abortSignal,
           }),
-        3,
-        'Reflector (compression retry)',
+        abortSignal,
       );
 
       // Accumulate usage from retry attempt
@@ -2027,7 +1976,7 @@ ${suggestedResponse}
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, messages, requestContext, stepNumber, state, writer } = args;
+    const { messageList, messages, requestContext, stepNumber, state, writer, abortSignal, abort } = args;
 
     omDebug(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}, writer: ${!!writer}`);
 
@@ -2215,15 +2164,20 @@ ${suggestedResponse}
                   resourceId,
                   freshUnobservedMessages,
                   writer,
+                  abortSignal,
                 );
               } else {
-                await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer);
+                await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer, abortSignal);
               }
               // Check if observation actually updated lastObservedAt
               const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
               const updatedTime = updatedRecord.lastObservedAt?.getTime() ?? 0;
               observationSucceeded = updatedTime > preObservationTime;
-            } catch {
+            } catch (error) {
+              // If the abort signal fired, use tripwire to cleanly exit
+              if (abortSignal?.aborted) {
+                abort('Agent execution was aborted');
+              }
               // Observation failed - don't clear messages
               observationSucceeded = false;
             }
@@ -2745,6 +2699,7 @@ ${formattedMessages}
     threadId: string,
     unobservedMessages: MastraDBMessage[],
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
 
@@ -2808,6 +2763,7 @@ ${formattedMessages}
         freshRecord?.activeObservations ?? record.activeObservations,
         unobservedMessages,
         freshRecord?.patterns ?? record.patterns,
+        abortSignal,
       );
 
       omDebug(`[OM] Observer returned observations (${result.observations.length} chars)`);
@@ -2926,7 +2882,7 @@ ${formattedMessages}
       });
 
       // Check for reflection (pass threadId so patterns can be cleared)
-      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId, writer);
+      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId, writer, abortSignal);
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
@@ -2948,6 +2904,10 @@ ${formattedMessages}
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
+      }
+      // If aborted, re-throw so the main agent loop can handle cancellation
+      if (abortSignal?.aborted) {
+        throw error;
       }
       // Log the error but don't re-throw - observation failure should not crash the agent
       omDebug(`[OM] Observation failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -2974,6 +2934,7 @@ ${formattedMessages}
     resourceId: string,
     currentThreadMessages: MastraDBMessage[],
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     omDebug(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
 
@@ -3293,6 +3254,7 @@ ${formattedMessages}
           batch.threadMap,
           batch.threadIds,
           existingPatterns,
+          abortSignal,
         );
         omDebug(
           `[OM] Batch ${batchIndex + 1}/${batches.length} complete, got results for ${batchResult.results.size} threads`,
@@ -3526,6 +3488,7 @@ ${formattedMessages}
         totalTokenCount,
         currentThreadId,
         writer,
+        abortSignal,
       );
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
@@ -3553,6 +3516,10 @@ ${formattedMessages}
           // Then seal the message (skipPush since writer.custom already added the part)
         }
       }
+      // If aborted, re-throw so the main agent loop can handle cancellation
+      if (abortSignal?.aborted) {
+        throw error;
+      }
       // Log the error but don't re-throw - observation failure should not crash the agent
       omDebug(`[OM] Resource-scoped observation failed: ${error instanceof Error ? error.message : String(error)}`);
       console.error(`[OM] Resource-scoped observation failed:`, error instanceof Error ? error.message : String(error));
@@ -3570,6 +3537,7 @@ ${formattedMessages}
     observationTokens: number,
     _threadId?: string,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     writeDebugEntry('maybeReflect:start', {
       recordId: record.id,
@@ -3654,6 +3622,7 @@ ${formattedMessages}
         patternsToReflect,
         streamContext,
         reflectThreshold,
+        abortSignal,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
@@ -3719,6 +3688,10 @@ ${formattedMessages}
           threadId,
         });
         await writer.custom(failedMarker).catch(() => {});
+      }
+      // If aborted, re-throw so the main agent loop can handle cancellation
+      if (abortSignal?.aborted) {
+        throw error;
       }
       // Log the error but don't re-throw - reflection failure should not crash the agent
       omDebug(`[OM] Reflection failed: ${error instanceof Error ? error.message : String(error)}`);

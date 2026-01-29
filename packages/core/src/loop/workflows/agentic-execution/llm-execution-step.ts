@@ -618,6 +618,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
               writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
