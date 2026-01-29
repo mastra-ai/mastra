@@ -20,6 +20,22 @@ import { handleError } from './error';
 // Default maximum versions per agent (can be made configurable in the future)
 export const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
 
+/**
+ * Checks if the agents store supports versioning methods.
+ * Used for backwards compatibility with older core versions that don't have versioning.
+ * @throws HTTPException 501 if versioning is not supported
+ */
+function assertVersioningSupported(agentsStore: any): void {
+  const requiredMethods = ['listVersions', 'createVersion', 'getVersion', 'deleteVersion', 'getLatestVersion'];
+  const missingMethods = requiredMethods.filter(method => typeof agentsStore[method] !== 'function');
+
+  if (missingMethods.length > 0) {
+    throw new HTTPException(501, {
+      message: 'Agent versioning is not supported by this core version. Please upgrade @mastra/core to 1.1.0 or later.',
+    });
+  }
+}
+
 // ============================================================================
 // Helper Functions (exported for use in stored-agents.ts)
 // ============================================================================
@@ -388,6 +404,9 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
       if (!agent) {
@@ -433,6 +452,9 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Get the current agent configuration
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -497,6 +519,9 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       const version = await agentsStore.getVersion(versionId);
 
       if (!version) {
@@ -539,6 +564,9 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -596,6 +624,9 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -699,6 +730,9 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
       if (!agent) {
@@ -758,6 +792,9 @@ export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Get both versions
       const fromVersion = await agentsStore.getVersion(from);
