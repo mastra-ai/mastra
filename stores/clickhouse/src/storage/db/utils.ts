@@ -1,5 +1,7 @@
 import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
-import {
+import * as coreStorage from '@mastra/core/storage';
+
+const {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -9,7 +11,7 @@ import {
   TABLE_AGENT_VERSIONS,
   safelyParseJSON,
   TABLE_SPANS,
-} from '@mastra/core/storage';
+} = coreStorage;
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,

@@ -15,7 +15,7 @@ Fix peer dependency compatibility issues and standardize on `fast-deep-equal`:
 
 - Add `getSchemas()`, `getSchema(tableName)`, and `hasSchema(tableName)` methods to `StorageDomain` base class. These provide a way to access table schemas dynamically.
 
-- Storage adapters now import `TABLE_AGENT_VERSIONS` and `toTraceSpans` directly from core. Peer dependency requirements (>=1.1.0-0) ensure these exports are available.
+- Storage adapters now use namespace imports (`import * as coreStorage`) with destructuring for cleaner access to core exports like `TABLE_AGENT_VERSIONS` and `toTraceSpans`. Peer dependency requirements (>=1.1.0-0) ensure these exports are available.
 
 - Update server handlers to check if new Mastra methods exist before calling them:
   - `mastra.getStoredAgentById()` - check before calling in agent lookup

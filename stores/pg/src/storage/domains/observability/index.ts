@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
+import * as coreStorage from '@mastra/core/storage';
+
+const {
   createStorageErrorId,
   listTracesArgsSchema,
   ObservabilityStorage,
@@ -7,7 +9,7 @@ import {
   TABLE_SPANS,
   toTraceSpans,
   TraceStatus,
-} from '@mastra/core/storage';
+} = coreStorage;
 import type {
   SpanRecord,
   TracingStorageStrategy,
