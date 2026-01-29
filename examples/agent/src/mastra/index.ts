@@ -1,7 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { registerApiRoute } from '@mastra/core/server';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { z } from 'zod';
 
 import {
   agentThatHarassesYou,
@@ -10,6 +11,7 @@ import {
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
+  schemaValidatedAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -60,6 +62,7 @@ const config = {
     dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
+    schemaValidatedAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -101,6 +104,97 @@ const config = {
     build: {
       swaggerUI: true,
     },
+    apiRoutes: [
+      // Example custom route with OpenAPI documentation
+      registerApiRoute('/hello/:name', {
+        method: 'GET',
+        openapi: {
+          summary: 'Say hello',
+          description: 'Returns a greeting for the given name',
+          tags: ['Custom'],
+          parameters: [
+            {
+              name: 'name',
+              in: 'path',
+              required: true,
+              description: 'Name to greet',
+              schema: { type: 'string' },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Greeting response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      message: { type: 'string' },
+                      timestamp: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        handler: async c => {
+          const name = c.req.param('name');
+          return c.json({
+            message: `Hello, ${name}!`,
+            timestamp: new Date().toISOString(),
+          });
+        },
+      }),
+
+      // Example with Zod schema conversion
+      registerApiRoute('/items', {
+        method: 'POST',
+        openapi: {
+          summary: 'Create an item',
+          description: 'Creates a new item with the provided data',
+          tags: ['Custom'],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: z.object({
+                  name: z.string().describe('Item name'),
+                  price: z.number().describe('Item price'),
+                }),
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Item created',
+              content: {
+                'application/json': {
+                  schema: z.object({
+                    id: z.string(),
+                    name: z.string(),
+                    price: z.number(),
+                    createdAt: z.string(),
+                  }),
+                },
+              },
+            },
+          },
+        },
+        handler: async c => {
+          const body = await c.req.json();
+          return c.json(
+            {
+              id: crypto.randomUUID(),
+              name: body.name,
+              price: body.price,
+              createdAt: new Date().toISOString(),
+            },
+            201,
+          );
+        },
+      }),
+    ],
   },
   scorers: {
     testScorer,
