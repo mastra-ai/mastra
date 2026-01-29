@@ -35,12 +35,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Cerebras documentation](https://inference-docs.cerebras.ai/models/overview) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -93,7 +87,6 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.cerebras.ai/v1",
     id: "cerebras/gpt-oss-120b",
     apiKey: process.env.CEREBRAS_API_KEY,
     headers: {

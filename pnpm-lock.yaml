@@ -1995,6 +1995,9 @@ importers:
       prettier:
         specifier: ^3.7.4
         version: 3.7.4
+      semver:
+        specifier: ^7.7.0
+        version: 7.7.3
       serve:
         specifier: ^14.2.5
         version: 14.2.5
@@ -2035,6 +2038,9 @@ importers:
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       '@types/serve-handler':
         specifier: ^6.1.4
         version: 6.1.4
