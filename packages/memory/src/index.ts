@@ -354,28 +354,40 @@ export class Memory extends MastraMemory {
       );
     }
 
-    const memoryStore = await this.getMemoryStore();
-    if (scope === 'resource' && resourceId) {
-      // Update working memory in resource table
-      await memoryStore.updateResource({
-        resourceId,
-        workingMemory,
-      });
-    } else {
-      // Update working memory in thread metadata (existing behavior)
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
+    // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
+    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
+    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+      : new Mutex();
+    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+    const release = await mutex.acquire();
 
-      await memoryStore.updateThread({
-        id: threadId,
-        title: thread.title || 'Untitled Thread',
-        metadata: {
-          ...thread.metadata,
+    try {
+      const memoryStore = await this.getMemoryStore();
+      if (scope === 'resource' && resourceId) {
+        // Update working memory in resource table
+        await memoryStore.updateResource({
+          resourceId,
           workingMemory,
-        },
-      });
+        });
+      } else {
+        // Update working memory in thread metadata (existing behavior)
+        const thread = await this.getThreadById({ threadId });
+        if (!thread) {
+          throw new Error(`Thread ${threadId} not found`);
+        }
+
+        await memoryStore.updateThread({
+          id: threadId,
+          title: thread.title || 'Untitled Thread',
+          metadata: {
+            ...thread.metadata,
+            workingMemory,
+          },
+        });
+      }
+    } finally {
+      release();
     }
   }
 
@@ -418,19 +430,37 @@ export class Memory extends MastraMemory {
       const template = await this.getWorkingMemoryTemplate({ memoryConfig });
 
       let reason = '';
+
+      // Normalize content for comparison (handles whitespace variations)
+      // This catches template duplicates even when LLM returns slightly different whitespace
+      const normalizeForComparison = (str: string) => str.replace(/\s+/g, ' ').trim();
+      const normalizedNewMemory = normalizeForComparison(workingMemory);
+      const normalizedTemplate = template?.content ? normalizeForComparison(template.content) : '';
+
       if (existingWorkingMemory) {
         if (searchString && existingWorkingMemory?.includes(searchString)) {
           workingMemory = existingWorkingMemory.replace(searchString, workingMemory);
           reason = `found and replaced searchString with newMemory`;
         } else if (
           existingWorkingMemory.includes(workingMemory) ||
-          template?.content?.trim() === workingMemory.trim()
+          template?.content?.trim() === workingMemory.trim() ||
+          // Also check normalized versions to catch template variations with different whitespace
+          normalizedNewMemory === normalizedTemplate
         ) {
           return {
             success: false,
             reason: `attempted to insert duplicate data into working memory. this entry was skipped`,
           };
         } else {
+          // Before appending, check if the new content is essentially the empty template
+          // This prevents template duplication when the LLM sends the template again
+          if (normalizedNewMemory === normalizedTemplate) {
+            return {
+              success: false,
+              reason: `attempted to append empty template to working memory. this entry was skipped`,
+            };
+          }
+
           if (searchString) {
             reason = `attempted to replace working memory string that doesn't exist. Appending to working memory instead.`;
           } else {
@@ -442,7 +472,7 @@ export class Memory extends MastraMemory {
             `
 ${workingMemory}`;
         }
-      } else if (workingMemory === template?.content) {
+      } else if (workingMemory === template?.content || normalizedNewMemory === normalizedTemplate) {
         return {
           success: false,
           reason: `try again when you have data to add. newMemory was equal to the working memory template`,
@@ -451,8 +481,16 @@ ${workingMemory}`;
         reason = `started new working memory`;
       }
 
-      // remove empty template insertions which models sometimes duplicate
-      workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
+      // Remove empty template insertions which models sometimes duplicate
+      // Use both exact and normalized matching to catch variations
+      if (template?.content) {
+        workingMemory = workingMemory.replaceAll(template.content, '');
+        // Also try to remove template with normalized line endings
+        const templateWithUnixLineEndings = template.content.replace(/\r\n/g, '\n');
+        const templateWithWindowsLineEndings = template.content.replace(/\n/g, '\r\n');
+        workingMemory = workingMemory.replaceAll(templateWithUnixLineEndings, '');
+        workingMemory = workingMemory.replaceAll(templateWithWindowsLineEndings, '');
+      }
 
       const scope = config.workingMemory.scope || 'resource';
 
