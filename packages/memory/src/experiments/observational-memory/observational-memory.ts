@@ -2009,41 +2009,77 @@ ${suggestedResponse}
 
       // Load unobserved messages from storage
       const lastObservedAt = record.lastObservedAt;
-      const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
 
-      if (historicalMessages.length > 0) {
-        omDebug(
-          `[OM processInputStep] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
-        );
+      if (this.scope === 'resource' && resourceId) {
+        // RESOURCE SCOPE: Load messages per-thread using each thread's own lastObservedAt cursor.
+        // This ensures other threads' messages appear in <other-conversation> blocks even after
+        // those threads have been observed (their messages become observations, but the raw
+        // conversation context is still valuable for the active thread).
+        const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
+        const messagesByThread = new Map<string, MastraDBMessage[]>();
+        let totalLoaded = 0;
 
-        if (this.scope === 'resource' && resourceId) {
-          const messagesByThread = this.groupMessagesByThread(historicalMessages);
-          unobservedContextBlocks = await this.formatUnobservedContextBlocks(messagesByThread, threadId);
-          if (unobservedContextBlocks) {
-            omDebug(
-              `[OM processInputStep] Including unobserved context from ${messagesByThread.size - 1} other threads`,
-            );
-          }
-          state.unobservedContextBlocks = unobservedContextBlocks;
-
-          // Add only current thread's messages to messageList (skip fully observed)
-          const currentThreadMessages = messagesByThread.get(threadId) || [];
-          let skippedFullyObserved = 0;
-          for (const msg of currentThreadMessages) {
-            if (msg.role !== 'system') {
-              if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) {
-                skippedFullyObserved++;
-                continue;
-              }
-              messageList.add(msg, 'memory');
+        for (const thread of allThreads) {
+          if (thread.id === threadId) {
+            // Current thread: use resource-level lastObservedAt (consistent with thread scope behavior)
+            const currentThreadMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
+            if (currentThreadMessages.length > 0) {
+              messagesByThread.set(threadId, currentThreadMessages);
+              totalLoaded += currentThreadMessages.length;
+            }
+          } else {
+            // Other threads: use that thread's own lastObservedAt cursor from thread metadata
+            // This way, messages from other threads are included until THAT thread is observed
+            const omMetadata = getThreadOMMetadata(thread.metadata);
+            const threadLastObservedAt = omMetadata?.lastObservedAt ? new Date(omMetadata.lastObservedAt) : undefined;
+            const threadMessages = await this.loadUnobservedMessages(thread.id, undefined, threadLastObservedAt);
+            if (threadMessages.length > 0) {
+              messagesByThread.set(thread.id, threadMessages);
+              totalLoaded += threadMessages.length;
             }
           }
-          if (skippedFullyObserved > 0) {
-            omDebug(
-              `[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`,
-            );
+        }
+
+        if (totalLoaded > 0) {
+          omDebug(
+            `[OM processInputStep] Resource scope: loaded ${totalLoaded} messages across ${messagesByThread.size} threads`,
+          );
+        }
+
+        unobservedContextBlocks = await this.formatUnobservedContextBlocks(messagesByThread, threadId);
+        if (unobservedContextBlocks) {
+          omDebug(
+            `[OM processInputStep] Including unobserved context from ${messagesByThread.size - (messagesByThread.has(threadId) ? 1 : 0)} other threads`,
+          );
+        }
+        state.unobservedContextBlocks = unobservedContextBlocks;
+
+        // Add only current thread's messages to messageList (skip fully observed)
+        const currentThreadMessages = messagesByThread.get(threadId) || [];
+        let skippedFullyObserved = 0;
+        for (const msg of currentThreadMessages) {
+          if (msg.role !== 'system') {
+            if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) {
+              skippedFullyObserved++;
+              continue;
+            }
+            messageList.add(msg, 'memory');
           }
-        } else {
+        }
+        if (skippedFullyObserved > 0) {
+          omDebug(
+            `[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`,
+          );
+        }
+      } else {
+        // THREAD SCOPE: Load unobserved messages using resource-level lastObservedAt
+        const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
+
+        if (historicalMessages.length > 0) {
+          omDebug(
+            `[OM processInputStep] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
+          );
+
           // Thread scope: add all messages (skip fully observed)
           let skippedFullyObserved = 0;
           for (const msg of historicalMessages) {
