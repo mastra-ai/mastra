@@ -20,7 +20,7 @@ Each message belongs to a thread (the conversation) and a resource (the user or 
 
 ## Getting started
 
-Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. For the purpose of these examples you'll use the local `@mastra/libsql` provider that stores the database inside a `mastra.db` file.
+Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
 
 ```bash npm2yarn
 npm install @mastra/memory@latest @mastra/libsql@latest
@@ -95,7 +95,7 @@ await agent.stream("Hello", {
 
 :::info
 
-Threads and messages are created automatically. To create them programmatically, see [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class#savemessages).
+Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually  with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class#savemessages). 
 
 :::
 
@@ -105,16 +105,20 @@ There are two ways to use this history:
 - [**Manual querying**](#querying) - For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
 
 
-## Querying
+## Accessing Memory
 
-To query threads and messages, call `getMemory()` on an agent to get a `Memory` instance:
+To access memory functions for querying, cloning, or deleting threads and messages, call `getMemory()` on an agent:
 
 ```typescript
 const agent = mastra.getAgent("weatherAgent");
 const memory = await agent.getMemory();
 ```
 
-The `Memory` instance gives you access to functions for listing threads, recalling messages within them, and more.
+The `Memory` instance gives you access to functions for listing threads, recalling messages, cloning conversations, and more.
+
+## Querying
+
+Use these methods to fetch threads and messages for displaying conversation history in your UI or for custom memory retrieval logic.
 
 :::warning
 The memory system does not enforce access control. Before running any query, verify in your application logic that the current user is authorized to access the `resourceId` being queried.
