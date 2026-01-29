@@ -17,8 +17,14 @@ export interface PeerDepMismatch {
 /**
  * Checks if the installed versions of @mastra packages satisfy each other's peer dependency requirements.
  * Returns a list of mismatches that should be warned about.
+ *
+ * Set MASTRA_SKIP_PEERDEP_CHECK=1 to skip this check.
  */
 export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promise<PeerDepMismatch[]> {
+  if (process.env.MASTRA_SKIP_PEERDEP_CHECK === '1' || process.env.MASTRA_SKIP_PEERDEP_CHECK === 'true') {
+    return [];
+  }
+
   const mismatches: PeerDepMismatch[] = [];
 
   // Build a map of installed package versions for quick lookup
