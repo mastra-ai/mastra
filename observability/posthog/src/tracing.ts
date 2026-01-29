@@ -19,6 +19,10 @@ export interface PostHogUsageMetrics {
 /**
  * Formats UsageStats to PostHog's expected property format.
  *
+ * PostHog expects $ai_input_tokens to be NON-cached tokens only,
+ * with cache tokens tracked separately for accurate cost calculation.
+ * See: https://posthog.com/docs/llm-analytics/calculating-costs
+ *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
  */
@@ -27,15 +31,23 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
 
   const props: PostHogUsageMetrics = {};
 
-  if (usage.inputTokens !== undefined) props.$ai_input_tokens = usage.inputTokens;
+  if (usage.inputTokens !== undefined) {
+    // Start with total input tokens (which includes cached tokens from usage.ts)
+    props.$ai_input_tokens = usage.inputTokens;
+
+    // Subtract cache tokens to get the actual non-cached input count
+    if (usage.inputDetails?.cacheRead !== undefined) {
+      props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
+      props.$ai_input_tokens -= props.$ai_cache_read_input_tokens;
+    }
+
+    if (usage.inputDetails?.cacheWrite !== undefined) {
+      props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+      props.$ai_input_tokens -= props.$ai_cache_creation_input_tokens;
+    }
+  }
+
   if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
-
-  // Cache read tokens from inputDetails
-  if (usage.inputDetails?.cacheRead !== undefined) props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
-
-  // Cache write tokens from inputDetails
-  if (usage.inputDetails?.cacheWrite !== undefined)
-    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
 
   return props;
 }
