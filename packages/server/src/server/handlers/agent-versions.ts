@@ -43,7 +43,10 @@ function assertVersioningSupported(agentsStore: any): void {
 /**
  * Deep equality comparison for comparing two values.
  * Handles primitives, arrays, objects, and Date instances.
- * TODO: Move to a shared utils package that gets bundled into each package
+ *
+ * NOTE: This function is inlined rather than imported from @mastra/core/utils
+ * to ensure backwards compatibility with older core versions that don't export it.
+ * See: https://github.com/mastra-ai/mastra/pull/12446
  */
 function deepEqual(a: unknown, b: unknown): boolean {
   // Handle identical references and primitives
