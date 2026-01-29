@@ -346,6 +346,16 @@ export async function handleAutoVersioning<TAgent>(
   existingAgent: TAgent,
   updatedAgent: TAgent,
 ): Promise<{ agent: TAgent; versionCreated: boolean }> {
+  // Check for versioning support (backwards compatibility with older core)
+  // If versioning methods don't exist, skip versioning entirely
+  const requiredMethods = ['createVersion', 'getLatestVersion', 'listVersions', 'deleteVersion'];
+  const hasVersioningSupport = requiredMethods.every(method => typeof (agentsStore as any)[method] === 'function');
+
+  if (!hasVersioningSupport) {
+    // Gracefully degrade: just return the updated agent without versioning
+    return { agent: updatedAgent, versionCreated: false };
+  }
+
   // Calculate what fields changed
   const changedFields = calculateChangedFields(
     existingAgent as unknown as Record<string, unknown>,
