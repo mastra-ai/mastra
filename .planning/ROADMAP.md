@@ -58,20 +58,21 @@ Plans:
 **Goal**: Wire `MastraCloudAuth` to use updated client and handle `sessionToken` flow
 **Depends on**: Phase 2
 **Requirements**:
-- `createSession()` in client removed, throws in index.ts
-- `CloudUser` includes `sessionToken` field for permission lookups
+- `createSession()` throws descriptive CloudApiError (Cloud doesn't support)
+- `CloudUser` includes required `sessionToken` field for permission lookups
+- Permissions resolved locally via JWT decode + resolvePermissions()
 
 **Success Criteria** (what must be TRUE):
-1. `CloudUser` type includes optional `sessionToken` field
-2. `handleCallback()` stores session token on returned user
-3. `getPermissions(user)` uses `user.sessionToken` for API call
-4. `getCurrentUser()` passes token to `client.getUser()`
-5. `createSession()` throws descriptive error (interface requirement)
+1. `CloudUser` type includes required `sessionToken` field
+2. `handleCallback()` decodes JWT locally and stores token on returned user
+3. `getPermissions(user)` extracts role from JWT, uses `resolvePermissions()` from core
+4. `createSession()` throws CloudApiError with 501 status
+5. TypeScript compiles without errors
 
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: Provider integration and sessionToken flow
+- [ ] 03-01-PLAN.md — Provider integration and sessionToken flow
 
 ### Phase 4: Testing + Validation
 **Goal**: Verify TypeScript compiles and all changes work against mocked API
@@ -99,5 +100,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Transport Layer | 1/1 | ✓ Complete | 2026-01-28 |
 | 2. API Paths + Methods | 1/1 | ✓ Complete | 2026-01-29 |
-| 3. Provider Integration | 0/1 | Not started | - |
+| 3. Provider Integration | 0/1 | Ready | - |
 | 4. Testing + Validation | 0/1 | Not started | - |
