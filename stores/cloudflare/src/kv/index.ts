@@ -10,15 +10,15 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
-import { MemoryStorageCloudflare } from './domains/memory';
-import { ScoresStorageCloudflare } from './domains/scores';
-import { WorkflowsStorageCloudflare } from './domains/workflows';
-import { isWorkersConfig } from './types';
+import { MemoryStorageCloudflare } from './storage/domains/memory';
+import { ScoresStorageCloudflare } from './storage/domains/scores';
+import { WorkflowsStorageCloudflare } from './storage/domains/workflows';
+import { isWorkersConfig } from './storage/types';
 
 // Export domain classes for direct use with MastraStorage composition
 export { MemoryStorageCloudflare, ScoresStorageCloudflare, WorkflowsStorageCloudflare };
-export type { CloudflareDomainConfig } from './types';
-import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
+export type { CloudflareDomainConfig } from './storage/types';
+import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './storage/types';
 
 /**
  * Cloudflare KV storage adapter for Mastra.
@@ -27,7 +27,7 @@ import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConf
  *
  * @example
  * ```typescript
- * const storage = new CloudflareStore({ id: 'my-store', accountId: '...', apiToken: '...' });
+ * const storage = new CloudflareKVStorage({ id: 'my-store', accountId: '...', apiToken: '...' });
  *
  * // Access memory domain
  * const memory = await storage.getStore('memory');
@@ -38,7 +38,7 @@ import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConf
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class CloudflareStore extends MastraCompositeStore {
+export class CloudflareKVStorage extends MastraCompositeStore {
   stores: StorageDomains;
   private client?: Cloudflare;
   private accountId?: string;
@@ -136,3 +136,8 @@ export class CloudflareStore extends MastraCompositeStore {
     // No explicit cleanup needed
   }
 }
+
+/**
+ * @deprecated Use CloudflareKVStorage instead
+ */
+export const CloudflareStore = CloudflareKVStorage;
