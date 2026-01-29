@@ -33,7 +33,10 @@ LocalFilesystem is the simplest way to get started - it requires no external ser
 
 ## Basic usage
 
+Create a workspace with a filesystem and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
+
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
@@ -41,6 +44,16 @@ const workspace = new Workspace({
     basePath: './workspace',
   }),
 });
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful file management assistant.',
+  workspace,
+});
+
+// The agent now has filesystem tools available
+const response = await agent.generate('List all files in the workspace');
 ```
 
 ## Read-only mode

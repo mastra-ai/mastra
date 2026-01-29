@@ -29,9 +29,10 @@ Each provider page includes configuration options and usage examples:
 
 ## Basic usage
 
-Create a workspace with a sandbox and execute commands:
+Create a workspace with a sandbox and assign it to an agent. The agent can then execute shell commands as part of its tasks:
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
@@ -43,9 +44,15 @@ const workspace = new Workspace({
   }),
 });
 
-// Execute a command
-const result = await workspace.sandbox.executeCommand('ls', ['-la']);
-console.log(result.stdout);
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful development assistant.',
+  workspace,
+});
+
+// The agent now has the execute_command tool available
+const response = await agent.generate('Run `ls -la` in the workspace directory');
 ```
 
 See [LocalSandbox Reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
