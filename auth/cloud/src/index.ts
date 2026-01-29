@@ -78,7 +78,7 @@ export class MastraCloudAuth
   // ============================================
 
   async authenticateToken(token: string): Promise<CloudUser | null> {
-    return this.client.verifyToken(token);
+    return this.client.verifyToken({ token });
   }
 
   async authorizeUser(_user: CloudUser): Promise<boolean> {
@@ -94,14 +94,17 @@ export class MastraCloudAuth
     const sessionToken = this.extractSessionToken(request);
     if (!sessionToken) return null;
 
-    const session = await this.client.validateSession(sessionToken);
+    const session = await this.client.validateSession({ sessionToken });
     if (!session) return null;
 
-    return this.client.getUser(session.userId);
+    // Token needed for getUser - use session id as auth token
+    return this.client.getUser({ userId: session.userId, token: sessionToken });
   }
 
-  async getUser(userId: string): Promise<CloudUser | null> {
-    return this.client.getUser(userId);
+  async getUser(userId: string, token?: string): Promise<CloudUser | null> {
+    // Without token, cannot make authenticated request
+    if (!token) return null;
+    return this.client.getUser({ userId, token });
   }
 
   getUserProfileUrl(user: CloudUser): string {
@@ -112,21 +115,23 @@ export class MastraCloudAuth
   // ISessionProvider
   // ============================================
 
-  async createSession(userId: string, _metadata?: Record<string, unknown>): Promise<CloudSession> {
-    return this.client.createSession(userId);
+  async createSession(_userId: string, _metadata?: Record<string, unknown>): Promise<CloudSession> {
+    // Cloud does not support server-side session creation
+    // Sessions are created via SSO flow (handleCallback)
+    throw new Error('MastraCloudAuth: createSession not supported. Use SSO flow via handleCallback.');
   }
 
-  async validateSession(sessionId: string): Promise<CloudSession | null> {
-    return this.client.validateSession(sessionId);
+  async validateSession(sessionToken: string): Promise<CloudSession | null> {
+    return this.client.validateSession({ sessionToken });
   }
 
-  async destroySession(sessionId: string): Promise<void> {
-    await this.client.destroySession(sessionId);
+  async destroySession(sessionId: string, token?: string): Promise<void> {
+    await this.client.destroySession({ sessionId, token });
   }
 
-  async refreshSession(sessionId: string): Promise<CloudSession | null> {
+  async refreshSession(sessionToken: string): Promise<CloudSession | null> {
     // Mastra Cloud handles refresh automatically
-    return this.client.validateSession(sessionId);
+    return this.client.validateSession({ sessionToken });
   }
 
   getSessionIdFromRequest(request: Request): string | null {
@@ -151,11 +156,11 @@ export class MastraCloudAuth
   // ============================================
 
   getLoginUrl(redirectUri: string, state: string): string {
-    return this.client.getLoginUrl(redirectUri, state);
+    return this.client.getLoginUrl({ redirectUri, state });
   }
 
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<CloudUser>> {
-    const { user, session } = await this.client.exchangeCode(code);
+    const { user, session } = await this.client.exchangeCode({ code });
 
     return {
       user,
@@ -190,8 +195,10 @@ export class MastraCloudAuth
     return user.roles.includes(role);
   }
 
-  async getPermissions(user: CloudUser): Promise<string[]> {
-    return this.client.getUserPermissions(user.id);
+  async getPermissions(user: CloudUser, token?: string): Promise<string[]> {
+    // Without token, cannot make authenticated request
+    if (!token) return [];
+    return this.client.getUserPermissions({ userId: user.id, token });
   }
 
   async hasPermission(user: CloudUser, permission: string): Promise<boolean> {

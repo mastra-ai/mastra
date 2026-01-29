@@ -3,34 +3,6 @@
  */
 
 /**
- * API response types for type-safe JSON parsing.
- */
-interface VerifyTokenResponse {
-  user: Record<string, unknown>;
-}
-
-interface ValidateSessionResponse {
-  session: Record<string, unknown>;
-}
-
-interface CreateSessionResponse {
-  session: Record<string, unknown>;
-}
-
-interface GetUserResponse {
-  user: Record<string, unknown>;
-}
-
-interface GetPermissionsResponse {
-  permissions?: string[];
-}
-
-interface ExchangeCodeResponse {
-  user: Record<string, unknown>;
-  session: Record<string, unknown>;
-}
-
-/**
  * Cloud API response envelope.
  * All responses wrapped with ok/data/error structure.
  */
@@ -207,22 +179,15 @@ export class MastraCloudClient {
   /**
    * Verify a token and get the user.
    */
-  async verifyToken(token: string): Promise<CloudUser | null> {
+  async verifyToken(options: VerifyTokenOptions): Promise<CloudUser | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/auth/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Project-ID': this.projectId,
+      const data = await this.request<{ user: Record<string, unknown> }>(
+        `${this.apiPrefix}/auth/verify`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ token: options.token }),
         },
-        body: JSON.stringify({ token }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = (await response.json()) as VerifyTokenResponse;
+      );
       return this.parseUser(data.user);
     } catch {
       return null;
@@ -232,22 +197,15 @@ export class MastraCloudClient {
   /**
    * Validate a session.
    */
-  async validateSession(sessionToken: string): Promise<CloudSession | null> {
+  async validateSession(options: ValidateSessionOptions): Promise<CloudSession | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/auth/session/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Project-ID': this.projectId,
+      const data = await this.request<{ session: Record<string, unknown> }>(
+        `${this.apiPrefix}/auth/session/validate`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ token: options.sessionToken }),
         },
-        body: JSON.stringify({ token: sessionToken }),
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = (await response.json()) as ValidateSessionResponse;
+      );
       return this.parseSession(data.session);
     } catch {
       return null;
@@ -255,56 +213,29 @@ export class MastraCloudClient {
   }
 
   /**
-   * Create a new session for a user.
-   */
-  async createSession(userId: string): Promise<CloudSession> {
-    const response = await fetch(`${this.baseUrl}/api/auth/session/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Project-ID': this.projectId,
-      },
-      body: JSON.stringify({ userId }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create session: ${response.status}`);
-    }
-
-    const data = (await response.json()) as CreateSessionResponse;
-    return this.parseSession(data.session);
-  }
-
-  /**
    * Destroy a session.
    */
-  async destroySession(sessionId: string): Promise<void> {
-    await fetch(`${this.baseUrl}/api/auth/session/destroy`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Project-ID': this.projectId,
+  async destroySession(options: DestroySessionOptions): Promise<void> {
+    await this.request<Record<string, unknown>>(
+      `${this.apiPrefix}/auth/session/destroy`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId: options.sessionId }),
       },
-      body: JSON.stringify({ sessionId }),
-    });
+      options.token,
+    );
   }
 
   /**
    * Get a user by ID.
    */
-  async getUser(userId: string): Promise<CloudUser | null> {
+  async getUser(options: GetUserOptions): Promise<CloudUser | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/users/${userId}`, {
-        headers: {
-          'X-Project-ID': this.projectId,
-        },
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = (await response.json()) as GetUserResponse;
+      const data = await this.request<{ user: Record<string, unknown> }>(
+        `${this.apiPrefix}/users/${options.userId}`,
+        { method: 'GET' },
+        options.token,
+      );
       return this.parseUser(data.user);
     } catch {
       return null;
@@ -314,19 +245,13 @@ export class MastraCloudClient {
   /**
    * Get permissions for a user.
    */
-  async getUserPermissions(userId: string): Promise<string[]> {
+  async getUserPermissions(options: GetUserPermissionsOptions): Promise<string[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/users/${userId}/permissions`, {
-        headers: {
-          'X-Project-ID': this.projectId,
-        },
-      });
-
-      if (!response.ok) {
-        return [];
-      }
-
-      const data = (await response.json()) as GetPermissionsResponse;
+      const data = await this.request<{ permissions?: string[] }>(
+        `${this.apiPrefix}/users/${options.userId}/permissions`,
+        { method: 'GET' },
+        options.token,
+      );
       return data.permissions ?? [];
     } catch {
       return [];
@@ -336,34 +261,30 @@ export class MastraCloudClient {
   /**
    * Get SSO login URL.
    */
-  getLoginUrl(redirectUri: string, state: string): string {
+  getLoginUrl(options: GetLoginUrlOptions): string {
     const params = new URLSearchParams({
       project_id: this.projectId,
-      redirect_uri: redirectUri,
-      state,
+      redirect_uri: options.redirectUri,
+      state: options.state,
     });
 
-    return `${this.baseUrl}/auth/login?${params}`;
+    return `${this.baseUrl}${this.authPath}?${params}`;
   }
 
   /**
    * Exchange authorization code for session.
    */
-  async exchangeCode(code: string): Promise<{ user: CloudUser; session: CloudSession }> {
-    const response = await fetch(`${this.baseUrl}/api/auth/callback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Project-ID': this.projectId,
+  async exchangeCode(options: ExchangeCodeOptions): Promise<{ user: CloudUser; session: CloudSession }> {
+    const data = await this.request<{
+      user: Record<string, unknown>;
+      session: Record<string, unknown>;
+    }>(
+      `${this.apiPrefix}/auth/callback`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ code: options.code }),
       },
-      body: JSON.stringify({ code }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to exchange code: ${response.status}`);
-    }
-
-    const data = (await response.json()) as ExchangeCodeResponse;
+    );
 
     return {
       user: this.parseUser(data.user),
