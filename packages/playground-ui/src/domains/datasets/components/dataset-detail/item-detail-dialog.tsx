@@ -8,9 +8,10 @@ import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Label } from '@/ds/components/Label';
 import { Icon } from '@/ds/icons/Icon';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil } from 'lucide-react';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
 import { format } from 'date-fns/format';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
@@ -38,13 +39,16 @@ export function ItemDetailDialog({
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
   const { Link } = useLinkComponent();
-  const { updateItem } = useDatasetMutations();
+  const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [expectedOutputValue, setExpectedOutputValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
+
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -53,6 +57,7 @@ export function ItemDetailDialog({
       setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
+      setShowDeleteConfirm(false); // Reset delete state on item change
     }
   }, [item?.id]);
 
@@ -136,6 +141,21 @@ export function ItemDetailDialog({
     setIsEditing(true);
   };
 
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteItem.mutateAsync({ datasetId, itemId: item.id });
+      toast.success('Item deleted successfully');
+      setShowDeleteConfirm(false);
+      onClose(); // Close the SideDialog after successful deletion
+    } catch (error) {
+      toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <SideDialog
       dialogTitle="Dataset Item"
@@ -158,7 +178,12 @@ export function ItemDetailDialog({
               </Icon>
               Edit
             </Button>
-            {/* Delete button will be added in Plan 09-04 */}
+            <Button variant="outline" size="sm" onClick={handleDelete}>
+              <Icon>
+                <Trash2 />
+              </Icon>
+              Delete
+            </Button>
           </div>
         )}
       </SideDialog.Top>
@@ -180,6 +205,24 @@ export function ItemDetailDialog({
           <ReadOnlyContent item={item} Link={Link} />
         )}
       </SideDialog.Content>
+
+      {/* Delete confirmation - uses portal, renders above SideDialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete Item</AlertDialog.Title>
+            <AlertDialog.Description>
+              Are you sure you want to delete this item? This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleDeleteConfirm}>
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </SideDialog>
   );
 }
@@ -187,13 +230,7 @@ export function ItemDetailDialog({
 /**
  * Read-only view of the dataset item details
  */
-function ReadOnlyContent({
-  item,
-  Link,
-}: {
-  item: DatasetItem;
-  Link: ReturnType<typeof useLinkComponent>['Link'];
-}) {
+function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
 
   return (
