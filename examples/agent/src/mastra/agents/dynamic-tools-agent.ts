@@ -18,6 +18,7 @@
 
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 import { ToolSearchProcessor } from '@mastra/core/processors';
 
 import {
@@ -33,6 +34,9 @@ import {
   convertUnits,
   cookingTool,
 } from '../tools/index.js';
+
+// Create memory for conversation persistence
+const memory = new Memory();
 
 // Create the tool search processor with all searchable tools
 // These tools are NOT loaded by default - they must be searched and loaded
@@ -99,6 +103,7 @@ You: "I've found and loaded a calculator tool. Let me add those numbers for you 
 [On next turn, calculator_add is available]
 
 Be proactive about searching for tools when you don't have the capability the user needs.`,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-4o'),
+  memory,
   inputProcessors: [toolSearchProcessor],
 });
